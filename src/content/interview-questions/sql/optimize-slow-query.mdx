@@ -1,0 +1,54 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "How would you optimize a slow analytical SQL query?"
+description: "Interview answer: read the query plan, reduce data scanned with pruning and column selection, make filters sargable, fix join fan-out and verify results are unchanged."
+inventoryId: "INT-05"
+technology: ["sql"]
+topic: ["performance", "query-plans"]
+difficulty: "Hard"
+questionType: ["optimization", "scenario"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+shortAnswer: "I start with the query plan to see where the time goes: large scans, expensive joins, sorts or aggregations. Then I reduce the data read by selecting only needed columns and filtering on partition, cluster or indexed columns without wrapping them in functions. Next I fix joins (correct keys, no accidental fan-out, broadcasting small tables) and remove repeated work, and finally I confirm the faster query returns exactly the same result."
+followUps: ["What makes a filter sargable?", "How do partitioning and clustering help in a columnar warehouse?", "The plan looks fine but the query is still slow. What next?"]
+prerequisites: ["articles:sql/query-optimization-fundamentals"]
+related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join"]
+versionContext: "Standard SQL; examples tested with SQLite 3.45"
+---
+
+## Detailed explanation
+
+Structure the answer as a process; interviewers listen for measurement first.
+
+1. **Reproduce and measure.** Note runtime and data scanned. Check whether it is slow every time or only under load (queueing, concurrency).
+2. **Read the plan.** Find the operator that dominates: a full scan, a large shuffle or sort, a nested-loop join, an exploding join.
+3. **Read less.** Project only needed columns; filter on partition or clustering columns so the engine prunes files or micro-partitions.
+4. **Make filters sargable.** Compare raw columns to ranges instead of applying functions (`created_at >= ... AND created_at < ...` instead of `CAST(created_at AS DATE) = ...`).
+5. **Fix joins.** Matching key types, unique keys where expected, aggregate before joining, broadcast small dimensions in distributed engines.
+6. **Remove repeated work.** Correlated subqueries, CTEs evaluated twice, unnecessary `DISTINCT` or `ORDER BY`.
+7. **Verify.** Same row count and key aggregates as before.
+
+## Example
+
+```sql
+-- Before: scans every partition, transforms the column
+SELECT * FROM events WHERE CAST(event_ts AS DATE) = DATE '2026-10-01';
+
+-- After: only needed columns, prunable range filter
+SELECT user_id, event_type
+FROM events
+WHERE event_ts >= TIMESTAMP '2026-10-01 00:00:00'
+  AND event_ts <  TIMESTAMP '2026-10-02 00:00:00';
+```
+
+## If the plan looks fine
+
+Look outside the query: data volume growth, skewed keys, stale statistics, small-file problems, warehouse size or concurrency limits, and whether the result could be pre-aggregated or incrementally maintained.
+
+## Common mistakes
+
+1. Jumping to "add an index" without evidence.
+2. Not checking that the optimised query gives the same answer.
+3. Ignoring the cost side: a bigger warehouse is a fix, but not a free one.

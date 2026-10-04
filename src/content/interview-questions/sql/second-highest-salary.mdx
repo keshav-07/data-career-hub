@@ -1,0 +1,77 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Find the second-highest salary without using a simple MAX approach."
+description: "Interview answer: rank distinct salaries with DENSE_RANK and pick rank 2, handling ties, NULLs, per-department variants and the case where no second value exists."
+inventoryId: "INT-03"
+technology: ["sql"]
+topic: ["window-functions", "ranking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+shortAnswer: "Rank salaries with DENSE_RANK() ordered by salary descending, so tied salaries share a rank, then select the salary whose rank is 2. Exclude NULL salaries first, and wrap the result so the query returns NULL rather than no row when there is no second-highest value. The same pattern with PARTITION BY dept gives the second-highest per department."
+followUps: ["Why is ROW_NUMBER wrong here when salaries tie?", "How would you return the Nth highest salary?", "How would you return every employee who earns the second-highest salary in each department?"]
+prerequisites: ["articles:sql/window-functions"]
+related: ["interview-questions:sql/window-functions-vs-group-by"]
+versionContext: "Standard SQL; examples tested with SQLite 3.45"
+---
+
+## Detailed explanation
+
+Salaries: Ben 150, Chen 150, Asha 120, Fay 110, Dev 90, Eli `NULL`. The highest is 150 (shared by two people), so the second-highest **distinct** salary is 120.
+
+```sql
+WITH ranked AS (
+  SELECT salary,
+         DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+  FROM employees
+  WHERE salary IS NOT NULL
+)
+SELECT DISTINCT salary FROM ranked WHERE rnk = 2;   -- 120
+```
+
+`DENSE_RANK` gives 150 rank 1 for both Ben and Chen, then 120 rank 2.
+
+## Why not ROW_NUMBER?
+
+`ROW_NUMBER` numbers rows 1, 2, 3 even when values tie, so row 2 is Chen's 150, which is wrong. `RANK` would also be wrong: it gives 120 rank 3 because it skips a number after the tie.
+
+## Alternative: DISTINCT with OFFSET
+
+```sql
+SELECT DISTINCT salary
+FROM employees
+WHERE salary IS NOT NULL
+ORDER BY salary DESC
+LIMIT 1 OFFSET 1;    -- 120
+```
+
+This is concise. Window functions generalise better (per department, Nth value, returning the employees too).
+
+## Return NULL when there is no second value
+
+Some interview platforms expect `NULL` rather than an empty result. Wrap the query in a scalar subquery:
+
+```sql
+SELECT (SELECT DISTINCT salary FROM ranked WHERE rnk = 2) AS second_highest;
+```
+
+## Per department, returning employees
+
+```sql
+WITH ranked AS (
+  SELECT dept, name, salary,
+         DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary DESC) AS rnk
+  FROM employees
+  WHERE salary IS NOT NULL
+)
+SELECT dept, name, salary FROM ranked WHERE rnk = 2;
+```
+
+## Common mistakes
+
+1. Using `ROW_NUMBER` or `RANK` and getting the wrong value on ties.
+2. Forgetting `NULL` salaries (they sort first or last depending on the engine).
+3. Returning duplicate rows when several employees share the salary; add `DISTINCT` if only the value is wanted.

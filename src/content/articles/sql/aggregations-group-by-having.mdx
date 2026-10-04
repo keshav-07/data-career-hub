@@ -1,0 +1,106 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "SQL Aggregations, GROUP BY and HAVING"
+description: "How GROUP BY, aggregate functions and HAVING work, how NULLs change COUNT and AVG, and the conditional aggregation patterns used in reporting pipelines."
+inventoryId: "TECH-04"
+technology: ["sql"]
+topic: ["aggregation"]
+difficulty: "Beginner"
+prerequisites: ["articles:sql/joins"]
+related: ["articles:sql/window-functions", "interview-questions:sql/inner-vs-left-join"]
+previous: "articles:sql/joins"
+next: "articles:sql/window-functions"
+sources: [{"label": "PostgreSQL documentation: Aggregate functions", "url": "https://www.postgresql.org/docs/current/functions-aggregate.html"}]
+versionContext: "Standard SQL; examples tested with SQLite 3.45"
+---
+
+`GROUP BY` collapses rows that share the same values into one row per group, and **aggregate functions** (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`) summarise each group. Most reporting tables in a warehouse are built this way.
+
+## Sample data
+
+```sql
+CREATE TABLE sales (region TEXT, product TEXT, amount INT, returned INT);
+INSERT INTO sales VALUES
+  ('north','a',100,0), ('north','b',50,1), ('north','a',NULL,0),
+  ('south','a',200,0), ('south','b',30,0);
+```
+
+One north sale has a `NULL` amount, perhaps a missing value from the source.
+
+## GROUP BY and aggregate functions
+
+```sql
+SELECT region,
+       COUNT(*)      AS row_count,
+       COUNT(amount) AS amount_count,
+       SUM(amount)   AS total,
+       AVG(amount)   AS average
+FROM sales
+GROUP BY region;
+```
+
+| region | row_count | amount_count | total | average |
+|--------|-----------|--------------|-------|---------|
+| north | 3 | 2 | 150 | 75.0 |
+| south | 2 | 2 | 230 | 115.0 |
+
+Every column in the `SELECT` list must be either in `GROUP BY` or inside an aggregate.
+
+## How NULL changes the result
+
+- `COUNT(*)` counts rows. `COUNT(column)` counts **non-NULL** values, which is why north shows 3 and 2.
+- `SUM`, `AVG`, `MIN` and `MAX` **ignore NULLs**. North's average is 150 / 2 = 75, not 150 / 3.
+- If you want missing amounts treated as zero, say so explicitly: `AVG(COALESCE(amount, 0))` gives 50 for north.
+
+Decide which meaning is correct for the business question; neither is automatically right.
+
+## WHERE versus HAVING
+
+`WHERE` filters **rows before** grouping. `HAVING` filters **groups after** aggregation.
+
+```sql
+SELECT region, SUM(amount) AS total
+FROM sales
+WHERE returned = 0          -- drop returned sales first
+GROUP BY region
+HAVING SUM(amount) > 160;   -- then keep only large regions
+```
+
+Put row-level conditions in `WHERE`: it reduces the data before the expensive grouping step.
+
+## Conditional aggregation
+
+`CASE` inside an aggregate computes several metrics in one pass:
+
+```sql
+SELECT region,
+       SUM(CASE WHEN returned = 1 THEN amount ELSE 0 END) AS returned_amount,
+       COUNT(DISTINCT product)                           AS products_sold
+FROM sales
+GROUP BY region;
+```
+
+This pattern (one row per group, one column per condition) is how most pivot-style reports are built without a `PIVOT` keyword.
+
+<Callout tone="warning" title="Aggregating after a join can double count">
+
+If you join orders to order lines and then `SUM(order_total)`, each order's total is added once per line. Aggregate each table to the same grain before joining, or sum the column that belongs to the many side.
+
+</Callout>
+
+## Common mistakes
+
+1. Selecting a column that is neither grouped nor aggregated.
+2. Using `COUNT(*)` after a `LEFT JOIN` to count matches. Unmatched rows still count as 1; use `COUNT(right_table.key)`.
+3. Forgetting that `AVG` skips `NULL`s.
+4. Filtering aggregates in `WHERE` (not allowed) or row conditions in `HAVING` (allowed but slower and harder to read).
+
+## Interview relevance
+
+Expect to compute per-group metrics, explain `WHERE` versus `HAVING`, and predict how `NULL`s affect `COUNT` and `AVG`.
+
+## Key takeaway
+
+Pick the grain with `GROUP BY`, filter rows with `WHERE` and groups with `HAVING`, and decide deliberately how missing values should count.

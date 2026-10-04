@@ -1,0 +1,68 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "How would you detect and remove duplicate records safely?"
+description: "Interview answer: define what makes a record a duplicate, find them with GROUP BY, keep one row per key with ROW_NUMBER, and rebuild the table without destroying data."
+inventoryId: "INT-04"
+technology: ["sql"]
+topic: ["deduplication", "data-quality"]
+difficulty: "Medium"
+questionType: ["coding", "scenario"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "First define the business key that should be unique, such as order_id, and a rule for which copy wins, such as the latest loaded_at. Find duplicates with GROUP BY key HAVING COUNT(*) > 1, then keep one row per key using ROW_NUMBER() OVER (PARTITION BY key ORDER BY loaded_at DESC) and select rn = 1. Write the result to a new table, check counts, then swap it in, rather than deleting rows in place."
+followUps: ["Why might SELECT DISTINCT not remove these duplicates?", "How do you prevent duplicates from coming back?", "How would you deduplicate a table too large to rebuild every day?"]
+prerequisites: ["articles:sql/window-functions"]
+related: ["articles:sql/ctes-subqueries-temp-tables", "interview-questions:data-engineering/idempotent-batch-pipeline"]
+versionContext: "Standard SQL; examples tested with SQLite 3.45"
+---
+
+## Detailed explanation
+
+"Duplicate" must be defined before it can be removed. Two rows can be **exact copies**, or they can share a business key but differ in other columns (a reload, a correction). Each needs a rule.
+
+## Example
+
+```sql
+-- order 1 was loaded twice; order 3 was corrected the next day
+SELECT order_id, COUNT(*) AS copies
+FROM raw_orders
+GROUP BY order_id
+HAVING COUNT(*) > 1;
+-- (1, 2), (3, 2)
+```
+
+`SELECT DISTINCT *` does **not** help here: the copies differ in `loaded_at` (and order 3 in `amount`), so all 5 rows are distinct.
+
+Keep the latest version of each order:
+
+```sql
+CREATE TABLE orders_clean AS
+WITH ranked AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY loaded_at DESC) AS rn
+  FROM raw_orders
+)
+SELECT order_id, customer, amount, loaded_at
+FROM ranked
+WHERE rn = 1;
+```
+
+Verify before swapping: `COUNT(*)` should equal `COUNT(DISTINCT order_id)` (3 and 3 here).
+
+## Why rebuild instead of DELETE
+
+Deleting in place is irreversible and easy to get wrong. Building a clean table, checking it, then renaming or swapping it is safer, and the raw table remains for audit.
+
+## Preventing recurrence
+
+- Enforce uniqueness at the target (primary key, or `MERGE` on the key).
+- Make loads idempotent so retries do not append copies.
+- Add a data-quality check that fails when the key is not unique.
+
+## Common mistakes
+
+1. Deduplicating without agreeing which copy is correct.
+2. Using `DISTINCT` when copies differ in metadata columns.
+3. A non-deterministic `ORDER BY` in `ROW_NUMBER` (ties in `loaded_at`), so a different row wins on each run. Add a tiebreaker.

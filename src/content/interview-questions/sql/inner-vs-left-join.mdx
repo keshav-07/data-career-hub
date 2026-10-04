@@ -1,0 +1,49 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Explain INNER JOIN vs LEFT JOIN with a practical example."
+description: "Interview answer: INNER JOIN keeps only matching rows, LEFT JOIN keeps every left-side row with NULLs where nothing matches, which changes counts and totals."
+inventoryId: "INT-01"
+technology: ["sql"]
+topic: ["joins"]
+difficulty: "Easy"
+questionType: ["conceptual", "coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+shortAnswer: "An INNER JOIN returns only rows that have a match in both tables. A LEFT JOIN returns every row from the left table, and fills the right table's columns with NULL where there is no match. So a customer with no orders disappears from an inner join but appears with NULLs in a left join, which changes counts and totals."
+followUps: ["Why does putting a condition on the right table in WHERE turn a LEFT JOIN into an INNER JOIN?", "How do you count orders per customer including customers with none?", "When would you use a FULL OUTER JOIN?"]
+related: ["articles:sql/joins", "articles:sql/aggregations-group-by-having"]
+versionContext: "Standard SQL; examples tested with SQLite 3.45"
+---
+
+## Detailed explanation
+
+Choose the join by asking: **which rows must I not lose?** If every customer must appear in a report, the customer table is the left side of a `LEFT JOIN`.
+
+## Example
+
+Customers Asha (2 orders), Ben (1 order) and Chen (no orders):
+
+```sql
+SELECT c.name,
+       COUNT(o.order_id)         AS orders,
+       COALESCE(SUM(o.amount), 0) AS revenue
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id
+GROUP BY c.name;
+```
+
+| name | orders | revenue |
+|------|--------|---------|
+| Asha | 2 | 120 |
+| Ben | 1 | 20 |
+| Chen | 0 | 0 |
+
+With `INNER JOIN`, Chen would be missing entirely.
+
+## Common mistakes
+
+1. **`COUNT(*)` instead of `COUNT(o.order_id)`.** `COUNT(*)` counts Chen's unmatched row as 1 order.
+2. **Filtering the right table in `WHERE`.** `WHERE o.amount > 0` removes rows where `o.amount` is `NULL`, which drops Chen and silently turns the query into an inner join. Move the condition into `ON`.
+3. **Assuming a left join cannot add rows.** If the right side has several matches, the left row is repeated once per match.

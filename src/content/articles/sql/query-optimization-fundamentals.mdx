@@ -1,0 +1,95 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "SQL Query Optimization Fundamentals"
+description: "A practical process for speeding up slow SQL: read the query plan, reduce the data scanned, make filters sargable, fix joins and verify the result is unchanged."
+inventoryId: "TECH-05"
+technology: ["sql"]
+topic: ["performance", "query-plans"]
+difficulty: "Advanced"
+prerequisites: ["articles:sql/ctes-subqueries-temp-tables"]
+related: ["interview-questions:sql/optimize-slow-query", "articles:spark/partitions-shuffles-skew"]
+previous: "articles:sql/ctes-subqueries-temp-tables"
+sources: [{"label": "SQLite documentation: EXPLAIN QUERY PLAN", "url": "https://www.sqlite.org/eqp.html"}, {"label": "PostgreSQL documentation: Using EXPLAIN", "url": "https://www.postgresql.org/docs/current/using-explain.html"}]
+versionContext: "Standard SQL; examples tested with SQLite 3.45; plan output format differs by engine"
+---
+
+Query optimisation is a process, not a list of tricks: **measure, find where the work goes, reduce it, and check the answer has not changed.**
+
+## 1. Read the plan
+
+Every engine can show how it will run a query: `EXPLAIN` (PostgreSQL, Snowflake, Spark SQL, BigQuery's execution details), `EXPLAIN QUERY PLAN` (SQLite). Look for:
+
+- **full scans** of large tables;
+- **joins** and their algorithm (hash, merge, nested loop, broadcast);
+- **sorts** and **aggregations** on large inputs;
+- estimated versus actual row counts, if the engine shows both.
+
+```sql
+EXPLAIN QUERY PLAN SELECT SUM(amount) FROM big WHERE customer_id = 42;
+-- SCAN big                      (no index: reads every row)
+
+CREATE INDEX idx_big_customer ON big(customer_id);
+EXPLAIN QUERY PLAN SELECT SUM(amount) FROM big WHERE customer_id = 42;
+-- SEARCH big USING INDEX idx_big_customer (customer_id=?)
+```
+
+## 2. Read less data
+
+The cheapest row is one you never read.
+
+- Select only the columns you need. In columnar warehouses `SELECT *` reads every column from storage.
+- Filter early, and on columns that let the engine **prune**: partition columns, clustering keys, sort keys or indexed columns.
+- Aggregate before joining when the result is at a coarser grain.
+
+## 3. Keep filters sargable
+
+A filter is *sargable* when the engine can use an index or partition/cluster metadata to skip data. Wrapping the column in a function or expression usually prevents that:
+
+```sql
+-- Not sargable: the column is transformed
+WHERE customer_id + 0 = 42
+WHERE CAST(created_at AS DATE) = DATE '2026-10-01'
+
+-- Sargable: compare the raw column to a range
+WHERE customer_id = 42
+WHERE created_at >= TIMESTAMP '2026-10-01' AND created_at < TIMESTAMP '2026-10-02'
+```
+
+With the index above, SQLite searches the index for `customer_id = 42` but falls back to a full scan for `customer_id + 0 = 42`.
+
+## 4. Fix the joins
+
+- Join on keys of matching types; implicit casts can block indexes and pruning.
+- Check the key is unique where you expect it to be; accidental fan-out multiplies the work and the answer.
+- In distributed engines, a small dimension can often be **broadcast** to avoid shuffling the large table.
+
+## 5. Avoid repeated work
+
+Correlated subqueries that run once per outer row, or a CTE that the engine evaluates twice, can dominate cost. Rewrite as a join or window function, or compute once into a temporary table.
+
+## 6. Verify the result
+
+After every change, compare row counts and key aggregates with the original query. A faster wrong query is a regression.
+
+<Callout tone="warning" title="Indexes are not free">
+
+Indexes speed reads but slow writes and use storage. In columnar warehouses you usually tune **partitioning, clustering and file layout** instead of creating B-tree indexes.
+
+</Callout>
+
+## Common mistakes
+
+1. Tuning without looking at the plan.
+2. Applying functions to filtered columns.
+3. Using `SELECT *` in production transformations.
+4. Optimising a query whose real problem is upstream data volume or skew.
+
+## Interview relevance
+
+"How would you optimise a slow query?" is answered best as a process: plan, data scanned, filters, joins, repeated work, verification. See the [interview question](/interview/sql/optimize-slow-query/).
+
+## Key takeaway
+
+Find where the work goes, then read less data, prune more, join smarter and confirm the answer is unchanged.
