@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "validate:content": "node scripts/validate-content.mjs"
+    "check:dist": "node scripts/check-dist.mjs",
+    "validate": "npm run check && npm run lint && npm run build && npm run check:dist"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",

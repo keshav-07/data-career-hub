@@ -21,7 +21,10 @@ const { Content } = await render(hub.entry);
 
 const articles = (await getItems("articles")).filter((a) => a.technology.includes(tech) && a.entry.data.section === "learn");
 const byLevel = (lvl: string) => sortByTitle(articles.filter((a) => a.difficulty === lvl));
-const questions = (await getItems("interview-questions")).filter((q) => q.technology.includes(tech));
+const allQuestions = await getItems("interview-questions");
+const questions = allQuestions.filter((q) => q.technology.includes(tech));
+// Interview hubs exist per primary technology (the question folder).
+const hasInterviewHub = allQuestions.some((q) => q.id.startsWith(`${tech}/`));
 const projects = (await getItems("projects")).filter((p) => p.technology.includes(tech) || p.entry.data.technologies.includes(tech));
 const learnFirst = (await Promise.all(d.whatToLearnFirst.map((r) => getByRef(r)))).filter((x): x is Item => !!x);
 const cheat = d.cheatSheet ? await getByRef(d.cheatSheet) : undefined;
@@ -106,9 +109,11 @@ const nav = [
         <ul class="link-list" style="margin-top: var(--sp-4)">
           {questions.map((q) => <li><ContentRow item={q} /></li>)}
         </ul>
-        <div style="margin-top: var(--sp-4)">
-          <Button href={`/interview/${tech}/`} variant="secondary">All {d.shortName} interview questions</Button>
-        </div>
+        {hasInterviewHub && (
+          <div style="margin-top: var(--sp-4)">
+            <Button href={`/interview/${tech}/`} variant="secondary">All {d.shortName} interview questions</Button>
+          </div>
+        )}
       </section>
     )
   }
