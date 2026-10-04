@@ -19,10 +19,22 @@ const { groups } = await relatedGroups(item);
 const tech = item.technology[0];
 ---
 
-<ArticleLayout item={item} crumbs={crumbs} headings={headings} eyebrow="Cheat sheet" deck={item.description} wide>
+<ArticleLayout
+  item={item}
+  crumbs={crumbs}
+  headings={headings}
+  eyebrow="Cheat sheet"
+  deck={item.description}
+  wide
+>
   <Content components={{ Callout }} />
   <Fragment slot="footer">
     <RelatedList groups={groups} />
-    <NextStep title="Go deeper" text="Cheat sheets are for revision. The full guides explain the reasoning." href={`/${tech}/`} label={`Open the ${tech} hub`} />
+    <NextStep
+      title="Go deeper"
+      text="Cheat sheets are for revision. The full guides explain the reasoning."
+      href={`/${tech}/`}
+      label={`Open the ${tech} hub`}
+    />
   </Fragment>
 </ArticleLayout>

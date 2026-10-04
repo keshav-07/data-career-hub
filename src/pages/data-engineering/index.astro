@@ -5,9 +5,14 @@ import { getItems } from "../../utils/content";
 import { TECH_GROUP_LABELS } from "../../data/site";
 import { HOME } from "../../utils/breadcrumbs";
 
-const hubs = (await getItems("technologies")).sort((a, b) => a.entry.data.order - b.entry.data.order);
+const hubs = (await getItems("technologies")).sort(
+  (a, b) => a.entry.data.order - b.entry.data.order,
+);
 const groups = Object.keys(TECH_GROUP_LABELS)
-  .map((g) => ({ label: TECH_GROUP_LABELS[g], items: hubs.filter((h) => h.entry.data.group === g) }))
+  .map((g) => ({
+    label: TECH_GROUP_LABELS[g],
+    items: hubs.filter((h) => h.entry.data.group === g),
+  }))
   .filter((g) => g.items.length);
 const pillars = (await getItems("articles")).filter((a) => a.entry.data.pillar);
 ---
@@ -23,35 +28,53 @@ const pillars = (await getItems("articles")).filter((a) => a.entry.data.pillar);
   <section class="section section--tight">
     <div class="cluster">
       <Button href="/data-engineering/roadmap/">Data Engineer roadmap</Button>
-      <Button href="/data-engineering/system-design/" variant="secondary">System design</Button>
-      <Button href="/projects/" variant="secondary">Projects</Button>
+      <Button href="/data-engineering/system-design/" variant="secondary">
+        System design
+      </Button>
+      <Button href="/projects/" variant="secondary">
+        Projects
+      </Button>
     </div>
   </section>
 
   <section class="section section--tight" aria-labelledby="tech-h">
-    <h2 id="tech-h" class="visually-hidden">Technologies</h2>
+    <h2 id="tech-h" class="visually-hidden">
+      Technologies
+    </h2>
     <div class="tech-groups">
-      {
-        groups.map((g) => (
-          <div class="tech-group">
-            <h3>{g.label}</h3>
-            <ul>
-              {g.items.map((h) => <li><a href={h.url}>{h.entry.data.shortName}<small>→</small></a></li>)}
-            </ul>
-          </div>
-        ))
-      }
+      {groups.map((g) => (
+        <div class="tech-group">
+          <h3>{g.label}</h3>
+          <ul>
+            {g.items.map((h) => (
+              <li>
+                <a href={h.url}>
+                  {h.entry.data.shortName}
+                  <small>→</small>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   </section>
 
-  {
-    pillars.length > 0 && (
-      <section class="section section--tight" aria-labelledby="pillar-h">
-        <h2 id="pillar-h" style="font-size: var(--fs-h3)">Pillar guides</h2>
-        <ul class="link-list" style="margin-top: var(--sp-4)">
-          {pillars.map((p) => <li><a class="row" href={p.url}><span class="row__title">{p.title}</span><span class="row__desc">{p.description}</span></a></li>)}
-        </ul>
-      </section>
-    )
-  }
+  {pillars.length > 0 && (
+    <section class="section section--tight" aria-labelledby="pillar-h">
+      <h2 id="pillar-h" style="font-size: var(--fs-h3)">
+        Pillar guides
+      </h2>
+      <ul class="link-list" style="margin-top: var(--sp-4)">
+        {pillars.map((p) => (
+          <li>
+            <a class="row" href={p.url}>
+              <span class="row__title">{p.title}</span>
+              <span class="row__desc">{p.description}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 </ContentLayout>

@@ -105,8 +105,7 @@ async function load(): Promise<Item[]> {
       if (!includeDrafts && data.status === "draft") continue;
       const technology =
         name === "technologies" ? [entry.id] : ((data.technology as string[] | undefined) ?? []);
-      const diff =
-        (data.difficulty as string | undefined) ?? (data.level as string | undefined);
+      const diff = (data.difficulty as string | undefined) ?? (data.level as string | undefined);
       const body = entry.body ?? "";
       const common: Common = {
         ref: `${name}:${entry.id}`,
@@ -124,7 +123,13 @@ async function load(): Promise<Item[]> {
       items.push({ ...common, collection: name, entry } as Item);
     }
   }
-  validateContent(items, new Set([...items.filter((i) => i.collection === "technologies").map((i) => i.id), ...EXTRA_TECHNOLOGY_TERMS]));
+  validateContent(
+    items,
+    new Set([
+      ...items.filter((i) => i.collection === "technologies").map((i) => i.id),
+      ...EXTRA_TECHNOLOGY_TERMS,
+    ]),
+  );
   return items;
 }
 

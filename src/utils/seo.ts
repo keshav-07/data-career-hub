@@ -10,7 +10,11 @@ export function pageTitle(title: string): string {
   return title === SITE.name ? title : `${title} | ${SITE.name}`;
 }
 
-export function breadcrumbSchema(crumbs: Crumb[], currentPath: string, site: URL | string | undefined) {
+export function breadcrumbSchema(
+  crumbs: Crumb[],
+  currentPath: string,
+  site: URL | string | undefined,
+) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

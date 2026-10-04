@@ -38,17 +38,22 @@ const crumbs = await breadcrumbsFor(item);
   </section>
 
   <section class="section section--tight" aria-labelledby="stages-h">
-    <h2 id="stages-h" style="font-size: var(--fs-h2); margin-bottom: var(--sp-8)">The journey, stage by stage</h2>
+    <h2 id="stages-h" style="font-size: var(--fs-h2); margin-bottom: var(--sp-8)">
+      The journey, stage by stage
+    </h2>
     <RoadmapNodes stages={d.stages} layout="grid" />
   </section>
 
   <section class="section section--tight">
     <p class="muted" style="max-width: 60ch">
-      This site does not save personal progress. Use the stages as an ordered guide and keep your own checklist.
+      This site does not save personal progress. Use the stages as an ordered guide and keep your
+      own checklist.
     </p>
     <div class="cluster" style="margin-top: var(--sp-4)">
       <Button href="/roadmaps/">Study plans (30, 60 and 90 days)</Button>
-      <Button href="/interview/" variant="secondary">Interview preparation</Button>
+      <Button href="/interview/" variant="secondary">
+        Interview preparation
+      </Button>
     </div>
   </section>
 </ContentLayout>

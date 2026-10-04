@@ -7,32 +7,57 @@ const isActive = (href: string) => (href === "/" ? path === "/" : path.startsWit
 
 <header class="site-header">
   <div class="container site-header__inner">
-    <a class="wordmark" href="/" aria-label={`${SITE.name} home`}>Data Career <span>Hub</span></a>
+    <a class="wordmark" href="/" aria-label={`${SITE.name} home`}>
+      Data Career <span>Hub</span>
+    </a>
     <nav class="primary-nav" aria-label="Primary">
       <ul>
-        {
-          GOALS.map((g) => (
-            <li>
-              <a href={g.href} aria-current={isActive(g.href) ? "page" : undefined}>
-                {g.label}
-              </a>
-            </li>
-          ))
-        }
+        {GOALS.map((g) => (
+          <li>
+            <a href={g.href} aria-current={isActive(g.href) ? "page" : undefined}>
+              {g.label}
+            </a>
+          </li>
+        ))}
       </ul>
     </nav>
     <div class="header-actions">
-      <button type="button" class="icon-btn search-trigger" data-search-open aria-label="Search" aria-haspopup="dialog">
+      <button
+        type="button"
+        class="icon-btn search-trigger"
+        data-search-open
+        aria-label="Search"
+        aria-haspopup="dialog"
+      >
         <Icon name="search" />
         <span class="visually-hidden">Search</span>
         <kbd aria-hidden="true">Ctrl K</kbd>
       </button>
-      <button type="button" class="icon-btn theme-toggle js-only" data-theme-toggle aria-label="Theme: system. Activate to change.">
-        <span class="icon-moon"><Icon name="moon" /></span>
-        <span class="icon-sun"><Icon name="sun" /></span>
-        <span class="visually-hidden" data-theme-label>system</span>
+      <button
+        type="button"
+        class="icon-btn theme-toggle js-only"
+        data-theme-toggle
+        aria-label="Theme: system. Activate to change."
+      >
+        <span class="icon-moon">
+          <Icon name="moon" />
+        </span>
+        <span class="icon-sun">
+          <Icon name="sun" />
+        </span>
+        <span class="visually-hidden" data-theme-label>
+          system
+        </span>
       </button>
-      <button type="button" class="icon-btn menu-toggle" data-menu-toggle aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="mobile-menu">
+      <button
+        type="button"
+        class="icon-btn menu-toggle"
+        data-menu-toggle
+        aria-label="Open menu"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="mobile-menu"
+      >
         <Icon name="menu" />
       </button>
     </div>

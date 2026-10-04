@@ -36,38 +36,46 @@ const typeText = d.questionType.join(" / ");
   titleClass="question-header-title"
   meta={[d.difficulty, typeText, `~${d.estimatedMinutes} min`, `${d.interviewRelevance} relevance`]}
 >
-  <section slot="header-extra" class="short-answer" aria-labelledby="short-answer-h" style="margin-top: var(--sp-6)">
+  <section
+    slot="header-extra"
+    class="short-answer"
+    aria-labelledby="short-answer-h"
+    style="margin-top: var(--sp-6)"
+  >
     <h2 id="short-answer-h">Short answer</h2>
     <p>{d.shortAnswer}</p>
   </section>
 
-  {
-    prerequisites.length > 0 && (
-      <Callout tone="info" title="Review first">
-        <ul style="margin:0;padding-left:1.2rem">
-          {prerequisites.map((p) => <li><a href={p.url}>{p.title}</a></li>)}
-        </ul>
-      </Callout>
-    )
-  }
+  {prerequisites.length > 0 && (
+    <Callout tone="info" title="Review first">
+      <ul style="margin:0;padding-left:1.2rem">
+        {prerequisites.map((p) => (
+          <li>
+            <a href={p.url}>{p.title}</a>
+          </li>
+        ))}
+      </ul>
+    </Callout>
+  )}
   <Content components={{ Callout }} />
 
   <Fragment slot="after-prose">
-    {
-      d.followUps.length > 0 && (
-        <section class="related-block" aria-labelledby="followups-h">
-          <h2 id="followups-h">Interview follow-ups</h2>
-          <p class="muted" style="margin-bottom: var(--sp-3)">
-            Interviewers often probe the same topic a layer deeper. Be ready for these.
-          </p>
-          <ol class="followups">
-            {d.followUps.map((f) => (
-              <li><span class="eyebrow">Follow-up</span>{f}</li>
-            ))}
-          </ol>
-        </section>
-      )
-    }
+    {d.followUps.length > 0 && (
+      <section class="related-block" aria-labelledby="followups-h">
+        <h2 id="followups-h">Interview follow-ups</h2>
+        <p class="muted" style="margin-bottom: var(--sp-3)">
+          Interviewers often probe the same topic a layer deeper. Be ready for these.
+        </p>
+        <ol class="followups">
+          {d.followUps.map((f) => (
+            <li>
+              <span class="eyebrow">Follow-up</span>
+              {f}
+            </li>
+          ))}
+        </ol>
+      </section>
+    )}
   </Fragment>
 
   <Fragment slot="footer">

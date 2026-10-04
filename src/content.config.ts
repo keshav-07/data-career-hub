@@ -5,7 +5,10 @@ import { z } from "astro/zod";
 /** Reference to another content item: "<collection>:<id>", e.g. "articles:sql/window-functions". */
 const ref = z
   .string()
-  .regex(/^[a-z-]+:[a-z0-9-]+(\/[a-z0-9-]+)*$/, 'Use "<collection>:<id>", e.g. "articles:sql/joins"');
+  .regex(
+    /^[a-z-]+:[a-z0-9-]+(\/[a-z0-9-]+)*$/,
+    'Use "<collection>:<id>", e.g. "articles:sql/joins"',
+  );
 
 const source = z.object({ label: z.string().min(2), url: z.url() });
 const difficulty = z.enum(["Beginner", "Intermediate", "Advanced"]);
@@ -14,7 +17,10 @@ const status = z.enum(["draft", "published"]);
 const shared = {
   title: z.string().min(10).max(110),
   description: z.string().min(80).max(200),
-  inventoryId: z.string().regex(/^[A-Z]+-\d{2}$/).optional(),
+  inventoryId: z
+    .string()
+    .regex(/^[A-Z]+-\d{2}$/)
+    .optional(),
   status: status.default("published"),
   technology: z.array(z.string()).min(1),
   topic: z.array(z.string()).default([]),
@@ -83,9 +89,7 @@ const companyGuides = defineCollection({
         }),
       )
       .default([]),
-    reportedQuestions: z
-      .array(z.object({ question: z.string(), source }))
-      .default([]),
+    reportedQuestions: z.array(z.object({ question: z.string(), source })).default([]),
     representativeQuestions: z.array(z.string()).default([]),
   }),
 });

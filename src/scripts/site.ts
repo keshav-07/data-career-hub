@@ -23,7 +23,9 @@ async function openSearch() {
 }
 
 triggers.forEach((t) => t.addEventListener("click", () => void openSearch()));
-dialog?.querySelectorAll("[data-search-close]").forEach((b) => b.addEventListener("click", () => dialog.close()));
+dialog
+  ?.querySelectorAll("[data-search-close]")
+  .forEach((b) => b.addEventListener("click", () => dialog.close()));
 // Escape inside the search field would otherwise only clear the text first.
 dialog?.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
@@ -37,7 +39,8 @@ dialog?.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
-    if (location.pathname === "/search/") document.querySelector<HTMLInputElement>("#search-page-input")?.focus();
+    if (location.pathname === "/search/")
+      document.querySelector<HTMLInputElement>("#search-page-input")?.focus();
     else void openSearch();
   }
 });

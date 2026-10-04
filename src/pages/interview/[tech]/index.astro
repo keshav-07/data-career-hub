@@ -14,8 +14,12 @@ export async function getStaticPaths() {
 const { tech } = Astro.params;
 const label = await techLabel(tech!);
 const qs = (await getItems("interview-questions")).filter((q) => q.id.startsWith(`${tech}/`));
-const articles = (await getItems("articles")).filter((a) => a.technology[0] === tech && a.entry.data.section === "learn");
-const levels = ["Easy", "Medium", "Hard"].filter((l) => qs.some((q) => q.entry.data.difficulty === l));
+const articles = (await getItems("articles")).filter(
+  (a) => a.technology[0] === tech && a.entry.data.section === "learn",
+);
+const levels = ["Easy", "Medium", "Hard"].filter((l) =>
+  qs.some((q) => q.entry.data.difficulty === l),
+);
 const types = [...new Set(qs.flatMap((q) => q.entry.data.questionType))];
 const hubExists = (await getItems("technologies")).some((t) => t.id === tech);
 ---
@@ -31,36 +35,72 @@ const hubExists = (await getItems("technologies")).some((t) => t.id === tech);
   <IndexMeta type="Interview hub" technology={tech} />
 
   <section class="section section--tight" aria-labelledby="qs-h">
-    <h2 id="qs-h" class="visually-hidden">Questions</h2>
+    <h2 id="qs-h" class="visually-hidden">
+      Questions
+    </h2>
     <div class="js-only" data-filters aria-label="Filter questions">
       <fieldset class="filter-group">
         <legend>Difficulty</legend>
         <div class="filter-bar">
-          <button type="button" class="chip" data-filter="difficulty" data-value="" aria-pressed="true">All</button>
-          {levels.map((l) => <button type="button" class="chip" data-filter="difficulty" data-value={l} aria-pressed="false">{l}</button>)}
+          <button
+            type="button"
+            class="chip"
+            data-filter="difficulty"
+            data-value=""
+            aria-pressed="true"
+          >
+            All
+          </button>
+          {levels.map((l) => (
+            <button
+              type="button"
+              class="chip"
+              data-filter="difficulty"
+              data-value={l}
+              aria-pressed="false"
+            >
+              {l}
+            </button>
+          ))}
         </div>
       </fieldset>
       <fieldset class="filter-group">
         <legend>Question type</legend>
         <div class="filter-bar">
-          <button type="button" class="chip" data-filter="type" data-value="" aria-pressed="true">All</button>
-          {types.map((t) => <button type="button" class="chip" data-filter="type" data-value={t} aria-pressed="false">{t}</button>)}
+          <button type="button" class="chip" data-filter="type" data-value="" aria-pressed="true">
+            All
+          </button>
+          {types.map((t) => (
+            <button
+              type="button"
+              class="chip"
+              data-filter="type"
+              data-value={t}
+              aria-pressed="false"
+            >
+              {t}
+            </button>
+          ))}
         </div>
       </fieldset>
       <p class="muted" role="status" aria-live="polite" data-count></p>
     </div>
     <ul class="link-list" data-list>
-      {
-        qs.map((q) => (
-          <li data-difficulty={q.entry.data.difficulty} data-types={q.entry.data.questionType.join(",")}>
-            <a class="row" href={q.url}>
-              <span class="row__title">{q.title}</span>
-              <span class="row__desc">{q.entry.data.shortAnswer.split(/(?<=[.?!])\s/)[0]}</span>
-              <span class="row__meta">{q.entry.data.difficulty} · {q.entry.data.questionType.join(", ")} · ~{q.entry.data.estimatedMinutes} min</span>
-            </a>
-          </li>
-        ))
-      }
+      {qs.map((q) => (
+        <li
+          data-difficulty={q.entry.data.difficulty}
+          data-types={q.entry.data.questionType.join(",")}
+        >
+          <a class="row" href={q.url}>
+            <span class="row__title">{q.title}</span>
+            <span class="row__desc">{q.entry.data.shortAnswer.split(/(?<=[.?!])\s/)[0]}</span>
+            <span class="row__meta">
+              {q.entry.data.difficulty} · {q.entry.data.questionType.join(", ")} · ~
+              {q.entry.data.estimatedMinutes} min
+            </span>
+          </a>
+        </li>
+      ))}
     </ul>
     <div class="empty-state" data-empty hidden>
       <h3>No questions match these filters</h3>
@@ -68,23 +108,40 @@ const hubExists = (await getItems("technologies")).some((t) => t.id === tech);
     </div>
   </section>
 
-  {
-    articles.length > 0 && (
-      <section class="section section--tight" aria-labelledby="concept-h">
-        <h2 id="concept-h" style="font-size: var(--fs-h3)">Concept review</h2>
-        <ul class="link-list" style="margin-top: var(--sp-4)">
-          {articles.map((a) => <li><a class="row" href={a.url}><span class="row__title">{a.title}</span><span class="row__meta">{a.difficulty}</span></a></li>)}
-        </ul>
-      </section>
-    )
-  }
+  {articles.length > 0 && (
+    <section class="section section--tight" aria-labelledby="concept-h">
+      <h2 id="concept-h" style="font-size: var(--fs-h3)">
+        Concept review
+      </h2>
+      <ul class="link-list" style="margin-top: var(--sp-4)">
+        {articles.map((a) => (
+          <li>
+            <a class="row" href={a.url}>
+              <span class="row__title">{a.title}</span>
+              <span class="row__meta">{a.difficulty}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 
   <section class="section section--tight" aria-labelledby="more-h">
-    <h2 id="more-h" style="font-size: var(--fs-h3)">Continue preparing</h2>
+    <h2 id="more-h" style="font-size: var(--fs-h3)">
+      Continue preparing
+    </h2>
     <div class="cluster" style="margin-top: var(--sp-4)">
-      <Button href="/data-engineering/system-design/" variant="secondary">System design case studies</Button>
-      <Button href="/interview/companies/" variant="secondary">Company preparation</Button>
-      {hubExists && <Button href={`/${tech}/`} variant="secondary">{label} learning hub</Button>}
+      <Button href="/data-engineering/system-design/" variant="secondary">
+        System design case studies
+      </Button>
+      <Button href="/interview/companies/" variant="secondary">
+        Company preparation
+      </Button>
+      {hubExists && (
+        <Button href={`/${tech}/`} variant="secondary">
+          {label} learning hub
+        </Button>
+      )}
     </div>
   </section>
 </ContentLayout>
@@ -113,7 +170,9 @@ const hubExists = (await getItems("technologies")).some((t) => t.id === tech);
       b.addEventListener("click", () => {
         const key = b.dataset.filter as "difficulty" | "type";
         state[key] = b.dataset.value ?? "";
-        root.querySelectorAll<HTMLButtonElement>(`button[data-filter="${key}"]`).forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        root
+          .querySelectorAll<HTMLButtonElement>(`button[data-filter="${key}"]`)
+          .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
         update();
       }),
     );

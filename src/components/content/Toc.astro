@@ -12,10 +12,21 @@ const { headings, variant } = Astro.props;
 const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
 ---
 
-{
-  variant === "desktop" ? (
-    <nav class="toc toc--desktop" aria-label="On this page">
-      <p class="toc__title">On this page</p>
+{variant === "desktop" ? (
+  <nav class="toc toc--desktop" aria-label="On this page">
+    <p class="toc__title">On this page</p>
+    <ol>
+      {items.map((h) => (
+        <li style={h.depth === 3 ? "padding-left: var(--sp-3)" : undefined}>
+          <a href={`#${h.slug}`}>{h.text}</a>
+        </li>
+      ))}
+    </ol>
+  </nav>
+) : (
+  <details class="disclosure toc toc--mobile">
+    <summary>On this page</summary>
+    <div>
       <ol>
         {items.map((h) => (
           <li style={h.depth === 3 ? "padding-left: var(--sp-3)" : undefined}>
@@ -23,19 +34,6 @@ const items = headings.filter((h) => h.depth === 2 || h.depth === 3);
           </li>
         ))}
       </ol>
-    </nav>
-  ) : (
-    <details class="disclosure toc toc--mobile">
-      <summary>On this page</summary>
-      <div>
-        <ol>
-          {items.map((h) => (
-            <li style={h.depth === 3 ? "padding-left: var(--sp-3)" : undefined}>
-              <a href={`#${h.slug}`}>{h.text}</a>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </details>
-  )
-}
+    </div>
+  </details>
+)}

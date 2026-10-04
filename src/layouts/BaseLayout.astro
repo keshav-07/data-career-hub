@@ -86,10 +86,14 @@ const analyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN;
         }
       })();
     </script>
-    {jsonLd.map((s) => <script type="application/ld+json" set:html={JSON.stringify(s)} />)}
+    {jsonLd.map((s) => (
+      <script type="application/ld+json" set:html={JSON.stringify(s)} />
+    ))}
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to main content</a>
+    <a class="skip-link" href="#main">
+      Skip to main content
+    </a>
     <Header />
     <MobileMenu />
     <main id="main" tabindex="-1" data-pagefind-body={indexable ? "" : undefined}>
@@ -100,14 +104,12 @@ const analyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN;
     <script>
       import "../scripts/site";
     </script>
-    {
-      analyticsToken && (
-        <script
-          defer
-          src="https://static.cloudflareinsights.com/beacon.min.js"
-          data-cf-beacon={JSON.stringify({ token: analyticsToken })}
-        />
-      )
-    }
+    {analyticsToken && (
+      <script
+        defer
+        src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon={JSON.stringify({ token: analyticsToken })}
+      />
+    )}
   </body>
 </html>

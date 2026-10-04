@@ -1,6 +1,13 @@
 ---
 import { render } from "astro:content";
-import { getItems, getByRef, getHub, sortByTitle, type Item, type ItemOf } from "../../utils/content";
+import {
+  getItems,
+  getByRef,
+  getHub,
+  sortByTitle,
+  type Item,
+  type ItemOf,
+} from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
 import IndexMeta from "../../components/content/IndexMeta.astro";
 import ContentRow from "../../components/content/ContentRow.astro";
@@ -19,16 +26,24 @@ const tech = hub.id;
 const d = hub.entry.data;
 const { Content } = await render(hub.entry);
 
-const articles = (await getItems("articles")).filter((a) => a.technology.includes(tech) && a.entry.data.section === "learn");
+const articles = (await getItems("articles")).filter(
+  (a) => a.technology.includes(tech) && a.entry.data.section === "learn",
+);
 const byLevel = (lvl: string) => sortByTitle(articles.filter((a) => a.difficulty === lvl));
 const allQuestions = await getItems("interview-questions");
 const questions = allQuestions.filter((q) => q.technology.includes(tech));
 // Interview hubs exist per primary technology (the question folder).
 const hasInterviewHub = allQuestions.some((q) => q.id.startsWith(`${tech}/`));
-const projects = (await getItems("projects")).filter((p) => p.technology.includes(tech) || p.entry.data.technologies.includes(tech));
-const learnFirst = (await Promise.all(d.whatToLearnFirst.map((r) => getByRef(r)))).filter((x): x is Item => !!x);
+const projects = (await getItems("projects")).filter(
+  (p) => p.technology.includes(tech) || p.entry.data.technologies.includes(tech),
+);
+const learnFirst = (await Promise.all(d.whatToLearnFirst.map((r) => getByRef(r)))).filter(
+  (x): x is Item => !!x,
+);
 const cheat = d.cheatSheet ? await getByRef(d.cheatSheet) : undefined;
-const related = (await Promise.all(d.relatedTechnologies.map((t) => getHub(t)))).filter((x): x is ItemOf<"technologies"> => !!x);
+const related = (await Promise.all(d.relatedTechnologies.map((t) => getHub(t)))).filter(
+  (x): x is ItemOf<"technologies"> => !!x,
+);
 const crumbs = await breadcrumbsFor(hub);
 const levels = [
   { id: "beginner", label: "Beginner", items: byLevel("Beginner") },
@@ -55,8 +70,14 @@ const nav = [
   indexable
 >
   <IndexMeta type="Technology hub" technology={tech} />
-  <nav class="tech-hub-nav" aria-label={`${d.shortName} sections`} style="margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter)">
-    {nav.map((n) => <a href={n.href}>{n.label}</a>)}
+  <nav
+    class="tech-hub-nav"
+    aria-label={`${d.shortName} sections`}
+    style="margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter)"
+  >
+    {nav.map((n) => (
+      <a href={n.href}>{n.label}</a>
+    ))}
   </nav>
 
   <section id="overview" class="section section--tight" aria-labelledby="overview-h">
@@ -66,86 +87,115 @@ const nav = [
         <Content />
       </div>
       <aside aria-label="Key facts">
-        <h2 class="eyebrow" style="font-size: var(--fs-sm)">Key facts</h2>
+        <h2 class="eyebrow" style="font-size: var(--fs-sm)">
+          Key facts
+        </h2>
         <ul class="link-list" style="margin-top: var(--sp-2)">
-          {d.keyFacts.map((f) => <li style="padding: var(--sp-3) 0">{f}</li>)}
+          {d.keyFacts.map((f) => (
+            <li style="padding: var(--sp-3) 0">{f}</li>
+          ))}
         </ul>
       </aside>
     </div>
   </section>
 
-  {
-    learnFirst.length > 0 && (
-      <section id="learn-first" class="section section--tight" aria-labelledby="lf-h">
-        <h2 id="lf-h" style="font-size: var(--fs-h3)">What to learn first</h2>
-        <ol class="ranked" style="margin-top: var(--sp-4)">
-          {learnFirst.map((i) => (
-            <li>
-              <a href={i.url}>
-                <span class="ranked__title">{i.title}<span class="ranked__sub">{i.description}</span></span>
-              </a>
-            </li>
-          ))}
-        </ol>
-      </section>
-    )
-  }
+  {learnFirst.length > 0 && (
+    <section id="learn-first" class="section section--tight" aria-labelledby="lf-h">
+      <h2 id="lf-h" style="font-size: var(--fs-h3)">
+        What to learn first
+      </h2>
+      <ol class="ranked" style="margin-top: var(--sp-4)">
+        {learnFirst.map((i) => (
+          <li>
+            <a href={i.url}>
+              <span class="ranked__title">
+                {i.title}
+                <span class="ranked__sub">{i.description}</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )}
 
-  {
-    levels.map((l) => (
-      <section id={l.id} class="section section--tight" aria-labelledby={`${l.id}-h`}>
-        <h2 id={`${l.id}-h`} style="font-size: var(--fs-h3)">{l.label}</h2>
-        <ul class="link-list" style="margin-top: var(--sp-4)">
-          {l.items.map((i) => <li><ContentRow item={i} /></li>)}
-        </ul>
-      </section>
-    ))
-  }
+  {levels.map((l) => (
+    <section id={l.id} class="section section--tight" aria-labelledby={`${l.id}-h`}>
+      <h2 id={`${l.id}-h`} style="font-size: var(--fs-h3)">
+        {l.label}
+      </h2>
+      <ul class="link-list" style="margin-top: var(--sp-4)">
+        {l.items.map((i) => (
+          <li>
+            <ContentRow item={i} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
 
-  {
-    questions.length > 0 && (
-      <section id="interview" class="section section--tight" aria-labelledby="int-h">
-        <h2 id="int-h" style="font-size: var(--fs-h3)">{d.shortName} interview preparation</h2>
-        <ul class="link-list" style="margin-top: var(--sp-4)">
-          {questions.map((q) => <li><ContentRow item={q} /></li>)}
-        </ul>
-        {hasInterviewHub && (
-          <div style="margin-top: var(--sp-4)">
-            <Button href={`/interview/${tech}/`} variant="secondary">All {d.shortName} interview questions</Button>
-          </div>
-        )}
-      </section>
-    )
-  }
+  {questions.length > 0 && (
+    <section id="interview" class="section section--tight" aria-labelledby="int-h">
+      <h2 id="int-h" style="font-size: var(--fs-h3)">
+        {d.shortName} interview preparation
+      </h2>
+      <ul class="link-list" style="margin-top: var(--sp-4)">
+        {questions.map((q) => (
+          <li>
+            <ContentRow item={q} />
+          </li>
+        ))}
+      </ul>
+      {hasInterviewHub && (
+        <div style="margin-top: var(--sp-4)">
+          <Button href={`/interview/${tech}/`} variant="secondary">
+            All {d.shortName} interview questions
+          </Button>
+        </div>
+      )}
+    </section>
+  )}
 
-  {
-    projects.length > 0 && (
-      <section id="projects" class="section section--tight" aria-labelledby="proj-h">
-        <h2 id="proj-h" style="font-size: var(--fs-h3)">Projects using {d.shortName}</h2>
-        <ul class="link-list" style="margin-top: var(--sp-4)">
-          {projects.map((p) => <li><ContentRow item={p} /></li>)}
-        </ul>
-      </section>
-    )
-  }
+  {projects.length > 0 && (
+    <section id="projects" class="section section--tight" aria-labelledby="proj-h">
+      <h2 id="proj-h" style="font-size: var(--fs-h3)">
+        Projects using {d.shortName}
+      </h2>
+      <ul class="link-list" style="margin-top: var(--sp-4)">
+        {projects.map((p) => (
+          <li>
+            <ContentRow item={p} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 
-  {
-    cheat && (
-      <section id="cheat-sheet" class="section section--tight" aria-labelledby="cs-h">
-        <h2 id="cs-h" style="font-size: var(--fs-h3)">Cheat sheet</h2>
-        <ul class="link-list" style="margin-top: var(--sp-4)"><li><ContentRow item={cheat} /></li></ul>
-      </section>
-    )
-  }
+  {cheat && (
+    <section id="cheat-sheet" class="section section--tight" aria-labelledby="cs-h">
+      <h2 id="cs-h" style="font-size: var(--fs-h3)">
+        Cheat sheet
+      </h2>
+      <ul class="link-list" style="margin-top: var(--sp-4)">
+        <li>
+          <ContentRow item={cheat} />
+        </li>
+      </ul>
+    </section>
+  )}
 
-  {
-    related.length > 0 && (
-      <section id="related" class="section section--tight" aria-labelledby="rel-h">
-        <h2 id="rel-h" style="font-size: var(--fs-h3)">Related technologies</h2>
-        <p class="cluster" style="margin-top: var(--sp-3)">
-          {related.map((r) => <a class="tag" href={r.url}>{r.entry.data.shortName}</a>)}
-        </p>
-      </section>
-    )
-  }
+  {related.length > 0 && (
+    <section id="related" class="section section--tight" aria-labelledby="rel-h">
+      <h2 id="rel-h" style="font-size: var(--fs-h3)">
+        Related technologies
+      </h2>
+      <p class="cluster" style="margin-top: var(--sp-3)">
+        {related.map((r) => (
+          <a class="tag" href={r.url}>
+            {r.entry.data.shortName}
+          </a>
+        ))}
+      </p>
+    </section>
+  )}
 </ContentLayout>

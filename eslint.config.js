@@ -9,7 +9,16 @@ export default [
   ...astro.configs.recommended,
   {
     languageOptions: {
-      globals: { window: "readonly", document: "readonly", navigator: "readonly", localStorage: "readonly", console: "readonly", process: "readonly", URL: "readonly", HTMLElement: "readonly" },
+      globals: {
+        window: "readonly",
+        document: "readonly",
+        navigator: "readonly",
+        localStorage: "readonly",
+        console: "readonly",
+        process: "readonly",
+        URL: "readonly",
+        HTMLElement: "readonly",
+      },
     },
   },
 ];

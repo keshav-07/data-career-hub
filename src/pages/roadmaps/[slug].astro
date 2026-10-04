@@ -9,7 +9,9 @@ import { breadcrumbsFor } from "../../utils/breadcrumbs";
 import { relatedGroups } from "../../utils/related";
 
 export async function getStaticPaths() {
-  const all = (await getItems("roadmaps")).filter((r) => r.entry.data.roadmapType !== "data-engineer");
+  const all = (await getItems("roadmaps")).filter(
+    (r) => r.entry.data.roadmapType !== "data-engineer",
+  );
   return all.map((r) => ({ params: { slug: r.id }, props: { ref: r.ref } }));
 }
 const item = (await getByRef(Astro.props.ref)) as ItemOf<"roadmaps">;
@@ -19,12 +21,24 @@ const crumbs = await breadcrumbsFor(item);
 const { groups } = await relatedGroups(item);
 ---
 
-<ArticleLayout item={item} crumbs={crumbs} headings={headings} eyebrow="Study plan" deck={item.description} meta={[d.difficulty]}>
+<ArticleLayout
+  item={item}
+  crumbs={crumbs}
+  headings={headings}
+  eyebrow="Study plan"
+  deck={item.description}
+  meta={[d.difficulty]}
+>
   <Content />
   <h2 id="plan">The plan</h2>
   <RoadmapNodes stages={d.stages} />
   <Fragment slot="footer">
     <RelatedList groups={groups} />
-    <NextStep title="See the full roadmap" text="Every plan maps onto the same ordered Data Engineering journey." href="/data-engineering/roadmap/" label="Open the Data Engineer roadmap" />
+    <NextStep
+      title="See the full roadmap"
+      text="Every plan maps onto the same ordered Data Engineering journey."
+      href="/data-engineering/roadmap/"
+      label="Open the Data Engineer roadmap"
+    />
   </Fragment>
 </ArticleLayout>

@@ -21,54 +21,113 @@ const { groups } = await relatedGroups(item);
 const { next, previous } = await nextPrev(item);
 ---
 
-<ArticleLayout item={item} crumbs={crumbs} headings={headings} eyebrow="System design" deck={d.problem} meta={[d.difficulty]} wide>
+<ArticleLayout
+  item={item}
+  crumbs={crumbs}
+  headings={headings}
+  eyebrow="System design"
+  deck={d.problem}
+  meta={[d.difficulty]}
+  wide
+>
   <section class="facts" aria-label="Requirements and scale" style="max-width:none">
     <div>
-      <h2 id="fr" style="border:0;padding:0;margin:0">Functional requirements</h2>
-      <ul>{d.functionalRequirements.map((r) => <li>{r}</li>)}</ul>
+      <h2 id="fr" style="border:0;padding:0;margin:0">
+        Functional requirements
+      </h2>
+      <ul>
+        {d.functionalRequirements.map((r) => (
+          <li>{r}</li>
+        ))}
+      </ul>
     </div>
     <div>
-      <h2 id="nfr" style="border:0;padding:0;margin:0">Non-functional requirements</h2>
-      <ul>{d.nonFunctionalRequirements.map((r) => <li>{r}</li>)}</ul>
+      <h2 id="nfr" style="border:0;padding:0;margin:0">
+        Non-functional requirements
+      </h2>
+      <ul>
+        {d.nonFunctionalRequirements.map((r) => (
+          <li>{r}</li>
+        ))}
+      </ul>
     </div>
     <div>
-      <h2 id="scale" style="border:0;padding:0;margin:0">Scale assumptions</h2>
-      <ul>{d.scaleAssumptions.map((r) => <li>{r}</li>)}</ul>
+      <h2 id="scale" style="border:0;padding:0;margin:0">
+        Scale assumptions
+      </h2>
+      <ul>
+        {d.scaleAssumptions.map((r) => (
+          <li>{r}</li>
+        ))}
+      </ul>
     </div>
     <div>
-      <h2 id="stack" style="border:0;padding:0;margin:0">Technologies</h2>
+      <h2 id="stack" style="border:0;padding:0;margin:0">
+        Technologies
+      </h2>
       <p>{d.technologies.join(", ")}</p>
-      <p class="muted" style="margin-top: var(--sp-2)">{d.architectureSummary}</p>
+      <p class="muted" style="margin-top: var(--sp-2)">
+        {d.architectureSummary}
+      </p>
     </div>
   </section>
-  <div style="margin-top: var(--sp-10)"><Content components={{ Callout }} /></div>
+  <div style="margin-top: var(--sp-10)">
+    <Content components={{ Callout }} />
+  </div>
 
   <Fragment slot="after-prose">
     <section class="related-block" aria-labelledby="tradeoffs-h">
       <h2 id="tradeoffs-h">Trade-offs</h2>
-      <div class="scroll-region" tabindex="0" role="region" aria-label="Trade-offs (scrollable table)">
+      <div
+        class="scroll-region"
+        tabindex="0"
+        role="region"
+        aria-label="Trade-offs (scrollable table)"
+      >
         <table class="tradeoffs">
           <thead>
-            <tr><th scope="col">Decision</th><th scope="col">Alternative</th><th scope="col">Why this choice</th><th scope="col">Consequence</th></tr>
+            <tr>
+              <th scope="col">Decision</th>
+              <th scope="col">Alternative</th>
+              <th scope="col">Why this choice</th>
+              <th scope="col">Consequence</th>
+            </tr>
           </thead>
           <tbody>
-            {d.tradeoffs.map((t) => <tr><th scope="row">{t.decision}</th><td>{t.alternative}</td><td>{t.reason}</td><td>{t.consequence}</td></tr>)}
+            {d.tradeoffs.map((t) => (
+              <tr>
+                <th scope="row">{t.decision}</th>
+                <td>{t.alternative}</td>
+                <td>{t.reason}</td>
+                <td>{t.consequence}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
     </section>
-    {
-      d.interviewFollowUps.length > 0 && (
-        <section class="related-block" aria-labelledby="fu-h">
-          <h2 id="fu-h">Interview follow-ups</h2>
-          <ol class="followups">{d.interviewFollowUps.map((f) => <li><span class="eyebrow">Follow-up</span>{f}</li>)}</ol>
-        </section>
-      )
-    }
+    {d.interviewFollowUps.length > 0 && (
+      <section class="related-block" aria-labelledby="fu-h">
+        <h2 id="fu-h">Interview follow-ups</h2>
+        <ol class="followups">
+          {d.interviewFollowUps.map((f) => (
+            <li>
+              <span class="eyebrow">Follow-up</span>
+              {f}
+            </li>
+          ))}
+        </ol>
+      </section>
+    )}
   </Fragment>
   <Fragment slot="footer">
     <RelatedList groups={groups} />
     <PrevNext previous={previous} next={next} />
-    <NextStep title="Practise the fundamentals behind it" text="System design answers are only as good as the concepts under them." href="/interview/" label="Open interview preparation" />
+    <NextStep
+      title="Practise the fundamentals behind it"
+      text="System design answers are only as good as the concepts under them."
+      href="/interview/"
+      label="Open interview preparation"
+    />
   </Fragment>
 </ArticleLayout>

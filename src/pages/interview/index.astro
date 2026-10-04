@@ -7,7 +7,9 @@ import { HOME } from "../../utils/breadcrumbs";
 const qs = await getItems("interview-questions");
 const counts = new Map<string, number>();
 qs.forEach((q) => counts.set(q.id.split("/")[0], (counts.get(q.id.split("/")[0]) ?? 0) + 1));
-const groups = await Promise.all([...counts.entries()].map(async ([t, n]) => ({ t, n, label: await techLabel(t) })));
+const groups = await Promise.all(
+  [...counts.entries()].map(async ([t, n]) => ({ t, n, label: await techLabel(t) })),
+);
 const companies = await getItems("company-guides");
 const designs = await getItems("system-designs");
 ---
@@ -21,24 +23,48 @@ const designs = await getItems("system-designs");
   indexable
 >
   <section class="section" aria-labelledby="lanes-h">
-    <h2 id="lanes-h" class="visually-hidden">Interview routes</h2>
+    <h2 id="lanes-h" class="visually-hidden">
+      Interview routes
+    </h2>
     <div class="lanes">
       <div class="lane">
         <h3>Technology interviews</h3>
-        <p>Short answer first, then the reasoning, mistakes to avoid and the follow-ups interviewers ask next.</p>
+        <p>
+          Short answer first, then the reasoning, mistakes to avoid and the follow-ups interviewers
+          ask next.
+        </p>
         <ul class="link-list" style="margin-top: var(--sp-4)">
-          {groups.map((g) => <li><a class="row" href={`/interview/${g.t}/`}><span class="row__title">{g.label}</span><span class="row__meta">{g.n} question{g.n === 1 ? "" : "s"}</span></a></li>)}
+          {groups.map((g) => (
+            <li>
+              <a class="row" href={`/interview/${g.t}/`}>
+                <span class="row__title">{g.label}</span>
+                <span class="row__meta">
+                  {g.n} question{g.n === 1 ? "" : "s"}
+                </span>
+              </a>
+            </li>
+          ))}
         </ul>
       </div>
       <div class="lane">
         <h3>System design</h3>
-        <p>Walk through requirements, architecture, reliability and trade-offs for common data platform problems.</p>
-        <Button href="/data-engineering/system-design/" variant="secondary">{designs.length} case stud{designs.length === 1 ? "y" : "ies"}</Button>
+        <p>
+          Walk through requirements, architecture, reliability and trade-offs for common data
+          platform problems.
+        </p>
+        <Button href="/data-engineering/system-design/" variant="secondary">
+          {designs.length} case stud{designs.length === 1 ? "y" : "ies"}
+        </Button>
       </div>
       <div class="lane">
         <h3>Company preparation</h3>
-        <p>Preparation guides that separate attributed reports from representative practice questions.</p>
-        <Button href="/interview/companies/" variant="secondary">{companies.length} compan{companies.length === 1 ? "y" : "ies"}</Button>
+        <p>
+          Preparation guides that separate attributed reports from representative practice
+          questions.
+        </p>
+        <Button href="/interview/companies/" variant="secondary">
+          {companies.length} compan{companies.length === 1 ? "y" : "ies"}
+        </Button>
       </div>
     </div>
   </section>

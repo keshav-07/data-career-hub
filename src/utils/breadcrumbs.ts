@@ -53,6 +53,10 @@ export async function breadcrumbsFor(item: Item): Promise<Crumb[]> {
     case "cheat-sheets":
       return [HOME, { label: "Resources", href: "/resources/" }, current];
     case "technologies":
-      return [HOME, { label: "Learn", href: "/data-engineering/" }, { label: item.entry.data.shortName }];
+      return [
+        HOME,
+        { label: "Learn", href: "/data-engineering/" },
+        { label: item.entry.data.shortName },
+      ];
   }
 }

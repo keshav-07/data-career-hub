@@ -16,10 +16,18 @@ const all = (await getItems("articles")).filter((a) => a.entry.data.section === 
   indexable
 >
   <section class="section section--tight">
-    <ul class="link-list">{all.map((a) => <li><ContentRow item={a} /></li>)}</ul>
+    <ul class="link-list">
+      {all.map((a) => (
+        <li>
+          <ContentRow item={a} />
+        </li>
+      ))}
+    </ul>
     <div class="cluster" style="margin-top: var(--sp-8)">
       <Button href="/roadmaps/">Study plans</Button>
-      <Button href="/projects/" variant="secondary">Projects</Button>
+      <Button href="/projects/" variant="secondary">
+        Projects
+      </Button>
     </div>
   </section>
 </ContentLayout>

@@ -16,6 +16,12 @@ const sheets = await getItems("cheat-sheets");
 >
   <section class="section section--tight">
     <h2 style="font-size: var(--fs-h3)">Cheat sheets</h2>
-    <ul class="link-list" style="margin-top: var(--sp-4)">{sheets.map((s) => <li><ContentRow item={s} /></li>)}</ul>
+    <ul class="link-list" style="margin-top: var(--sp-4)">
+      {sheets.map((s) => (
+        <li>
+          <ContentRow item={s} />
+        </li>
+      ))}
+    </ul>
   </section>
 </ContentLayout>

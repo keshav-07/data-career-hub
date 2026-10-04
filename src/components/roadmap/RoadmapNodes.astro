@@ -25,31 +25,55 @@ const resolved = await Promise.all(
 ---
 
 <ol class={`roadmap ${layout === "grid" ? "roadmap--grid" : ""}`}>
-  {
-    resolved.map((s, i) => (
-      <li class="roadmap__node" id={`stage-${s.id}`}>
-        <span class="roadmap__num" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
-        <div class="roadmap__body">
-          <h3><span class="visually-hidden">Stage {i + 1}: </span>{s.title}</h3>
-          <p>{s.summary}</p>
-          <dl class="roadmap__facts">
-            {s.why && (<><dt>Why it matters</dt><dd>{s.why}</dd></>)}
-            {s.prerequisites.length > 0 && (<><dt>Prerequisites</dt><dd>{s.prerequisites.join(", ")}</dd></>)}
-            <dt>Typical effort</dt>
-            <dd>{s.estimatedEffort}</dd>
-            <dt>Outcome</dt>
-            <dd>{s.outcome}</dd>
-          </dl>
-          {s.items.length > 0 && (
-            <ul class="roadmap__links" aria-label={`Core resources for ${s.title}`}>
-              {s.items.map((r) => r && <li><a href={r.url}>{r.title}</a></li>)}
-            </ul>
+  {resolved.map((s, i) => (
+    <li class="roadmap__node" id={`stage-${s.id}`}>
+      <span class="roadmap__num" aria-hidden="true">
+        {String(i + 1).padStart(2, "0")}
+      </span>
+      <div class="roadmap__body">
+        <h3>
+          <span class="visually-hidden">Stage {i + 1}: </span>
+          {s.title}
+        </h3>
+        <p>{s.summary}</p>
+        <dl class="roadmap__facts">
+          {s.why && (
+            <>
+              <dt>Why it matters</dt>
+              <dd>{s.why}</dd>
+            </>
           )}
-          {s.href && (
-            <p style="margin-top: var(--sp-3)"><a href={s.href}><strong>Open stage →</strong></a></p>
+          {s.prerequisites.length > 0 && (
+            <>
+              <dt>Prerequisites</dt>
+              <dd>{s.prerequisites.join(", ")}</dd>
+            </>
           )}
-        </div>
-      </li>
-    ))
-  }
+          <dt>Typical effort</dt>
+          <dd>{s.estimatedEffort}</dd>
+          <dt>Outcome</dt>
+          <dd>{s.outcome}</dd>
+        </dl>
+        {s.items.length > 0 && (
+          <ul class="roadmap__links" aria-label={`Core resources for ${s.title}`}>
+            {s.items.map(
+              (r) =>
+                r && (
+                  <li>
+                    <a href={r.url}>{r.title}</a>
+                  </li>
+                ),
+            )}
+          </ul>
+        )}
+        {s.href && (
+          <p style="margin-top: var(--sp-3)">
+            <a href={s.href}>
+              <strong>Open stage →</strong>
+            </a>
+          </p>
+        )}
+      </div>
+    </li>
+  ))}
 </ol>

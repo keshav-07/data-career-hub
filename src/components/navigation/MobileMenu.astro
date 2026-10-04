@@ -10,17 +10,27 @@ const popular = POPULAR_TECH.filter((t) => hubs.has(t));
   <div class="mobile-menu__inner">
     <div class="mobile-menu__head">
       <strong>Menu</strong>
-      <button type="button" class="icon-btn" data-menu-close aria-label="Close menu"><Icon name="close" /></button>
+      <button type="button" class="icon-btn" data-menu-close aria-label="Close menu">
+        <Icon name="close" />
+      </button>
     </div>
     <nav aria-label="Goals" class="mobile-menu__goals">
       <ul>
-        {GOALS.map((g) => <li><a href={g.href}>{g.label}</a></li>)}
+        {GOALS.map((g) => (
+          <li>
+            <a href={g.href}>{g.label}</a>
+          </li>
+        ))}
       </ul>
     </nav>
     <section aria-labelledby="popular-tech">
-      <h2 id="popular-tech" class="eyebrow" style="margin-bottom: var(--sp-3)">Popular technologies</h2>
+      <h2 id="popular-tech" class="eyebrow" style="margin-bottom: var(--sp-3)">
+        Popular technologies
+      </h2>
       <div class="mobile-menu__tech">
-        {popular.map((t) => <a href={`/${t}/`}>{hubs.get(t)}</a>)}
+        {popular.map((t) => (
+          <a href={`/${t}/`}>{hubs.get(t)}</a>
+        ))}
       </div>
     </section>
   </div>

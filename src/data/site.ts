@@ -97,4 +97,3 @@ export const TECH_GROUP_LABELS: Record<string, string> = {
   platforms: "Data platforms",
   streaming: "Streaming & orchestration",
 };
-

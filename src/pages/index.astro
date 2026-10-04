@@ -4,9 +4,15 @@ import Button from "../components/content/Button.astro";
 import { getItems, getByRef } from "../utils/content";
 import { SITE, TECH_GROUP_LABELS } from "../data/site";
 
-const hubs = (await getItems("technologies")).sort((a, b) => a.entry.data.order - b.entry.data.order);
+const hubs = (await getItems("technologies")).sort(
+  (a, b) => a.entry.data.order - b.entry.data.order,
+);
 const groups = Object.keys(TECH_GROUP_LABELS)
-  .map((g) => ({ id: g, label: TECH_GROUP_LABELS[g], items: hubs.filter((h) => h.entry.data.group === g) }))
+  .map((g) => ({
+    id: g,
+    label: TECH_GROUP_LABELS[g],
+    items: hubs.filter((h) => h.entry.data.group === g),
+  }))
   .filter((g) => g.items.length);
 const roadmap = await getByRef("roadmaps:data-engineer-roadmap");
 const stages = roadmap && roadmap.collection === "roadmaps" ? roadmap.entry.data.stages : [];
@@ -20,21 +26,34 @@ const designs = await getItems("system-designs");
 const companies = await getItems("company-guides");
 ---
 
-<BaseLayout title={SITE.name} seoTitle="Learn Data Engineering and Prepare for Interviews" description={SITE.description}>
+<BaseLayout
+  title={SITE.name}
+  seoTitle="Learn Data Engineering and Prepare for Interviews"
+  description={SITE.description}
+>
   <section class="hero">
     <div class="container">
       <div class="hero__inner">
         <p class="eyebrow">Data Engineering · learning paths and interview preparation</p>
         <h1>Learn Data Engineering. Prepare smarter. Get job ready.</h1>
         <p class="deck">
-          One structured place for learning paths, interview preparation, projects and career guidance, so you always know what to study next.
+          One structured place for learning paths, interview preparation, projects and career
+          guidance, so you always know what to study next.
         </p>
         <div class="hero__actions">
-          <Button href="/data-engineering/roadmap/" size="lg" fullWidthOnMobile>Start Data Engineering Roadmap</Button>
-          <Button href="/interview/" variant="secondary" size="lg" fullWidthOnMobile>Explore Interview Preparation</Button>
+          <Button href="/data-engineering/roadmap/" size="lg" fullWidthOnMobile>
+            Start Data Engineering Roadmap
+          </Button>
+          <Button href="/interview/" variant="secondary" size="lg" fullWidthOnMobile>
+            Explore Interview Preparation
+          </Button>
         </div>
         <p class="hero__signal">
-          {hubs.slice(0, 8).map((h) => <a href={h.url} style="color: inherit">{h.entry.data.shortName}</a>)}
+          {hubs.slice(0, 8).map((h) => (
+            <a href={h.url} style="color: inherit">
+              {h.entry.data.shortName}
+            </a>
+          ))}
         </p>
       </div>
     </div>
@@ -45,42 +64,59 @@ const companies = await getItems("company-guides");
       <div class="section-head">
         <p class="eyebrow">Learn</p>
         <h2 id="learn-h">Technology by technology, in a sensible order</h2>
-        <p>Each hub lists what to learn first, then beginner to advanced guides, interview questions and projects.</p>
+        <p>
+          Each hub lists what to learn first, then beginner to advanced guides, interview questions
+          and projects.
+        </p>
       </div>
       <div class="tech-groups">
-        {
-          groups.map((g) => (
-            <div class="tech-group">
-              <h3>{g.label}</h3>
-              <ul>
-                {g.items.map((h) => (
-                  <li><a href={h.url}>{h.entry.data.shortName}<small>→</small></a></li>
-                ))}
-              </ul>
-            </div>
-          ))
-        }
+        {groups.map((g) => (
+          <div class="tech-group">
+            <h3>{g.label}</h3>
+            <ul>
+              {g.items.map((h) => (
+                <li>
+                  <a href={h.url}>
+                    {h.entry.data.shortName}
+                    <small>→</small>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </div>
   </section>
 
-  {
-    stages.length > 0 && (
-      <section class="section" aria-labelledby="road-h">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Roadmap</p>
-            <h2 id="road-h">Data Engineer roadmap</h2>
-            <p>From beginner foundations to job-ready, in {stages.length} ordered stages.</p>
-          </div>
-          <ol class="roadmap-preview">
-            {stages.map((s) => <li><a href={`/data-engineering/roadmap/#stage-${s.id}`} style="color:inherit;text-decoration:none"><strong>{s.title}</strong></a></li>)}
-          </ol>
-          <div style="margin-top: var(--sp-6)"><Button href="/data-engineering/roadmap/" variant="quiet">See the full roadmap →</Button></div>
+  {stages.length > 0 && (
+    <section class="section" aria-labelledby="road-h">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Roadmap</p>
+          <h2 id="road-h">Data Engineer roadmap</h2>
+          <p>From beginner foundations to job-ready, in {stages.length} ordered stages.</p>
         </div>
-      </section>
-    )
-  }
+        <ol class="roadmap-preview">
+          {stages.map((s) => (
+            <li>
+              <a
+                href={`/data-engineering/roadmap/#stage-${s.id}`}
+                style="color:inherit;text-decoration:none"
+              >
+                <strong>{s.title}</strong>
+              </a>
+            </li>
+          ))}
+        </ol>
+        <div style="margin-top: var(--sp-6)">
+          <Button href="/data-engineering/roadmap/" variant="quiet">
+            See the full roadmap →
+          </Button>
+        </div>
+      </div>
+    </section>
+  )}
 
   <section class="section" aria-labelledby="int-h">
     <div class="container">
@@ -92,62 +128,86 @@ const companies = await getItems("company-guides");
         <div class="lane">
           <h3>Technology interviews</h3>
           <p>Direct answers first, then reasoning, mistakes and follow-ups.</p>
-          <Button href="/interview/" variant="secondary">Open interview hub</Button>
+          <Button href="/interview/" variant="secondary">
+            Open interview hub
+          </Button>
         </div>
         <div class="lane">
           <h3>System design</h3>
-          <p>{designs.length} case stud{designs.length === 1 ? "y" : "ies"} with requirements, architecture and trade-offs.</p>
-          <Button href="/data-engineering/system-design/" variant="secondary">See case studies</Button>
+          <p>
+            {designs.length} case stud{designs.length === 1 ? "y" : "ies"} with requirements,
+            architecture and trade-offs.
+          </p>
+          <Button href="/data-engineering/system-design/" variant="secondary">
+            See case studies
+          </Button>
         </div>
         <div class="lane">
           <h3>Company preparation</h3>
           <p>Guides that separate attributed reports from practice questions.</p>
-          <Button href="/interview/companies/" variant="secondary">{companies.length} compan{companies.length === 1 ? "y" : "ies"}</Button>
+          <Button href="/interview/companies/" variant="secondary">
+            {companies.length} compan{companies.length === 1 ? "y" : "ies"}
+          </Button>
         </div>
       </div>
     </div>
   </section>
 
-  {
-    featuredProjects.length > 0 && (
-      <section class="section" aria-labelledby="proj-h">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Projects</p>
-            <h2 id="proj-h">Build something you can explain</h2>
-          </div>
-          <div class="project-list">
-            {featuredProjects.map((p) => (
-              <article class="project-summary">
-                <div><span class="badge">{p.entry.data.level}</span></div>
-                <div>
-                  <h3><a href={p.url}>{p.title}</a></h3>
-                  <p class="muted" style="margin-top: var(--sp-2)">{p.entry.data.problemStatement}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-          <div style="margin-top: var(--sp-6)"><Button href="/projects/" variant="quiet">All projects →</Button></div>
+  {featuredProjects.length > 0 && (
+    <section class="section" aria-labelledby="proj-h">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Projects</p>
+          <h2 id="proj-h">Build something you can explain</h2>
         </div>
-      </section>
-    )
-  }
+        <div class="project-list">
+          {featuredProjects.map((p) => (
+            <article class="project-summary">
+              <div>
+                <span class="badge">{p.entry.data.level}</span>
+              </div>
+              <div>
+                <h3>
+                  <a href={p.url}>{p.title}</a>
+                </h3>
+                <p class="muted" style="margin-top: var(--sp-2)">
+                  {p.entry.data.problemStatement}
+                </p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div style="margin-top: var(--sp-6)">
+          <Button href="/projects/" variant="quiet">
+            All projects →
+          </Button>
+        </div>
+      </div>
+    </section>
+  )}
 
-  {
-    featured.length > 0 && (
-      <section class="section" aria-labelledby="feat-h">
-        <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">Featured guides</p>
-            <h2 id="feat-h">Start with these</h2>
-          </div>
-          <ol class="ranked">
-            {featured.map((a) => <li><a href={a.url}><span class="ranked__title">{a.title}<span class="ranked__sub">{a.description}</span></span></a></li>)}
-          </ol>
+  {featured.length > 0 && (
+    <section class="section" aria-labelledby="feat-h">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Featured guides</p>
+          <h2 id="feat-h">Start with these</h2>
         </div>
-      </section>
-    )
-  }
+        <ol class="ranked">
+          {featured.map((a) => (
+            <li>
+              <a href={a.url}>
+                <span class="ranked__title">
+                  {a.title}
+                  <span class="ranked__sub">{a.description}</span>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  )}
 
   <section class="section" aria-labelledby="trust-h">
     <div class="container">
@@ -156,10 +216,31 @@ const companies = await getItems("company-guides");
         <h2 id="trust-h">Editorial principles</h2>
       </div>
       <ul class="principles">
-        <li><h3>Reviewed technical content</h3><p>Claims about tools are checked against official documentation, and each page shows when it was last reviewed.</p></li>
-        <li><h3>Version-aware</h3><p>Where behaviour depends on a version or platform release, the page says which one it describes.</p></li>
-        <li><h3>Evidence-labelled interviews</h3><p>Company material is labelled as attributed, reported or representative practice. We never present invented questions as real ones.</p></li>
-        <li><h3>Structured paths</h3><p>Every page points to a prerequisite, a related idea and a next step.</p></li>
+        <li>
+          <h3>Reviewed technical content</h3>
+          <p>
+            Claims about tools are checked against official documentation, and each page shows when
+            it was last reviewed.
+          </p>
+        </li>
+        <li>
+          <h3>Version-aware</h3>
+          <p>
+            Where behaviour depends on a version or platform release, the page says which one it
+            describes.
+          </p>
+        </li>
+        <li>
+          <h3>Evidence-labelled interviews</h3>
+          <p>
+            Company material is labelled as attributed, reported or representative practice. We
+            never present invented questions as real ones.
+          </p>
+        </li>
+        <li>
+          <h3>Structured paths</h3>
+          <p>Every page points to a prerequisite, a related idea and a next step.</p>
+        </li>
       </ul>
     </div>
   </section>

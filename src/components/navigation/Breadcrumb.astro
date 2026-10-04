@@ -8,16 +8,14 @@ const { crumbs } = Astro.props;
 
 <nav class="breadcrumb" aria-label="Breadcrumb">
   <ol>
-    {
-      crumbs.map((c, i) => (
-        <li>
-          {c.href && i < crumbs.length - 1 ? (
-            <a href={c.href}>{c.label}</a>
-          ) : (
-            <span aria-current={i === crumbs.length - 1 ? "page" : undefined}>{c.label}</span>
-          )}
-        </li>
-      ))
-    }
+    {crumbs.map((c, i) => (
+      <li>
+        {c.href && i < crumbs.length - 1 ? (
+          <a href={c.href}>{c.label}</a>
+        ) : (
+          <span aria-current={i === crumbs.length - 1 ? "page" : undefined}>{c.label}</span>
+        )}
+      </li>
+    ))}
   </ol>
 </nav>

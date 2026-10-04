@@ -20,7 +20,8 @@ const RESERVED_TOP_LEVEL = new Set([
   "diagrams",
 ]);
 
-const PLACEHOLDER = /lorem ipsum|\bTODO\b|\bTBD\b|\[(?:X|N)\s*%?\]|\[\d+\s*%\]|\[(?:company|your)[^\]]*\]/i;
+const PLACEHOLDER =
+  /lorem ipsum|\bTODO\b|\bTBD\b|\[(?:X|N)\s*%?\]|\[\d+\s*%\]|\[(?:company|your)[^\]]*\]/i;
 
 /**
  * Build-time content validation. Errors fail the build; warnings are logged.
@@ -78,7 +79,8 @@ export function validateContent(items: Item[], technologyVocab: Set<string>): vo
         const d = item.entry.data;
         const prefix = item.id.split("/")[0];
         if (d.section === "career") {
-          if (prefix !== "career") errors.push(`${item.ref}: career articles must live in articles/career/`);
+          if (prefix !== "career")
+            errors.push(`${item.ref}: career articles must live in articles/career/`);
         } else if (prefix !== d.technology[0] || !hubs.has(prefix)) {
           errors.push(
             `${item.ref}: folder "${prefix}" must equal technology[0] ("${d.technology[0]}") and have a technology hub`,
@@ -92,27 +94,36 @@ export function validateContent(items: Item[], technologyVocab: Set<string>): vo
         if (prefix !== item.entry.data.technology[0]) {
           errors.push(`${item.ref}: folder must equal technology[0]`);
         }
-        if (item.id.split("/").length !== 2) errors.push(`${item.ref}: expected <technology>/<slug>`);
+        if (item.id.split("/").length !== 2)
+          errors.push(`${item.ref}: expected <technology>/<slug>`);
         break;
       }
       case "technologies": {
-        if (RESERVED_TOP_LEVEL.has(item.id)) errors.push(`${item.ref}: slug collides with a reserved route`);
+        if (RESERVED_TOP_LEVEL.has(item.id))
+          errors.push(`${item.ref}: slug collides with a reserved route`);
         for (const r of item.entry.data.whatToLearnFirst) {
           if (!refs.has(r)) errors.push(`${item.ref}: whatToLearnFirst → "${r}" does not resolve`);
         }
         for (const t of item.entry.data.relatedTechnologies) {
-          if (!hubs.has(t) && !technologyVocab.has(t)) errors.push(`${item.ref}: unknown related technology "${t}"`);
+          if (!hubs.has(t) && !technologyVocab.has(t))
+            errors.push(`${item.ref}: unknown related technology "${t}"`);
         }
         break;
       }
       case "roadmaps": {
         for (const s of item.entry.data.stages) {
           for (const r of s.resources) {
-            if (!refs.has(r)) errors.push(`${item.ref}: stage "${s.id}" resource "${r}" does not resolve`);
+            if (!refs.has(r))
+              errors.push(`${item.ref}: stage "${s.id}" resource "${r}" does not resolve`);
           }
         }
-        if (item.entry.data.roadmapType === "data-engineer" && item.id !== "data-engineer-roadmap") {
-          errors.push(`${item.ref}: the canonical data-engineer roadmap must be "data-engineer-roadmap"`);
+        if (
+          item.entry.data.roadmapType === "data-engineer" &&
+          item.id !== "data-engineer-roadmap"
+        ) {
+          errors.push(
+            `${item.ref}: the canonical data-engineer roadmap must be "data-engineer-roadmap"`,
+          );
         }
         break;
       }
@@ -134,7 +145,9 @@ export function validateContent(items: Item[], technologyVocab: Set<string>): vo
     }
 
     if (item.description.length < 100 || item.description.length > 170) {
-      warnings.push(`${item.ref}: description is ${item.description.length} chars (target ~140–165)`);
+      warnings.push(
+        `${item.ref}: description is ${item.description.length} chars (target ~140–165)`,
+      );
     }
   }
 
@@ -146,7 +159,7 @@ export function validateContent(items: Item[], technologyVocab: Set<string>): vo
       ...((data.prerequisites as string[]) ?? []),
       ...(data.next ? [data.next as string] : []),
       ...(data.previous ? [data.previous as string] : []),
-      ...(((data.whatToLearnFirst as string[]) ?? [])),
+      ...((data.whatToLearnFirst as string[]) ?? []),
     ];
     if (item.collection === "roadmaps") {
       for (const s of item.entry.data.stages) out.push(...s.resources);

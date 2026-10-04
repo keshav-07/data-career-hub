@@ -18,7 +18,11 @@ function walk(dir) {
 }
 
 const htmlFiles = walk(DIST).filter((f) => f.endsWith(".html"));
-const urlOf = (file) => "/" + relative(DIST, file).replace(/index\.html$/, "").replace(/\.html$/, "/");
+const urlOf = (file) =>
+  "/" +
+  relative(DIST, file)
+    .replace(/index\.html$/, "")
+    .replace(/\.html$/, "/");
 const pages = htmlFiles.map((f) => ({ file: f, url: urlOf(f), html: readFileSync(f, "utf8") }));
 const byUrl = new Map(pages.map((p) => [p.url, p]));
 
@@ -51,12 +55,17 @@ for (const p of pages) {
   if (!canonical) errors.push(`${url}: missing canonical`);
   else {
     if (!/^https?:\/\//.test(canonical)) errors.push(`${url}: canonical is not absolute`);
-    if (!is404 && !canonical.endsWith(url)) errors.push(`${url}: canonical ${canonical} does not match URL`);
+    if (!is404 && !canonical.endsWith(url))
+      errors.push(`${url}: canonical ${canonical} does not match URL`);
   }
   if (title && title.length > 70) warnings.push(`${url}: title is ${title.length} chars`);
   if (!noindex && !is404) {
     indexable.push(url);
-    for (const [k, v] of [["title", title], ["description", desc], ["canonical", canonical]]) {
+    for (const [k, v] of [
+      ["title", title],
+      ["description", desc],
+      ["canonical", canonical],
+    ]) {
       if (!v) continue;
       if (seen[k].has(v)) errors.push(`${url}: duplicate ${k} (also on ${seen[k].get(v)})`);
       seen[k].set(v, url);
@@ -64,7 +73,8 @@ for (const p of pages) {
   }
   const og = html.match(/<meta property="og:image" content="([^"]*)"/)?.[1];
   if (!og) errors.push(`${url}: missing og:image`);
-  else if (!existsSync(join(DIST, new URL(og).pathname))) errors.push(`${url}: og:image file not found (${new URL(og).pathname})`);
+  else if (!existsSync(join(DIST, new URL(og).pathname)))
+    errors.push(`${url}: og:image file not found (${new URL(og).pathname})`);
 
   for (const m of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
     try {
@@ -82,7 +92,8 @@ for (const p of pages) {
   for (const m of html.matchAll(/<a\b[^>]*href="([^"]+)"/g)) {
     const href = m[1].replace(/&amp;/g, "&");
     if (href.startsWith("#")) {
-      if (href.length > 1 && !pageIds.has(decodeURIComponent(href.slice(1)))) errors.push(`${url}: broken anchor ${href}`);
+      if (href.length > 1 && !pageIds.has(decodeURIComponent(href.slice(1))))
+        errors.push(`${url}: broken anchor ${href}`);
       continue;
     }
     if (/^(https?:|mailto:|tel:)/.test(href)) continue;
@@ -91,7 +102,8 @@ for (const p of pages) {
       continue;
     }
     const path = href.split(/[?#]/)[0];
-    if (!path.endsWith("/") && !/\.[a-z0-9]+$/i.test(path)) errors.push(`${url}: link without trailing slash ${href}`);
+    if (!path.endsWith("/") && !/\.[a-z0-9]+$/i.test(path))
+      errors.push(`${url}: link without trailing slash ${href}`);
     if (!resolves(href)) errors.push(`${url}: broken internal link ${href}`);
     const hash = href.split("#")[1];
     if (hash && byUrl.has(path) && !ids(byUrl.get(path).html).has(decodeURIComponent(hash))) {
@@ -122,28 +134,42 @@ for (const p of pages) {
   }
   p.js = js;
   p.css = css;
-  if (js / 1024 > BUDGET.jsBlockKb) errors.push(`${url}: initial JS ${(js / 1024).toFixed(1)} KB gz exceeds release block`);
-  else if (js / 1024 > BUDGET.jsKb) warnings.push(`${url}: initial JS ${(js / 1024).toFixed(1)} KB gz over target`);
-  if (css / 1024 > BUDGET.cssBlockKb) errors.push(`${url}: CSS ${(css / 1024).toFixed(1)} KB gz exceeds release block`);
-  else if (css / 1024 > BUDGET.cssKb) warnings.push(`${url}: CSS ${(css / 1024).toFixed(1)} KB gz over target`);
+  if (js / 1024 > BUDGET.jsBlockKb)
+    errors.push(`${url}: initial JS ${(js / 1024).toFixed(1)} KB gz exceeds release block`);
+  else if (js / 1024 > BUDGET.jsKb)
+    warnings.push(`${url}: initial JS ${(js / 1024).toFixed(1)} KB gz over target`);
+  if (css / 1024 > BUDGET.cssBlockKb)
+    errors.push(`${url}: CSS ${(css / 1024).toFixed(1)} KB gz exceeds release block`);
+  else if (css / 1024 > BUDGET.cssKb)
+    warnings.push(`${url}: CSS ${(css / 1024).toFixed(1)} KB gz over target`);
 }
 
 // Sitemap: must contain every indexable page and nothing else.
 const sitemapFiles = readdirSync(DIST).filter((f) => /^sitemap-\d+\.xml$/.test(f));
 const inSitemap = new Set(
-  sitemapFiles.flatMap((f) => [...readFileSync(join(DIST, f), "utf8").matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]).pathname)),
+  sitemapFiles.flatMap((f) =>
+    [...readFileSync(join(DIST, f), "utf8").matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+      (m) => new URL(m[1]).pathname,
+    ),
+  ),
 );
 for (const u of indexable) if (!inSitemap.has(u)) errors.push(`sitemap: missing ${u}`);
-for (const u of inSitemap) if (!indexable.includes(u)) errors.push(`sitemap: should not include ${u}`);
+for (const u of inSitemap)
+  if (!indexable.includes(u)) errors.push(`sitemap: should not include ${u}`);
 
 const robots = readFileSync(join(DIST, "robots.txt"), "utf8");
-if (!/Sitemap: https?:\/\/\S+\/sitemap-index\.xml/.test(robots)) errors.push("robots.txt: missing Sitemap line");
+if (!/Sitemap: https?:\/\/\S+\/sitemap-index\.xml/.test(robots))
+  errors.push("robots.txt: missing Sitemap line");
 if (/Disallow: \/\s*$/m.test(robots)) errors.push("robots.txt: blocks the whole site");
 
 const maxJs = Math.max(...pages.map((p) => p.js));
 const maxCss = Math.max(...pages.map((p) => p.css));
-console.log(`Checked ${pages.length} pages (${indexable.length} indexable, ${inSitemap.size} in sitemap).`);
-console.log(`Largest initial JS: ${(maxJs / 1024).toFixed(1)} KB gz (target ≤ ${BUDGET.jsKb}). Largest CSS: ${(maxCss / 1024).toFixed(1)} KB gz (target ≤ ${BUDGET.cssKb}).`);
+console.log(
+  `Checked ${pages.length} pages (${indexable.length} indexable, ${inSitemap.size} in sitemap).`,
+);
+console.log(
+  `Largest initial JS: ${(maxJs / 1024).toFixed(1)} KB gz (target ≤ ${BUDGET.jsKb}). Largest CSS: ${(maxCss / 1024).toFixed(1)} KB gz (target ≤ ${BUDGET.cssKb}).`,
+);
 for (const w of warnings) console.warn(`warning: ${w}`);
 if (errors.length) {
   for (const e of errors) console.error(`error: ${e}`);

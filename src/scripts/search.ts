@@ -15,7 +15,10 @@ type PagefindApi = {
     term: string,
     opts?: Record<string, unknown>,
     ms?: number,
-  ) => Promise<{ results: { data: () => Promise<PagefindResult> }[]; unfilteredResultCount: number } | null>;
+  ) => Promise<{
+    results: { data: () => Promise<PagefindResult> }[];
+    unfilteredResultCount: number;
+  } | null>;
 };
 
 let pagefind: Promise<PagefindApi> | undefined;
@@ -52,7 +55,8 @@ function safeExcerpt(html: string): DocumentFragment {
 }
 
 export function mountSearch(root: HTMLElement) {
-  if (root.dataset.mounted) return root.querySelector<HTMLInputElement>("input[type=search]")?.focus();
+  if (root.dataset.mounted)
+    return root.querySelector<HTMLInputElement>("input[type=search]")?.focus();
   root.dataset.mounted = "true";
   const input = root.querySelector<HTMLInputElement>("input[type=search]")!;
   const status = root.querySelector<HTMLElement>("[data-search-status]")!;
@@ -67,7 +71,9 @@ export function mountSearch(root: HTMLElement) {
   filters.querySelectorAll<HTMLButtonElement>("button[data-type]").forEach((b) => {
     b.addEventListener("click", () => {
       type = b.dataset.type ?? "All";
-      filters.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      filters
+        .querySelectorAll("button")
+        .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
       void run();
     });
   });
@@ -83,7 +89,8 @@ export function mountSearch(root: HTMLElement) {
     const h = document.createElement("h3");
     h.textContent = `No results for “${term}”`;
     const p = document.createElement("p");
-    p.textContent = "Try a broader technology, a concept instead of an exact phrase, or remove a filter.";
+    p.textContent =
+      "Try a broader technology, a concept instead of an exact phrase, or remove a filter.";
     const a = document.createElement("a");
     a.href = "/data-engineering/roadmap/";
     a.textContent = "Browse the Data Engineering roadmap";
@@ -134,7 +141,9 @@ export function mountSearch(root: HTMLElement) {
         a.href = d.url;
         const meta = document.createElement("span");
         meta.className = "search-result__meta";
-        meta.textContent = [d.meta.type, d.meta.technology, d.meta.difficulty].filter(Boolean).join(" · ");
+        meta.textContent = [d.meta.type, d.meta.technology, d.meta.difficulty]
+          .filter(Boolean)
+          .join(" · ");
         const title = document.createElement("span");
         title.className = "search-result__title";
         title.textContent = d.meta.title ?? d.url;

@@ -16,7 +16,11 @@ const all = await getItems("roadmaps");
 >
   <section class="section section--tight">
     <ul class="link-list">
-      {all.map((r) => <li><ContentRow item={r} /></li>)}
+      {all.map((r) => (
+        <li>
+          <ContentRow item={r} />
+        </li>
+      ))}
     </ul>
   </section>
 </ContentLayout>

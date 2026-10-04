@@ -31,59 +31,63 @@ const hub = isCareer ? undefined : await getHub(d.technology[0]);
   deck={item.description}
   meta={[d.difficulty, d.pillar && "Pillar guide"]}
 >
-  {
-    prerequisites.length > 0 && (
-      <Callout tone="info" title="Before you start">
-        <ul style="margin:0;padding-left:1.2rem">
-          {prerequisites.map((p) => <li><a href={p.url}>{p.title}</a></li>)}
-        </ul>
-      </Callout>
-    )
-  }
-  {
-    isTutorial && d.learningObjectives.length > 0 && (
-      <section aria-labelledby="goals-h" style="margin-top: var(--sp-6)">
-        <h2 id="goals-h" style="font-size: var(--fs-xl); border:0; padding:0">What you will learn</h2>
-        <ul>{d.learningObjectives.map((o) => <li>{o}</li>)}</ul>
-      </section>
-    )
-  }
+  {prerequisites.length > 0 && (
+    <Callout tone="info" title="Before you start">
+      <ul style="margin:0;padding-left:1.2rem">
+        {prerequisites.map((p) => (
+          <li>
+            <a href={p.url}>{p.title}</a>
+          </li>
+        ))}
+      </ul>
+    </Callout>
+  )}
+  {isTutorial && d.learningObjectives.length > 0 && (
+    <section aria-labelledby="goals-h" style="margin-top: var(--sp-6)">
+      <h2 id="goals-h" style="font-size: var(--fs-xl); border:0; padding:0">
+        What you will learn
+      </h2>
+      <ul>
+        {d.learningObjectives.map((o) => (
+          <li>{o}</li>
+        ))}
+      </ul>
+    </section>
+  )}
   <Content components={{ Callout }} />
 
   <Fragment slot="footer">
-    {
-      d.sources.length > 0 && (
-        <section class="related-block" aria-labelledby="sources-h">
-          <h2 id="sources-h">Sources and further reading</h2>
-          <ul class="link-list">
-            {d.sources.map((s) => (
-              <li><a class="row" href={s.url} rel="noopener"><span class="row__title">{s.label}</span></a></li>
-            ))}
-          </ul>
-        </section>
-      )
-    }
+    {d.sources.length > 0 && (
+      <section class="related-block" aria-labelledby="sources-h">
+        <h2 id="sources-h">Sources and further reading</h2>
+        <ul class="link-list">
+          {d.sources.map((s) => (
+            <li>
+              <a class="row" href={s.url} rel="noopener">
+                <span class="row__title">{s.label}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
     <RelatedList groups={groups} />
     <PrevNext previous={previous} next={next} />
-    {
-      isCareer && (
-        <NextStep
-          title="Keep building toward the job"
-          text="Pick a plan, build a project you can explain, and practise the interview questions that match it."
-          href="/roadmaps/"
-          label="Browse roadmaps and plans"
-        />
-      )
-    }
-    {
-      hub && (
-        <NextStep
-          title={`Continue with ${hub.title}`}
-          text="See the full learning sequence, interview preparation and projects for this technology."
-          href={hub.url}
-          label={`Open the ${hub.entry.data.shortName} hub`}
-        />
-      )
-    }
+    {isCareer && (
+      <NextStep
+        title="Keep building toward the job"
+        text="Pick a plan, build a project you can explain, and practise the interview questions that match it."
+        href="/roadmaps/"
+        label="Browse roadmaps and plans"
+      />
+    )}
+    {hub && (
+      <NextStep
+        title={`Continue with ${hub.title}`}
+        text="See the full learning sequence, interview preparation and projects for this technology."
+        href={hub.url}
+        label={`Open the ${hub.entry.data.shortName} hub`}
+      />
+    )}
   </Fragment>
 </ArticleLayout>

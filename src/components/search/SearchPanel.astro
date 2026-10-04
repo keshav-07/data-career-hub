@@ -32,18 +32,34 @@ const TYPES: [string, string][] = [
         spellcheck="false"
         aria-describedby={`${idPrefix}-status`}
       />
-      <button type="button" class="btn btn--secondary" data-search-clear hidden>Clear</button>
+      <button type="button" class="btn btn--secondary" data-search-clear hidden>
+        Clear
+      </button>
     </div>
   </div>
   <fieldset class="filter-group" style="margin-top: var(--sp-3)">
     <legend>Filter by type</legend>
     <div class="search-filters" data-search-filters>
-      {TYPES.map(([value, label]) => <button type="button" class="chip" data-type={value} aria-pressed={value === "All" ? "true" : "false"}>{label}</button>)}
+      {TYPES.map(([value, label]) => (
+        <button
+          type="button"
+          class="chip"
+          data-type={value}
+          aria-pressed={value === "All" ? "true" : "false"}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   </fieldset>
   <div class="search-field" style="margin-top: var(--sp-3); max-width: 240px">
     <label for={`${idPrefix}-difficulty`}>Difficulty</label>
-    <select id={`${idPrefix}-difficulty`} class="search-input" style="min-height:44px;font-size:1rem" data-search-difficulty>
+    <select
+      id={`${idPrefix}-difficulty`}
+      class="search-input"
+      style="min-height:44px;font-size:1rem"
+      data-search-difficulty
+    >
       <option value="">Any difficulty</option>
       <option>Beginner</option>
       <option>Intermediate</option>
@@ -53,6 +69,13 @@ const TYPES: [string, string][] = [
       <option>Hard</option>
     </select>
   </div>
-  <p id={`${idPrefix}-status`} class="search-status" role="status" aria-live="polite" data-search-status style="margin-top: var(--sp-3)"></p>
+  <p
+    id={`${idPrefix}-status`}
+    class="search-status"
+    role="status"
+    aria-live="polite"
+    data-search-status
+    style="margin-top: var(--sp-3)"
+  ></p>
   <ul class="search-results" data-search-results></ul>
 </div>

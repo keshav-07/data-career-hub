@@ -17,9 +17,28 @@ interface Props {
   /** Width of the page body container */
   width?: "default" | "wide" | "reading";
 }
-const { title, description, seoTitle, crumbs, eyebrow, deck, noindex, indexable, schema = [], width = "default" } = Astro.props;
-const containerClass = width === "wide" ? "container container--wide" : width === "reading" ? "container container--reading" : "container";
-const all = [...(crumbs.length > 1 ? [breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site)] : []), ...schema];
+const {
+  title,
+  description,
+  seoTitle,
+  crumbs,
+  eyebrow,
+  deck,
+  noindex,
+  indexable,
+  schema = [],
+  width = "default",
+} = Astro.props;
+const containerClass =
+  width === "wide"
+    ? "container container--wide"
+    : width === "reading"
+      ? "container container--reading"
+      : "container";
+const all = [
+  ...(crumbs.length > 1 ? [breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site)] : []),
+  ...schema,
+];
 ---
 
 <BaseLayout {title} {description} {seoTitle} {noindex} {indexable} schema={all}>
@@ -27,9 +46,19 @@ const all = [...(crumbs.length > 1 ? [breadcrumbSchema(crumbs, Astro.url.pathnam
     <div class={containerClass}>
       <Breadcrumb {crumbs} />
       <div class="page-header__inner">
-        {eyebrow && <p class="eyebrow" style="margin-top: var(--sp-6)">{eyebrow}</p>}
-        <h1 data-pagefind-weight="10" style={eyebrow ? undefined : "margin-top: var(--sp-6)"}>{title}</h1>
-        {deck && <p class="deck" data-pagefind-weight="4">{deck}</p>}
+        {eyebrow && (
+          <p class="eyebrow" style="margin-top: var(--sp-6)">
+            {eyebrow}
+          </p>
+        )}
+        <h1 data-pagefind-weight="10" style={eyebrow ? undefined : "margin-top: var(--sp-6)"}>
+          {title}
+        </h1>
+        {deck && (
+          <p class="deck" data-pagefind-weight="4">
+            {deck}
+          </p>
+        )}
         <slot name="header-extra" />
       </div>
     </div>

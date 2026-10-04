@@ -12,7 +12,9 @@
     font-weight: 600;
     font-size: var(--fs-md);
     text-decoration: none;
-    transition: background var(--dur-fast), border-color var(--dur-fast);
+    transition:
+      background var(--dur-fast),
+      border-color var(--dur-fast);
   }
   .btn--sm {
     min-height: 36px;

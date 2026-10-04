@@ -8,18 +8,31 @@ const root = new URL("../", import.meta.url).pathname;
 const invPath = join(root, "docs/content-inventory.json");
 const inv = JSON.parse(readFileSync(invPath, "utf8"));
 const contentDir = join(root, "src/content");
-const walk = (d) => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
+const walk = (d) =>
+  readdirSync(d).flatMap((f) =>
+    statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)],
+  );
 
 const urlFor = (collection, id, fm) => {
   switch (collection) {
-    case "articles": return `/${id}/`;
-    case "interview-questions": return `/interview/${id}/`;
-    case "company-guides": return `/interview/companies/${id}/`;
-    case "roadmaps": return /roadmapType:\s*"?data-engineer"?\s*$/m.test(fm) ? "/data-engineering/roadmap/" : `/roadmaps/${id}/`;
-    case "system-designs": return `/data-engineering/system-design/${id}/`;
-    case "projects": return `/projects/${id}/`;
-    case "cheat-sheets": return `/resources/cheat-sheets/${id}/`;
-    default: return null;
+    case "articles":
+      return `/${id}/`;
+    case "interview-questions":
+      return `/interview/${id}/`;
+    case "company-guides":
+      return `/interview/companies/${id}/`;
+    case "roadmaps":
+      return /roadmapType:\s*"?data-engineer"?\s*$/m.test(fm)
+        ? "/data-engineering/roadmap/"
+        : `/roadmaps/${id}/`;
+    case "system-designs":
+      return `/data-engineering/system-design/${id}/`;
+    case "projects":
+      return `/projects/${id}/`;
+    case "cheat-sheets":
+      return `/resources/cheat-sheets/${id}/`;
+    default:
+      return null;
   }
 };
 
@@ -38,7 +51,8 @@ for (const file of walk(contentDir).filter((f) => /\.mdx?$/.test(f))) {
 }
 
 const ids = new Set(inv.items.map((i) => i.id));
-for (const iid of found.keys()) if (!ids.has(iid)) errors.push(`content uses unknown inventoryId ${iid}`);
+for (const iid of found.keys())
+  if (!ids.has(iid)) errors.push(`content uses unknown inventoryId ${iid}`);
 
 const write = process.argv.includes("--write");
 const counts = {};
@@ -59,7 +73,8 @@ for (const item of inv.items) {
   if (found.has(item.id)) byType[item.type].withContent++;
 }
 console.log(`Inventory: ${inv.items.length} items. With content files: ${found.size}.`);
-for (const [t, c] of Object.entries(byType)) console.log(`  ${t.padEnd(20)} ${c.withContent}/${c.total}`);
+for (const [t, c] of Object.entries(byType))
+  console.log(`  ${t.padEnd(20)} ${c.withContent}/${c.total}`);
 console.log("Status counts:", counts);
 if (errors.length) {
   errors.forEach((e) => console.error("error:", e));

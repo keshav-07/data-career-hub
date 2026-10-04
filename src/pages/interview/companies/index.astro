@@ -17,17 +17,29 @@ const guides = await getItems("company-guides");
   <section class="section section--tight">
     <Callout tone="info" title="How to read these guides">
       <p>
-        <strong>Verified / attributed</strong> items cite a public source. <strong>Reported</strong> items come from named candidate
-        accounts. <strong>Representative practice questions</strong> are written by us to practise the skills a role is likely to need; they are
-        never claimed to be actual company questions.
+        <strong>Verified / attributed</strong> items cite a public source. <strong>Reported</strong>{" "}
+        items come from named candidate accounts. <strong>Representative practice questions</strong>{" "}
+        are written by us to practise the skills a role is likely to need; they are never claimed to
+        be actual company questions.
       </p>
     </Callout>
   </section>
   <section class="section section--tight" aria-labelledby="g-h">
-    <h2 id="g-h" class="visually-hidden">Guides</h2>
+    <h2 id="g-h" class="visually-hidden">
+      Guides
+    </h2>
     <ul class="link-list">
-      {guides.map((g) => <li><a class="row" href={g.url}><span class="row__title">{g.title}</span><span class="row__desc">{g.description}</span></a></li>)}
+      {guides.map((g) => (
+        <li>
+          <a class="row" href={g.url}>
+            <span class="row__title">{g.title}</span>
+            <span class="row__desc">{g.description}</span>
+          </a>
+        </li>
+      ))}
     </ul>
-    <p class="muted" style="margin-top: var(--sp-6)">More companies are added only when we can meet the evidence standard above.</p>
+    <p class="muted" style="margin-top: var(--sp-6)">
+      More companies are added only when we can meet the evidence standard above.
+    </p>
   </section>
 </ContentLayout>

@@ -42,7 +42,9 @@ function enhanceCode(root: ParentNode) {
     btn.addEventListener("click", async () => {
       const ok = await copyText(pre.innerText.replace(/\n$/, ""));
       btn.textContent = ok ? "Copied" : "Press Ctrl+C";
-      live.textContent = ok ? "Code copied to clipboard" : "Copy failed. Select the code and press Ctrl+C.";
+      live.textContent = ok
+        ? "Code copied to clipboard"
+        : "Copy failed. Select the code and press Ctrl+C.";
       if (!ok) {
         const range = document.createRange();
         range.selectNodeContents(pre);

@@ -4,7 +4,9 @@ import ContentLayout from "../../layouts/ContentLayout.astro";
 import { HOME } from "../../utils/breadcrumbs";
 const all = await getItems("projects");
 const order = ["Beginner", "Intermediate", "Advanced"];
-const sorted = [...all].sort((a, b) => order.indexOf(a.entry.data.level) - order.indexOf(b.entry.data.level));
+const sorted = [...all].sort(
+  (a, b) => order.indexOf(a.entry.data.level) - order.indexOf(b.entry.data.level),
+);
 ---
 
 <ContentLayout
@@ -17,18 +19,24 @@ const sorted = [...all].sort((a, b) => order.indexOf(a.entry.data.level) - order
 >
   <section class="section section--tight">
     <div class="project-list">
-      {
-        sorted.map((p) => (
-          <article class="project-summary">
-            <div><span class="badge">{p.entry.data.level}</span></div>
-            <div>
-              <h2 style="font-size: var(--fs-h3)"><a href={p.url}>{p.title}</a></h2>
-              <p class="muted" style="margin-top: var(--sp-2)">{p.entry.data.problemStatement}</p>
-              <p class="row__meta" style="margin-top: var(--sp-2)">{p.entry.data.technologies.join(" · ")}</p>
-            </div>
-          </article>
-        ))
-      }
+      {sorted.map((p) => (
+        <article class="project-summary">
+          <div>
+            <span class="badge">{p.entry.data.level}</span>
+          </div>
+          <div>
+            <h2 style="font-size: var(--fs-h3)">
+              <a href={p.url}>{p.title}</a>
+            </h2>
+            <p class="muted" style="margin-top: var(--sp-2)">
+              {p.entry.data.problemStatement}
+            </p>
+            <p class="row__meta" style="margin-top: var(--sp-2)">
+              {p.entry.data.technologies.join(" · ")}
+            </p>
+          </div>
+        </article>
+      ))}
     </div>
   </section>
 </ContentLayout>

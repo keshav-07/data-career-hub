@@ -27,7 +27,17 @@ interface Props {
   schema?: object[];
   titleClass?: string;
 }
-const { item, crumbs, headings = [], eyebrow, deck, meta = [], wide = false, schema = [], titleClass } = Astro.props;
+const {
+  item,
+  crumbs,
+  headings = [],
+  eyebrow,
+  deck,
+  meta = [],
+  wide = false,
+  schema = [],
+  titleClass,
+} = Astro.props;
 const data = item.entry.data as {
   title: string;
   seoTitle?: string;
@@ -77,9 +87,23 @@ const containerClass = wide ? "container container--wide" : "container";
       <div class={containerClass}>
         <Breadcrumb {crumbs} />
         <div class="page-header__inner">
-          {eyebrow && <p class="eyebrow" style="margin-top: var(--sp-6)" data-pagefind-weight="3">{eyebrow}</p>}
-          <h1 class={titleClass} data-pagefind-weight="10" style={eyebrow ? undefined : "margin-top: var(--sp-6)"}>{item.title}</h1>
-          {deck && <p class="deck" data-pagefind-weight="4">{deck}</p>}
+          {eyebrow && (
+            <p class="eyebrow" style="margin-top: var(--sp-6)" data-pagefind-weight="3">
+              {eyebrow}
+            </p>
+          )}
+          <h1
+            class={titleClass}
+            data-pagefind-weight="10"
+            style={eyebrow ? undefined : "margin-top: var(--sp-6)"}
+          >
+            {item.title}
+          </h1>
+          {deck && (
+            <p class="deck" data-pagefind-weight="4">
+              {deck}
+            </p>
+          )}
           <div class="meta">
             <Metadata
               items={[
