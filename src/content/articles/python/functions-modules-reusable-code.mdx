@@ -1,0 +1,114 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Python Functions, Modules and Reusable Data Pipeline Code"
+description: "Structure Python pipeline code as small pure functions, clear modules and a thin entry point so it is testable, reusable and safe to run from any scheduler."
+inventoryId: "TECH-06"
+technology: ["python"]
+topic: ["functions", "modules", "code-structure"]
+difficulty: "Beginner"
+related: ["articles:python/idempotent-csv-loader", "articles:python/iterators-generators"]
+next: "articles:python/iterators-generators"
+sources: [{"label": "Python documentation: Modules", "url": "https://docs.python.org/3/tutorial/modules.html"}, {"label": "Python documentation: Defining functions", "url": "https://docs.python.org/3/tutorial/controlflow.html#defining-functions"}]
+versionContext: "Examples run on Python 3.12"
+---
+
+Most pipeline scripts start as one long file that reads, transforms and writes in a single block. That works once and is painful afterwards: you cannot test the transformation without a database, and you cannot reuse it in another job. The fix is structure, not cleverness.
+
+## Separate reading, transforming and writing
+
+Keep **I/O at the edges** and **logic in the middle**. A transformation function should take plain data in and return plain data out.
+
+```python
+def normalise_order(raw: dict) -> dict:
+    """Pure function: same input, same output, no I/O."""
+    return {
+        "order_id": int(raw["order_id"]),
+        "customer": raw["customer"].strip().title(),
+        "amount": round(float(raw["amount"]), 2),
+    }
+
+print(normalise_order({"order_id": "7", "customer": "  asha ", "amount": "19.999"}))
+```
+
+```text
+{'order_id': 7, 'customer': 'Asha', 'amount': 20.0}
+```
+
+Because `normalise_order` touches no files or databases, it is trivial to test and safe to reuse in a batch job, a streaming consumer or a notebook.
+
+## Pass configuration in, do not reach out for it
+
+Functions that read global variables or environment variables deep inside are hard to test and surprising to call. Pass what they need as arguments, and read configuration once at the entry point.
+
+```python
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class LoadConfig:
+    source_dir: str
+    target_table: str
+    batch_size: int = 1000
+
+def plan_batches(row_count: int, config: LoadConfig) -> int:
+    return (row_count + config.batch_size - 1) // config.batch_size
+
+config = LoadConfig(source_dir="data/", target_table="orders")
+print(plan_batches(2500, config))
+```
+
+```text
+3
+```
+
+A frozen dataclass documents every setting in one place and cannot be modified by accident halfway through a run.
+
+## Organise into modules
+
+A small pipeline package might look like this:
+
+```text
+orders_pipeline/
+  __init__.py
+  config.py        # LoadConfig, reading env vars or CLI args
+  extract.py       # read files / APIs (I/O)
+  transform.py     # pure functions such as normalise_order
+  load.py          # write to the database (I/O)
+  main.py          # wires them together
+tests/
+  test_transform.py
+```
+
+Each module has one reason to change. Tests import `transform` directly without touching files or credentials.
+
+## A thin entry point
+
+```python
+def run(rows: list[dict]) -> list[dict]:
+    return [normalise_order(r) for r in rows]
+
+if __name__ == "__main__":
+    print(run([{"order_id": "1", "customer": "ben", "amount": "5"}]))
+```
+
+The `if __name__ == "__main__":` guard means importing the module (from a test or an orchestrator) does not start the job. Only running it as a script does.
+
+## Type hints and docstrings
+
+Type hints (`raw: dict -> dict`) cost little and let editors and type checkers catch mistakes such as passing a string where a number is expected. A one-line docstring that says what the function guarantees is more useful than a comment that repeats the code.
+
+## Common mistakes
+
+1. Mixing database calls into transformation logic, so nothing can be tested offline.
+2. Mutable default arguments: `def f(rows=[])` shares one list across calls. Use `None` and create the list inside.
+3. Reading environment variables inside deep helper functions.
+4. Putting job execution at module import time without a `__main__` guard.
+
+## Interview relevance
+
+Interviewers often ask you to "clean up" a script or explain how you would test a pipeline. Talk about pure functions, I/O at the edges, configuration passed in, and tests for the transformation layer.
+
+## Key takeaway
+
+Keep transformations pure, push I/O to the edges, pass configuration in, and give the job a thin entry point. Testability and reuse follow.

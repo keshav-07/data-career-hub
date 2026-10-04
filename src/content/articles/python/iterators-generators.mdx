@@ -1,0 +1,158 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Python Iterators, Generators and Memory-Efficient Processing"
+description: "Use Python iterators and generators to process files and API pages lazily, in batches, with flat memory use, and avoid the mistakes that silently exhaust them."
+inventoryId: "TECH-07"
+technology: ["python"]
+topic: ["generators", "memory"]
+difficulty: "Intermediate"
+prerequisites: ["articles:python/functions-modules-reusable-code"]
+related: ["interview-questions:python/generators-large-datasets", "articles:python/idempotent-csv-loader"]
+previous: "articles:python/functions-modules-reusable-code"
+next: "articles:python/idempotent-csv-loader"
+sources: [{"label": "Python documentation: Generators (functional programming HOWTO)", "url": "https://docs.python.org/3/howto/functional.html#generators"}, {"label": "Python documentation: itertools", "url": "https://docs.python.org/3/library/itertools.html"}]
+versionContext: "Examples run on Python 3.12; itertools.batched requires Python 3.12"
+---
+
+A list holds every element in memory at once. An **iterator** produces elements one at a time, on demand. For data that is large, unbounded or arrives in pages, that difference decides whether a job runs in a few megabytes or runs out of memory.
+
+## Iterables, iterators and generators
+
+- An **iterable** is anything you can loop over (`list`, `dict`, file objects).
+- An **iterator** is the object that actually hands out the next value (`next(it)`), and remembers where it is.
+- A **generator** is the easiest way to write an iterator: a function that uses `yield`.
+
+```python
+def count_up_to(n):
+    i = 1
+    while i <= n:
+        yield i          # pause here, hand out i, resume on the next request
+        i += 1
+
+gen = count_up_to(3)
+print(next(gen), next(gen), next(gen))
+print(list(count_up_to(5)))
+```
+
+```text
+1 2 3
+[1, 2, 3, 4, 5]
+```
+
+Nothing runs until a value is requested, and only one value exists at a time.
+
+## Streaming a file line by line
+
+File objects are already iterators, so this reads one line at a time no matter how big the file is:
+
+```python
+import io
+
+fake_file = io.StringIO("id,amount\n1,10\n2,oops\n3,30\n")
+
+def parse_amounts(lines):
+    next(lines)                      # skip header
+    for line in lines:
+        order_id, amount = line.strip().split(",")
+        try:
+            yield int(order_id), float(amount)
+        except ValueError:
+            continue                 # in real code: log and count bad rows
+
+print(list(parse_amounts(fake_file)))
+```
+
+```text
+[(1, 10.0), (3, 30.0)]
+```
+
+With a real file you would write `with open(path) as f: for row in parse_amounts(f): ...`.
+
+## Pipelines of generators
+
+Generators compose. Each stage pulls from the previous one, so the whole chain processes one record at a time:
+
+```python
+def read(rows):
+    yield from rows
+
+def only_large(records, threshold):
+    return (r for r in records if r["amount"] >= threshold)   # generator expression
+
+def to_cents(records):
+    for r in records:
+        yield {**r, "amount_cents": int(round(r["amount"] * 100))}
+
+rows = [{"id": 1, "amount": 5.0}, {"id": 2, "amount": 50.5}, {"id": 3, "amount": 120.0}]
+for record in to_cents(only_large(read(rows), 50)):
+    print(record)
+```
+
+```text
+{'id': 2, 'amount': 50.5, 'amount_cents': 5050}
+{'id': 3, 'amount': 120.0, 'amount_cents': 12000}
+```
+
+## Batching for databases and APIs
+
+Writing one row at a time is slow; loading everything is memory-hungry. Batches are the middle ground. Python 3.12 adds `itertools.batched`:
+
+```python
+from itertools import batched
+
+for batch in batched(range(1, 8), 3):
+    print(batch)
+```
+
+```text
+(1, 2, 3)
+(4, 5, 6)
+(7,)
+```
+
+On older versions, `itertools.islice` gives the same effect in a short helper.
+
+## Paginated APIs
+
+A generator hides pagination from the caller:
+
+```python
+def fetch_all(fetch_page):
+    page = 1
+    while True:
+        items = fetch_page(page)
+        if not items:
+            return
+        yield from items
+        page += 1
+
+fake_api = {1: ["a", "b"], 2: ["c"], 3: []}
+print(list(fetch_all(lambda p: fake_api.get(p, []))))
+```
+
+```text
+['a', 'b', 'c']
+```
+
+<Callout tone="warning" title="A generator can only be consumed once">
+
+After you loop over a generator, it is exhausted. A second loop silently yields nothing. If you need the data twice, recreate the generator or materialise it with `list()` if it fits in memory.
+
+</Callout>
+
+## Common mistakes
+
+1. Calling `len()` on a generator (not supported) or converting to a list just to count, losing the memory benefit.
+2. Reusing an exhausted generator and getting an empty result with no error.
+3. Building a list comprehension `[...]` where a generator expression `(...)` would do.
+4. Holding a file open across a long-lived generator; keep the `with` block around the consumption.
+
+## Interview relevance
+
+"What is a generator and why does it help with large data?" is a common Python interview question for data roles. See the [interview answer](/interview/python/generators-large-datasets/).
+
+## Key takeaway
+
+Process data as a stream: read lazily, transform with chained generators, and write in batches. Memory stays flat no matter how big the input is.

@@ -1,0 +1,92 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "How should exceptions be handled in production data pipelines?"
+description: "Interview answer: catch specific exceptions, retry only transient failures, quarantine bad records, log with context, and fail loudly instead of swallowing errors."
+seoTitle: "Exception Handling in Data Pipelines: Interview Answer"
+inventoryId: "INT-08"
+technology: ["python"]
+topic: ["error-handling", "reliability"]
+difficulty: "Medium"
+questionType: ["conceptual", "scenario"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+shortAnswer: "Handle errors by type. Retry transient failures such as timeouts with backoff and a limit; skip and quarantine individual bad records with a logged count, so one malformed row does not stop the batch; and let unexpected or systemic errors fail the run loudly so the scheduler alerts and nothing half-finished is published. Catch specific exceptions, log with context, and never silently swallow errors with a bare except."
+followUps: ["How do you decide between skipping a bad record and failing the job?", "Why is a bare except: dangerous?", "How do retries interact with idempotency?"]
+related: ["articles:python/idempotent-csv-loader", "articles:airflow/dags-scheduling-retries", "interview-questions:data-engineering/idempotent-batch-pipeline"]
+versionContext: "Examples run on Python 3.12"
+---
+
+## Detailed explanation
+
+Classify failures before writing `try`:
+
+| Failure | Example | Response |
+|---------|---------|----------|
+| Transient | Network timeout, rate limit, lock contention | Retry with backoff, then fail |
+| Bad record | One row with an invalid date | Skip, log, count, quarantine; fail if the rate exceeds a threshold |
+| Systemic | Wrong schema, missing credentials, bug | Fail immediately and alert |
+
+## Example
+
+```python
+import logging
+import time
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+log = logging.getLogger("pipeline")
+
+class TransientError(Exception):
+    pass
+
+def with_retries(fn, attempts=3, base_delay=0.01):
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except TransientError as exc:
+            if attempt == attempts:
+                raise
+            log.warning("attempt %d failed (%s); retrying", attempt, exc)
+            time.sleep(base_delay * 2 ** (attempt - 1))
+
+calls = {"n": 0}
+def flaky():
+    calls["n"] += 1
+    if calls["n"] < 3:
+        raise TransientError("timeout")
+    return "ok"
+
+print(with_retries(flaky))
+
+def parse(rows, max_bad_ratio=0.1):
+    good, bad = [], 0
+    for row in rows:
+        try:
+            good.append(int(row))
+        except ValueError:
+            bad += 1
+            log.warning("bad row %r", row)
+    if rows and bad / len(rows) > max_bad_ratio:
+        raise ValueError(f"{bad} of {len(rows)} rows invalid; refusing to load")
+    return good
+
+print(parse(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "x"]))
+```
+
+The retry succeeds on the third attempt. One bad row in eleven is within the threshold, so it is logged and skipped; if most rows were bad, the job would stop rather than load garbage.
+
+## Practices
+
+- Catch the narrowest exception you can handle. `except Exception` is a last-resort boundary, and should re-raise or fail the run.
+- Preserve the cause: `raise LoadError("...") from exc`.
+- Log with context (file, row number, key), and use `log.exception` inside `except` to keep the traceback.
+- Clean up with `with` blocks or `finally`, and keep writes transactional so a failure leaves no partial output.
+- Make retried steps idempotent.
+
+## Common mistakes
+
+1. `except: pass`, which hides real failures and produces silent data loss.
+2. Retrying non-transient errors (a schema mismatch will fail every time).
+3. Unbounded retries without backoff.
+4. Logging the error but exiting with success, so the scheduler never alerts.

@@ -1,0 +1,64 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "What is a generator and why can it help with large datasets?"
+description: "Interview answer: a generator yields values lazily one at a time, so you can stream files and API pages with constant memory instead of loading everything."
+seoTitle: "Python Generators for Large Datasets: Interview Answer"
+inventoryId: "INT-07"
+technology: ["python"]
+topic: ["generators", "memory"]
+difficulty: "Easy"
+questionType: ["conceptual", "coding"]
+estimatedMinutes: 6
+interviewRelevance: "High"
+shortAnswer: "A generator is a function that uses yield to produce values one at a time, pausing between them, instead of building a whole list. Because only the current item is held in memory, you can stream a file, a query result or paginated API data of any size with roughly constant memory. The trade-off is that a generator can be consumed only once and has no length or random access."
+followUps: ["What is the difference between a generator expression and a list comprehension?", "What happens if you loop over the same generator twice?", "How would you write rows to a database in batches from a generator?"]
+related: ["articles:python/iterators-generators", "articles:python/idempotent-csv-loader"]
+versionContext: "Examples run on Python 3.12"
+---
+
+## Detailed explanation
+
+```python
+import sys
+
+squares_list = [i * i for i in range(1_000_000)]
+squares_gen = (i * i for i in range(1_000_000))
+
+print(sys.getsizeof(squares_list) > 1_000_000, sys.getsizeof(squares_gen) < 1_000)
+print(sum(squares_gen) == sum(squares_list))
+```
+
+```text
+True True
+True
+```
+
+The list object alone takes megabytes; the generator object is a few hundred bytes regardless of how many values it will produce, and gives the same sum.
+
+## Where it helps in data engineering
+
+- Reading large files line by line.
+- Iterating over database cursors or paginated APIs.
+- Chaining transformation stages that each handle one record.
+- Feeding a loader in fixed-size batches.
+
+## The single-use trap
+
+```python
+gen = (x for x in [1, 2, 3])
+print(list(gen), list(gen))
+```
+
+```text
+[1, 2, 3] []
+```
+
+The second pass is silently empty.
+
+## Common mistakes
+
+1. Converting a generator to a list "to be safe", which removes the benefit.
+2. Calling `len()` on it.
+3. Consuming it twice and not noticing.

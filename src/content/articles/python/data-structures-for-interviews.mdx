@@ -1,0 +1,117 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Python Data Structures for Data Engineering Interviews"
+description: "Choose between list, tuple, set, dict, deque and Counter by their operations and costs, with the patterns that come up in data engineering coding interviews."
+inventoryId: "TECH-09"
+technology: ["python"]
+topic: ["data-structures", "complexity"]
+difficulty: "Beginner"
+related: ["interview-questions:python/list-tuple-set", "interview-questions:python/shallow-vs-deep-copy"]
+sources: [{"label": "Python documentation: Data structures", "url": "https://docs.python.org/3/tutorial/datastructures.html"}, {"label": "Python wiki: Time complexity", "url": "https://wiki.python.org/moin/TimeComplexity"}]
+versionContext: "Examples run on Python 3.12"
+---
+
+Choosing the right built-in structure is often the whole answer to a coding question. Know what each one is **for** and what its common operations **cost**.
+
+| Structure | Ordered | Mutable | Duplicates | Lookup by value | Typical use |
+|-----------|---------|---------|------------|-----------------|-------------|
+| `list` | Yes | Yes | Yes | O(n) scan | Ordered records, stacks |
+| `tuple` | Yes | No | Yes | O(n) scan | Fixed records, dict keys |
+| `set` | No | Yes | No | O(1) average | Membership, deduplication |
+| `dict` | Insertion order | Yes | Unique keys | O(1) average by key | Lookups, grouping, counting |
+| `collections.deque` | Yes | Yes | Yes | O(n) scan | Queues: fast appends/pops at both ends |
+
+## Membership: use a set
+
+```python
+seen_ids = {101, 102, 103}
+print(102 in seen_ids, 999 in seen_ids)
+```
+
+```text
+True False
+```
+
+Checking `x in some_list` scans the list, which gets slow inside a loop over a large input. Converting to a set first turns repeated membership checks from O(n) into O(1) on average.
+
+## Deduplicate while keeping order
+
+```python
+events = ["b", "a", "b", "c", "a"]
+print(list(dict.fromkeys(events)))
+```
+
+```text
+['b', 'a', 'c']
+```
+
+Dicts preserve insertion order (guaranteed since Python 3.7), so `dict.fromkeys` keeps the first occurrence of each value. `list(set(events))` also deduplicates but loses order.
+
+## Grouping and counting
+
+```python
+from collections import Counter, defaultdict
+
+orders = [("asha", 50), ("ben", 20), ("asha", 70)]
+
+totals = defaultdict(int)
+for customer, amount in orders:
+    totals[customer] += amount
+print(dict(totals))
+
+print(Counter(customer for customer, _ in orders).most_common(1))
+```
+
+```text
+{'asha': 120, 'ben': 20}
+[('asha', 2)]
+```
+
+These are the in-memory equivalents of `GROUP BY` with `SUM` and `COUNT`.
+
+## Queues and sliding windows
+
+```python
+from collections import deque
+
+window = deque(maxlen=3)
+for value in [1, 2, 3, 4, 5]:
+    window.append(value)
+print(list(window), sum(window) / len(window))
+```
+
+```text
+[3, 4, 5] 4.0
+```
+
+`deque(maxlen=n)` drops old items automatically, which is handy for moving averages over a stream.
+
+## Tuples as composite keys
+
+Tuples are immutable, and therefore hashable when their elements are, so they can be dict keys or set members:
+
+```python
+daily = {("2026-10-01", "north"): 150, ("2026-10-01", "south"): 230}
+print(daily[("2026-10-01", "south")])
+```
+
+```text
+230
+```
+
+## Common mistakes
+
+1. Membership checks against a list inside a loop (quadratic time).
+2. Using a list as a queue with `pop(0)`, which shifts every element. Use `deque.popleft()`.
+3. Trying to use a list as a dict key (lists are not hashable).
+4. Assuming sets keep order.
+
+## Interview relevance
+
+Many "process these records" questions reduce to: group with a dict, deduplicate with a set or `dict.fromkeys`, count with `Counter`, and stream with a deque. State the time complexity of your choice.
+
+## Key takeaway
+
+Pick the structure by the operation you do most: sets for membership, dicts for lookup and grouping, deques for queues, tuples for fixed records and keys.

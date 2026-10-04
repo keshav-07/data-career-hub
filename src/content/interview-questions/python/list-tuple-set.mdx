@@ -1,0 +1,51 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "List vs tuple vs set: when would you use each in a data pipeline?"
+description: "Interview answer: lists for ordered mutable sequences, tuples for fixed records and hashable keys, sets for fast membership and deduplication, with costs."
+seoTitle: "List vs Tuple vs Set in Python: Interview Answer"
+inventoryId: "INT-06"
+technology: ["python"]
+topic: ["data-structures"]
+difficulty: "Easy"
+questionType: ["conceptual"]
+estimatedMinutes: 5
+interviewRelevance: "Foundational"
+shortAnswer: "Use a list for an ordered, changeable sequence such as records you append to. Use a tuple for a fixed record that should not change, and when you need a hashable value such as a composite dictionary key. Use a set when you need fast membership checks or deduplication, because lookups are O(1) on average, accepting that a set has no order and no duplicates."
+followUps: ["Why can a tuple be a dict key but a list cannot?", "How do you deduplicate a list while keeping order?", "What is the time complexity of x in list versus x in set?"]
+related: ["articles:python/data-structures-for-interviews", "interview-questions:python/shallow-vs-deep-copy"]
+versionContext: "Examples run on Python 3.12"
+---
+
+## Detailed explanation
+
+| | list | tuple | set |
+|--|------|-------|-----|
+| Ordered | Yes | Yes | No |
+| Mutable | Yes | No | Yes |
+| Duplicates | Allowed | Allowed | Removed |
+| Hashable | No | Yes, if its items are | No (`frozenset` is) |
+| `x in ...` | O(n) | O(n) | O(1) average |
+
+## Example in a pipeline
+
+```python
+batch = []                                   # list: rows accumulate in order
+batch.append(("2026-10-01", "north", 150))   # tuple: a fixed record
+batch.append(("2026-10-01", "south", 230))
+
+already_loaded = {("2026-10-01", "north")}   # set of tuple keys
+to_load = [r for r in batch if (r[0], r[1]) not in already_loaded]
+print(to_load)
+```
+
+```text
+[('2026-10-01', 'south', 230)]
+```
+
+## Common mistakes
+
+1. Checking membership against a large list inside a loop.
+2. Expecting a set to preserve order.
+3. Thinking a tuple is "always hashable": `(1, [2])` is not, because it contains a list.

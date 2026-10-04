@@ -1,0 +1,57 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Explain shallow copy vs deep copy."
+description: "Interview answer: a shallow copy duplicates the outer container but shares nested objects, while a deep copy recursively duplicates everything it contains."
+seoTitle: "Shallow Copy vs Deep Copy in Python: Interview Answer"
+inventoryId: "INT-09"
+technology: ["python"]
+topic: ["data-structures", "mutability"]
+difficulty: "Easy"
+questionType: ["conceptual", "debugging"]
+estimatedMinutes: 5
+interviewRelevance: "Medium"
+shortAnswer: "A shallow copy creates a new outer container but fills it with references to the same inner objects, so changing a nested list or dict through the copy also changes the original. A deep copy, made with copy.deepcopy, recursively copies the nested objects too, so the two are fully independent. Shallow copies are cheaper; deep copies are safer when nested data will be mutated."
+followUps: ["Which ways of copying a list are shallow?", "When is a deep copy a bad idea?", "How do immutable objects change the answer?"]
+related: ["articles:python/data-structures-for-interviews", "interview-questions:python/list-tuple-set"]
+versionContext: "Examples run on Python 3.12"
+---
+
+## Detailed explanation
+
+```python
+import copy
+
+config = {"tables": ["orders", "customers"], "retries": 3}
+
+shallow = copy.copy(config)
+deep = copy.deepcopy(config)
+
+shallow["tables"].append("products")   # mutates the shared inner list
+shallow["retries"] = 5                 # rebinds a key on the copy only
+
+print(config)
+print(deep)
+```
+
+```text
+{'tables': ['orders', 'customers', 'products'], 'retries': 3}
+{'tables': ['orders', 'customers'], 'retries': 3}
+```
+
+Appending through the shallow copy changed the original's list, because both dicts point to the same list object. Reassigning `retries` did not, because that replaced the value on the copy only. The deep copy is unaffected by either change.
+
+## Shallow copies you may not notice
+
+`list(x)`, `x[:]`, `x.copy()`, `dict(x)` and `{**x}` all make **shallow** copies.
+
+## When it matters in pipelines
+
+A shared default configuration or a template record that each task "copies" and then modifies. With nested structures and a shallow copy, one task's change leaks into every other task's config.
+
+## Common mistakes
+
+1. Assuming `.copy()` makes nested data independent.
+2. Using `deepcopy` on large objects in a hot loop (it is slow), when building fresh objects would be clearer.
+3. Forgetting that immutable nested values (strings, numbers, tuples of immutables) are safe to share.
