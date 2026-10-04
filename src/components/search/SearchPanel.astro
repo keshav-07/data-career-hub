@@ -4,6 +4,19 @@ interface Props {
   headingLevel?: "h1" | "h2";
 }
 const { idPrefix } = Astro.props;
+// Rendered at build time so the layout does not shift when the search script loads.
+const TYPES: [string, string][] = [
+  ["All", "All"],
+  ["Article", "Articles"],
+  ["Tutorial", "Tutorials"],
+  ["Interview question", "Interview questions"],
+  ["Project", "Projects"],
+  ["System design", "System design"],
+  ["Cheat sheet", "Cheat sheets"],
+  ["Company guide", "Company guides"],
+  ["Roadmap", "Roadmaps"],
+  ["Career guide", "Career guides"],
+];
 ---
 
 <div data-search-root>
@@ -24,7 +37,9 @@ const { idPrefix } = Astro.props;
   </div>
   <fieldset class="filter-group" style="margin-top: var(--sp-3)">
     <legend>Filter by type</legend>
-    <div class="search-filters" data-search-filters></div>
+    <div class="search-filters" data-search-filters>
+      {TYPES.map(([value, label]) => <button type="button" class="chip" data-type={value} aria-pressed={value === "All" ? "true" : "false"}>{label}</button>)}
+    </div>
   </fieldset>
   <div class="search-field" style="margin-top: var(--sp-3); max-width: 240px">
     <label for={`${idPrefix}-difficulty`}>Difficulty</label>

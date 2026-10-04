@@ -51,31 +51,6 @@ function safeExcerpt(html: string): DocumentFragment {
   return frag;
 }
 
-const TYPES = [
-  "All",
-  "Article",
-  "Tutorial",
-  "Interview question",
-  "Project",
-  "System design",
-  "Cheat sheet",
-  "Company guide",
-  "Roadmap",
-  "Career guide",
-];
-const TYPE_LABEL: Record<string, string> = {
-  All: "All",
-  Article: "Articles",
-  Tutorial: "Tutorials",
-  "Interview question": "Interview questions",
-  Project: "Projects",
-  "System design": "System design",
-  "Cheat sheet": "Cheat sheets",
-  "Company guide": "Company guides",
-  Roadmap: "Roadmaps",
-  "Career guide": "Career guides",
-};
-
 export function mountSearch(root: HTMLElement) {
   if (root.dataset.mounted) return root.querySelector<HTMLInputElement>("input[type=search]")?.focus();
   root.dataset.mounted = "true";
@@ -89,19 +64,12 @@ export function mountSearch(root: HTMLElement) {
   let type = "All";
   let seq = 0;
 
-  TYPES.forEach((t) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "chip";
-    b.textContent = TYPE_LABEL[t];
-    b.setAttribute("aria-pressed", String(t === type));
-    b.dataset.type = t;
+  filters.querySelectorAll<HTMLButtonElement>("button[data-type]").forEach((b) => {
     b.addEventListener("click", () => {
-      type = t;
+      type = b.dataset.type ?? "All";
       filters.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
       void run();
     });
-    filters.append(b);
   });
 
   function setStatus(msg: string) {

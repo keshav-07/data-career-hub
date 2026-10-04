@@ -62,7 +62,9 @@ for (const p of pages) {
       seen[k].set(v, url);
     }
   }
-  if (!/property="og:image"/.test(html)) errors.push(`${url}: missing og:image`);
+  const og = html.match(/<meta property="og:image" content="([^"]*)"/)?.[1];
+  if (!og) errors.push(`${url}: missing og:image`);
+  else if (!existsSync(join(DIST, new URL(og).pathname))) errors.push(`${url}: og:image file not found (${new URL(og).pathname})`);
 
   for (const m of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
     try {
