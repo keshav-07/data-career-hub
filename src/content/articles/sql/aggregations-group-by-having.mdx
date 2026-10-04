@@ -13,7 +13,7 @@ related: ["articles:sql/window-functions", "interview-questions:sql/inner-vs-lef
 previous: "articles:sql/joins"
 next: "articles:sql/window-functions"
 sources: [{"label": "PostgreSQL documentation: Aggregate functions", "url": "https://www.postgresql.org/docs/current/functions-aggregate.html"}]
-versionContext: "Standard SQL; examples tested with SQLite 3.45"
+versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there)"
 ---
 
 `GROUP BY` collapses rows that share the same values into one row per group, and **aggregate functions** (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`) summarise each group. Most reporting tables in a warehouse are built this way.

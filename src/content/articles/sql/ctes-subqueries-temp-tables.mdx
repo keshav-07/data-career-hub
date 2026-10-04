@@ -13,7 +13,7 @@ related: ["articles:sql/query-optimization-fundamentals", "interview-questions:s
 previous: "articles:sql/window-functions"
 next: "articles:sql/query-optimization-fundamentals"
 sources: [{"label": "PostgreSQL documentation: WITH queries (common table expressions)", "url": "https://www.postgresql.org/docs/current/queries-with.html"}]
-versionContext: "Standard SQL; examples tested with SQLite 3.45; materialisation behaviour differs by engine"
+versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there); materialisation behaviour differs by engine"
 ---
 
 All three let you break a query into steps. They differ in **scope** (one query or the whole session), **reuse** and how the engine executes them.

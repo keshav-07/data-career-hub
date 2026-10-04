@@ -12,7 +12,7 @@ prerequisites: ["articles:sql/ctes-subqueries-temp-tables"]
 related: ["interview-questions:sql/optimize-slow-query", "articles:spark/partitions-shuffles-skew"]
 previous: "articles:sql/ctes-subqueries-temp-tables"
 sources: [{"label": "SQLite documentation: EXPLAIN QUERY PLAN", "url": "https://www.sqlite.org/eqp.html"}, {"label": "PostgreSQL documentation: Using EXPLAIN", "url": "https://www.postgresql.org/docs/current/using-explain.html"}]
-versionContext: "Standard SQL; examples tested with SQLite 3.45; plan output format differs by engine"
+versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there); plan output format differs by engine"
 ---
 
 Query optimisation is a process, not a list of tricks: **measure, find where the work goes, reduce it, and check the answer has not changed.**

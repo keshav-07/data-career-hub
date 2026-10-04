@@ -15,7 +15,7 @@ interviewRelevance: "High"
 shortAnswer: "An INNER JOIN returns only rows that have a match in both tables. A LEFT JOIN returns every row from the left table, and fills the right table's columns with NULL where there is no match. So a customer with no orders disappears from an inner join but appears with NULLs in a left join, which changes counts and totals."
 followUps: ["Why does putting a condition on the right table in WHERE turn a LEFT JOIN into an INNER JOIN?", "How do you count orders per customer including customers with none?", "When would you use a FULL OUTER JOIN?"]
 related: ["articles:sql/joins", "articles:sql/aggregations-group-by-having"]
-versionContext: "Standard SQL; examples tested with SQLite 3.45"
+versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there)"
 ---
 
 ## Detailed explanation
