@@ -24,6 +24,13 @@ async function openSearch() {
 
 triggers.forEach((t) => t.addEventListener("click", () => void openSearch()));
 dialog?.querySelectorAll("[data-search-close]").forEach((b) => b.addEventListener("click", () => dialog.close()));
+// Escape inside the search field would otherwise only clear the text first.
+dialog?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    dialog.close();
+  }
+});
 dialog?.addEventListener("click", (e) => {
   if (e.target === dialog) dialog.close();
 });
