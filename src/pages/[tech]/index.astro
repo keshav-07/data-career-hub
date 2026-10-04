@@ -1,6 +1,6 @@
 ---
 import { render } from "astro:content";
-import { getItems, getByRef, sortByTitle, type Item } from "../../utils/content";
+import { getItems, getByRef, getHub, sortByTitle, type Item, type ItemOf } from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
 import IndexMeta from "../../components/content/IndexMeta.astro";
 import ContentRow from "../../components/content/ContentRow.astro";
@@ -25,7 +25,7 @@ const questions = (await getItems("interview-questions")).filter((q) => q.techno
 const projects = (await getItems("projects")).filter((p) => p.technology.includes(tech) || p.entry.data.technologies.includes(tech));
 const learnFirst = (await Promise.all(d.whatToLearnFirst.map((r) => getByRef(r)))).filter((x): x is Item => !!x);
 const cheat = d.cheatSheet ? await getByRef(d.cheatSheet) : undefined;
-const related = (await Promise.all(d.relatedTechnologies.map((t) => getByRef(`technologies:${t}`)))).filter((x): x is Item => !!x);
+const related = (await Promise.all(d.relatedTechnologies.map((t) => getHub(t)))).filter((x): x is ItemOf<"technologies"> => !!x);
 const crumbs = await breadcrumbsFor(hub);
 const levels = [
   { id: "beginner", label: "Beginner", items: byLevel("Beginner") },

@@ -164,3 +164,7 @@ export async function techLabel(slug: string): Promise<string> {
   };
   return map[slug] ?? slug.charAt(0).toUpperCase() + slug.slice(1);
 }
+
+export async function getHub(slug: string): Promise<ItemOf<"technologies"> | undefined> {
+  return (await getItems("technologies")).find((t) => t.id === slug);
+}

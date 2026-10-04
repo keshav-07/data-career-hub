@@ -7,7 +7,7 @@ const ref = z
   .string()
   .regex(/^[a-z-]+:[a-z0-9-]+(\/[a-z0-9-]+)*$/, 'Use "<collection>:<id>", e.g. "articles:sql/joins"');
 
-const source = z.object({ label: z.string().min(2), url: z.string().url() });
+const source = z.object({ label: z.string().min(2), url: z.url() });
 const difficulty = z.enum(["Beginner", "Intermediate", "Advanced"]);
 const status = z.enum(["draft", "published"]);
 

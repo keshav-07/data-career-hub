@@ -76,12 +76,14 @@ const analyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN;
     <!-- Theme bootstrap: tiny, deterministic, no network. Prevents a light/dark flash. -->
     <script is:inline>
       (function () {
-        var d = document.documentElement;
+        const d = document.documentElement;
         d.classList.add("js");
         try {
-          var t = localStorage.getItem("dch-theme");
+          const t = localStorage.getItem("dch-theme");
           if (t === "light" || t === "dark") d.setAttribute("data-theme", t);
-        } catch (e) {}
+        } catch {
+          /* storage unavailable: follow the system theme */
+        }
       })();
     </script>
     {jsonLd.map((s) => <script type="application/ld+json" set:html={JSON.stringify(s)} />)}

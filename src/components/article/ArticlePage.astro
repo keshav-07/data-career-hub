@@ -1,6 +1,6 @@
 ---
 import { render } from "astro:content";
-import { getByRef, type ItemOf } from "../../utils/content";
+import { getHub, type ItemOf } from "../../utils/content";
 import ArticleLayout from "../../layouts/ArticleLayout.astro";
 import RelatedList from "../content/RelatedList.astro";
 import PrevNext from "../content/PrevNext.astro";
@@ -20,7 +20,7 @@ const { prerequisites, groups } = await relatedGroups(item);
 const { next, previous } = await nextPrev(item);
 const isTutorial = d.kind === "tutorial";
 const isCareer = d.section === "career";
-const hub = isCareer ? undefined : await getByRef(`technologies:${d.technology[0]}`);
+const hub = isCareer ? undefined : await getHub(d.technology[0]);
 ---
 
 <ArticleLayout
