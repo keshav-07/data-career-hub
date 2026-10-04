@@ -1,0 +1,25 @@
+---
+import { getItems } from "../../utils/content";
+import ContentLayout from "../../layouts/ContentLayout.astro";
+import ContentRow from "../../components/content/ContentRow.astro";
+import Button from "../../components/content/Button.astro";
+import { HOME } from "../../utils/breadcrumbs";
+const all = (await getItems("articles")).filter((a) => a.entry.data.section === "career");
+---
+
+<ContentLayout
+  title="Data Engineering career guidance"
+  description="Practical career guidance for Data Engineers: explaining projects, resumes, switching roles and planning your job search."
+  crumbs={[HOME, { label: "Career" }]}
+  eyebrow="Career"
+  deck="Practical guidance on turning what you learn into a job offer."
+  indexable
+>
+  <section class="section section--tight">
+    <ul class="link-list">{all.map((a) => <li><ContentRow item={a} /></li>)}</ul>
+    <div class="cluster" style="margin-top: var(--sp-8)">
+      <Button href="/roadmaps/">Study plans</Button>
+      <Button href="/projects/" variant="secondary">Projects</Button>
+    </div>
+  </section>
+</ContentLayout>

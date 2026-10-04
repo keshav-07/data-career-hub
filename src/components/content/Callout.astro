@@ -1,0 +1,14 @@
+---
+interface Props {
+  tone?: "neutral" | "info" | "success" | "warning" | "danger";
+  title: string;
+}
+const { tone = "neutral", title } = Astro.props;
+// Text label + border: the tone is never conveyed by colour alone.
+const prefix: Record<string, string> = { neutral: "Note", info: "Info", success: "Tip", warning: "Warning", danger: "Caution" };
+---
+
+<aside class={`callout callout--${tone}`} aria-label={`${prefix[tone]}: ${title}`}>
+  <p class="callout__title">{prefix[tone]}: {title}</p>
+  <slot />
+</aside>

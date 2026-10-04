@@ -1,0 +1,16 @@
+---
+/** Static-search metadata (Pagefind). Filters drive the search UI; meta values render in results. */
+interface Props {
+  type: string;
+  technology?: string;
+  difficulty?: string;
+}
+const { type, technology, difficulty } = Astro.props;
+---
+
+<meta data-pagefind-filter="type[content]" content={type} />
+<meta data-pagefind-meta="type[content]" content={type} />
+{technology && <meta data-pagefind-filter="technology[content]" content={technology} />}
+{technology && <meta data-pagefind-meta="technology[content]" content={technology} />}
+{difficulty && <meta data-pagefind-filter="difficulty[content]" content={difficulty} />}
+{difficulty && <meta data-pagefind-meta="difficulty[content]" content={difficulty} />}

@@ -1,0 +1,30 @@
+---
+import ContentLayout from "../../layouts/ContentLayout.astro";
+import { HOME } from "../../utils/breadcrumbs";
+import { SITE } from "../../data/site";
+---
+
+<ContentLayout
+  title="Contact"
+  description="How to contact Data Career Hub to report a factual error, a broken link or a content suggestion."
+  crumbs={[HOME, { label: "Contact" }]}
+  eyebrow="Contact"
+  deck="Corrections and suggestions are welcome."
+  indexable
+>
+  <section class="section section--tight">
+    <div class="prose">
+      <h2>Reporting an issue</h2>
+      <p>Please include the page address, what looks wrong and, if you can, a link to the documentation that shows the correct behaviour. Factual corrections are the most useful reports.</p>
+      <h2>How to reach us</h2>
+      {
+        SITE.contactEmail ? (
+          <p>Email <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.</p>
+        ) : (
+          <p>A public contact address has not been published yet. This page will list one as soon as it is configured.</p>
+        )
+      }
+      <p>This site does not use a contact form, so no message data is collected here.</p>
+    </div>
+  </section>
+</ContentLayout>

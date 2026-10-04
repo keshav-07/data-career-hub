@@ -1,0 +1,122 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Delta Lake: Transactions, Schema Evolution and Time Travel"
+description: "See how Delta Lake's transaction log gives ACID guarantees on data lake files, how schema enforcement and evolution work, and how time travel and VACUUM interact."
+inventoryId: "TECH-25"
+technology: ["delta-lake", "spark"]
+topic: ["lakehouse", "acid", "schema-evolution"]
+difficulty: "Intermediate"
+featured: false
+prerequisites: ["articles:spark/partitions-shuffles-skew"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline"]
+previous: "articles:kafka/topics-partitions-consumer-groups"
+next: "articles:airflow/dags-scheduling-retries"
+sources: [{"label": "Delta Lake documentation", "url": "https://docs.delta.io/"}, {"label": "Delta Lake documentation: Table batch reads and writes", "url": "https://docs.delta.io/latest/delta-batch.html"}]
+versionContext: "Describes Delta Lake 3.x behaviour; some features and defaults differ between open-source Delta and managed platforms such as Databricks, so check your platform's documentation"
+---
+
+Plain Parquet files in a data lake have no transactions: a failed job can leave half-written files, and readers can see partial results. **Delta Lake** adds a transaction log on top of Parquet files so that a folder of files behaves like a reliable table.
+
+## How it works
+
+A Delta table is a directory containing Parquet data files and a `_delta_log` folder:
+
+```text
+my_table/
+  _delta_log/
+    00000000000000000000.json    <- commit 0: files added
+    00000000000000000001.json    <- commit 1: more files, some removed
+    ...
+    00000000000000000010.checkpoint.parquet
+  part-00000-....snappy.parquet
+  part-00001-....snappy.parquet
+```
+
+Each **commit** is a JSON file that lists which data files were added or removed. The current state of the table is the result of replaying the log (with periodic Parquet **checkpoints** so readers do not replay everything). A write becomes visible only when its commit file is atomically written, so readers see either the old table version or the new one, never a half-finished write.
+
+## ACID in practice
+
+- **Atomicity**: a commit succeeds completely or not at all.
+- **Consistency**: schema enforcement blocks writes that do not match the table.
+- **Isolation**: readers use a consistent snapshot, and concurrent writers use **optimistic concurrency control**: if two writers conflict, one commit fails and can be retried.
+- **Durability**: committed data lives in durable object storage.
+
+## Schema enforcement
+
+By default, writing a DataFrame whose columns do not match the table's schema fails, instead of corrupting the table:
+
+```python
+df.write.format("delta").mode("append").save("/data/orders")
+# fails if df has a column the table does not, or a conflicting type
+```
+
+This is a feature: bad data is stopped at the boundary.
+
+## Schema evolution
+
+When the change is intentional, you opt in explicitly:
+
+```python
+# add new columns found in the incoming data
+(df.write.format("delta")
+   .mode("append")
+   .option("mergeSchema", "true")
+   .save("/data/orders"))
+```
+
+or change the table definition directly:
+
+```sql
+ALTER TABLE orders ADD COLUMNS (coupon_code STRING);
+```
+
+**When is evolution safe?**
+
+| Change | Usually safe? | Why |
+|--------|---------------|-----|
+| Add a nullable column | Yes | Old rows read as `NULL`; old readers can ignore it |
+| Widen a type (for example int → long) | Often, check support | Existing values still fit |
+| Change a type incompatibly (string → int) | No | Existing data may not convert |
+| Drop or rename a column | Needs care | Downstream queries break; requires column mapping support |
+
+The safest habit is to evolve additively, communicate changes to downstream consumers, and avoid relying on silent `mergeSchema` in every job.
+
+## Time travel
+
+Because old files remain until cleaned up, you can query earlier versions:
+
+```sql
+SELECT * FROM orders VERSION AS OF 12;
+SELECT * FROM orders TIMESTAMP AS OF '2026-10-01';
+DESCRIBE HISTORY orders;
+```
+
+Use it to audit changes, debug a bad load, or restore a previous version.
+
+## Maintenance: OPTIMIZE and VACUUM
+
+- Many small files slow reads. **`OPTIMIZE`** compacts them into larger files.
+- **`VACUUM`** permanently deletes data files no longer referenced by the table and older than the retention threshold (7 days by default).
+
+<Callout tone="warning" title="VACUUM limits time travel">
+
+Time travel only works while the old data files still exist. After `VACUUM` removes them, versions that depended on those files can no longer be read. Do not shorten the retention period below the longest running reader or the history you need to keep.
+
+</Callout>
+
+## Common mistakes
+
+1. Enabling schema merge globally so a typo in a column name becomes a new column.
+2. Running `VACUUM` with a very short retention while long jobs or time-travel queries still need old files.
+3. Leaving thousands of tiny files without compaction.
+4. Assuming Delta removes the need for idempotent pipelines. A retried job can still append duplicates unless you use `MERGE` or an overwrite pattern.
+
+## Interview relevance
+
+Typical prompts: "What problems does Delta Lake solve?", "How does it provide ACID on object storage?", "What is schema evolution and when is it safe?" Mention the transaction log, optimistic concurrency and the difference between enforcement and evolution.
+
+## Key takeaway
+
+The transaction log turns files into a table. Enforce schemas by default, evolve them deliberately, and remember that time travel lasts only as long as the underlying files do.

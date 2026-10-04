@@ -1,0 +1,83 @@
+---
+import { getItems, getByRef, type ItemOf } from "../../../utils/content";
+import ArticleLayout from "../../../layouts/ArticleLayout.astro";
+import RelatedList from "../../../components/content/RelatedList.astro";
+import PrevNext from "../../../components/content/PrevNext.astro";
+import NextStep from "../../../components/content/NextStep.astro";
+import Callout from "../../../components/content/Callout.astro";
+import { render } from "astro:content";
+import { breadcrumbsFor } from "../../../utils/breadcrumbs";
+import { relatedGroups, nextPrev } from "../../../utils/related";
+import { techLabel } from "../../../utils/content";
+
+export async function getStaticPaths() {
+  const qs = await getItems("interview-questions");
+  return qs.map((q) => {
+    const [tech, slug] = q.id.split("/");
+    return { params: { tech, slug }, props: { ref: q.ref } };
+  });
+}
+
+const item = (await getByRef(Astro.props.ref)) as ItemOf<"interview-questions">;
+const d = item.entry.data;
+const { Content, headings } = await render(item.entry);
+const crumbs = await breadcrumbsFor(item);
+const { prerequisites, groups } = await relatedGroups(item);
+const { next, previous } = await nextPrev(item);
+const label = await techLabel(d.technology[0]);
+const typeText = d.questionType.join(" / ");
+---
+
+<ArticleLayout
+  item={item}
+  crumbs={crumbs}
+  headings={headings}
+  eyebrow={`${label} interview question`}
+  titleClass="question-header-title"
+  meta={[d.difficulty, typeText, `~${d.estimatedMinutes} min`, `${d.interviewRelevance} relevance`]}
+>
+  <section slot="header-extra" class="short-answer" aria-labelledby="short-answer-h" style="margin-top: var(--sp-6)">
+    <h2 id="short-answer-h">Short answer</h2>
+    <p>{d.shortAnswer}</p>
+  </section>
+
+  {
+    prerequisites.length > 0 && (
+      <Callout tone="info" title="Review first">
+        <ul style="margin:0;padding-left:1.2rem">
+          {prerequisites.map((p) => <li><a href={p.url}>{p.title}</a></li>)}
+        </ul>
+      </Callout>
+    )
+  }
+  <Content components={{ Callout }} />
+
+  <Fragment slot="after-prose">
+    {
+      d.followUps.length > 0 && (
+        <section class="related-block" aria-labelledby="followups-h">
+          <h2 id="followups-h">Interview follow-ups</h2>
+          <p class="muted" style="margin-bottom: var(--sp-3)">
+            Interviewers often probe the same topic a layer deeper. Be ready for these.
+          </p>
+          <ol class="followups">
+            {d.followUps.map((f) => (
+              <li><span class="eyebrow">Follow-up</span>{f}</li>
+            ))}
+          </ol>
+        </section>
+      )
+    }
+  </Fragment>
+
+  <Fragment slot="footer">
+    <RelatedList groups={groups} />
+    <PrevNext previous={previous} next={next} />
+    <NextStep
+      title={`More ${label} interview questions`}
+      text="Keep practising: related questions, concept review and the system-design case studies build on each other."
+      href={`/interview/${d.technology[0]}/`}
+      label={`Open the ${label} interview hub`}
+    />
+  </Fragment>
+</ArticleLayout>

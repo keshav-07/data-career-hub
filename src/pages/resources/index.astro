@@ -1,0 +1,21 @@
+---
+import { getItems } from "../../utils/content";
+import ContentLayout from "../../layouts/ContentLayout.astro";
+import ContentRow from "../../components/content/ContentRow.astro";
+import { HOME } from "../../utils/breadcrumbs";
+const sheets = await getItems("cheat-sheets");
+---
+
+<ContentLayout
+  title="Data Engineering resources and cheat sheets"
+  description="Dense, scannable reference sheets for SQL, PySpark and other Data Engineering tools, built for fast revision before an interview or a deploy."
+  crumbs={[HOME, { label: "Resources" }]}
+  eyebrow="Resources"
+  deck="Reference material for quick revision. Each sheet says which versions it covers."
+  indexable
+>
+  <section class="section section--tight">
+    <h2 style="font-size: var(--fs-h3)">Cheat sheets</h2>
+    <ul class="link-list" style="margin-top: var(--sp-4)">{sheets.map((s) => <li><ContentRow item={s} /></li>)}</ul>
+  </section>
+</ContentLayout>

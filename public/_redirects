@@ -1,0 +1,5 @@
+# Documented redirect map. Format: source destination status
+/data-engineering/interview-preparation /interview/ 301
+/data-engineering/interview-preparation/ /interview/ 301
+/data-engineering/projects /projects/ 301
+/data-engineering/projects/ /projects/ 301

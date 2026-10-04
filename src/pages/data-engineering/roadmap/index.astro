@@ -1,0 +1,54 @@
+---
+import { render } from "astro:content";
+import { getByRef, type ItemOf } from "../../../utils/content";
+import ContentLayout from "../../../layouts/ContentLayout.astro";
+import IndexMeta from "../../../components/content/IndexMeta.astro";
+import RoadmapNodes from "../../../components/roadmap/RoadmapNodes.astro";
+import Metadata from "../../../components/content/Metadata.astro";
+import Button from "../../../components/content/Button.astro";
+import { breadcrumbsFor } from "../../../utils/breadcrumbs";
+import { formatMonthYear } from "../../../utils/dates";
+
+const item = (await getByRef("roadmaps:data-engineer-roadmap")) as ItemOf<"roadmaps">;
+const d = item.entry.data;
+const { Content } = await render(item.entry);
+const crumbs = await breadcrumbsFor(item);
+---
+
+<ContentLayout
+  title={d.title}
+  seoTitle={d.seoTitle}
+  description={item.description}
+  crumbs={crumbs}
+  eyebrow="Roadmap"
+  deck={item.description}
+  width="wide"
+  indexable
+>
+  <IndexMeta type="Roadmap" technology="data-engineering" />
+  <div slot="header-extra" style="margin-top: var(--sp-4)">
+    <Metadata items={[`${d.stages.length} stages`, `Updated ${formatMonthYear(d.updatedDate)}`]} />
+  </div>
+
+  <section class="section section--tight" aria-labelledby="how-h">
+    <div class="prose">
+      <h2 id="how-h">How to use this roadmap</h2>
+      <Content />
+    </div>
+  </section>
+
+  <section class="section section--tight" aria-labelledby="stages-h">
+    <h2 id="stages-h" style="font-size: var(--fs-h2); margin-bottom: var(--sp-8)">The journey, stage by stage</h2>
+    <RoadmapNodes stages={d.stages} layout="grid" />
+  </section>
+
+  <section class="section section--tight">
+    <p class="muted" style="max-width: 60ch">
+      This site does not save personal progress. Use the stages as an ordered guide and keep your own checklist.
+    </p>
+    <div class="cluster" style="margin-top: var(--sp-4)">
+      <Button href="/roadmaps/">Study plans (30, 60 and 90 days)</Button>
+      <Button href="/interview/" variant="secondary">Interview preparation</Button>
+    </div>
+  </section>
+</ContentLayout>

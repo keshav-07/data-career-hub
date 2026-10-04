@@ -1,0 +1,37 @@
+---
+import ContentLayout from "../../layouts/ContentLayout.astro";
+import SearchPanel from "../../components/search/SearchPanel.astro";
+import { HOME } from "../../utils/breadcrumbs";
+---
+
+<ContentLayout
+  title="Search"
+  description="Search Data Career Hub guides, interview questions, projects, system design case studies and cheat sheets."
+  crumbs={[HOME, { label: "Search" }]}
+  noindex
+>
+  <section class="section section--tight" style="max-width: 760px">
+    <div class="js-only">
+      <SearchPanel idPrefix="page" />
+    </div>
+    <div class="no-js-only">
+      <p>Search needs JavaScript. You can still browse everything from these hubs:</p>
+    </div>
+    <div style="margin-top: var(--sp-8)">
+      <h2 style="font-size: var(--fs-xl)">Browse instead</h2>
+      <ul class="link-list" style="margin-top: var(--sp-3)">
+        <li><a class="row" href="/data-engineering/"><span class="row__title">Learn Data Engineering</span></a></li>
+        <li><a class="row" href="/interview/"><span class="row__title">Interview preparation</span></a></li>
+        <li><a class="row" href="/projects/"><span class="row__title">Projects</span></a></li>
+        <li><a class="row" href="/resources/"><span class="row__title">Cheat sheets</span></a></li>
+        <li><a class="row" href="/roadmaps/"><span class="row__title">Roadmaps and study plans</span></a></li>
+      </ul>
+    </div>
+  </section>
+</ContentLayout>
+
+<script>
+  import { mountSearch } from "../../scripts/search";
+  const root = document.querySelector<HTMLElement>("main [data-search-root]");
+  if (root) mountSearch(root);
+</script>

@@ -1,0 +1,63 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "How would you design an idempotent batch pipeline?"
+description: "Interview answer: make each run deterministic for its input interval and write with overwrite-by-partition or upserts in a transaction, so reruns are safe."
+inventoryId: "INT-27"
+technology: ["data-engineering", "airflow"]
+topic: ["idempotency", "reliability"]
+difficulty: "Medium"
+questionType: ["architecture", "scenario"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "An idempotent pipeline gives the same final result however many times it runs for the same input. Parameterise each run by its data interval instead of the current time, read a fixed input for that interval, and write output so that rerunning replaces rather than adds: overwrite the target partition, or upsert on a unique key, inside a transaction or atomic swap. Then retries, backfills and duplicate triggers are all safe."
+followUps: ["How would you handle late-arriving data for an already processed day?", "Append versus overwrite versus merge: when do you use each?", "How do you make an idempotent load when the target has no primary key?", "How do you test idempotency?"]
+related: ["articles:airflow/dags-scheduling-retries", "articles:python/idempotent-csv-loader", "articles:delta-lake/transactions-schema-evolution", "articles:etl-elt/etl-vs-elt", "articles:data-warehousing/star-schema"]
+---
+
+## Detailed explanation
+
+Pipelines get rerun: a task fails and retries, someone backfills last month, a scheduler fires twice. If each run **appends**, every rerun duplicates data. Idempotency makes reruns harmless.
+
+### 1. Deterministic input
+
+Drive each run from its **logical interval** (for example `2026-10-03`), never from `now()`. The run for a given day must always read the same slice of source data.
+
+### 2. Replace, do not add
+
+| Pattern | How | Good for |
+|---------|-----|----------|
+| **Partition overwrite** | `INSERT OVERWRITE ... PARTITION (dt='2026-10-03')` or delete-then-insert for that day | Daily facts, event tables |
+| **Upsert / MERGE** | Match on a unique key, update or insert | Dimensions, corrections, CDC |
+| **Atomic swap** | Build into a staging table, then rename or swap | Full rebuilds of small tables |
+
+### 3. Atomic writes
+
+Wrap the write in a transaction or use a table format with atomic commits (such as Delta Lake), so a crash cannot leave half a partition.
+
+### 4. Side effects
+
+Emails, API calls and notifications are not naturally idempotent. Record what was sent (keyed by run and entity) and check before sending again.
+
+## Example
+
+```sql
+-- Idempotent daily load: rerunning for the same day gives the same result
+BEGIN;
+DELETE FROM fact_orders WHERE order_date = DATE '2026-10-03';
+INSERT INTO fact_orders
+SELECT * FROM staging_orders WHERE order_date = DATE '2026-10-03';
+COMMIT;
+```
+
+## Testing idempotency
+
+Run the pipeline twice on the same input and assert the output (row count, key set, checksums of aggregates) is identical. Add this as an automated test.
+
+## Common mistakes
+
+1. Using the current date inside the job, so a retry processes a different day.
+2. Appending with no unique key or deduplication.
+3. Deleting and inserting without a transaction.
+4. Forgetting that late data needs the affected partitions to be reprocessed.

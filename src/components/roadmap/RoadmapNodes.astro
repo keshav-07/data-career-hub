@@ -1,0 +1,55 @@
+---
+import { getByRef } from "../../utils/content";
+interface Stage {
+  id: string;
+  title: string;
+  summary: string;
+  why?: string;
+  estimatedEffort: string;
+  prerequisites: string[];
+  resources: string[];
+  outcome: string;
+  href?: string;
+}
+interface Props {
+  stages: Stage[];
+  layout?: "list" | "grid";
+}
+const { stages, layout = "list" } = Astro.props;
+const resolved = await Promise.all(
+  stages.map(async (s) => ({
+    ...s,
+    items: (await Promise.all(s.resources.map((r) => getByRef(r)))).filter((x) => !!x),
+  })),
+);
+---
+
+<ol class={`roadmap ${layout === "grid" ? "roadmap--grid" : ""}`}>
+  {
+    resolved.map((s, i) => (
+      <li class="roadmap__node" id={`stage-${s.id}`}>
+        <span class="roadmap__num" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+        <div class="roadmap__body">
+          <h3><span class="visually-hidden">Stage {i + 1}: </span>{s.title}</h3>
+          <p>{s.summary}</p>
+          <dl class="roadmap__facts">
+            {s.why && (<><dt>Why it matters</dt><dd>{s.why}</dd></>)}
+            {s.prerequisites.length > 0 && (<><dt>Prerequisites</dt><dd>{s.prerequisites.join(", ")}</dd></>)}
+            <dt>Typical effort</dt>
+            <dd>{s.estimatedEffort}</dd>
+            <dt>Outcome</dt>
+            <dd>{s.outcome}</dd>
+          </dl>
+          {s.items.length > 0 && (
+            <ul class="roadmap__links" aria-label={`Core resources for ${s.title}`}>
+              {s.items.map((r) => r && <li><a href={r.url}>{r.title}</a></li>)}
+            </ul>
+          )}
+          {s.href && (
+            <p style="margin-top: var(--sp-3)"><a href={s.href}><strong>Open stage →</strong></a></p>
+          )}
+        </div>
+      </li>
+    ))
+  }
+</ol>

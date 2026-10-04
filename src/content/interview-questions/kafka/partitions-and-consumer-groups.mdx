@@ -1,0 +1,46 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Explain Kafka partitions and consumer groups."
+description: "Interview answer: partitions give ordering and parallelism, and a consumer group assigns each partition to one consumer so the group shares the work."
+inventoryId: "INT-22"
+technology: ["kafka"]
+topic: ["partitions", "consumer-groups"]
+difficulty: "Medium"
+questionType: ["conceptual", "architecture"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+shortAnswer: "A Kafka topic is split into partitions, each an ordered log; ordering is guaranteed only within a partition, and records with the same key go to the same partition. A consumer group is a set of consumers sharing a group id, and Kafka assigns each partition to exactly one consumer in the group, so partitions are divided among them. This means the partition count caps how many consumers in one group can work in parallel."
+followUps: ["What happens if a group has more consumers than partitions?", "What triggers a rebalance and why does it matter?", "How do you keep all events for one customer in order?", "What happens if you add partitions to an existing topic?"]
+related: ["articles:kafka/topics-partitions-consumer-groups"]
+---
+
+## Detailed explanation
+
+- **Partitions** are the unit of both **ordering** and **parallelism**. Each has its own sequence of offsets.
+- **Keys** route records: the same key always maps to the same partition while the partition count is unchanged.
+- **Consumer groups** split partitions among members. Two different groups each receive every record independently.
+
+## Example
+
+A topic `orders` has 6 partitions.
+
+| Consumers in group `billing` | Partitions per consumer |
+|------------------------------|-------------------------|
+| 1 | 6 |
+| 3 | 2 each |
+| 6 | 1 each |
+| 8 | 6 consumers get 1, **2 are idle** |
+
+A second group `analytics` reads all 6 partitions on its own, unaffected by `billing`.
+
+## Failure and rebalancing
+
+If a consumer crashes or stops sending heartbeats, the group **rebalances** and its partitions move to other members, which resume from the last committed offsets. Records processed but not yet committed are processed again, which is why at-least-once consumers need idempotent processing.
+
+## Common mistakes
+
+1. Claiming Kafka guarantees ordering across a whole topic.
+2. Adding consumers beyond the partition count to increase throughput.
+3. Picking a skewed key so one partition receives most of the traffic.

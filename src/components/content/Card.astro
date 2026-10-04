@@ -1,0 +1,20 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+  href?: string;
+  eyebrow?: string;
+  metadata?: string[];
+  cta?: string;
+}
+const { title, description, href, eyebrow, metadata = [], cta } = Astro.props;
+const Tag = href ? "a" : "div";
+---
+
+<Tag class="card" href={href}>
+  {eyebrow && <div class="card__eyebrow">{eyebrow}</div>}
+  <div class="card__title">{title}</div>
+  {description && <p class="card__desc">{description}</p>}
+  {metadata.length > 0 && <div class="card__meta">{metadata.join(" · ")}</div>}
+  {href && cta && <div class="card__cta">{cta} →</div>}
+</Tag>

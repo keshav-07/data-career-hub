@@ -1,0 +1,43 @@
+---
+interface Props {
+  idPrefix: string;
+  headingLevel?: "h1" | "h2";
+}
+const { idPrefix } = Astro.props;
+---
+
+<div data-search-root>
+  <div class="search-field">
+    <label for={`${idPrefix}-input`}>Search the library</label>
+    <div class="search-input-row">
+      <input
+        id={idPrefix === "page" ? "search-page-input" : `${idPrefix}-input`}
+        class="search-input"
+        type="search"
+        placeholder="e.g. broadcast join, window functions, Kafka"
+        autocomplete="off"
+        spellcheck="false"
+        aria-describedby={`${idPrefix}-status`}
+      />
+      <button type="button" class="btn btn--secondary" data-search-clear hidden>Clear</button>
+    </div>
+  </div>
+  <fieldset class="filter-group" style="margin-top: var(--sp-3)">
+    <legend>Filter by type</legend>
+    <div class="search-filters" data-search-filters></div>
+  </fieldset>
+  <div class="search-field" style="margin-top: var(--sp-3); max-width: 240px">
+    <label for={`${idPrefix}-difficulty`}>Difficulty</label>
+    <select id={`${idPrefix}-difficulty`} class="search-input" style="min-height:44px;font-size:1rem" data-search-difficulty>
+      <option value="">Any difficulty</option>
+      <option>Beginner</option>
+      <option>Intermediate</option>
+      <option>Advanced</option>
+      <option>Easy</option>
+      <option>Medium</option>
+      <option>Hard</option>
+    </select>
+  </div>
+  <p id={`${idPrefix}-status`} class="search-status" role="status" aria-live="polite" data-search-status style="margin-top: var(--sp-3)"></p>
+  <ul class="search-results" data-search-results></ul>
+</div>

@@ -1,0 +1,16 @@
+---
+import { getItems, getByRef, type ItemOf } from "../../utils/content";
+import ArticlePage from "../../components/article/ArticlePage.astro";
+
+export async function getStaticPaths() {
+  const articles = (await getItems("articles")).filter((a) => a.entry.data.section === "learn");
+  return articles.map((a) => {
+    const [tech, slug] = a.id.split("/");
+    return { params: { tech, slug }, props: { ref: a.ref } };
+  });
+}
+
+const item = (await getByRef(Astro.props.ref)) as ItemOf<"articles">;
+---
+
+<ArticlePage item={item} />

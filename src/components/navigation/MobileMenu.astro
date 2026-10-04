@@ -1,0 +1,27 @@
+---
+import { GOALS, POPULAR_TECH } from "../../data/site";
+import { getItems } from "../../utils/content";
+import Icon from "../layout/Icon.astro";
+const hubs = new Map((await getItems("technologies")).map((t) => [t.id, t.entry.data.shortName]));
+const popular = POPULAR_TECH.filter((t) => hubs.has(t));
+---
+
+<dialog id="mobile-menu" class="mobile-menu" aria-label="Site menu">
+  <div class="mobile-menu__inner">
+    <div class="mobile-menu__head">
+      <strong>Menu</strong>
+      <button type="button" class="icon-btn" data-menu-close aria-label="Close menu"><Icon name="close" /></button>
+    </div>
+    <nav aria-label="Goals" class="mobile-menu__goals">
+      <ul>
+        {GOALS.map((g) => <li><a href={g.href}>{g.label}</a></li>)}
+      </ul>
+    </nav>
+    <section aria-labelledby="popular-tech">
+      <h2 id="popular-tech" class="eyebrow" style="margin-bottom: var(--sp-3)">Popular technologies</h2>
+      <div class="mobile-menu__tech">
+        {popular.map((t) => <a href={`/${t}/`}>{hubs.get(t)}</a>)}
+      </div>
+    </section>
+  </div>
+</dialog>

@@ -1,0 +1,97 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Kafka Topics, Partitions, Consumer Groups and Delivery Semantics"
+description: "Understand how Kafka topics are split into partitions, how consumer groups share the work, and what at-most-once, at-least-once and exactly-once delivery really mean."
+inventoryId: "TECH-29"
+technology: ["kafka"]
+topic: ["partitions", "consumer-groups", "delivery-semantics"]
+difficulty: "Intermediate"
+featured: true
+related: ["interview-questions:kafka/partitions-and-consumer-groups", "interview-questions:data-engineering/idempotent-batch-pipeline"]
+previous: "articles:etl-elt/etl-vs-elt"
+next: "articles:delta-lake/transactions-schema-evolution"
+sources: [{"label": "Apache Kafka documentation: Design", "url": "https://kafka.apache.org/documentation/#design"}, {"label": "Apache Kafka documentation: Message delivery semantics", "url": "https://kafka.apache.org/documentation/#semantics"}]
+versionContext: "Concepts apply to Apache Kafka 3.x and later; idempotent producers are enabled by default since 3.0"
+---
+
+Kafka is a distributed, append-only **log**. Producers write events to it, consumers read from it, and events stay available for a configured retention period instead of disappearing when read. Almost every Kafka question comes back to three ideas: topics, partitions and consumer groups.
+
+## Topics and partitions
+
+A **topic** is a named stream of events, such as `orders`. A topic is split into **partitions**, and each partition is an ordered, immutable sequence of records. Every record in a partition has an **offset**, its position in that sequence.
+
+```text
+Topic: orders
+  Partition 0: [o0] [o1] [o2] [o3] ...
+  Partition 1: [o0] [o1] [o2] ...
+  Partition 2: [o0] [o1] ...
+```
+
+Two consequences matter:
+
+1. **Ordering is guaranteed only within a partition**, not across the whole topic.
+2. **Partitions are the unit of parallelism.** More partitions allow more consumers to read in parallel.
+
+## Keys decide the partition
+
+A producer can attach a **key** to each record. Records with the same key are sent to the same partition (by hashing the key), which keeps all events for one entity, say one `customer_id`, in order.
+
+<Callout tone="warning" title="Changing the partition count changes key placement">
+
+If you add partitions to an existing topic, the hash of a key maps to a different partition than before. Ordering for a key across the change is no longer guaranteed. Plan partition counts up front.
+
+</Callout>
+
+Records sent without a key are spread across partitions, so you get throughput but no per-entity ordering.
+
+## Replication
+
+Each partition is replicated across brokers. One replica is the **leader** that serves reads and writes; followers copy it. If the leader's broker fails, a follower in sync takes over. A producer setting of `acks=all` makes a write succeed only after all in-sync replicas have it, and `min.insync.replicas` sets how many that must be.
+
+## Consumer groups
+
+Consumers that share a `group.id` form a **consumer group**. Kafka assigns each partition to **exactly one consumer in the group** at a time, so the group divides the topic's partitions between its members.
+
+- With 6 partitions and 3 consumers, each consumer reads 2 partitions.
+- With 6 partitions and 8 consumers, 2 consumers sit idle, because a partition is never split between consumers in a group. **Partitions cap a group's parallelism.**
+- A different group reads the topic independently and receives every record. This is how several systems (analytics, search, alerts) consume the same stream.
+
+When a consumer joins, leaves or crashes, the group **rebalances**: partitions are reassigned. Rebalances briefly pause consumption, so very frequent ones signal a problem such as consumers timing out under long processing.
+
+## Offsets and commits
+
+A consumer tracks progress by **committing offsets** (stored by Kafka in an internal topic). After a restart it resumes from the last committed offset. When you commit relative to processing decides your delivery guarantee.
+
+## Delivery semantics
+
+| Guarantee | How it happens | Failure behaviour |
+|-----------|----------------|-------------------|
+| **At-most-once** | Commit the offset *before* processing | A crash after commit loses the record |
+| **At-least-once** | Process, *then* commit the offset | A crash before commit reprocesses the record: **duplicates possible** |
+| **Exactly-once** | Idempotent producer plus transactions, consuming with `isolation.level=read_committed` | Each record's effect appears once, within Kafka's transactional scope |
+
+At-least-once is the common default. To make duplicates harmless, make the processing **idempotent**: writing the same record twice has the same effect as once, for example an upsert keyed by a unique event id.
+
+Exactly-once in Kafka applies to read-process-write cycles **inside Kafka** (consume from topics, write to topics, commit offsets in one transaction). Writing to an external system such as a database still needs an idempotent or transactional sink to avoid duplicates.
+
+## Sizing partitions
+
+There is no universal number. Consider the target throughput per partition, the maximum consumer parallelism you need (partitions must be at least that many), and that more partitions add broker overhead and lengthen recovery. Start from required throughput and consumer count, then add headroom.
+
+## Common mistakes
+
+1. Expecting global ordering across a multi-partition topic.
+2. Running more consumers than partitions and expecting more throughput.
+3. Using auto-commit with slow processing and losing or duplicating records after a crash.
+4. Assuming "exactly-once" removes the need for idempotent sinks.
+5. Choosing a low-cardinality key, which concentrates traffic on a few partitions.
+
+## Interview relevance
+
+Likely prompts: "Explain partitions and consumer groups", "How do you get ordering?", "What happens when a consumer fails?" and "At-least-once versus exactly-once". Tie each answer to the unit of ordering (the partition) and the unit of parallelism (the partition again).
+
+## Key takeaway
+
+Partitions give both ordering and parallelism. Consumer groups divide partitions. Where you commit offsets decides whether you risk loss or duplicates, and idempotent processing makes duplicates safe.

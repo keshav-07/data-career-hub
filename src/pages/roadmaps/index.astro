@@ -1,0 +1,22 @@
+---
+import { getItems } from "../../utils/content";
+import ContentLayout from "../../layouts/ContentLayout.astro";
+import ContentRow from "../../components/content/ContentRow.astro";
+import { HOME } from "../../utils/breadcrumbs";
+const all = await getItems("roadmaps");
+---
+
+<ContentLayout
+  title="Data Engineering roadmaps and study plans"
+  description="Follow the full Data Engineer roadmap or a time-boxed study plan that sequences concepts, practice, projects and interview preparation."
+  crumbs={[HOME, { label: "Roadmaps" }]}
+  eyebrow="Roadmaps"
+  deck="A roadmap shows the order. A study plan fits that order into a fixed number of days."
+  indexable
+>
+  <section class="section section--tight">
+    <ul class="link-list">
+      {all.map((r) => <li><ContentRow item={r} /></li>)}
+    </ul>
+  </section>
+</ContentLayout>

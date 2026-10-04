@@ -1,0 +1,14 @@
+---
+interface Props {
+  href: string;
+  variant?: "primary" | "secondary" | "quiet";
+  size?: "sm" | "md" | "lg";
+  fullWidthOnMobile?: boolean;
+}
+const { href, variant = "primary", size = "md", fullWidthOnMobile = false } = Astro.props;
+const cls = ["btn", `btn--${variant}`, size !== "md" && `btn--${size}`, fullWidthOnMobile && "btn--block-mobile"]
+  .filter(Boolean)
+  .join(" ");
+---
+
+<a href={href} class={cls}><slot /></a>

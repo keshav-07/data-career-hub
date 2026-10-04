@@ -1,0 +1,111 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Fact Tables, Dimension Tables and the Star Schema"
+description: "Learn how a star schema separates facts from dimensions, why the grain of a fact table comes first, and how this design keeps analytical queries simple and fast."
+inventoryId: "TECH-18"
+technology: ["data-warehousing"]
+topic: ["modelling", "star-schema"]
+difficulty: "Beginner"
+featured: true
+related: ["articles:etl-elt/etl-vs-elt", "interview-questions:data-engineering/idempotent-batch-pipeline"]
+next: "articles:etl-elt/etl-vs-elt"
+sources: [{"label": "Kimball Group: Dimensional Modeling Techniques", "url": "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/"}]
+versionContext: "Conceptual; applies to any SQL warehouse or lakehouse"
+---
+
+A **star schema** is a way of organising analytical data: one central **fact table** that records measurements, surrounded by **dimension tables** that describe them. Drawn out, the fact table sits in the middle with dimensions around it like points of a star.
+
+## Facts and dimensions
+
+- A **fact** is a measurement of something that happened: an order line, a page view, a payment. Facts are numeric and usually additive, such as `quantity`, `amount` or `duration_seconds`.
+- A **dimension** is context you filter and group by: customer, product, date, store. Dimensions are descriptive and mostly text and categories.
+
+```text
+dim_date ─┐
+dim_customer ─┤
+              ├── fact_order_line (quantity, amount)
+dim_product ─┤
+dim_store ───┘
+```
+
+## Decide the grain first
+
+The **grain** is the exact meaning of one row in the fact table, for example "one row per order line" or "one row per customer per day". Decide it before anything else, because every column must be true at that grain.
+
+If you mix grains (some rows per order, some per order line), sums double count and joins misbehave. A fact table with a clear grain is easy to reason about and easy to test.
+
+## A small example
+
+```sql
+CREATE TABLE dim_customer (
+  customer_key INT PRIMARY KEY,   -- surrogate key
+  customer_id  TEXT,              -- business key from the source system
+  name         TEXT,
+  segment      TEXT
+);
+
+CREATE TABLE dim_product (
+  product_key INT PRIMARY KEY,
+  sku         TEXT,
+  category    TEXT
+);
+
+CREATE TABLE fact_order_line (
+  order_id     TEXT,
+  line_number  INT,
+  order_date   DATE,
+  customer_key INT,
+  product_key  INT,
+  quantity     INT,
+  amount       DECIMAL(12,2)   -- grain: one row per order line
+);
+```
+
+A typical question joins the fact to the dimensions it needs and aggregates:
+
+```sql
+SELECT p.category, c.segment, SUM(f.amount) AS revenue
+FROM fact_order_line f
+JOIN dim_product  p ON p.product_key  = f.product_key
+JOIN dim_customer c ON c.customer_key = f.customer_key
+GROUP BY p.category, c.segment;
+```
+
+Every query follows the same shape: join the fact to a few dimensions, group, aggregate. That predictability is the main benefit.
+
+## Surrogate keys
+
+Dimension tables usually have a **surrogate key**, a meaningless integer the warehouse generates, in addition to the **business key** from the source. Surrogate keys keep joins small and let you keep several versions of the same customer when attributes change (see slowly changing dimensions below).
+
+## Common fact table types
+
+| Type | One row represents | Example |
+|------|--------------------|---------|
+| Transaction | An event | An order line |
+| Periodic snapshot | A state at regular intervals | Account balance per day |
+| Accumulating snapshot | A process with milestones, updated as it progresses | An order from placed to delivered |
+
+## Slowly changing dimensions
+
+Dimension attributes change: a customer moves city. **Type 1** overwrites the old value (simple, loses history). **Type 2** adds a new row with validity dates so history is preserved, and facts keep pointing at the version that was current when they occurred.
+
+## Star versus snowflake
+
+A **snowflake schema** normalises dimensions into further tables (for example `product` → `category`). It saves a little storage but adds joins. In modern columnar warehouses, storage is cheap and joins cost time, so the simpler star is usually preferred.
+
+## Common mistakes
+
+1. Not stating the grain, then mixing levels in one table.
+2. Putting descriptive text in the fact table instead of a dimension.
+3. Joining two fact tables directly on a shared dimension key, which multiplies rows. Aggregate each to the shared grain first.
+4. Using business keys as the only join key and losing history when attributes change.
+
+## Interview relevance
+
+Common prompts: "Design a schema for an e-commerce company", "What is the grain of this table?" and "How would you handle a customer changing address?". Start every answer by stating the grain.
+
+## Key takeaway
+
+Facts record what happened at a stated grain; dimensions describe it. Get the grain right and the rest of the model follows.

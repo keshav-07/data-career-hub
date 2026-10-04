@@ -1,0 +1,90 @@
+---
+import { render } from "astro:content";
+import { getItems, getByRef, type ItemOf } from "../../../utils/content";
+import ArticleLayout from "../../../layouts/ArticleLayout.astro";
+import RelatedList from "../../../components/content/RelatedList.astro";
+import NextStep from "../../../components/content/NextStep.astro";
+import Callout from "../../../components/content/Callout.astro";
+import { breadcrumbsFor } from "../../../utils/breadcrumbs";
+import { relatedGroups } from "../../../utils/related";
+
+export async function getStaticPaths() {
+  const g = await getItems("company-guides");
+  return g.map((x) => ({ params: { slug: x.id }, props: { ref: x.ref } }));
+}
+
+const item = (await getByRef(Astro.props.ref)) as ItemOf<"company-guides">;
+const d = item.entry.data;
+const { Content, headings } = await render(item.entry);
+const crumbs = await breadcrumbsFor(item);
+const { groups } = await relatedGroups(item);
+---
+
+<ArticleLayout item={item} crumbs={crumbs} headings={headings} eyebrow={`${d.company} · Company guide`} deck={item.description}>
+  <Callout tone="warning" title="Evidence note">
+    <p>{d.evidenceNote}</p>
+  </Callout>
+
+  <h2 id="attributed">Verified and attributed information</h2>
+  {
+    d.verifiedSources.length === 0 && d.commonTopics.length === 0 ? (
+      <p>No attributed sources have been added yet. We add items here only when they can be cited.</p>
+    ) : (
+      <>
+        {d.commonTopics.map((t) => (
+          <div class="evidence-item">
+            <span class={`evidence ${t.basis === "verified-attributed" ? "evidence--verified" : "evidence--reported"}`}>
+              {t.basis === "verified-attributed" ? "Verified / attributed" : "Commonly reported topic"}
+            </span>
+            <p>{t.topic}</p>
+            {t.source && <p class="muted" style="font-size: var(--fs-sm)">Source: <a href={t.source.url} rel="noopener">{t.source.label}</a></p>}
+          </div>
+        ))}
+        {d.verifiedSources.length > 0 && (
+          <>
+            <h3 id="sources">Sources</h3>
+            <ul>{d.verifiedSources.map((s) => <li><a href={s.url} rel="noopener">{s.label}</a></li>)}</ul>
+          </>
+        )}
+      </>
+    )
+  }
+
+  <h2 id="reported">Reported candidate questions</h2>
+  {
+    d.reportedQuestions.length === 0 ? (
+      <p>None yet. A question appears here only with a named, attributable source.</p>
+    ) : (
+      d.reportedQuestions.map((q) => (
+        <div class="evidence-item">
+          <span class="evidence evidence--reported">Reported candidate question</span>
+          <p>{q.question}</p>
+          <p class="muted" style="font-size: var(--fs-sm)">Source: <a href={q.source.url} rel="noopener">{q.source.label}</a></p>
+        </div>
+      ))
+    )
+  }
+
+  <h2 id="practice">Representative practice questions</h2>
+  <p>These are practice questions written for this guide. They are <strong>not</strong> claimed to be questions this company has asked.</p>
+  {
+    d.representativeQuestions.map((q) => (
+      <div class="evidence-item">
+        <span class="evidence evidence--representative">Representative practice question</span>
+        <p>{q}</p>
+      </div>
+    ))
+  }
+
+  <Content components={{ Callout }} />
+
+  <Fragment slot="footer">
+    <RelatedList groups={groups} />
+    <NextStep
+      title="Build the underlying skills"
+      text="Company rounds test fundamentals first. Work through the technology questions and system-design case studies."
+      href="/interview/"
+      label="Open interview preparation"
+    />
+  </Fragment>
+</ArticleLayout>

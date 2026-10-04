@@ -1,0 +1,108 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Airflow DAGs, Scheduling, Retries and Task Dependencies"
+description: "Learn how Airflow DAGs define task order, how scheduling intervals really work, and why retries are only safe when each task is idempotent."
+inventoryId: "TECH-30"
+technology: ["airflow"]
+topic: ["orchestration", "scheduling", "retries"]
+difficulty: "Intermediate"
+featured: false
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:python/idempotent-csv-loader"]
+previous: "articles:delta-lake/transactions-schema-evolution"
+sources: [{"label": "Apache Airflow documentation", "url": "https://airflow.apache.org/docs/apache-airflow/stable/"}, {"label": "Apache Airflow documentation: DAG runs and data intervals", "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dag-run.html"}]
+versionContext: "Concepts apply to Airflow 2.x and 3.x. Import paths and some defaults changed in Airflow 3, so follow the migration guide for your version"
+---
+
+Airflow is a **workflow orchestrator**. You describe a workflow as a **DAG** (directed acyclic graph) of tasks in Python, and Airflow decides when each task runs, in what order, and what to do when one fails. Airflow orchestrates; the heavy data processing should happen in the tools it triggers (Spark, a warehouse, a container), not inside Airflow workers.
+
+## A DAG
+
+```python
+from datetime import datetime, timedelta
+from airflow.sdk import dag, task   # Airflow 2.x: from airflow.decorators import dag, task
+
+@dag(
+    dag_id="daily_orders",
+    schedule="@daily",
+    start_date=datetime(2026, 1, 1),
+    catchup=False,
+    default_args={"retries": 3, "retry_delay": timedelta(minutes=5)},
+)
+def daily_orders():
+    @task
+    def extract():
+        ...
+
+    @task
+    def transform(raw):
+        ...
+
+    @task
+    def load(clean):
+        ...
+
+    load(transform(extract()))
+
+daily_orders()
+```
+
+Calling the tasks like functions defines the dependencies: `extract → transform → load`. With classic operators you write `extract_task >> transform_task >> load_task`.
+
+## How scheduling really works
+
+A scheduled DAG run covers a **data interval** (for example, one day). Airflow starts the run **after the interval has ended**, so the run for 1 January 00:00 to 2 January 00:00 starts at the beginning of 2 January. This surprises many people: a `@daily` DAG's run labelled "1 Jan" executes on 2 Jan.
+
+Use the run's interval boundaries (templated variables such as `data_interval_start` and `data_interval_end`, or `{{ ds }}`) to decide which data a run processes. Never use "today's date" inside the task, or re-running an old interval would process the wrong data.
+
+## Catchup and backfills
+
+If a DAG's `start_date` is in the past, Airflow can create a run for every missed interval; this is **catchup**. Set `catchup` explicitly: the default is `False` in Airflow 3 but was `True` in Airflow 2, so relying on it makes behaviour depend on the version. A **backfill** reruns a range of past intervals on purpose, for example after fixing a bug.
+
+## Retries
+
+```python
+default_args={"retries": 3, "retry_delay": timedelta(minutes=5), "retry_exponential_backoff": True}
+```
+
+Retries handle transient failures such as a network timeout. Set them per task or DAG default. Backoff avoids hammering a service that is struggling.
+
+## Retries require idempotent tasks
+
+If a task fails halfway and Airflow retries it, the same work runs again. If the task **appended** rows on the first attempt, the retry appends them again and you have duplicates.
+
+An **idempotent** task produces the same final state no matter how many times it runs for the same interval:
+
+- **Overwrite the partition** for the run's interval instead of appending (`INSERT OVERWRITE`, or delete-then-insert in a transaction).
+- **Upsert** using a unique key (`MERGE` / `INSERT ... ON CONFLICT`).
+- Write to a temporary location, then **atomically swap** it in.
+
+The [Python tutorial on an idempotent loader](/python/idempotent-csv-loader/) shows the pattern in code.
+
+## Dependencies and trigger rules
+
+By default a task runs only when all upstream tasks succeeded. Trigger rules change this, for example running a cleanup task whether or not upstream tasks failed. Use them sparingly; complicated rules make DAGs hard to reason about.
+
+## Design guidance
+
+1. Keep tasks **small and single-purpose**, so a retry repeats little work.
+2. Pass **references, not data**: tasks should hand each other file paths or table names, not large payloads.
+3. Make every task **idempotent** and parameterised by the run's data interval.
+4. Add **alerts** on failure and **SLAs or timeouts** so stuck runs do not go unnoticed.
+5. Do not run heavy transformations on the Airflow workers; submit them to Spark or the warehouse.
+
+## Common mistakes
+
+1. Using `datetime.now()` inside tasks instead of the data interval.
+2. Retrying non-idempotent tasks and creating duplicates.
+3. Leaving `catchup` at an unexamined default and flooding the scheduler with old runs.
+4. Putting large data frames through task-to-task communication.
+
+## Interview relevance
+
+Expect "How does Airflow schedule a run?", "What is idempotency and why does it matter with retries?" and "How would you backfill?". The key insight: a retry is only safe if rerunning the task for the same interval gives the same result.
+
+## Key takeaway
+
+Define order with a DAG, drive each run from its data interval, and make every task idempotent so retries and backfills are safe.

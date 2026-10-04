@@ -1,0 +1,76 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "How to Explain a Data Engineering Project in an Interview"
+description: "A repeatable structure for explaining a data engineering project in an interview: problem, design, trade-offs, failure handling and honest results."
+inventoryId: "SUPPORT-20"
+technology: ["career", "data-engineering"]
+topic: ["interview", "projects"]
+difficulty: "Beginner"
+featured: true
+section: "career"
+related: ["projects:csv-to-warehouse-pipeline", "interview-questions:data-engineering/idempotent-batch-pipeline"]
+sources: []
+versionContext: "Applies to any project and any interview format"
+---
+
+Interviewers rarely want a list of tools. They want to see **how you think**: what problem you solved, why you designed it that way, what went wrong and what you would change. Use the same structure every time.
+
+## The structure: problem, design, decisions, failure, result
+
+### 1. Problem (20 seconds)
+
+State the business problem, not the stack. *"A retailer's daily sales reports were built by hand from CSV exports and were often a day late. I built a pipeline that loads them automatically and checks quality before anyone sees the numbers."*
+
+### 2. Scale and constraints (15 seconds)
+
+Give honest numbers: file sizes, frequency, latency needs. Say what you actually had. If it was a personal project with a small dataset, say so. Interviewers respect honesty and are quick to spot inflated claims.
+
+### 3. Design (60 seconds)
+
+Draw or describe the flow end to end: sources, ingestion, storage layers, transformation, orchestration, serving. Name each component and **why** you chose it.
+
+### 4. Decisions and trade-offs (the most valuable part)
+
+For two or three decisions, say what you chose, what you rejected and why:
+
+- *Why a warehouse star schema rather than one wide table?*
+- *Why upserts instead of append-only loads?*
+- *Why batch rather than streaming?*
+
+If you cannot explain why, you will be asked. Prepare these.
+
+### 5. Reliability and data quality
+
+Explain how it behaves when things go wrong: retries, idempotency, bad-record handling, alerts, row-count and null checks, how you detect and recover from a bad load.
+
+### 6. Result and what you would change
+
+Report results you can **actually back up**. If you measured it, say what you measured and how. If you did not, describe qualitative outcomes and do not invent percentages. End with one improvement you would make with more time; it shows judgement.
+
+## Questions to prepare for
+
+- What was the hardest bug and how did you find it?
+- How do you know the data is correct?
+- What happens if the job runs twice? If a source file arrives late?
+- How would this change at 100× the data?
+- What would you do differently?
+
+## Common mistakes
+
+1. Describing tools instead of problems and decisions.
+2. Claiming scale or impact you did not have.
+3. Not knowing why a technology was chosen.
+4. Having no story about failure or data quality.
+5. Talking for five minutes without checking whether the interviewer wants more detail.
+
+<Callout tone="success" title="A simple rehearsal">
+
+Practise a 2-minute version and a 5-minute version. Record yourself once. The 2-minute version covers steps 1 to 3 and one trade-off; the 5-minute version adds reliability, results and improvements.
+
+</Callout>
+
+## Key takeaway
+
+Lead with the problem, explain design choices as trade-offs, show how you handle failure, and report only results you can defend.

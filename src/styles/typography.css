@@ -1,0 +1,48 @@
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: var(--lh-heading);
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+  h1 {
+    font-size: var(--fs-h1);
+    letter-spacing: -0.03em;
+  }
+  h2 {
+    font-size: var(--fs-h2);
+  }
+  h3 {
+    font-size: var(--fs-h3);
+  }
+  h4 {
+    font-size: var(--fs-h4);
+  }
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono);
+    font-size: var(--fs-code);
+  }
+  .eyebrow {
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--c-text-muted);
+  }
+  .deck {
+    font-size: var(--fs-lg);
+    color: var(--c-text-muted);
+    line-height: 1.55;
+    max-width: 62ch;
+  }
+  @media (min-width: 768px) {
+    .deck {
+      font-size: var(--fs-xl);
+    }
+  }
+}

@@ -1,0 +1,85 @@
+---
+import { render } from "astro:content";
+import { getItems, getByRef, type ItemOf } from "../../utils/content";
+import ArticleLayout from "../../layouts/ArticleLayout.astro";
+import RelatedList from "../../components/content/RelatedList.astro";
+import NextStep from "../../components/content/NextStep.astro";
+import PrevNext from "../../components/content/PrevNext.astro";
+import Callout from "../../components/content/Callout.astro";
+import { breadcrumbsFor } from "../../utils/breadcrumbs";
+import { relatedGroups, nextPrev } from "../../utils/related";
+
+export async function getStaticPaths() {
+  const all = await getItems("projects");
+  return all.map((s) => ({ params: { slug: s.id }, props: { ref: s.ref } }));
+}
+const item = (await getByRef(Astro.props.ref)) as ItemOf<"projects">;
+const d = item.entry.data;
+const { Content, headings } = await render(item.entry);
+const crumbs = await breadcrumbsFor(item);
+const { groups } = await relatedGroups(item);
+const { next, previous } = await nextPrev(item);
+const lists: [string, string, string[], boolean?][] = [
+  ["steps", "Build steps", d.steps, true],
+  ["testing", "Testing", d.testing],
+  ["dq", "Data quality", d.dataQuality],
+  ["monitoring", "Monitoring", d.monitoring],
+  ["cost", "Cost considerations", d.costConsiderations],
+];
+---
+
+<ArticleLayout item={item} crumbs={crumbs} headings={headings} eyebrow={`${d.level} project`} deck={d.problemStatement} meta={[d.level, d.technologies.join(" · ")]} wide>
+  <section class="facts" aria-label="Project summary" style="max-width:none">
+    <div>
+      <h2 id="requirements" style="border:0;padding:0;margin:0">Requirements</h2>
+      <ul>{d.requirements.map((r) => <li>{r}</li>)}</ul>
+    </div>
+    <div>
+      <h2 id="stack" style="border:0;padding:0;margin:0">Technology stack</h2>
+      <p>{d.technologies.join(", ")}</p>
+      {d.dataset && (<><h3 style="margin-top: var(--sp-4); font-size: var(--fs-lg)">Dataset</h3><p>{d.dataset}</p></>)}
+    </div>
+  </section>
+  <div style="margin-top: var(--sp-10)"><Content components={{ Callout }} /></div>
+
+  <Fragment slot="after-prose">
+    {
+      lists.filter(([, , xs]) => xs.length > 0).map(([id, label, xs, ordered]) => (
+        <section class="related-block" aria-labelledby={`${id}-h`}>
+          <h2 id={`${id}-h`}>{label}</h2>
+          {ordered ? <ol class="flow">{xs.map((x) => <li>{x}</li>)}</ol> : <ul>{xs.map((x) => <li>{x}</li>)}</ul>}
+        </section>
+      ))
+    }
+    {
+      d.interviewQuestions.length > 0 && (
+        <section class="related-block" aria-labelledby="iq-h">
+          <h2 id="iq-h">Interview questions this project prepares you for</h2>
+          <ul>{d.interviewQuestions.map((q) => <li>{q}</li>)}</ul>
+        </section>
+      )
+    }
+    {
+      d.resumeBullets.length > 0 && (
+        <section class="related-block" aria-labelledby="rb-h">
+          <h2 id="rb-h">Resume bullets (add only what you measured)</h2>
+          <p class="muted">Use these as structure. Replace the wording with results you actually produced and can show; never claim numbers you did not measure.</p>
+          <ul style="margin-top: var(--sp-3)">{d.resumeBullets.map((b) => <li>{b}</li>)}</ul>
+        </section>
+      )
+    }
+    {
+      d.extensions.length > 0 && (
+        <section class="related-block" aria-labelledby="ext-h">
+          <h2 id="ext-h">Extensions</h2>
+          <ul>{d.extensions.map((x) => <li>{x}</li>)}</ul>
+        </section>
+      )
+    }
+  </Fragment>
+  <Fragment slot="footer">
+    <RelatedList groups={groups} />
+    <PrevNext previous={previous} next={next} />
+    <NextStep eyebrow="Next project" title="Explain it like an engineer" text="A project only helps if you can walk through its design and trade-offs." href="/career/explain-a-data-engineering-project/" label="How to explain a project in an interview" />
+  </Fragment>
+</ArticleLayout>

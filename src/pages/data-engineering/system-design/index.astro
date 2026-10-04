@@ -1,0 +1,20 @@
+---
+import { getItems } from "../../../utils/content";
+import ContentLayout from "../../../layouts/ContentLayout.astro";
+import ContentRow from "../../../components/content/ContentRow.astro";
+import { HOME } from "../../../utils/breadcrumbs";
+const all = await getItems("system-designs");
+---
+
+<ContentLayout
+  title="Data Engineering system design"
+  description="System-design case studies for Data Engineers: requirements, scale assumptions, architecture, reliability, trade-offs and the follow-ups interviewers ask."
+  crumbs={[HOME, { label: "Learn", href: "/data-engineering/" }, { label: "System design" }]}
+  eyebrow="System design"
+  deck="Each case study follows the same structure so you can practise a repeatable approach, not memorise one answer."
+  indexable
+>
+  <section class="section section--tight">
+    <ul class="link-list">{all.map((s) => <li><ContentRow item={s} /></li>)}</ul>
+  </section>
+</ContentLayout>

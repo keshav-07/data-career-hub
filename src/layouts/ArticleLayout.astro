@@ -1,0 +1,115 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import Breadcrumb from "../components/navigation/Breadcrumb.astro";
+import Toc from "../components/content/Toc.astro";
+import Metadata from "../components/content/Metadata.astro";
+import IndexMeta from "../components/content/IndexMeta.astro";
+import { articleSchema, breadcrumbSchema } from "../utils/seo";
+import { formatMonthYear, isoDate } from "../utils/dates";
+import type { Crumb } from "../utils/breadcrumbs";
+import type { Item } from "../utils/content";
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+interface Props {
+  item: Item;
+  crumbs: Crumb[];
+  headings?: Heading[];
+  eyebrow?: string;
+  deck?: string;
+  /** Extra metadata items shown in the compact line (difficulty, reading time are added automatically). */
+  meta?: (string | undefined | false)[];
+  /** Wide technical content layout (system design, projects). */
+  wide?: boolean;
+  schema?: object[];
+  titleClass?: string;
+}
+const { item, crumbs, headings = [], eyebrow, deck, meta = [], wide = false, schema = [], titleClass } = Astro.props;
+const data = item.entry.data as {
+  title: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  publishedDate: Date;
+  updatedDate: Date;
+  reviewedDate: Date;
+  author: string;
+  image?: string;
+  imageAlt?: string;
+  versionContext?: string;
+};
+const usefulHeadings = headings.filter((h) => h.depth === 2);
+const showToc = usefulHeadings.length >= 3;
+const jsonLd = [
+  breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site),
+  articleSchema({
+    headline: data.title,
+    description: data.seoDescription ?? item.description,
+    path: Astro.url.pathname,
+    site: Astro.site,
+    published: data.publishedDate,
+    modified: data.updatedDate,
+    author: data.author,
+    image: data.image,
+  }),
+  ...schema,
+];
+const containerClass = wide ? "container container--wide" : "container";
+---
+
+<BaseLayout
+  title={data.title}
+  seoTitle={data.seoTitle}
+  description={data.seoDescription ?? item.description}
+  ogType="article"
+  ogImage={data.image}
+  ogImageAlt={data.imageAlt}
+  schema={jsonLd}
+  indexable
+  publishedTime={isoDate(data.publishedDate)}
+  modifiedTime={isoDate(data.updatedDate)}
+>
+  <IndexMeta type={item.typeLabel} technology={item.technology[0]} difficulty={item.difficulty} />
+  <article>
+    <header class="page-header">
+      <div class={containerClass}>
+        <Breadcrumb {crumbs} />
+        <div class="page-header__inner">
+          {eyebrow && <p class="eyebrow" style="margin-top: var(--sp-6)" data-pagefind-weight="3">{eyebrow}</p>}
+          <h1 class={titleClass} data-pagefind-weight="10" style={eyebrow ? undefined : "margin-top: var(--sp-6)"}>{item.title}</h1>
+          {deck && <p class="deck" data-pagefind-weight="4">{deck}</p>}
+          <div class="meta">
+            <Metadata
+              items={[
+                ...meta,
+                `${item.minutes} min read`,
+                `Updated ${formatMonthYear(data.updatedDate)}`,
+              ]}
+            />
+          </div>
+          <slot name="header-extra" />
+        </div>
+      </div>
+    </header>
+
+    <div class={containerClass} style="padding-block: var(--sp-8) 0">
+      <div class={`main-with-toc ${showToc && !wide ? "main-with-toc--has-toc" : ""}`}>
+        <div style="min-width:0">
+          {showToc && <Toc headings={headings} variant="mobile" />}
+          <div class={`prose ${wide ? "prose--breakout" : ""}`}>
+            <slot />
+          </div>
+          <slot name="after-prose" />
+          <p class="author" style="margin-top: var(--sp-10)">
+            By {data.author} · Last reviewed {formatMonthYear(data.reviewedDate)}
+            {data.versionContext && <> · {data.versionContext}</>}
+          </p>
+          <slot name="footer" />
+        </div>
+        {showToc && !wide && <Toc headings={headings} variant="desktop" />}
+      </div>
+    </div>
+  </article>
+</BaseLayout>

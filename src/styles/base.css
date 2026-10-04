@@ -1,0 +1,68 @@
+@layer base {
+  html {
+    scroll-padding-top: calc(var(--header-h) + var(--sp-6));
+  }
+  body {
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-sans);
+    font-size: var(--fs-md);
+    line-height: var(--lh-body);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-wrap: break-word;
+  }
+  main {
+    flex: 1 0 auto;
+    scroll-margin-top: var(--header-h);
+  }
+  a {
+    color: var(--c-accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  a:hover {
+    color: var(--c-accent-hover);
+    text-decoration-thickness: 2px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: var(--c-accent-soft);
+    color: var(--c-text);
+  }
+  hr {
+    border: 0;
+    border-top: 1px solid var(--c-border);
+    margin: var(--sp-8) 0;
+  }
+  .skip-link {
+    position: absolute;
+    left: var(--sp-4);
+    top: -100px;
+    z-index: 100;
+    background: var(--c-accent);
+    color: var(--c-on-accent);
+    padding: var(--sp-2) var(--sp-4);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .skip-link:focus {
+    top: var(--sp-2);
+    color: var(--c-on-accent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

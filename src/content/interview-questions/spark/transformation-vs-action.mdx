@@ -1,0 +1,47 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "What is the difference between a transformation and an action in Spark?"
+description: "Interview answer: transformations lazily describe a new dataset, actions trigger execution and return a result or write output. Includes narrow vs wide."
+inventoryId: "INT-10"
+technology: ["spark", "pyspark"]
+topic: ["execution-model", "lazy-evaluation"]
+difficulty: "Easy"
+questionType: ["conceptual"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+shortAnswer: "A transformation such as select, filter or join describes a new DataFrame from an existing one and is lazy: Spark only records it in a plan. An action such as count, collect, show or a write forces Spark to optimise that plan and actually run a job. Laziness lets Spark combine steps and skip unnecessary work before anything executes."
+followUps: ["What is the difference between a narrow and a wide transformation?", "Why can calling count() several times in a notebook be slow?", "When would you cache a DataFrame?"]
+related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join"]
+---
+
+## Detailed explanation
+
+Spark builds a **logical plan** as you chain transformations. Nothing runs yet. When you call an **action**, Spark optimises the whole plan (for example pushing filters down and pruning columns), splits it into stages and runs it as tasks on the cluster.
+
+| Transformations (lazy) | Actions (trigger a job) |
+|------------------------|-------------------------|
+| `select`, `filter`, `withColumn` | `count`, `collect`, `show`, `take` |
+| `join`, `groupBy().agg()` | `write...save()` / `saveAsTable` |
+| `distinct`, `repartition` | `foreach`, `toPandas` |
+
+## Narrow and wide
+
+- **Narrow** transformations (`filter`, `select`) let each output partition depend on a single input partition, so no data moves.
+- **Wide** transformations (`groupBy`, most `join`s, `distinct`) need data with the same key together, which causes a **shuffle** and a new stage.
+
+## Example
+
+```python
+orders = spark.read.parquet("/data/orders")          # nothing runs yet
+big = orders.filter("amount > 100").select("customer_id", "amount")
+by_customer = big.groupBy("customer_id").sum("amount")  # still lazy
+by_customer.show()                                      # action: a job runs
+```
+
+## Common mistakes
+
+1. Thinking `read` or `filter` runs immediately.
+2. Calling several actions on the same expensive DataFrame without caching, so Spark recomputes it each time.
+3. Using `collect()` on large data, pulling everything to the driver.

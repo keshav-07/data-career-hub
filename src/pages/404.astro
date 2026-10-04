@@ -1,0 +1,27 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Button from "../components/content/Button.astro";
+---
+
+<BaseLayout title="Page not found" description="The page you were looking for does not exist or has moved." noindex>
+  <section class="not-found">
+    <div class="container container--reading">
+      <p class="eyebrow">404</p>
+      <h1 style="margin-top: var(--sp-3)">We could not find that page</h1>
+      <p class="deck" style="margin-top: var(--sp-4)">
+        The link may be out of date or the page may have moved. Try search, or start from one of the main sections.
+      </p>
+      <div class="cluster" style="margin-top: var(--sp-8)">
+        <button type="button" class="btn btn--primary js-only" data-search-open>Search the site</button>
+        <Button href="/data-engineering/roadmap/" variant="secondary">Data Engineering roadmap</Button>
+        <Button href="/" variant="secondary">Home</Button>
+      </div>
+      <ul class="link-list" style="margin-top: var(--sp-10)">
+        <li><a class="row" href="/data-engineering/"><span class="row__title">Learn</span></a></li>
+        <li><a class="row" href="/interview/"><span class="row__title">Interview preparation</span></a></li>
+        <li><a class="row" href="/projects/"><span class="row__title">Projects</span></a></li>
+        <li><a class="row" href="/resources/"><span class="row__title">Resources</span></a></li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>

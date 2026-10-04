@@ -1,0 +1,111 @@
+@layer components {
+  .prose {
+    font-size: var(--fs-lg);
+    line-height: var(--lh-body);
+    max-width: var(--w-reading);
+  }
+  .prose > * + * {
+    margin-top: 1.15rem;
+  }
+  .prose h2 {
+    margin-top: var(--sp-12);
+    padding-top: var(--sp-6);
+    border-top: 1px solid var(--c-border);
+    font-size: var(--fs-h2);
+  }
+  .prose h2:first-child {
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
+  }
+  .prose h3 {
+    margin-top: var(--sp-8);
+  }
+  .prose h4 {
+    margin-top: var(--sp-6);
+  }
+  .prose :is(h2, h3, h4) + * {
+    margin-top: var(--sp-3);
+  }
+  .prose ul,
+  .prose ol {
+    padding-left: 1.4rem;
+  }
+  .prose li + li {
+    margin-top: 0.4rem;
+  }
+  .prose li > ul,
+  .prose li > ol {
+    margin-top: 0.4rem;
+  }
+  .prose a {
+    text-decoration: underline;
+  }
+  .prose strong {
+    font-weight: 650;
+  }
+  .prose blockquote {
+    border-left: 3px solid var(--c-border-strong);
+    padding-left: var(--sp-4);
+    color: var(--c-text-muted);
+  }
+  .prose :not(pre) > code {
+    background: var(--c-surface-2);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-sm);
+    padding: 0.1em 0.35em;
+    font-size: 0.86em;
+  }
+  .prose pre {
+    background: var(--c-code-bg);
+    color: var(--c-code-text);
+    border-radius: var(--radius-md);
+    padding: var(--sp-4);
+    overflow-x: auto;
+    line-height: 1.65;
+    font-size: var(--fs-code);
+    tab-size: 2;
+  }
+  .prose pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: inherit;
+  }
+  .prose table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--fs-md);
+  }
+  .prose th,
+  .prose td {
+    text-align: left;
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--c-border);
+    vertical-align: top;
+  }
+  .prose th {
+    font-size: var(--fs-sm);
+    color: var(--c-text-muted);
+    border-bottom: 1px solid var(--c-border-strong);
+    white-space: nowrap;
+  }
+  .prose img {
+    border-radius: var(--radius-md);
+  }
+  /* Wrappers injected by scripts/enhance.ts keep long code and tables inside the viewport. */
+  .scroll-region {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .scroll-region:focus-visible {
+    outline-offset: 0;
+  }
+  @media (min-width: 1180px) {
+    .prose--breakout .code-block,
+    .prose--breakout .scroll-region {
+      /* allow wide technical content to extend beyond the 740px column */
+      margin-right: calc(-1 * min(var(--sp-16), 8vw));
+    }
+  }
+}

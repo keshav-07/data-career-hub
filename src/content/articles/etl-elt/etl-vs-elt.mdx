@@ -1,0 +1,90 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "ETL vs ELT: Choosing the Right Approach"
+description: "ETL transforms data before loading it, ELT loads raw data first and transforms inside the warehouse. Learn the factors that decide which one fits your pipeline."
+inventoryId: "TECH-23"
+technology: ["etl-elt", "data-warehousing"]
+topic: ["pipelines", "architecture"]
+difficulty: "Beginner"
+featured: false
+prerequisites: ["articles:data-warehousing/star-schema"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:airflow/dags-scheduling-retries"]
+previous: "articles:data-warehousing/star-schema"
+next: "articles:kafka/topics-partitions-consumer-groups"
+sources: [{"label": "dbt documentation: What is dbt?", "url": "https://docs.getdbt.com/docs/introduction"}]
+versionContext: "Conceptual; applies to cloud warehouses and lakehouses"
+---
+
+**ETL** (extract, transform, load) and **ELT** (extract, load, transform) differ in one thing: **where and when the transformation happens**.
+
+| | ETL | ELT |
+|--|-----|-----|
+| Order | Extract → transform → load | Extract → load raw → transform |
+| Transformation runs in | A separate processing engine | The warehouse or lakehouse itself |
+| Raw data kept in the target | Often not | Yes, as a raw or "bronze" layer |
+| Typical transformation language | Code (Python, Spark, a tool's GUI) | SQL |
+
+## Why ELT became common
+
+Cloud warehouses and lakehouses separate cheap storage from scalable compute. Loading raw data first and transforming with SQL inside the warehouse means:
+
+- raw data is preserved, so you can **re-run or change transformations** without re-extracting from the source;
+- transformations are plain SQL that analysts can read and review;
+- the warehouse's own engine does the heavy lifting in parallel.
+
+Tools such as dbt are built around this pattern: they manage SQL transformations that run inside the warehouse.
+
+## When ETL is still the better fit
+
+- **Data must be changed before it lands**, for example removing or masking personal data so it is never stored raw in the target.
+- **The source or target is not SQL-friendly**, such as parsing binary or semi-structured files, or heavy non-SQL processing.
+- **Volume must be reduced early** to cut storage or network costs, for example filtering or aggregating high-volume events before loading.
+- **The target cannot do the compute**, such as a small operational database.
+
+## How to decide
+
+Ask these questions in order:
+
+1. **Do compliance or privacy rules require transformation before storage?** If yes, transform (at least partly) before load.
+2. **Where is compute cheapest and most scalable?** If the warehouse scales well, push SQL transformations there.
+3. **Do you need to reprocess history?** Keeping raw data (ELT) makes backfills far easier.
+4. **Who maintains the transformations?** SQL-first teams favour ELT; teams with strong software-engineering practice may accept code-based ETL.
+
+Many real pipelines are a mix: light, mandatory cleaning and masking on the way in, then SQL modelling after load.
+
+<Callout tone="info" title="Both need the same discipline">
+
+Whichever order you choose, the pipeline should be **idempotent** (safe to re-run), validated with data-quality checks, and observable. Those qualities matter more than the acronym.
+
+</Callout>
+
+## A simple ELT flow
+
+```text
+Source system ──extract/load──▶ raw.orders      (as received)
+                                    │ SQL
+                                    ▼
+                              staging.orders     (typed, deduplicated)
+                                    │ SQL
+                                    ▼
+                         marts.fact_order_line   (modelled for analytics)
+```
+
+Each arrow is a rerunnable step. If a rule changes, you rebuild from the raw table, not from the source.
+
+## Common mistakes
+
+1. Treating ELT as "dump everything and clean it later" with no staging layer or tests.
+2. Loading personal data raw when policy requires it to be masked first.
+3. Choosing ETL tooling out of habit when SQL in the warehouse would be simpler.
+4. Forgetting that raw storage grows; retention rules still apply.
+
+## Interview relevance
+
+"ETL versus ELT" is a classic question. A strong answer states the definition, gives two or three deciding factors (compliance, compute location, reprocessing needs) and admits that real systems often combine both.
+
+## Key takeaway
+
+ETL and ELT are about where transformation runs. Pick based on compliance, where compute is cheapest, and how often you need to reprocess history.

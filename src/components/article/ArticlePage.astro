@@ -1,0 +1,89 @@
+---
+import { render } from "astro:content";
+import { getByRef, type ItemOf } from "../../utils/content";
+import ArticleLayout from "../../layouts/ArticleLayout.astro";
+import RelatedList from "../content/RelatedList.astro";
+import PrevNext from "../content/PrevNext.astro";
+import NextStep from "../content/NextStep.astro";
+import Callout from "../content/Callout.astro";
+import { breadcrumbsFor } from "../../utils/breadcrumbs";
+import { relatedGroups, nextPrev } from "../../utils/related";
+
+interface Props {
+  item: ItemOf<"articles">;
+}
+const { item } = Astro.props;
+const d = item.entry.data;
+const { Content, headings } = await render(item.entry);
+const crumbs = await breadcrumbsFor(item);
+const { prerequisites, groups } = await relatedGroups(item);
+const { next, previous } = await nextPrev(item);
+const isTutorial = d.kind === "tutorial";
+const isCareer = d.section === "career";
+const hub = isCareer ? undefined : await getByRef(`technologies:${d.technology[0]}`);
+---
+
+<ArticleLayout
+  item={item}
+  crumbs={crumbs}
+  headings={headings}
+  eyebrow={isTutorial ? "Tutorial" : isCareer ? "Career" : (hub?.title ?? "Guide")}
+  deck={item.description}
+  meta={[d.difficulty, d.pillar && "Pillar guide"]}
+>
+  {
+    prerequisites.length > 0 && (
+      <Callout tone="info" title="Before you start">
+        <ul style="margin:0;padding-left:1.2rem">
+          {prerequisites.map((p) => <li><a href={p.url}>{p.title}</a></li>)}
+        </ul>
+      </Callout>
+    )
+  }
+  {
+    isTutorial && d.learningObjectives.length > 0 && (
+      <section aria-labelledby="goals-h" style="margin-top: var(--sp-6)">
+        <h2 id="goals-h" style="font-size: var(--fs-xl); border:0; padding:0">What you will learn</h2>
+        <ul>{d.learningObjectives.map((o) => <li>{o}</li>)}</ul>
+      </section>
+    )
+  }
+  <Content components={{ Callout }} />
+
+  <Fragment slot="footer">
+    {
+      d.sources.length > 0 && (
+        <section class="related-block" aria-labelledby="sources-h">
+          <h2 id="sources-h">Sources and further reading</h2>
+          <ul class="link-list">
+            {d.sources.map((s) => (
+              <li><a class="row" href={s.url} rel="noopener"><span class="row__title">{s.label}</span></a></li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+    <RelatedList groups={groups} />
+    <PrevNext previous={previous} next={next} />
+    {
+      isCareer && (
+        <NextStep
+          title="Keep building toward the job"
+          text="Pick a plan, build a project you can explain, and practise the interview questions that match it."
+          href="/roadmaps/"
+          label="Browse roadmaps and plans"
+        />
+      )
+    }
+    {
+      hub && (
+        <NextStep
+          title={`Continue with ${hub.title}`}
+          text="See the full learning sequence, interview preparation and projects for this technology."
+          href={hub.url}
+          label={`Open the ${hub.entry.data.shortName} hub`}
+        />
+      )
+    }
+  </Fragment>
+</ArticleLayout>

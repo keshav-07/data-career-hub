@@ -1,0 +1,14 @@
+---
+import Icon from "../layout/Icon.astro";
+import SearchPanel from "./SearchPanel.astro";
+---
+
+<dialog id="search-dialog" class="search-dialog" aria-label="Search">
+  <div class="search-dialog__inner">
+    <div class="search-dialog__head">
+      <strong>Search</strong>
+      <button type="button" class="icon-btn" data-search-close aria-label="Close search"><Icon name="close" /></button>
+    </div>
+    <SearchPanel idPrefix="dialog" />
+  </div>
+</dialog>

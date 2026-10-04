@@ -1,0 +1,36 @@
+---
+import ContentLayout from "../../layouts/ContentLayout.astro";
+import { HOME } from "../../utils/breadcrumbs";
+const analytics = Boolean(import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN);
+---
+
+<ContentLayout
+  title="Privacy"
+  description="What Data Career Hub does and does not collect: no accounts, no forms, no advertising trackers, and only aggregate privacy-conscious analytics."
+  crumbs={[HOME, { label: "Privacy" }]}
+  eyebrow="Legal"
+  indexable
+>
+  <section class="section section--tight">
+    <div class="prose">
+      <h2>Summary</h2>
+      <p>There are no accounts, no comments and no forms on this site. We do not sell or share personal data.</p>
+      <h2>Information stored on your device</h2>
+      <p>If you choose a light or dark theme, that choice is saved in your browser’s local storage under the key <code>dch-theme</code>. It never leaves your device and can be cleared in your browser settings.</p>
+      <h2>Analytics</h2>
+      {
+        analytics ? (
+          <p>This site uses Cloudflare Web Analytics for aggregate page-view and performance statistics. It is described by Cloudflare as privacy-first and does not use cookies or collect personal data for cross-site tracking. We do not record sessions or build profiles of individual visitors.</p>
+        ) : (
+          <p>This deployment does not currently load any analytics script. If aggregate analytics are enabled later, this page will be updated to name the tool before it is switched on.</p>
+        )
+      }
+      <h2>Server logs</h2>
+      <p>Our hosting provider, Cloudflare, processes requests to deliver the site and may keep standard technical logs such as IP address and user agent for security and reliability. See Cloudflare’s own privacy documentation for details.</p>
+      <h2>Search</h2>
+      <p>Search runs entirely in your browser against a static index. Your search terms are not sent to a server.</p>
+      <h2>External links</h2>
+      <p>Pages link to external sites such as vendor documentation. Those sites have their own privacy practices.</p>
+    </div>
+  </section>
+</ContentLayout>

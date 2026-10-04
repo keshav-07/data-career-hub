@@ -1,0 +1,18 @@
+---
+import Button from "./Button.astro";
+interface Props {
+  title: string;
+  text: string;
+  href: string;
+  label: string;
+  eyebrow?: string;
+}
+const { title, text, href, label, eyebrow = "Next step" } = Astro.props;
+---
+
+<aside class="next-step" aria-labelledby="next-step-heading">
+  <p class="eyebrow">{eyebrow}</p>
+  <h2 id="next-step-heading">{title}</h2>
+  <p>{text}</p>
+  <Button href={href}>{label}</Button>
+</aside>

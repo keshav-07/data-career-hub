@@ -1,0 +1,33 @@
+---
+import type { RelatedGroup } from "../../utils/related";
+interface Props {
+  groups: RelatedGroup[];
+  headingLevel?: "h2" | "h3";
+}
+const { groups } = Astro.props;
+---
+
+{
+  groups.length > 0 && (
+    <section class="related-block" aria-labelledby="related-heading">
+      <h2 id="related-heading">Keep learning</h2>
+      <div class="stack" style="--stack: var(--sp-6)">
+        {groups.map((g) => (
+          <div>
+            <h3 class="eyebrow" style="margin-bottom: var(--sp-2)">{g.label}</h3>
+            <ul class="link-list">
+              {g.items.map((i) => (
+                <li>
+                  <a class="row" href={i.url}>
+                    <span class="row__title">{i.title}</span>
+                    <span class="row__meta">{[i.typeLabel, i.difficulty].filter(Boolean).join(" · ")}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}

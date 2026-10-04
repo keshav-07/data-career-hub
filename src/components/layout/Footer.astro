@@ -1,0 +1,30 @@
+---
+import { FOOTER_COLUMNS, SITE } from "../../data/site";
+---
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      {
+        FOOTER_COLUMNS.map((col) => (
+          <nav aria-label={`Footer: ${col.title}`}>
+            <h2>{col.title}</h2>
+            <ul>
+              {col.links.map((l) => (
+                <li>
+                  <a href={l.href}>{l.label}</a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))
+      }
+    </div>
+    <div class="footer-bottom">
+      <span>© {new Date().getUTCFullYear()} {SITE.name}</span>
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Terms</a>
+      <a href="/disclaimer/">Disclaimer</a>
+    </div>
+  </div>
+</footer>

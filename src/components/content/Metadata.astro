@@ -1,0 +1,10 @@
+---
+interface Props {
+  items: (string | undefined | false)[];
+}
+const items = Astro.props.items.filter(Boolean) as string[];
+---
+
+<ul class="meta">
+  {items.map((i) => <li>{i}</li>)}
+</ul>
