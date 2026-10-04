@@ -361,7 +361,7 @@
   .chip {
     min-height: 44px;
     padding: 0 var(--sp-4);
-    border: 1px solid var(--c-border-strong);
+    border: 1px solid var(--c-border-input);
     border-radius: var(--radius-pill);
     background: var(--c-surface);
     color: var(--c-text);
