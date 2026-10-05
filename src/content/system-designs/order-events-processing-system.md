@@ -70,6 +70,7 @@ sources:
   - { label: "Debezium documentation", url: "https://debezium.io/documentation/" }
   - { label: "PostgreSQL: window functions", url: "https://www.postgresql.org/docs/current/functions-window.html" }
 previous: "system-designs:notification-alerting-pipeline"
+next: "system-designs:payment-events-pipeline-exactly-once"
 ---
 
 ## Approach
