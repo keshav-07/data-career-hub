@@ -20,8 +20,9 @@ const RESERVED_TOP_LEVEL = new Set([
   "diagrams",
 ]);
 
+// Bracketed placeholders such as [X%] or [your name]; Markdown link text "[...](" is not a placeholder.
 const PLACEHOLDER =
-  /lorem ipsum|\bTODO\b|\bTBD\b|\[(?:X|N)\s*%?\]|\[\d+\s*%\]|\[(?:company|your)[^\]]*\]/i;
+  /lorem ipsum|\bTODO\b|\bTBD\b|\[(?:X|N)\s*%?\](?!\()|\[\d+\s*%\](?!\()|\[(?:company|your)[^\]]*\](?!\()/i;
 
 /**
  * Build-time content validation. Errors fail the build; warnings are logged.
