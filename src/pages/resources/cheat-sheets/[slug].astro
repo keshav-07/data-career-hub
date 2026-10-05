@@ -2,11 +2,9 @@
 import { render } from "astro:content";
 import { getItems, getByRef, getHub, type ItemOf } from "../../../utils/content";
 import ArticleLayout from "../../../layouts/ArticleLayout.astro";
-import RelatedList from "../../../components/content/RelatedList.astro";
 import NextStep from "../../../components/content/NextStep.astro";
 import Callout from "../../../components/content/Callout.astro";
 import { breadcrumbsFor } from "../../../utils/breadcrumbs";
-import { relatedGroups } from "../../../utils/related";
 import { sectionNav } from "../../../utils/navigation";
 
 export async function getStaticPaths() {
@@ -16,7 +14,6 @@ export async function getStaticPaths() {
 const item = (await getByRef(Astro.props.ref)) as ItemOf<"cheat-sheets">;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
-const { groups } = await relatedGroups(item);
 const hub = (await Promise.all(item.technology.map((t) => getHub(t)))).find((h) => !!h);
 const nav = await sectionNav("cheat-sheets", item.url);
 ---
@@ -32,7 +29,6 @@ const nav = await sectionNav("cheat-sheets", item.url);
 >
   <Content components={{ Callout }} />
   <Fragment slot="footer">
-    <RelatedList groups={groups} />
     {hub ? (
       <NextStep
         title="Go deeper"

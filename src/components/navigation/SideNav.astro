@@ -1,22 +1,63 @@
 ---
 import type { SectionNav } from "../../utils/navigation";
 import SideNavList from "./SideNavList.astro";
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
 interface Props {
   nav: SectionNav;
   variant: "desktop" | "mobile";
+  headings?: Heading[];
 }
-const { nav, variant } = Astro.props;
+const { nav, variant, headings = [] } = Astro.props;
 const position = nav.position
   ? `${nav.position.noun} ${nav.position.index} of ${nav.position.total}`
   : undefined;
+const noun =
+  nav.progressKind === "question"
+    ? "questions"
+    : nav.progressKind === "project"
+      ? "projects"
+      : "lessons";
 ---
 
 {variant === "desktop" ? (
-  <nav class="side-nav side-nav--desktop" aria-label={nav.label}>
-    <a class="side-nav__title" href={nav.href}>
-      {nav.title}
-    </a>
-    <SideNavList nav={nav} />
+  <nav class="side-nav side-nav--desktop" aria-label={nav.label} id="course-menu">
+    <div class="side-nav__top">
+      <a class="side-nav__title" href={nav.href}>
+        {nav.title}
+      </a>
+      <button
+        type="button"
+        class="icon-btn side-nav__collapse js-only"
+        data-sidebar-toggle
+        aria-controls="course-menu"
+        aria-expanded="true"
+        title="Hide menu"
+      >
+        <span aria-hidden="true">«</span>
+        <span class="visually-hidden">Hide course menu</span>
+      </button>
+    </div>
+    {nav.progressKind && nav.total ? (
+      <div
+        class="side-progress js-only"
+        data-ring
+        data-kind={nav.progressKind}
+        data-course={nav.course}
+        data-total={nav.total}
+        data-label={`${nav.title} progress`}
+        role="img"
+      >
+        <span class="side-progress__bar" aria-hidden="true" />
+        <span class="side-progress__text" aria-hidden="true">
+          <span data-ring-detail>0 of {nav.total}</span> {noun} done
+        </span>
+      </div>
+    ) : null}
+    <SideNavList nav={nav} headings={headings} />
   </nav>
 ) : (
   <details class="side-nav side-nav--mobile">

@@ -1,0 +1,30 @@
+---
+import type { ExploreGroup } from "../../utils/explore";
+import AdSlot from "./AdSlot.astro";
+interface Props {
+  groups: ExploreGroup[];
+}
+const { groups } = Astro.props;
+---
+
+<aside class="explore" aria-labelledby="explore-h" data-pagefind-ignore>
+  <p id="explore-h" class="explore__title">
+    Explore
+  </p>
+  {groups.map((g) => (
+    <section class="explore__group">
+      <p class="explore__heading">{g.title}</p>
+      <ul class="explore__list" role="list">
+        {g.links.map((l) => (
+          <li>
+            <a href={l.url} class="explore__link" data-progress-url={l.url}>
+              <span class="explore__text">{l.title}</span>
+              {l.meta && <span class="explore__meta">{l.meta}</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
+  <AdSlot placement="rail" />
+</aside>

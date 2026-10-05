@@ -1,7 +1,5 @@
 export function initToc() {
-  const links = Array.from(
-    document.querySelectorAll<HTMLAnchorElement>(".toc--desktop a[href^='#']"),
-  );
+  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("[data-toc] a[href^='#']"));
   if (!links.length || !("IntersectionObserver" in window)) return;
   const map = new Map<string, HTMLAnchorElement>();
   links.forEach((a) => map.set(decodeURIComponent(a.hash.slice(1)), a));

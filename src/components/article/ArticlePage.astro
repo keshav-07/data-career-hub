@@ -2,7 +2,6 @@
 import { render } from "astro:content";
 import { getHub, type ItemOf } from "../../utils/content";
 import ArticleLayout from "../../layouts/ArticleLayout.astro";
-import RelatedList from "../content/RelatedList.astro";
 import NextStep from "../content/NextStep.astro";
 import Callout from "../content/Callout.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
@@ -16,7 +15,7 @@ const { item } = Astro.props;
 const d = item.entry.data;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
-const { prerequisites, groups } = await relatedGroups(item);
+const { prerequisites } = await relatedGroups(item);
 const isTutorial = d.kind === "tutorial";
 const isCareer = d.section === "career";
 const hub = isCareer ? undefined : await getHub(d.technology[0]);
@@ -78,7 +77,6 @@ const nav = isCareer ? await sectionNav("career", item.url) : await courseNav(it
         </ul>
       </section>
     )}
-    <RelatedList groups={groups} />
     {isCareer && (
       <NextStep
         title="Keep building toward the job"
@@ -89,10 +87,10 @@ const nav = isCareer ? await sectionNav("career", item.url) : await courseNav(it
     )}
     {hub && (
       <NextStep
-        title={`Continue with ${hub.title}`}
-        text="See the full learning sequence, interview preparation and projects for this technology."
+        title={`Back to the ${hub.entry.data.shortName} course`}
+        text="See every lesson, your progress, projects and the cheat sheet for this course."
         href={hub.url}
-        label={`Open the ${hub.entry.data.shortName} hub`}
+        label={`Open the ${hub.entry.data.shortName} course`}
       />
     )}
   </Fragment>

@@ -29,7 +29,7 @@ const metaItems = meta.filter(Boolean) as string[];
 ---
 
 {variant === "row" ? (
-  <a class="tile tile--row" href={href}>
+  <a class="tile tile--row" href={href} data-progress-url={href}>
     {num !== undefined && (
       <span class="tile__num" aria-hidden="true">
         {num}
@@ -55,7 +55,7 @@ const metaItems = meta.filter(Boolean) as string[];
     </span>
   </a>
 ) : (
-  <a class="tile" href={href}>
+  <a class="tile" href={href} data-progress-url={href}>
     {(mono || level || eyebrow) && (
       <span class="tile__top">
         {mono ? (

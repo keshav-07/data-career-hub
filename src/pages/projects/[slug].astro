@@ -2,11 +2,9 @@
 import { render } from "astro:content";
 import { getItems, getByRef, type ItemOf } from "../../utils/content";
 import ArticleLayout from "../../layouts/ArticleLayout.astro";
-import RelatedList from "../../components/content/RelatedList.astro";
 import NextStep from "../../components/content/NextStep.astro";
 import Callout from "../../components/content/Callout.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
-import { relatedGroups } from "../../utils/related";
 import { sectionNav } from "../../utils/navigation";
 
 export async function getStaticPaths() {
@@ -17,7 +15,6 @@ const item = (await getByRef(Astro.props.ref)) as ItemOf<"projects">;
 const d = item.entry.data;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
-const { groups } = await relatedGroups(item);
 const lists: [string, string, string[], boolean?][] = [
   ["steps", "Build steps", d.steps, true],
   ["testing", "Testing", d.testing],
@@ -123,7 +120,6 @@ const nav = await sectionNav("projects", item.url);
     )}
   </Fragment>
   <Fragment slot="footer">
-    <RelatedList groups={groups} />
     <NextStep
       eyebrow="Next project"
       title="Explain it like an engineer"

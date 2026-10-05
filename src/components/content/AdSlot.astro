@@ -1,0 +1,30 @@
+---
+/**
+ * Reserved advertising space. Renders nothing unless PUBLIC_ADSENSE_CLIENT and the slot's id are set at build
+ * time. The box has a fixed minimum size so an ad arriving later never moves the content (no layout shift).
+ * Placement rules (build plan section 41): never in the first paragraphs, inside code, in the TOC or as an overlay.
+ */
+interface Props {
+  placement: "rail" | "inline";
+}
+const { placement } = Astro.props;
+const client = import.meta.env.PUBLIC_ADSENSE_CLIENT;
+const slot =
+  placement === "rail"
+    ? import.meta.env.PUBLIC_ADSENSE_SLOT_RAIL
+    : import.meta.env.PUBLIC_ADSENSE_SLOT_INLINE;
+---
+
+{client && slot && (
+  <aside class={`ad-box ad-box--${placement}`} aria-label="Advertisement" data-pagefind-ignore>
+    <p class="ad-box__label">Advertisement</p>
+    <ins
+      class="adsbygoogle"
+      style="display:block"
+      data-ad-client={client}
+      data-ad-slot={slot}
+      data-ad-format={placement === "rail" ? "rectangle" : "auto"}
+      data-full-width-responsive={placement === "inline" ? "true" : "false"}
+    />
+  </aside>
+)}

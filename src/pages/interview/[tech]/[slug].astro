@@ -1,7 +1,6 @@
 ---
 import { getItems, getByRef, type ItemOf } from "../../../utils/content";
 import ArticleLayout from "../../../layouts/ArticleLayout.astro";
-import RelatedList from "../../../components/content/RelatedList.astro";
 import NextStep from "../../../components/content/NextStep.astro";
 import Callout from "../../../components/content/Callout.astro";
 import { render } from "astro:content";
@@ -22,7 +21,7 @@ const item = (await getByRef(Astro.props.ref)) as ItemOf<"interview-questions">;
 const d = item.entry.data;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
-const { prerequisites, groups } = await relatedGroups(item);
+const { prerequisites } = await relatedGroups(item);
 const label = await techLabel(d.technology[0]);
 const typeText = d.questionType.join(" / ");
 const nav = await interviewNav(item);
@@ -80,7 +79,6 @@ const nav = await interviewNav(item);
   </Fragment>
 
   <Fragment slot="footer">
-    <RelatedList groups={groups} />
     <NextStep
       title={`More ${label} interview questions`}
       text="Keep practising: related questions, concept review and the system-design case studies build on each other."

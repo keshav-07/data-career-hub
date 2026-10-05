@@ -1,0 +1,30 @@
+---
+interface Props {
+  url: string;
+  kind: "lesson" | "question" | "project";
+  course?: string;
+  title: string;
+}
+const { url, kind, course, title } = Astro.props;
+const noun = kind === "question" ? "question" : kind === "project" ? "project" : "lesson";
+---
+
+<div class="done-box js-only" data-pagefind-ignore>
+  <button
+    type="button"
+    class="done-btn"
+    data-done-toggle
+    data-url={url}
+    data-kind={kind}
+    data-course={course}
+    data-title={title}
+    data-label-off={`Mark ${noun} as done`}
+    data-label-on={`Completed · click to undo`}
+    aria-pressed="false"
+  >
+    <span class="done-btn__icon" aria-hidden="true"></span>
+    <span data-done-label>Mark {noun} as done</span>
+  </button>
+  <p class="done-box__note">Progress is saved in this browser only. No account needed.</p>
+  <p class="visually-hidden" role="status" data-done-status></p>
+</div>

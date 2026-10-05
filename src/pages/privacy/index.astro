@@ -16,13 +16,30 @@ const analytics = Boolean(import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN);
       <h2>Summary</h2>
       <p>
         There are no accounts, no comments and no forms on this site. We do not sell or share
-        personal data.
+        personal data. If advertising is switched on in future, this page will name the provider and
+        explain its cookies first.
       </p>
       <h2>Information stored on your device</h2>
       <p>
-        If you choose a light or dark theme, that choice is saved in your browser’s local storage
-        under the key <code>dch-theme</code>. It never leaves your device and can be cleared in your
-        browser settings.
+        Some preferences and your learning progress are saved in your browser’s local storage, on
+        your device only:
+      </p>
+      <ul>
+        <li>
+          <code>dch-theme</code>: your light or dark theme choice.
+        </li>
+        <li>
+          <code>dch-sidebar</code>: whether you hid the course menu.
+        </li>
+        <li>
+          <code>dch-progress-v1</code>: pages you have opened, items you marked as done, and the
+          last lesson you visited, so the site can show your progress and a “continue” link.
+        </li>
+      </ul>
+      <p>
+        This information is never sent to us or anyone else. It stays in this browser, does not
+        follow you to other devices, and is removed if you clear this site’s data. You can also
+        clear your progress with the “Reset” link in the “Your progress” panel on the home page.
       </p>
       <h2>Analytics</h2>
       {analytics ? (

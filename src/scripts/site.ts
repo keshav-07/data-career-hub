@@ -2,11 +2,17 @@ import { initTheme } from "./theme";
 import { initMenu } from "./menu";
 import { initEnhance } from "./enhance";
 import { initToc } from "./toc";
+import { initProgress } from "./progress";
+import { initSidebar } from "./sidebar";
+import { initAds } from "./ads";
 
 initTheme();
 initMenu();
 initEnhance();
 initToc();
+initProgress();
+initSidebar();
+initAds();
 
 // Search runtime is loaded lazily: only when the dialog is opened or on /search/.
 const dialog = document.querySelector<HTMLDialogElement>("#search-dialog");

@@ -12,6 +12,10 @@ export type SectionNav = {
   position?: { index: number; total: number; noun: string };
   prev?: NavLink;
   next?: NavLink;
+  /** What the listed items count as for progress tracking, and which course they belong to. */
+  progressKind?: "lesson" | "question" | "project";
+  course?: string;
+  total?: number;
 };
 
 const DIFFICULTY_ORDER = ["Beginner", "Intermediate", "Advanced"];
@@ -141,6 +145,9 @@ export async function courseNav(item: ItemOf<"articles">): Promise<SectionNav | 
       href: course.hub.url,
       groups,
       current: item.url,
+      progressKind: "lesson",
+      course: course.hub.id,
+      total: course.lessons.length,
     },
     course.lessons,
     item.url,
@@ -174,6 +181,9 @@ export async function interviewNav(item: ItemOf<"interview-questions">): Promise
       href: `/interview/${tech}/`,
       groups,
       current: item.url,
+      progressKind: "question",
+      course: tech,
+      total: all.length,
     },
     all,
     item.url,
@@ -219,7 +229,15 @@ export async function sectionNav(section: SectionKey, currentUrl: string): Promi
         links: items.filter((p) => p.entry.data.level === l).map((p) => link(p)),
       })).filter((g) => g.links.length);
       return withPager(
-        { label: "Projects", title: "Projects", href: "/projects/", groups, current: currentUrl },
+        {
+          label: "Projects",
+          title: "Projects",
+          href: "/projects/",
+          groups,
+          current: currentUrl,
+          progressKind: "project",
+          total: items.length,
+        },
         items,
         currentUrl,
         "Project",

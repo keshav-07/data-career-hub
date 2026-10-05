@@ -1,32 +1,61 @@
 ---
 import type { SectionNav } from "../../utils/navigation";
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
 interface Props {
   nav: SectionNav;
+  /** Sections of the current page, nested under its link. */
+  headings?: Heading[];
 }
-const { nav } = Astro.props;
+const { nav, headings = [] } = Astro.props;
+const total = nav.groups.reduce((n, g) => n + g.links.length, 0);
+const sections = headings.filter((h) => h.depth === 2);
 ---
 
-{nav.groups.map((g) => (
-  <div class="side-nav__group">
-    <p class="side-nav__heading">{g.title}</p>
-    <ol class="side-nav__list" role="list">
-      {g.links.map((l) => (
-        <li>
-          <a
-            href={l.url}
-            aria-current={l.url === nav.current ? "page" : undefined}
-            class="side-nav__link"
-          >
-            {l.number !== undefined && (
-              <span class="side-nav__num" aria-hidden="true">
-                {l.number}
-              </span>
-            )}
-            <span class="side-nav__text">{l.title}</span>
-            {l.meta && <span class="side-nav__meta">{l.meta}</span>}
-          </a>
-        </li>
-      ))}
-    </ol>
-  </div>
-))}
+{nav.groups.map((g) => {
+  const hasCurrent = g.links.some((l) => l.url === nav.current);
+  return (
+    <details class="side-nav__group" open={hasCurrent || total <= 16}>
+      <summary class="side-nav__heading">
+        <span>{g.title}</span>
+        <span class="side-nav__count">{g.links.length}</span>
+      </summary>
+      <ol class="side-nav__list" role="list">
+        {g.links.map((l) => {
+          const current = l.url === nav.current;
+          return (
+            <li>
+              <a
+                href={l.url}
+                aria-current={current ? "page" : undefined}
+                class="side-nav__link"
+                data-progress-url={l.url}
+              >
+                {l.number !== undefined && (
+                  <span class="side-nav__num" aria-hidden="true">
+                    {l.number}
+                  </span>
+                )}
+                <span class="side-nav__text">{l.title}</span>
+                {l.meta && <span class="side-nav__meta">{l.meta}</span>}
+                <span class="side-nav__status" aria-hidden="true" />
+              </a>
+              {current && sections.length > 0 && (
+                <ol class="side-nav__sections" role="list" data-toc aria-label="On this page">
+                  {sections.map((h) => (
+                    <li>
+                      <a href={`#${h.slug}`}>{h.text}</a>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+})}

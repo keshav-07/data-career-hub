@@ -63,6 +63,58 @@ const lessonCount = courses.reduce((n, c) => n + (c?.lessons.length ?? 0), 0);
             <dd>{projects.length}</dd>
           </div>
         </dl>
+        <div class="progress-panel js-only" aria-labelledby="progress-h">
+          <div class="progress-panel__head">
+            <h2 id="progress-h">Your progress</h2>
+            <span class="muted" style="font-size: var(--fs-sm)">
+              Saved in this browser only, no account needed.
+              <button type="button" class="link-btn" data-progress-reset data-progress-has hidden>
+                Reset
+              </button>
+            </span>
+          </div>
+          <div class="rings">
+            {[
+              { kind: "lesson", label: "Lessons", total: lessonCount },
+              { kind: "question", label: "Interview questions", total: questions.length },
+              { kind: "project", label: "Projects", total: projects.length },
+            ].map((r) => (
+              <div
+                class="ring"
+                data-ring
+                data-kind={r.kind}
+                data-total={r.total}
+                data-label={r.label}
+                role="img"
+              >
+                <span class="ring__dial" aria-hidden="true">
+                  <span class="ring__value" data-ring-value>
+                    0%
+                  </span>
+                </span>
+                <span aria-hidden="true">
+                  <span class="ring__label">{r.label}</span>
+                  <span class="ring__detail" data-ring-detail>
+                    0 of {r.total}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p
+            class="muted"
+            data-progress-empty
+            style="margin-top: var(--sp-3); font-size: var(--fs-sm)"
+          >
+            Open a lesson or tick off an interview question and your progress appears here.
+          </p>
+          <a class="continue-link" href="/data-engineering/" data-continue hidden>
+            <span>
+              Continue where you left off: <strong data-continue-title></strong>
+            </span>
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
       </div>
     </div>
   </section>
@@ -85,7 +137,8 @@ const lessonCount = courses.reduce((n, c) => n + (c?.lessons.length ?? 0), 0);
               description={h.description}
               meta={[
                 `${courses[i]?.lessons.length ?? 0} lessons`,
-                (courses[i]?.questions.length ?? 0) > 0 && `${courses[i]?.questions.length} questions`,
+                (courses[i]?.questions.length ?? 0) > 0 &&
+                  `${courses[i]?.questions.length} questions`,
               ]}
             />
           </li>

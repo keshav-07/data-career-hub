@@ -34,6 +34,19 @@ const designs = await getItems("system-designs");
   deck="Every answer starts with something you can say out loud, then explains the details and the follow-ups."
   indexable
 >
+  <section class="section section--tight" aria-labelledby="all-h">
+    <h2 id="all-h" class="visually-hidden">
+      All questions
+    </h2>
+    <a class="continue-link" href="/interview/questions/">
+      <span>
+        <strong>All {qs.length} interview questions</strong> in one filterable list, with progress
+        you can tick off.
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+  </section>
+
   <section class="section section--tight" aria-labelledby="topics-h">
     <h2 id="topics-h" class="group-title">
       Questions by topic

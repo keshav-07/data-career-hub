@@ -1,0 +1,31 @@
+---
+import { getItems, techLabel } from "../../../utils/content";
+import ContentLayout from "../../../layouts/ContentLayout.astro";
+import QuestionTable from "../../../components/interview/QuestionTable.astro";
+import { HOME } from "../../../utils/breadcrumbs";
+
+const ORDER = ["Easy", "Medium", "Hard"];
+const qs = (await getItems("interview-questions")).sort(
+  (a, b) =>
+    a.id.split("/")[0].localeCompare(b.id.split("/")[0]) ||
+    ORDER.indexOf(a.entry.data.difficulty) - ORDER.indexOf(b.entry.data.difficulty) ||
+    a.title.localeCompare(b.title),
+);
+const topicIds = [...new Set(qs.map((q) => q.id.split("/")[0]))];
+const topics = Object.fromEntries(
+  await Promise.all(topicIds.map(async (t) => [t, await techLabel(t)])),
+);
+---
+
+<ContentLayout
+  title="All Data Engineering interview questions"
+  description="Every Data Engineering interview question on the site in one list: filter by topic, difficulty and type, and tick off the ones you have practised."
+  crumbs={[HOME, { label: "Interview", href: "/interview/" }, { label: "All questions" }]}
+  eyebrow="Interview preparation"
+  deck={`${qs.length} questions across ${topicIds.length} topics. Filter the list, open a question, and tick it off when you can answer it.`}
+  indexable
+>
+  <section class="section section--tight">
+    <QuestionTable questions={qs} topics={topics} caption="All interview questions" />
+  </section>
+</ContentLayout>

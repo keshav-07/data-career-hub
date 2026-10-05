@@ -1,0 +1,185 @@
+---
+import type { ItemOf } from "../../utils/content";
+interface Props {
+  questions: ItemOf<"interview-questions">[];
+  /** Show the topic column (used on the all-questions page). */
+  topics?: Record<string, string>;
+  caption: string;
+}
+const { questions, topics, caption } = Astro.props;
+const types = [...new Set(questions.flatMap((q) => q.entry.data.questionType))].sort();
+const topicIds = topics ? [...new Set(questions.map((q) => q.id.split("/")[0]))] : [];
+const levels = ["Easy", "Medium", "Hard"].filter((l) =>
+  questions.some((q) => q.entry.data.difficulty === l),
+);
+---
+
+<div data-qtable>
+  <form
+    class="q-filters js-only"
+    role="search"
+    aria-label="Filter questions"
+    onsubmit="return false"
+  >
+    <label>
+      Search
+      <input type="search" data-q-text placeholder="Filter by words in the question" />
+    </label>
+    <label>
+      Difficulty
+      <select data-q-filter="difficulty">
+        <option value="">All</option>
+        {levels.map((l) => (
+          <option>{l}</option>
+        ))}
+      </select>
+    </label>
+    <label>
+      Type
+      <select data-q-filter="types">
+        <option value="">All</option>
+        {types.map((t) => (
+          <option>{t}</option>
+        ))}
+      </select>
+    </label>
+    {topics && (
+      <label>
+        Topic
+        <select data-q-filter="topic">
+          <option value="">All</option>
+          {topicIds.map((t) => (
+            <option value={t}>{topics[t] ?? t}</option>
+          ))}
+        </select>
+      </label>
+    )}
+    <label>
+      Status
+      <select data-q-status>
+        <option value="">All</option>
+        <option value="todo">Not done</option>
+        <option value="done">Done</option>
+      </select>
+    </label>
+  </form>
+  <p
+    class="muted js-only"
+    role="status"
+    aria-live="polite"
+    data-q-count
+    style="margin-bottom: var(--sp-3)"
+  ></p>
+  <div class="scroll-region" tabindex="0" role="region" aria-label={`${caption} (table)`}>
+    <table class="q-table">
+      <caption class="visually-hidden">{caption}</caption>
+      <thead>
+        <tr>
+          <th scope="col" class="q-num">
+            #
+          </th>
+          <th scope="col">Question</th>
+          {topics && (
+            <th scope="col" class="q-topic">
+              Topic
+            </th>
+          )}
+          <th scope="col">Difficulty</th>
+          <th scope="col" class="q-type">
+            Type
+          </th>
+          <th scope="col" class="q-done">
+            Done
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {questions.map((q, i) => {
+          const topic = q.id.split("/")[0];
+          return (
+            <tr
+              data-difficulty={q.entry.data.difficulty}
+              data-types={q.entry.data.questionType.join(",")}
+              data-topic={topic}
+              data-url={q.url}
+              data-text={q.title.toLowerCase()}
+            >
+              <td class="q-num">{i + 1}</td>
+              <td class="q-title">
+                <a href={q.url} data-progress-url={q.url}>
+                  {q.title}
+                </a>
+              </td>
+              {topics && <td class="q-topic">{topics[topic] ?? topic}</td>}
+              <td>
+                <span class={`diff diff--${q.entry.data.difficulty.toLowerCase()}`}>
+                  {q.entry.data.difficulty}
+                </span>
+              </td>
+              <td class="q-type">{q.entry.data.questionType.join(", ")}</td>
+              <td class="q-done">
+                <input
+                  type="checkbox"
+                  class="js-only"
+                  data-done-url={q.url}
+                  data-kind="question"
+                  data-course={topic}
+                  data-title={q.title}
+                  aria-label={`Mark "${q.title}" as done`}
+                />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted js-only" style="margin-top: var(--sp-3); font-size: var(--fs-sm)">
+    Ticks are saved in this browser only. No account needed.
+  </p>
+  <div class="empty-state" data-q-empty hidden>
+    <h3>No questions match these filters</h3>
+    <p>Clear a filter to see more questions.</p>
+  </div>
+</div>
+
+<script>
+  import { isDone } from "../../scripts/progress";
+  document.querySelectorAll<HTMLElement>("[data-qtable]").forEach((root) => {
+    const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr"));
+    const text = root.querySelector<HTMLInputElement>("[data-q-text]");
+    const selects = Array.from(root.querySelectorAll<HTMLSelectElement>("select[data-q-filter]"));
+    const status = root.querySelector<HTMLSelectElement>("[data-q-status]");
+    const count = root.querySelector<HTMLElement>("[data-q-count]")!;
+    const empty = root.querySelector<HTMLElement>("[data-q-empty]")!;
+    const update = () => {
+      const words = (text?.value ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      let done = 0;
+      rows.forEach((r) => {
+        const isRowDone = isDone(r.dataset.url!);
+        if (isRowDone) done++;
+        const ok =
+          words.every((w) => r.dataset.text!.includes(w)) &&
+          selects.every((s) => {
+            const key = s.dataset.qFilter!;
+            if (!s.value) return true;
+            return key === "types"
+              ? r.dataset.types!.split(",").includes(s.value)
+              : r.dataset[key] === s.value;
+          }) &&
+          (!status?.value || (status.value === "done") === isRowDone);
+        r.hidden = !ok;
+        if (ok) shown++;
+      });
+      count.textContent = `Showing ${shown} of ${rows.length} questions · ${done} done`;
+      empty.hidden = shown !== 0;
+    };
+    text?.addEventListener("input", update);
+    [...selects, status].forEach((s) => s?.addEventListener("change", update));
+    root.addEventListener("change", (e) => {
+      if ((e.target as HTMLElement).matches("input[data-done-url]")) setTimeout(update);
+    });
+    update();
+  });
+</script>

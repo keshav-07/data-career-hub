@@ -7,6 +7,7 @@ import Breadcrumb from "../../components/navigation/Breadcrumb.astro";
 import IndexMeta from "../../components/content/IndexMeta.astro";
 import Tile from "../../components/content/Tile.astro";
 import Button from "../../components/content/Button.astro";
+import AdSlot from "../../components/content/AdSlot.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
 import { breadcrumbSchema } from "../../utils/seo";
 import { TECH_GROUP_LABELS } from "../../data/site";
@@ -27,16 +28,15 @@ const related = (await Promise.all(d.relatedTechnologies.map((t) => getHub(t))))
 );
 const relatedCourses = await Promise.all(related.map((r) => getCourse(r.id)));
 const first = course.lessons[0];
-const interviewHub = course.questions.some((q) => q.id.startsWith(`${tech}/`));
+const hubQuestions = course.questions.filter((q) => q.id.startsWith(`${tech}/`));
+const interviewHub = hubQuestions.length > 0;
 const hours = Math.max(1, Math.round(course.minutes / 60));
 let lessonNo = 0;
 
+// Interview questions have their own indexed page (/interview/<tech>/) rather than a tab: the list will grow large.
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "lessons", label: "Lessons", count: course.lessons.length },
-  course.questions.length
-    ? { id: "interview", label: "Interview", count: course.questions.length }
-    : null,
   course.projects.length || course.designs.length
     ? { id: "projects", label: "Projects", count: course.projects.length + course.designs.length }
     : null,
@@ -69,13 +69,24 @@ const tabs = [
           </p>
           <div class="course-hero__actions">
             {first && (
-              <Button href={first.url} size="lg" fullWidthOnMobile>
-                Start the course
-              </Button>
+              <span data-hide-when-continue={tech}>
+                <Button href={first.url} size="lg" fullWidthOnMobile>
+                  Start the course
+                </Button>
+              </span>
             )}
+            <a
+              class="btn btn--primary btn--lg btn--block-mobile"
+              href={first?.url ?? hub.url}
+              data-continue
+              data-course={tech}
+              hidden
+            >
+              Continue: <span data-continue-title></span>
+            </a>
             {interviewHub && (
               <Button href={`/interview/${tech}/`} variant="secondary" size="lg" fullWidthOnMobile>
-                Practise interview questions
+                Interview questions
               </Button>
             )}
           </div>
@@ -131,16 +142,96 @@ const tabs = [
           <div class="prose">
             <Content />
           </div>
-          {course.lessons.length > 0 && (
-            <>
-              <h3 style="margin-top: var(--sp-8); font-size: var(--fs-xl)">What you will learn</h3>
-              <ul class="checklist" style="margin-top: var(--sp-3)">
-                {course.lessons.map((l) => (
-                  <li>{l.title}</li>
-                ))}
-              </ul>
-            </>
-          )}
+
+          <div class="progress-panel js-only">
+            <div class="progress-panel__head">
+              <h3>Your progress</h3>
+              <span class="muted" style="font-size: var(--fs-sm)">
+                Saved in this browser only
+              </span>
+            </div>
+            <div class="rings">
+              <div
+                class="ring"
+                data-ring
+                data-kind="lesson"
+                data-course={tech}
+                data-total={course.lessons.length}
+                data-label="Lessons"
+                role="img"
+              >
+                <span class="ring__dial" aria-hidden="true">
+                  <span class="ring__value" data-ring-value>
+                    0%
+                  </span>
+                </span>
+                <span aria-hidden="true">
+                  <span class="ring__label">Lessons</span>
+                  <span class="ring__detail" data-ring-detail>
+                    0 of {course.lessons.length}
+                  </span>
+                </span>
+              </div>
+              {interviewHub && (
+                <div
+                  class="ring"
+                  data-ring
+                  data-kind="question"
+                  data-course={tech}
+                  data-total={hubQuestions.length}
+                  data-label="Interview questions"
+                  role="img"
+                >
+                  <span class="ring__dial" aria-hidden="true">
+                    <span class="ring__value" data-ring-value>
+                      0%
+                    </span>
+                  </span>
+                  <span aria-hidden="true">
+                    <span class="ring__label">Questions</span>
+                    <span class="ring__detail" data-ring-detail>
+                      0 of {hubQuestions.length}
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <h3 class="group-title" style="margin-top: var(--sp-10)">
+            Practise
+          </h3>
+          <ul class="tile-grid" role="list">
+            {interviewHub && (
+              <li>
+                <Tile
+                  href={`/interview/${tech}/`}
+                  eyebrow="Interview"
+                  title={`${d.shortName} interview questions`}
+                  description="The full list with difficulty, type and a box to tick off each one."
+                  meta={[`${hubQuestions.length} questions`]}
+                />
+              </li>
+            )}
+            {course.cheatSheets.slice(0, 1).map((c) => (
+              <li>
+                <Tile
+                  href={c.url}
+                  eyebrow="Cheat sheet"
+                  title={c.title}
+                  description={c.description}
+                />
+              </li>
+            ))}
+            <li>
+              <Tile
+                href="/interview/questions/"
+                eyebrow="Interview"
+                title="All interview questions"
+                description="Every question across all topics in one filterable list."
+              />
+            </li>
+          </ul>
         </div>
         <aside aria-labelledby="facts-h">
           <h2 id="facts-h" class="tile__eyebrow" style="margin-bottom: var(--sp-3)">
@@ -151,6 +242,7 @@ const tabs = [
               <li>{f}</li>
             ))}
           </ul>
+          <AdSlot placement="rail" />
         </aside>
       </div>
       {course.modules.length > 0 && (
@@ -178,7 +270,8 @@ const tabs = [
     <section id="lessons" class="tab-panel" role="tabpanel" aria-labelledby="tab-lessons">
       <h2 class="tab-panel__title">Lessons</h2>
       <p class="tab-panel__lead">
-        Work through the lessons in order. Each one ends with a link to the next.
+        Work through the lessons in order. Completed lessons show a tick; lessons you have opened
+        are outlined.
       </p>
       {course.modules.map((m) => (
         <div>
@@ -204,36 +297,6 @@ const tabs = [
         </div>
       ))}
     </section>
-
-    {course.questions.length > 0 && (
-      <section id="interview" class="tab-panel" role="tabpanel" aria-labelledby="tab-interview">
-        <h2 class="tab-panel__title">Interview questions</h2>
-        <p class="tab-panel__lead">
-          Each question starts with a short answer you can say out loud, then explains the details
-          and follow-ups.
-        </p>
-        <ul class="tile-grid tile-grid--wide" role="list">
-          {course.questions.map((q) => (
-            <li>
-              <Tile
-                href={q.url}
-                title={q.title}
-                level={q.entry.data.difficulty}
-                eyebrow={q.entry.data.questionType.join(" · ")}
-                meta={[`~${q.entry.data.estimatedMinutes} min`]}
-              />
-            </li>
-          ))}
-        </ul>
-        {interviewHub && (
-          <p style="margin-top: var(--sp-6)">
-            <Button href={`/interview/${tech}/`} variant="secondary">
-              Filter all {d.shortName} questions
-            </Button>
-          </p>
-        )}
-      </section>
-    )}
 
     {(course.projects.length > 0 || course.designs.length > 0) && (
       <section id="projects" class="tab-panel" role="tabpanel" aria-labelledby="tab-projects">
@@ -311,7 +374,8 @@ const tabs = [
                   description={r.description}
                   meta={[
                     `${relatedCourses[i]?.lessons.length ?? 0} lessons`,
-                    (relatedCourses[i]?.questions.length ?? 0) > 0 && `${relatedCourses[i]?.questions.length} questions`,
+                    (relatedCourses[i]?.questions.length ?? 0) > 0 &&
+                      `${relatedCourses[i]?.questions.length} questions`,
                   ]}
                 />
               </li>

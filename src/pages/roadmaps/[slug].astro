@@ -3,10 +3,8 @@ import { render } from "astro:content";
 import { getItems, getByRef, type ItemOf } from "../../utils/content";
 import ArticleLayout from "../../layouts/ArticleLayout.astro";
 import RoadmapNodes from "../../components/roadmap/RoadmapNodes.astro";
-import RelatedList from "../../components/content/RelatedList.astro";
 import NextStep from "../../components/content/NextStep.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
-import { relatedGroups } from "../../utils/related";
 import { sectionNav } from "../../utils/navigation";
 
 export async function getStaticPaths() {
@@ -19,7 +17,6 @@ const item = (await getByRef(Astro.props.ref)) as ItemOf<"roadmaps">;
 const d = item.entry.data;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
-const { groups } = await relatedGroups(item);
 const nav = await sectionNav("roadmaps", item.url);
 ---
 
@@ -36,7 +33,6 @@ const nav = await sectionNav("roadmaps", item.url);
   <h2 id="plan">The plan</h2>
   <RoadmapNodes stages={d.stages} />
   <Fragment slot="footer">
-    <RelatedList groups={groups} />
     <NextStep
       title="See the full roadmap"
       text="Every plan maps onto the same ordered Data Engineering journey."

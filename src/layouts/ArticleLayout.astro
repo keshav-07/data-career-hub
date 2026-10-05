@@ -6,8 +6,12 @@ import Pager from "../components/navigation/Pager.astro";
 import Toc from "../components/content/Toc.astro";
 import Metadata from "../components/content/Metadata.astro";
 import IndexMeta from "../components/content/IndexMeta.astro";
+import Explore from "../components/content/Explore.astro";
+import DoneButton from "../components/content/DoneButton.astro";
+import AdSlot from "../components/content/AdSlot.astro";
 import { articleSchema, breadcrumbSchema } from "../utils/seo";
 import { formatMonthYear, isoDate } from "../utils/dates";
+import { exploreFor } from "../utils/explore";
 import type { Crumb } from "../utils/breadcrumbs";
 import type { Item } from "../utils/content";
 import type { SectionNav } from "../utils/navigation";
@@ -29,7 +33,7 @@ interface Props {
   wide?: boolean;
   schema?: object[];
   titleClass?: string;
-  /** Left-hand section navigation with previous/next. Every content page provides one. */
+  /** Left-hand section navigation with previous/next. */
   nav?: SectionNav;
 }
 const {
@@ -57,6 +61,8 @@ const data = item.entry.data as {
   versionContext?: string;
 };
 const showToc = headings.filter((h) => h.depth === 2).length >= 3;
+const explore = await exploreFor(item);
+const kind = nav?.progressKind;
 const jsonLd = [
   breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site),
   articleSchema({
@@ -90,16 +96,36 @@ const position = nav?.position
 >
   <IndexMeta type={item.typeLabel} technology={item.technology[0]} difficulty={item.difficulty} />
   <div
-    class={`course-shell container container--course ${showToc ? "course-shell--toc" : ""} ${nav ? "" : "course-shell--no-nav"}`}
-  >
+    hidden
+    data-progress-page
+    data-url={item.url}
+    data-kind={kind ?? "other"}
+    data-course={nav?.course}
+    data-title={item.title}
+  ></div>
+  <div class:list={["course-shell container container--course", { "course-shell--no-nav": !nav }]}>
     {nav && (
       <aside class="course-shell__nav" data-pagefind-ignore>
-        <SideNav nav={nav} variant="desktop" />
+        <SideNav nav={nav} variant="desktop" headings={headings} />
       </aside>
     )}
     <article class="course-shell__main">
       <header class="lesson-header">
-        <Breadcrumb {crumbs} />
+        <div class="lesson-header__crumbs">
+          {nav && (
+            <button
+              type="button"
+              class="btn btn--secondary btn--sm show-menu"
+              data-sidebar-toggle
+              data-sidebar-open
+              aria-controls="course-menu"
+              aria-expanded="false"
+            >
+              ☰ Course menu
+            </button>
+          )}
+          <Breadcrumb {crumbs} />
+        </div>
         {nav && (
           <div class="lesson-header__mobile-nav" data-pagefind-ignore>
             <SideNav nav={nav} variant="mobile" />
@@ -129,11 +155,6 @@ const position = nav?.position
           />
         </div>
         <slot name="header-extra" />
-        {nav && (
-          <div data-pagefind-ignore>
-            <Pager prev={nav.prev} next={nav.next} variant="compact" noun={nav.position?.noun} />
-          </div>
-        )}
       </header>
 
       {showToc && <Toc headings={headings} variant="mobile" />}
@@ -145,22 +166,29 @@ const position = nav?.position
         By {data.author} · Last reviewed {formatMonthYear(data.reviewedDate)}
         {data.versionContext && <> · {data.versionContext}</>}
       </p>
+      {kind && <DoneButton url={item.url} kind={kind} course={nav?.course} title={item.title} />}
       {nav && (
         <div data-pagefind-ignore>
           <Pager prev={nav.prev} next={nav.next} variant="full" noun={nav.position?.noun} />
         </div>
       )}
+      <AdSlot placement="inline" />
       <slot name="footer" />
     </article>
-    {showToc && <Toc headings={headings} variant="desktop" />}
+    {explore.length > 0 && (
+      <div class="course-shell__explore">
+        <Explore groups={explore} />
+      </div>
+    )}
   </div>
 </BaseLayout>
 
 <script>
-  // Keep the current lesson visible in a long sidebar.
+  // Keep the current lesson visible in a long sidebar, without hiding the course title when it already fits.
   const current = document.querySelector<HTMLElement>(".side-nav--desktop [aria-current='page']");
   const box = current?.closest<HTMLElement>(".course-shell__nav");
-  if (current && box && box.scrollHeight > box.clientHeight) {
-    box.scrollTop = current.offsetTop - box.clientHeight / 3;
+  if (current && box) {
+    const offset = current.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    if (offset > box.clientHeight * 0.7) box.scrollTop = offset - box.clientHeight / 3;
   }
 </script>
