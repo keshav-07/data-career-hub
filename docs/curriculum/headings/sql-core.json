@@ -114,5 +114,29 @@
   "LATERAL / CROSS APPLY joins": {
     "ref": "articles:sql/semi-anti-lateral-joins",
     "heading": "LATERAL joins and CROSS APPLY"
+  },
+  "Subqueries in WHERE": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Subqueries in WHERE"
+  },
+  "Subqueries in FROM (derived tables)": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Subqueries in FROM (derived tables)"
+  },
+  "Scalar subqueries": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Scalar subqueries"
+  },
+  "Correlated subqueries": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Correlated subqueries"
+  },
+  "Common Table Expressions (CTEs)": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Common table expressions (CTEs)"
+  },
+  "Multiple chained CTEs": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Multiple chained CTEs"
   }
 }

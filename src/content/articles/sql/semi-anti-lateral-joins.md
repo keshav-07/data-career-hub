@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:sql/joins"]
 related: ["articles:pyspark/joins-and-join-strategy", "articles:sql/set-operations"]
 previous: "articles:sql/joins"
+next: "articles:sql/ctes-subqueries-temp-tables"
 sources:
   - { label: "PostgreSQL documentation: Subquery expressions (EXISTS, IN, NOT IN)", url: "https://www.postgresql.org/docs/16/functions-subquery.html" }
   - { label: "PostgreSQL documentation: LATERAL subqueries", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
