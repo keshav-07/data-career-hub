@@ -34,5 +34,21 @@
   "CASE WHEN expressions": {
     "ref": "articles:sql/operators-nulls-case",
     "heading": "CASE expressions"
+  },
+  "String functions (CONCAT, SUBSTRING, TRIM)": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "String functions: CONCAT, SUBSTRING, TRIM and friends"
+  },
+  "Date functions basics": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "Date and time functions"
+  },
+  "CAST and data type conversion": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "CAST and data type conversion"
+  },
+  "Arithmetic & rounding": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "Arithmetic and rounding"
   }
 }

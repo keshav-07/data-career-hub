@@ -15,6 +15,7 @@ learningObjectives:
 prerequisites: ["articles:sql/sql-fundamentals"]
 related: ["articles:sql/aggregations-group-by-having", "cheat-sheets:sql-data-engineering"]
 previous: "articles:sql/sql-fundamentals"
+next: "articles:sql/functions-strings-dates-types"
 sources:
   - { label: "PostgreSQL documentation: Comparison functions and operators", url: "https://www.postgresql.org/docs/16/functions-comparison.html" }
   - { label: "PostgreSQL documentation: Pattern matching", url: "https://www.postgresql.org/docs/16/functions-matching.html" }
