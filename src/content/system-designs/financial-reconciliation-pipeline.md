@@ -70,6 +70,7 @@ sources:
   - { label: "PostgreSQL 16: table expressions and joins", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
   - { label: "PostgreSQL 16: conditional expressions (CASE, COALESCE)", url: "https://www.postgresql.org/docs/16/functions-conditional.html" }
 previous: "system-designs:marketing-attribution-pipeline"
+next: "system-designs:time-series-metrics-store"
 ---
 
 ## Approach
