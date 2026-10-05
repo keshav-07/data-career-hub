@@ -1,98 +1,445 @@
 ---
-seoTitle: "Kafka Partitions, Consumer Groups and Delivery"
+seoTitle: "Kafka Topics, Partitions and Consumer Groups"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "Kafka Topics, Partitions, Consumer Groups and Delivery Semantics"
-description: "Understand how Kafka topics are split into partitions, how consumer groups share the work, and what at-most-once, at-least-once and exactly-once delivery really mean."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Kafka Topics, Partitions and Consumer Groups"
+description: "How Kafka topics split into partitions, how keys decide ordering, what replication factor protects, and how consumer groups divide partitions between consumers."
 inventoryId: "TECH-29"
 technology: ["kafka"]
-topic: ["partitions", "consumer-groups", "delivery-semantics"]
-difficulty: "Intermediate"
+topic: ["topics", "partitions", "consumer-groups", "replication"]
+difficulty: "Beginner"
 featured: true
-related: ["interview-questions:kafka/partitions-and-consumer-groups", "interview-questions:data-engineering/idempotent-batch-pipeline"]
+learningObjectives:
+  - "Explain what a topic, a partition and an offset are, and why Kafka keeps events after they are read"
+  - "Predict which partition a keyed record lands in, and why adding partitions breaks per-key ordering"
+  - "Choose a replication factor and explain what it does and does not protect against"
+  - "Describe how a consumer group divides partitions and why partitions cap a group's parallelism"
+  - "Compare the range, round-robin and sticky assignment strategies at a high level"
+related: ["interview-questions:kafka/partitions-and-consumer-groups", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:kafka/kafka-vs-message-queues"]
 previous: "articles:etl-elt/etl-vs-elt"
-next: "articles:delta-lake/transactions-schema-evolution"
-sources: [{"label": "Apache Kafka documentation: Design", "url": "https://kafka.apache.org/documentation/#design"}, {"label": "Apache Kafka documentation: Message delivery semantics", "url": "https://kafka.apache.org/documentation/#semantics"}]
-versionContext: "Concepts apply to Apache Kafka 3.x and later; idempotent producers are enabled by default since 3.0"
+next: "articles:kafka/log-storage-retention-compaction"
+sources:
+  - { label: "Apache Kafka documentation: Design", url: "https://kafka.apache.org/documentation/#design" }
+  - { label: "Apache Kafka documentation: Introduction", url: "https://kafka.apache.org/intro" }
+  - { label: "Apache Kafka documentation: Consumer configs", url: "https://kafka.apache.org/41/configuration/consumer-configs/" }
+  - { label: "Apache Kafka documentation: Consumer rebalance protocol", url: "https://kafka.apache.org/41/operations/consumer-rebalance-protocol/" }
+versionContext: "CLI commands and their output were run on Apache Kafka 4.3.1 (a three-node KRaft cluster on one machine, Java 21). The Python partitioning and assignment simulations run on Python 3 with no Kafka install; the murmur2 function was checked against the Java producer's default partitioner on 30 keys with no mismatches."
 ---
 
-Kafka is a distributed, append-only **log**. Producers write events to it, consumers read from it, and events stay available for a configured retention period instead of disappearing when read. Almost every Kafka question comes back to three ideas: topics, partitions and consumer groups.
+Kafka is a distributed, append-only **log**. Producers write events to it, consumers read from it, and events stay available for a configured retention period instead of disappearing when they are read. Almost every Kafka design question, and most Kafka interview questions, come back to four ideas: topics, partitions, replication and consumer groups. This lesson builds each one from first principles.
 
-## Topics and partitions
+## Follow along on a local cluster
 
-A **topic** is a named stream of events, such as `orders`. A topic is split into **partitions**, and each partition is an ordered, immutable sequence of records. Every record in a partition has an **offset**, its position in that sequence.
+You do not need a cluster to follow the Python simulations below, but running the CLI commands yourself makes the ideas stick. Kafka 4.x runs without ZooKeeper, so a single-node broker is three commands after you download and unpack a release from kafka.apache.org (Java 17 or later is required):
 
-```text
-Topic: orders
-  Partition 0: [o0] [o1] [o2] [o3] ...
-  Partition 1: [o0] [o1] [o2] ...
-  Partition 2: [o0] [o1] ...
+```bash
+KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+bin/kafka-storage.sh format --standalone -t "$KAFKA_CLUSTER_ID" -c config/server.properties
+bin/kafka-server-start.sh config/server.properties
 ```
 
-Two consequences matter:
+The outputs on this page come from a three-broker cluster (brokers 1, 2 and 3) so that replication is visible. On a single broker, use `--replication-factor 1`.
 
-1. **Ordering is guaranteed only within a partition**, not across the whole topic.
-2. **Partitions are the unit of parallelism.** More partitions allow more consumers to read in parallel.
+## Topic fundamentals
 
-## Keys decide the partition
+A **topic** is a named stream of related events, such as `orders`, `page-views` or `payments.cdc`. Think of it as a table name for events, except that rows are never updated in place: new events are appended, and old ones age out according to the topic's retention settings.
 
-A producer can attach a **key** to each record. Records with the same key are sent to the same partition (by hashing the key), which keeps all events for one entity, say one `customer_id`, in order.
+Three properties make a Kafka topic different from a queue:
 
-<Callout tone="warning" title="Changing the partition count changes key placement">
+- **Events are retained, not deleted on read.** A topic keeps data for a time or size limit (seven days by default). Reading an event does not remove it.
+- **Many independent readers.** Any number of applications can read the same topic, each at its own pace and position.
+- **Replay.** Because events stay, a consumer can go back and read them again, for example to rebuild a table after a bug fix.
 
-If you add partitions to an existing topic, the hash of a key maps to a different partition than before. Ordering for a key across the change is no longer guaranteed. Plan partition counts up front.
+Every event (Kafka also says *record* or *message*) has a **key** (optional), a **value**, a **timestamp** and optional **headers**. Kafka treats key and value as bytes. Turning them into JSON, Avro or Protobuf is the job of the client's serialisers.
+
+### Creating and inspecting a topic
+
+```bash
+bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --topic page-views \
+  --partitions 3 --replication-factor 3 --config retention.ms=86400000
+bin/kafka-topics.sh --bootstrap-server localhost:19092 --describe --topic page-views
+```
+
+```text
+Created topic page-views.
+Topic: page-views	TopicId: LG01aRfWQh-yqdLL3js4-Q	PartitionCount: 3	ReplicationFactor: 3	Configs: min.insync.replicas=1,retention.ms=86400000
+	Topic: page-views	Partition: 0	Leader: 2	Replicas: 2,3,1	Isr: 2,3,1	Elr: 	LastKnownElr:
+	Topic: page-views	Partition: 1	Leader: 3	Replicas: 3,1,2	Isr: 3,1,2	Elr: 	LastKnownElr:
+	Topic: page-views	Partition: 2	Leader: 1	Replicas: 1,2,3	Isr: 1,2,3	Elr: 	LastKnownElr:
+```
+
+Each line describes one partition: which broker leads it, which brokers hold copies, and which copies are currently in sync (`Isr`). `Elr` is the eligible leader replica list, a newer safety mechanism covered in the [replication lesson](/kafka/replication-isr/).
+
+### Naming topics
+
+Topic names may contain letters, digits, `.`, `_` and `-`, up to 249 characters. Pick one separator: Kafka refuses names that differ only by `.` versus `_` because they collide in metric names.
+
+```text
+$ bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --topic web_clicks ...
+WARNING: Due to limitations in metric names, topics with a period ('.') or underscore ('_') could collide. To avoid issues it is best to use either, but not both.
+Error while executing topic command : Topic 'web_clicks' collides with existing topic: web.clicks
+```
+
+A common convention is `<domain>.<entity>.<event>` or `<source>.<schema>.<table>` for CDC topics. Internal topics start with an underscore or double underscore, such as `__consumer_offsets`.
+
+### Pitfalls
+
+- **Auto-created topics.** Brokers default to `auto.create.topics.enable=true`, so a typo in a producer's topic name silently creates a new topic with the broker defaults (one partition, replication factor 1). Production clusters usually turn this off and create topics deliberately.
+- **Treating a topic like a database table.** You cannot update or delete a single record by offset. To "delete" by key you need a compacted topic and a tombstone (see [log storage and compaction](/kafka/log-storage-retention-compaction/)).
+
+### In interviews
+
+Expect "what is a topic and how is it different from a queue?" A strong answer mentions retention independent of consumption, replay, and multiple independent consumer groups, then moves straight on to partitions.
+
+## Partitions and parallelism
+
+A topic is split into **partitions**. Each partition is an ordered, immutable sequence of records stored on disk as a log. Every record in a partition gets an **offset**: its position, starting at 0 and increasing by one per record.
+
+```text
+Topic: orders (3 partitions)
+  Partition 0: [0] [1] [2] [3] [4] ...
+  Partition 1: [0] [1] [2] ...
+  Partition 2: [0] [1] [2] [3] ...
+```
+
+Offsets are per partition. "Offset 2" means nothing without saying which partition.
+
+### Why partitions exist
+
+Partitions are Kafka's **unit of parallelism** and **unit of ordering**:
+
+- Different partitions can live on different brokers, so writes and storage spread across the cluster.
+- Within a consumer group, each partition is read by exactly one consumer at a time, so more partitions allow more consumers to work in parallel.
+- Kafka guarantees order **within** a partition only. There is no global order across a topic's partitions.
+
+### How many partitions?
+
+There is no universal number. Work it out from requirements:
+
+1. **Consumer parallelism.** If you will ever need 12 consumers in one group working at once, you need at least 12 partitions.
+2. **Throughput.** Measure what one consumer (and one partition) can sustain in your setup, then divide target throughput by it and add headroom.
+3. **Costs of too many.** Each partition adds open files, memory, replication work and metadata. More partitions also means more work when brokers fail or restart, and more leaders to move.
+
+You can **increase** partitions later but never decrease them:
+
+```text
+$ bin/kafka-topics.sh --bootstrap-server localhost:19092 --alter --topic page-views --partitions 2
+Error while executing topic command : The topic page-views currently has 3 partition(s); 2 would not be an increase.
+```
+
+Increasing is allowed but changes where keys land (next section), so plan the count up front for keyed topics.
+
+### Pitfalls
+
+- **More consumers than partitions** does not add throughput; the extra consumers sit idle.
+- **One hot partition** (a skewed key) limits the whole pipeline to the speed of one consumer.
+- **A single-partition topic** gives total order but no parallelism. Use it only when you truly need global order and the volume is small.
+
+### In interviews
+
+"How do you scale consumption?" The answer is: add partitions (planned up front) and consumers up to the partition count, and remove per-record bottlenecks such as synchronous database calls. Mention that partitions cap parallelism and that more partitions have operational costs.
+
+## Partition keys and ordering
+
+When a producer sends a record, something must decide its partition:
+
+1. If the record names a partition explicitly, that partition is used.
+2. Otherwise, if it has a **key**, the Java client's default partitioner hashes the key bytes with **murmur2** and takes the result modulo the number of partitions. Same key, same partition count: same partition, every time.
+3. With no key, the producer uses a "sticky" partition: it fills a batch for one partition, then moves on, which keeps batches large.
+
+Using a key such as `customer_id` therefore keeps all of one customer's events in one partition, in the order they were produced.
+
+### Worked example: predicting the partition
+
+The function below reproduces the Java client's default key hashing in plain Python. It was checked against a real Kafka 4.3.1 producer on 30 keys and matched every one.
+
+```python
+def murmur2(data: bytes) -> int:
+    """Kafka's 32-bit murmur2 hash (same seed and constants as the Java client)."""
+    length = len(data)
+    seed, m, r = 0x9747B28C, 0x5BD1E995, 24
+    h = (seed ^ length) & 0xFFFFFFFF
+    for i in range(length // 4):
+        j = i * 4
+        k = data[j] | (data[j + 1] << 8) | (data[j + 2] << 16) | (data[j + 3] << 24)
+        k = (k * m) & 0xFFFFFFFF
+        k ^= k >> r
+        k = (k * m) & 0xFFFFFFFF
+        h = (h * m) & 0xFFFFFFFF
+        h ^= k
+    tail, extra = (length // 4) * 4, length % 4
+    if extra == 3:
+        h ^= data[tail + 2] << 16
+    if extra >= 2:
+        h ^= data[tail + 1] << 8
+    if extra >= 1:
+        h ^= data[tail]
+        h = (h * m) & 0xFFFFFFFF
+    h ^= h >> 13
+    h = (h * m) & 0xFFFFFFFF
+    h ^= h >> 15
+    return h
+
+def partition_for(key: str, num_partitions: int) -> int:
+    # Kafka clears the sign bit (toPositive) before taking the modulo
+    return (murmur2(key.encode("utf-8")) & 0x7FFFFFFF) % num_partitions
+
+for key in ["cust-1", "cust-2", "cust-3", "cust-4", "cust-5", "cust-6"]:
+    print(key, "-> partition", partition_for(key, 6), "of 6 |", partition_for(key, 8), "of 8")
+```
+
+```text
+cust-1 -> partition 1 of 6 | 3 of 8
+cust-2 -> partition 1 of 6 | 5 of 8
+cust-3 -> partition 1 of 6 | 3 of 8
+cust-4 -> partition 0 of 6 | 0 of 8
+cust-5 -> partition 0 of 6 | 6 of 8
+cust-6 -> partition 3 of 6 | 5 of 8
+```
+
+Two lessons are visible. First, with only a few keys, hashing is lumpy: three of six customers landed in partition 1. Second, going from 6 to 8 partitions moved most keys. The real cluster agreed: producing `cust-1`, `cust-2` and `cust-3` to the six-partition `orders` topic put all six events in partition 1.
+
+```text
+$ bin/kafka-console-consumer.sh --bootstrap-server localhost:19092 --topic orders --from-beginning \
+    --formatter-property print.key=true --formatter-property print.partition=true --formatter-property print.offset=true
+Partition:1	Offset:0	cust-1	order 1001 created
+Partition:1	Offset:1	cust-2	order 1002 created
+Partition:1	Offset:2	cust-1	order 1001 paid
+Partition:1	Offset:3	cust-3	order 1003 created
+Partition:1	Offset:4	cust-2	order 1002 cancelled
+Partition:1	Offset:5	cust-1	order 1001 shipped
+```
+
+Order 1001's three events are in the order they were produced. That is the guarantee keys buy you.
+
+<Callout tone="warning" title="Adding partitions changes key placement">
+
+The partition is `hash(key) % partition_count`. Change the count and most keys map somewhere else. New events for a key go to the new partition while older events sit in the old one, so a consumer can see them out of order across the change. For keyed topics, choose the partition count up front, or create a new topic and migrate.
 
 </Callout>
 
-Records sent without a key are spread across partitions, so you get throughput but no per-entity ordering.
+### Choosing a good key
 
-## Replication
+| Key | Ordering you get | Risk |
+|-----|------------------|------|
+| `order_id` | Per order | Usually even spread |
+| `customer_id` | Per customer | Skew if a few customers dominate |
+| `country` | Per country | Severe skew, very few distinct values |
+| no key | None | Even spread, highest throughput |
 
-Each partition is replicated across brokers. One replica is the **leader** that serves reads and writes; followers copy it. If the leader's broker fails, a follower in sync takes over. A producer setting of `acks=all` makes a write succeed only after all in-sync replicas have it, and `min.insync.replicas` sets how many that must be.
+Pick the **narrowest entity whose events must stay in order**. A key with few distinct values, or one dominant value, creates a hot partition.
 
-## Consumer groups
+### Pitfalls
 
-Consumers that share a `group.id` form a **consumer group**. Kafka assigns each partition to **exactly one consumer in the group** at a time, so the group divides the topic's partitions between its members.
+- **Different clients, different hashes.** librdkafka-based clients (the Confluent Python, Go and .NET clients) default to a CRC32-based partitioner. On the same topic, the Confluent Python client's default agreed with the Java producer on only 7 of 30 test keys. Set `partitioner: murmur2_random` in those clients when Java and non-Java producers write the same keyed topic.
+- **Retries and reordering.** Ordering within a partition also depends on producer settings; the idempotent producer (on by default since Kafka 3.0) keeps order through retries. See the [producers lesson](/kafka/producers/).
+- **Null keys** give no ordering. Do not rely on arrival order for unkeyed data.
 
-- With 6 partitions and 3 consumers, each consumer reads 2 partitions.
-- With 6 partitions and 8 consumers, 2 consumers sit idle, because a partition is never split between consumers in a group. **Partitions cap a group's parallelism.**
-- A different group reads the topic independently and receives every record. This is how several systems (analytics, search, alerts) consume the same stream.
+### In interviews
 
-When a consumer joins, leaves or crashes, the group **rebalances**: partitions are reassigned. Rebalances briefly pause consumption, so very frequent ones signal a problem such as consumers timing out under long processing.
+"How do you guarantee ordering in Kafka?" Strong answer: ordering exists only per partition, so key by the entity that needs ordering, keep the partition count fixed, keep the idempotent producer on, and process each partition sequentially on the consumer side.
 
-## Offsets and commits
+## Replication factor
 
-A consumer tracks progress by **committing offsets** (stored by Kafka in an internal topic). After a restart it resumes from the last committed offset. When you commit relative to processing decides your delivery guarantee.
+The **replication factor** (RF) is how many copies of each partition the cluster keeps, each on a different broker. With RF 3, every partition has three replicas. One is the **leader**, which handles reads and writes; the others are **followers**, which copy the leader's log.
 
-## Delivery semantics
+In the `page-views` output above, partition 0 has `Replicas: 2,3,1` and `Leader: 2`. If broker 2 fails, the controller elects a new leader from the replicas that were in sync (`Isr`), and clients carry on.
 
-| Guarantee | How it happens | Failure behaviour |
-|-----------|----------------|-------------------|
-| **At-most-once** | Commit the offset *before* processing | A crash after commit loses the record |
-| **At-least-once** | Process, *then* commit the offset | A crash before commit reprocesses the record: **duplicates possible** |
-| **Exactly-once** | Idempotent producer plus transactions, consuming with `isolation.level=read_committed` | Each record's effect appears once, within Kafka's transactional scope |
+### What RF protects against
 
-At-least-once is the common default. To make duplicates harmless, make the processing **idempotent**: writing the same record twice has the same effect as once, for example an upsert keyed by a unique event id.
+- With RF *N*, a partition survives up to *N − 1* broker failures without losing committed data, provided the producer waited for all in-sync replicas (`acks=all`, the default).
+- RF 3 is the usual production choice: you can lose one broker (or take it down for maintenance) and still have redundancy.
+- RF cannot exceed the number of brokers:
 
-Exactly-once in Kafka applies to read-process-write cycles **inside Kafka** (consume from topics, write to topics, commit offsets in one transaction). Writing to an external system such as a database still needs an idempotent or transactional sink to avoid duplicates.
+```text
+$ bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --topic too-many --partitions 3 --replication-factor 4
+Error while executing topic command : Unable to replicate the partition 4 time(s): The target replication factor of 4 cannot be reached because only 3 broker(s) are registered or some brokers have all their log directories cordoned.
+```
 
-## Sizing partitions
+### What RF does not protect against
 
-There is no universal number. Consider the target throughput per partition, the maximum consumer parallelism you need (partitions must be at least that many), and that more partitions add broker overhead and lengthen recovery. Start from required throughput and consumer count, then add headroom.
+- **Bad data or accidental deletes.** Replicas copy everything, including a bad deployment's output and a topic deletion.
+- **Losing a whole data centre** if every replica sits in it. Use rack awareness (`broker.rack`) so replicas spread across zones, and a separate cluster plus MirrorMaker 2 for regional disaster recovery.
 
-## Common mistakes
+### Pitfalls
 
-1. Expecting global ordering across a multi-partition topic.
-2. Running more consumers than partitions and expecting more throughput.
-3. Using auto-commit with slow processing and losing or duplicating records after a crash.
-4. Assuming "exactly-once" removes the need for idempotent sinks.
-5. Choosing a low-cardinality key, which concentrates traffic on a few partitions.
+- RF 1 in production: one disk failure loses the partition.
+- RF 2 with `min.insync.replicas=2` means losing one broker stops writes to that partition; RF 3 with `min.insync.replicas=2` is the common durable pairing.
+- The broker default `default.replication.factor` is 1, which applies to auto-created topics. Set it explicitly in production.
 
-## Interview relevance
+### In interviews
 
-Likely prompts: "Explain partitions and consumer groups", "How do you get ordering?", "What happens when a consumer fails?" and "At-least-once versus exactly-once". Tie each answer to the unit of ordering (the partition) and the unit of parallelism (the partition again).
+Be ready to connect RF, `acks` and `min.insync.replicas`: RF says how many copies exist, `min.insync.replicas` says how many must confirm a write, and `acks=all` makes the producer wait for them. The details are in the [replication lesson](/kafka/replication-isr/).
 
-## Key takeaway
+## Consumer group basics
 
-Partitions give both ordering and parallelism. Consumer groups divide partitions. Where you commit offsets decides whether you risk loss or duplicates, and idempotent processing makes duplicates safe.
+Consumers that share a `group.id` form a **consumer group**. Kafka assigns each partition of the subscribed topics to **exactly one member of the group** at a time, so the group divides the work. A different group reads the same topic independently and receives every record. That is how one `orders` topic feeds a warehouse loader, a fraud service and a search indexer without them interfering.
+
+### Worked example: three consumers, six partitions
+
+Three console consumers joined the group `analytics` on the six-partition `orders` topic. The group tool shows how Kafka split the partitions:
+
+```bash
+bin/kafka-consumer-groups.sh --bootstrap-server localhost:19092 --describe --group analytics --members
+```
+
+```text
+GROUP           CONSUMER-ID                                      HOST            CLIENT-ID       #PARTITIONS
+analytics       analytics-2-f9a9c501-abce-4938-b514-8bee111f2cae /127.0.0.1      analytics-2     2
+analytics       analytics-1-bfe7d8f3-d3ec-4fd3-8edd-afa25f85f7e3 /127.0.0.1      analytics-1     2
+analytics       analytics-3-17da9438-3082-4ba4-b2e2-6e2d7cd6c48b /127.0.0.1      analytics-3     2
+```
+
+Without `--members`, the same command lists each partition with its committed offset, the log-end offset and the **lag** between them, which is the first number to check when a pipeline falls behind (covered in the [consumers lesson](/kafka/consumers-offsets/)).
+
+### Rules worth memorising
+
+| Partitions | Consumers in group | Result |
+|-----------:|-------------------:|--------|
+| 6 | 3 | 2 partitions each |
+| 6 | 4 | two consumers get 2, two get 1 |
+| 6 | 8 | 6 busy, 2 idle |
+| 6 | 1 | one consumer reads all 6 |
+
+- **Partitions cap a group's parallelism.** Idle consumers are still useful as hot standbys, but they add no throughput.
+- **Membership changes trigger a rebalance.** When a consumer joins, leaves or stops heartbeating, partitions are reassigned. Under the classic protocol this can briefly pause the group; the newer consumer protocol (generally available since Kafka 4.0) makes it incremental. See [consumer groups and rebalancing](/kafka/consumer-groups-rebalancing/).
+- **Progress is stored per group.** Each group commits its own offsets to the internal `__consumer_offsets` topic, so a restarted consumer resumes where its group left off.
+- **Share groups are a different thing.** Kafka 4.2 made *share groups* (KIP-932, "queues for Kafka") production-ready: members of a share group can read the same partition and acknowledge records one by one, like a work queue. This lesson, and most pipelines, use ordinary consumer groups.
+
+### Pitfalls
+
+- Reusing one `group.id` for two different applications makes them split the partitions between them, so each sees only part of the data.
+- Long processing inside the poll loop can exceed `max.poll.interval.ms` (5 minutes by default), get the consumer kicked out, and cause repeated rebalances.
+- A brand-new group with no committed offsets starts from `auto.offset.reset`, which defaults to `latest`: it skips existing data unless you set `earliest`.
+
+### In interviews
+
+Classic prompts: "What happens with more consumers than partitions?", "How do two teams read the same topic?" and "What happens when a consumer dies?" Answer in terms of one partition per consumer per group, separate groups for separate applications, and rebalancing plus committed offsets for failover.
+
+## Partition assignment
+
+**Partition assignment** decides which group member gets which partitions. In the classic protocol, one consumer (the group leader) runs a client-side **assignor**; in the newer consumer protocol (`group.protocol=consumer`), the broker-side group coordinator computes the assignment.
+
+| Strategy | Where | How it splits |
+|----------|-------|---------------|
+| `RangeAssignor` | classic, client | Per topic, contiguous ranges of partitions to members in sorted order |
+| `RoundRobinAssignor` | classic, client | All partitions of all topics dealt one at a time |
+| `StickyAssignor` | classic, client | Balanced, and keeps existing assignments where possible |
+| `CooperativeStickyAssignor` | classic, client | Sticky, and moves partitions incrementally instead of revoking everything |
+| `uniform` (default), `range` | consumer protocol, broker | Server-side equivalents; `uniform` replaces sticky and round-robin |
+
+The Java consumer's default `partition.assignment.strategy` is `[RangeAssignor, CooperativeStickyAssignor]`: range is used until every member supports cooperative rebalancing, which allows a rolling upgrade to the cooperative strategy.
+
+### Worked example: range versus round-robin
+
+This simulation follows the documented behaviour of the two simplest assignors.
+
+```python
+def range_assign(topic_partitions, members):
+    """RangeAssignor: works topic by topic, giving contiguous ranges; earlier members get the extras."""
+    members = sorted(members)
+    result = {m: [] for m in members}
+    for topic, partitions in topic_partitions.items():
+        per_member, extra = divmod(len(partitions), len(members))
+        start = 0
+        for i, m in enumerate(members):
+            count = per_member + (1 if i < extra else 0)
+            result[m] += [f"{topic}-{p}" for p in partitions[start:start + count]]
+            start += count
+    return result
+
+def round_robin_assign(topic_partitions, members):
+    """RoundRobinAssignor: deals all partitions of all topics across members in turn."""
+    members = sorted(members)
+    result = {m: [] for m in members}
+    every = [f"{t}-{p}" for t, ps in sorted(topic_partitions.items()) for p in ps]
+    for i, tp in enumerate(every):
+        result[members[i % len(members)]].append(tp)
+    return result
+
+one_topic = {"orders": list(range(6))}
+print("range, 4 members:", range_assign(one_topic, ["c1", "c2", "c3", "c4"]))
+print("range, 8 members:", {m: len(ps) for m, ps in range_assign(one_topic, [f"c{i}" for i in range(1, 9)]).items()})
+
+two_topics = {"orders": [0, 1, 2], "payments": [0, 1, 2]}
+for name, fn in [("range", range_assign), ("round-robin", round_robin_assign)]:
+    counts = {m: len(ps) for m, ps in fn(two_topics, ["c1", "c2"]).items()}
+    print(f"{name:11} two topics x 3 partitions, 2 members:", counts)
+```
+
+```text
+range, 4 members: {'c1': ['orders-0', 'orders-1'], 'c2': ['orders-2', 'orders-3'], 'c3': ['orders-4'], 'c4': ['orders-5']}
+range, 8 members: {'c1': 1, 'c2': 1, 'c3': 1, 'c4': 1, 'c5': 1, 'c6': 1, 'c7': 0, 'c8': 0}
+range       two topics x 3 partitions, 2 members: {'c1': 4, 'c2': 2}
+round-robin two topics x 3 partitions, 2 members: {'c1': 3, 'c2': 3}
+```
+
+The last two lines show the classic weakness of range assignment: because it works topic by topic, the first member gets the extra partition of **every** topic, so it ends up with twice the work. Range's strength is that partition *N* of every subscribed topic goes to the same member, which helps when you join two co-partitioned topics in the consumer.
+
+### Replica placement is a different assignment
+
+Do not confuse consumer assignment with **replica placement**: when you create a topic, the controller spreads each partition's replicas and leaders across brokers (and across racks when `broker.rack` is set), as the rotated `Replicas` lists in the `describe` output show. Moving replicas later is done with `kafka-reassign-partitions.sh` or a tool such as Cruise Control (see [operating Kafka](/kafka/kafka-operations/)).
+
+### Pitfalls
+
+- Expecting assignment to follow load: assignors balance partition **counts**, not bytes or message rates.
+- Mixing assignors carelessly during upgrades; follow the documented two-step rolling bounce when switching to cooperative rebalancing.
+- With the consumer protocol, client-side settings such as `partition.assignment.strategy` are no longer used; choose a server-side assignor with `group.remote.assignor` instead.
+
+### In interviews
+
+You may be asked "how are partitions assigned to consumers?" Name the group coordinator, the assignor, and the trade-off between range (co-partitioning, possible imbalance), round-robin (balance, more movement) and sticky or cooperative strategies (balance with minimal movement during rebalances).
+
+## Practice questions
+
+<details>
+<summary>A topic has 10 partitions and your consumer group has 15 instances. What happens, and how would you get more throughput?</summary>
+
+Ten consumers each read one partition and five sit idle, because a partition is read by only one member of a group. To go faster, increase partitions (accepting that keyed records will move to new partitions) or make each consumer process faster, for example by batching writes to the sink or removing per-record network calls.
+
+</details>
+
+<details>
+<summary>Why does Kafka only guarantee ordering within a partition?</summary>
+
+Each partition is an independent log, possibly led by a different broker, and different consumers read different partitions in parallel. A global order would need a single sequencer and a single reader, which removes horizontal scaling. Kafka chooses per-partition order, and keys let you put the records that need ordering into the same partition.
+
+</details>
+
+<details>
+<summary>You increased a keyed topic from 6 to 12 partitions. What can go wrong?</summary>
+
+The partition is chosen by hashing the key modulo the partition count, so most keys now map to different partitions. Events for one key are split between the old partition (older events) and the new one (newer events), and consumers can process them out of order across the change. Stateful consumers may also see a key for the first time on a different instance. Safer options are to size partitions up front or migrate to a new topic.
+
+</details>
+
+<details>
+<summary>What does a replication factor of 3 buy you, and what does it not?</summary>
+
+Each partition has three copies on three brokers, so with `acks=all` and a suitable `min.insync.replicas` you can lose a broker without losing acknowledged data and keep serving reads and writes. It does not protect against bad data, accidental topic deletion, or losing every replica in one data centre; those need backups, rack awareness and cross-cluster replication.
+
+</details>
+
+<details>
+<summary>Two services need every event from the same topic. How do you set up the consumers?</summary>
+
+Give each service its own `group.id`. Each group receives all records and tracks its own offsets independently. If they shared a group, they would split the partitions and each would see only part of the data.
+
+</details>
+
+<details>
+<summary>A Java service and a Python service (using the Confluent client) both produce keyed records to one topic, and per-key ordering breaks. Why?</summary>
+
+The Java client hashes keys with murmur2, while librdkafka-based clients default to a CRC32-based partitioner, so the same key can land in different partitions depending on which service sent it. Configure the Python producer with `partitioner: murmur2_random` so both use the same hashing.
+
+</details>
+
+## Key takeaways
+
+- A topic is a retained, replayable log; partitions split it for scale, and offsets are positions within one partition.
+- Ordering is guaranteed only within a partition. Key by the entity that needs ordering and fix the partition count early.
+- The replication factor is how many copies of each partition exist; RF 3 with `acks=all` is the usual durable choice, but it does not replace backups or DR.
+- A consumer group gives each partition to one member, so partitions cap the group's parallelism; separate groups read independently.
+- Assignors decide who reads what: range keeps topics aligned, round-robin balances counts, and sticky or cooperative strategies minimise movement.
+- Delivery guarantees depend on when offsets are committed relative to processing; see the [delivery semantics lesson](/kafka/delivery-semantics-exactly-once/).
