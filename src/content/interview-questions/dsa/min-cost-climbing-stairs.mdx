@@ -1,0 +1,149 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Min Cost Climbing Stairs: Cheapest Path to the Top with 1D DP"
+seoTitle: "Min Cost Climbing Stairs: 1D DP"
+description: "Find the cheapest way to reach the top of a staircase where each step has a cost, with recursion, memoised, bottom-up and constant-space DP, plus tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Let best(i) be the cheapest cost to stand on position i, where the top is one past the last step and you may start on step 0 or step 1 for free. Then best(i) = min(best(i - 1) + cost[i - 1], best(i - 2) + cost[i - 2]), with best(0) = best(1) = 0, and the answer is best at the top. Keeping only the last two values gives O(n) time and O(1) space."
+followUps: ["How would you also return which steps were used?", "What changes if you may jump up to k steps at a time?", "How does this relate to House Robber?"]
+previous: "interview-questions:dsa/climbing-stairs"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of non-negative costs, one per step. Stepping onto step i costs `cost[i]`; after paying, you may
+move up one or two steps. You may begin on step 0 or step 1 without paying anything yet. The top is the position just
+past the last step. Return the minimum total cost to reach the top.
+
+This is widely known as LeetCode 746, "Min Cost Climbing Stairs". It is
+[Climbing Stairs](/interview/dsa/climbing-stairs/) with a minimum instead of a count.
+
+Assume 2 to 1,000 steps with costs up to 999.
+
+## Examples
+
+```text
+cost: [4, 9, 2]
+start on 0 (pay 4), jump two to step 2 (pay 2), step to top  -> 6
+start on 1 (pay 9), jump two to top                          -> 9
+-> 6
+
+cost: [1, 50, 1, 1, 50, 1]
+0 (1) -> 2 (1) -> 3 (1) -> 5 (1) -> top  -> 4
+
+cost: [7, 3] -> 3   (start on step 1, jump to the top)
+```
+
+## Approach 1: plain recursion
+
+The cheapest way to reach position i is from i - 1 or i - 2, paying the cost of the step you leave.
+
+```python
+def min_cost_recursive(cost):
+    def best(i):
+        if i <= 1:
+            return 0
+        return min(best(i - 1) + cost[i - 1], best(i - 2) + cost[i - 2])
+    return best(len(cost))
+```
+
+It recomputes the same positions exponentially often: O(2^n) in the worst case.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `best[i]` = minimum cost to stand on position i (positions 0..n, where n = `len(cost)` is the top).
+- **Recurrence:** `best[i] = min(best[i - 1] + cost[i - 1], best[i - 2] + cost[i - 2])`.
+- **Base cases:** `best[0] = best[1] = 0`, because you may start on either for free.
+- **Answer:** `best` at index n (the last entry).
+
+### Filled table for cost = [1, 50, 1, 1, 50, 1]
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 | 6 (top) |
+|---|---|---|---|---|---|---|---|
+| best | 0 | 0 | 1 | 2 | 2 | 3 | 4 |
+
+For example `best[4] = min(best[3] + cost[3], best[2] + cost[2]) = min(2 + 1, 1 + 1) = 2`.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def min_cost_memo(cost):
+    @lru_cache(maxsize=None)
+    def best(i):
+        if i <= 1:
+            return 0
+        return min(best(i - 1) + cost[i - 1], best(i - 2) + cost[i - 2])
+    return best(len(cost))
+```
+
+### Bottom-up
+
+```python
+def min_cost_table(cost):
+    size = len(cost)
+    best = [0] * (size + 1)
+    for i in range(2, size + 1):
+        best[i] = min(best[i - 1] + cost[i - 1], best[i - 2] + cost[i - 2])
+    return best[-1]
+```
+
+### Space optimised
+
+```python
+def min_cost_climbing_stairs(cost):
+    prev2 = prev1 = 0                     # best[i - 2], best[i - 1]
+    for i in range(2, len(cost) + 1):
+        prev2, prev1 = prev1, min(prev1 + cost[i - 1], prev2 + cost[i - 2])
+    return prev1
+```
+
+### Complexity
+
+- Bottom-up and memoised: O(n) time and O(n) space.
+- Space optimised: O(n) time and O(1) space.
+
+## Tests
+
+```python
+for fn in (min_cost_climbing_stairs, min_cost_table, min_cost_memo, min_cost_recursive):
+    assert fn([4, 9, 2]) == 6
+    assert fn([1, 50, 1, 1, 50, 1]) == 4
+    assert fn([7, 3]) == 3
+    assert fn([0, 0, 0, 0]) == 0                      # free steps
+    assert fn([5]) == 0                               # one step: start on 1 = top
+    assert fn([]) == 0                                # no steps
+
+# Agreement on random inputs
+import random
+random.seed(1)
+for _ in range(50):
+    c = [random.randint(0, 20) for _ in range(random.randint(2, 12))]
+    assert min_cost_climbing_stairs(c) == min_cost_recursive(c) == min_cost_table(c)
+```
+
+## Edge cases and pitfalls
+
+- **Where the top is.** The top is index n, one past the last step; returning `best[n - 1]` forces you to stand on
+  the last step.
+- **Free start.** Both step 0 and step 1 are free starting points; forgetting step 1 overcharges.
+- **Which cost to add.** You pay for the step you leave (or land on, depending on the formulation); pick one and be
+  consistent.
+- **Mutating the input** to store DP values works but changes the caller's list.
+
+## Where this shows up in data engineering
+
+Not directly. It is the simplest example of a minimum-cost path through a sequence of stages, which is the shape of
+choosing, for each stage of a job, between two options with different costs while respecting what the previous stage
+allowed.
