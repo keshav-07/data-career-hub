@@ -400,7 +400,7 @@ FROM orders;
 | MySQL | `SUM(cond)` (a boolean is 1 or 0) |
 | All engines | `COUNT(CASE WHEN cond THEN 1 END)` |
 
-The `CASE` form works everywhere, so it is the safe choice in an interview unless the interviewer names an engine. Conditional aggregation by status or month is a manual **pivot**; the PIVOT and GROUPING SETS lesson later in the course compares it with the `PIVOT` operator.
+The `CASE` form works everywhere, so it is the safe choice in an interview unless the interviewer names an engine. Conditional aggregation by status or month is a manual **pivot**; the [PIVOT and GROUPING SETS lesson](/sql/pivot-unpivot-grouping-sets/) compares it with the `PIVOT` operator.
 
 ### Pitfalls
 

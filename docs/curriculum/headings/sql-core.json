@@ -138,5 +138,25 @@
   "Multiple chained CTEs": {
     "ref": "articles:sql/ctes-subqueries-temp-tables",
     "heading": "Multiple chained CTEs"
+  },
+  "PIVOT rows to columns": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "PIVOT: turning rows into columns"
+  },
+  "UNPIVOT columns to rows": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "UNPIVOT: turning columns into rows"
+  },
+  "Pivoting dynamic columns": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "Pivoting dynamic columns"
+  },
+  "GROUPING SETS": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "GROUPING SETS"
+  },
+  "ROLLUP and CUBE": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "ROLLUP and CUBE"
   }
 }

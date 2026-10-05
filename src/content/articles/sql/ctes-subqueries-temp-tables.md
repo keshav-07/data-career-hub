@@ -18,6 +18,7 @@ learningObjectives:
 prerequisites: ["articles:sql/semi-anti-lateral-joins"]
 related: ["articles:sql/query-optimization-fundamentals", "interview-questions:sql/remove-duplicate-records", "interview-questions:sql/second-highest-salary"]
 previous: "articles:sql/semi-anti-lateral-joins"
+next: "articles:sql/pivot-unpivot-grouping-sets"
 sources:
   - { label: "PostgreSQL documentation: WITH queries (common table expressions)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
   - { label: "PostgreSQL documentation: Subquery expressions", url: "https://www.postgresql.org/docs/16/functions-subquery.html" }
