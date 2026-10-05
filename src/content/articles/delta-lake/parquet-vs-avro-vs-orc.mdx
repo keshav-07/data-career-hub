@@ -1,0 +1,69 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Parquet vs Avro vs ORC for Data Engineering"
+seoTitle: "Parquet vs Avro vs ORC for Data Engineering"
+description: "Compare Parquet, ORC and Avro by layout, compression, schema evolution and use case, with a measured size comparison and how column pruning works in Spark."
+inventoryId: "SUPPORT-07"
+technology: ["delta-lake", "spark"]
+topic: ["file-formats", "comparison"]
+difficulty: "Intermediate"
+related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/transactions-schema-evolution"]
+sources: [{"label": "Apache Parquet documentation", "url": "https://parquet.apache.org/docs/"}, {"label": "Apache ORC documentation", "url": "https://orc.apache.org/docs/"}, {"label": "Apache Avro documentation", "url": "https://avro.apache.org/docs/"}]
+versionContext: "Measurements taken with PySpark 4.2 default writers on synthetic data; your sizes will differ"
+---
+
+The first question is **row or column?** Parquet and ORC store data by column; Avro stores it by row. That determines what each is good at.
+
+| | Parquet | ORC | Avro |
+|--|---------|-----|------|
+| Layout | Columnar | Columnar | Row-based |
+| Best for | Analytics, lakehouse tables | Analytics (strong in the Hive ecosystem) | Streaming records, messages, write-heavy ingestion |
+| Reads a few columns of many rows | Excellent | Excellent | Reads whole rows |
+| Schema | Embedded in file | Embedded in file | Embedded; strong schema-evolution rules |
+| Typical ecosystem | Spark, Delta Lake, Iceberg, warehouses | Hive, Spark | Kafka, schema registries |
+
+## Why columnar wins for analytics
+
+Analytical queries usually read a few columns across many rows. A columnar file stores each column together, so the engine reads only the columns it needs (**column pruning**) and compresses well because similar values sit together. Files also keep per-column statistics, so filters can skip row groups (**predicate pushdown**).
+
+In Spark, selecting one column and filtering it on a Parquet file produces a scan that reads only that column and pushes the filter down:
+
+```text
+FileScan parquet [amount] ... PushedFilters: [IsNotNull(amount), GreaterThan(amount,50.0)],
+ReadSchema: struct<amount:double>
+```
+
+## A measured example
+
+Writing the same 200,000 synthetic rows (five columns) with PySpark 4.2's default settings, as one file each:
+
+| Format | Size |
+|--------|------|
+| JSON | 21,260 KB |
+| CSV | 9,151 KB |
+| Parquet | 2,382 KB |
+| ORC | 1,473 KB |
+
+This is one test on generated data with each format's default compression, not a benchmark. Real ratios depend on your data, compression codec and settings. The direction, though, is typical: columnar formats are several times smaller than text formats.
+
+## Where Avro fits
+
+Avro is compact, row-oriented and schema-first, with well-defined rules for evolving schemas (adding fields with defaults, for example). That makes it a good fit for **messages and streaming ingestion**, especially with a schema registry, where each record is written and read whole. It is a poor fit for analytical scans. In Spark, Avro support is provided by a separate module.
+
+## Choosing
+
+- Lakehouse and analytical tables: **Parquet** (the basis of Delta Lake and Iceberg data files).
+- Existing Hive-centric platform: **ORC** is a reasonable choice.
+- Kafka messages and record-oriented ingestion: **Avro** (or Protobuf), then convert to Parquet for analytics.
+
+## Common mistakes
+
+1. Keeping analytical data in CSV or JSON long-term.
+2. Writing thousands of tiny Parquet files, which wipes out the benefits.
+3. Using Avro for wide analytical tables.
+
+## Key takeaway
+
+Columnar (Parquet, ORC) for analytics; row-based (Avro) for messages and ingestion. Measure on your own data before relying on any size ratio.

@@ -1,0 +1,73 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "CDC Patterns and Failure Modes"
+seoTitle: "CDC Patterns and Failure Modes"
+description: "Compare change data capture approaches (log-based, query-based, triggers, outbox) and the failure modes to design for: ordering, deletes, snapshots and schema changes."
+inventoryId: "SUPPORT-18"
+technology: ["etl-elt", "kafka"]
+topic: ["cdc", "reliability"]
+difficulty: "Advanced"
+related: ["system-designs:change-data-capture-platform", "interview-questions:data-engineering/design-cdc-pipeline", "projects:change-data-capture-pipeline"]
+sources: [{"label": "PostgreSQL documentation: Logical decoding", "url": "https://www.postgresql.org/docs/current/logicaldecoding.html"}, {"label": "Debezium documentation", "url": "https://debezium.io/documentation/"}]
+versionContext: "Concepts apply across databases; connector behaviour varies, so check your connector's documentation"
+---
+
+Change data capture (CDC) copies changes from an operational database to other systems. There are several ways to do it, each with characteristic failure modes.
+
+## Approaches
+
+| Approach | How it works | Captures deletes | Load on source | Notes |
+|----------|--------------|------------------|----------------|-------|
+| **Log-based** | Read the database's transaction log | Yes | Low | Preferred; needs log access and connector operations |
+| **Query-based** | Poll `WHERE updated_at > last_seen` | No (unless soft deletes) | Medium | Misses intermediate changes and rows without updated timestamps |
+| **Triggers** | Database triggers write changes to a table | Yes | Adds write overhead | Couples CDC to the application schema |
+| **Outbox pattern** | Application writes events to an outbox table in the same transaction | As designed | Low | Emits business events rather than raw row changes |
+
+## Failure modes to design for
+
+### Ordering
+
+Changes to one row must be applied in order. Key events by primary key so they share a partition, carry the source log position, and apply only if the incoming position is newer than what is stored.
+
+### Duplicates and replays
+
+Connectors and consumers deliver at least once. Make the apply step idempotent (position-aware `MERGE`).
+
+### Deletes
+
+Log-based CDC emits delete events; query-based CDC cannot see deleted rows at all. Decide whether to hard-delete or soft-delete downstream.
+
+### Initial snapshot
+
+A consistent snapshot plus the log position at which it was taken, then streaming from that position. Without this, changes during the snapshot can be missed or applied twice.
+
+### Log retention and lag
+
+If the connector falls behind longer than the database retains its log, changes are lost and a new snapshot is required. Monitor connector lag and retention headroom.
+
+### Schema changes
+
+Additive changes can flow through; renames and type changes need a coordinated migration. Detect them and pause rather than corrupt the target.
+
+### Transactions
+
+A source transaction may touch several tables. Downstream, those changes may arrive at slightly different times; consumers that need cross-table consistency must account for that.
+
+<Callout tone="info" title="Why log-based is the default">
+
+It sees every change including deletes, preserves order, and adds little load on the source. The cost is operating the connector and managing log retention.
+
+</Callout>
+
+## Common mistakes
+
+1. Polling `updated_at` and assuming deletes and every intermediate change are captured.
+2. Applying changes in arrival order without positions.
+3. No snapshot strategy.
+4. Ignoring log retention until changes are lost.
+
+## Key takeaway
+
+Prefer log-based CDC, key by primary key, apply with position-aware merges, plan snapshots and deletes, and monitor lag against log retention.

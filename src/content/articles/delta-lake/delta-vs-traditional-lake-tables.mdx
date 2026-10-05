@@ -1,0 +1,55 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Delta Lake vs Traditional Data Lake Tables"
+seoTitle: "Delta Lake vs Traditional Data Lake Tables"
+description: "What changes when a folder of Parquet files becomes a Delta table: atomic writes, updates and deletes, schema enforcement, time travel and faster metadata."
+inventoryId: "SUPPORT-09"
+technology: ["delta-lake"]
+topic: ["comparison", "lakehouse"]
+difficulty: "Intermediate"
+prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
+related: ["interview-questions:delta-lake/what-delta-lake-solves", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
+sources: [{"label": "Delta Lake documentation", "url": "https://docs.delta.io/"}]
+versionContext: "Describes Delta Lake 3.x; comparable features exist in Apache Iceberg and Apache Hudi"
+---
+
+A "traditional" lake table is a directory of Parquet files, often with partition folders and an entry in a metastore. A Delta table is the same Parquet files **plus a transaction log**. Here is what that log changes in day-to-day pipeline work.
+
+| Task | Plain Parquet directory | Delta table |
+|------|-------------------------|-------------|
+| Job fails halfway through a write | Partial files visible to readers | Nothing visible until the commit |
+| Two jobs write at once | Possible corruption or lost files | Optimistic concurrency; conflicting commit fails cleanly |
+| Fix one wrong row | Rewrite the whole partition yourself | `UPDATE` / `DELETE` / `MERGE` |
+| Upsert from a CDC feed | Custom, error-prone code | `MERGE` |
+| Wrong schema arrives | Written anyway; readers break later | Rejected unless evolution is enabled |
+| "What did this table look like yesterday?" | Not possible without backups | Time travel |
+| Listing millions of files | Slow on object storage | Read from the log and checkpoints |
+| Compact small files safely | Risky while readers are active | `OPTIMIZE` as a transaction |
+
+## What stays the same
+
+- Data files are still Parquet, so storage costs and compression are similar.
+- Partitioning and file sizing still matter.
+- Your Spark and SQL code is mostly unchanged; you write `format("delta")` instead of `format("parquet")`.
+
+## What you take on
+
+- **Maintenance**: compaction and `VACUUM` to remove unreferenced files.
+- **Retention decisions**: time travel only reaches as far back as retained files and log entries.
+- **Compatibility**: readers must understand the table format (most modern engines do, but check versions and features).
+
+## Migrating
+
+Delta Lake can convert an existing Parquet directory in place (`CONVERT TO DELTA`), which creates a log over the existing files. After conversion, change all writers to write through Delta; a writer that keeps adding plain files behind the log's back will make the table inconsistent.
+
+<Callout tone="warning" title="All writers must use the format">
+
+The guarantees only hold if every writer commits through the transaction log. Audit jobs and tools that write to the path before migrating.
+
+</Callout>
+
+## Key takeaway
+
+Delta keeps the Parquet files and adds a log, which turns them into a table with atomic writes, row-level changes, schema enforcement and history. In exchange you schedule maintenance and make every writer use the format.

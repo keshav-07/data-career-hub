@@ -1,0 +1,73 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Schema Evolution: Safe Design Patterns"
+seoTitle: "Schema Evolution: Safe Design Patterns"
+description: "Patterns for evolving data schemas without breaking consumers: additive changes, expand-and-contract migrations, contracts, versioned events and handling type changes."
+inventoryId: "SUPPORT-10"
+technology: ["delta-lake", "data-engineering"]
+topic: ["schema-evolution", "data-contracts"]
+difficulty: "Advanced"
+prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
+related: ["interview-questions:delta-lake/schema-evolution-safety", "system-designs:kafka-ingestion-system"]
+sources: [{"label": "Delta Lake documentation: Schema validation and evolution", "url": "https://docs.delta.io/latest/delta-batch.html#schema-validation"}, {"label": "Apache Avro specification: Schema resolution", "url": "https://avro.apache.org/docs/1.12.0/specification/#schema-resolution"}]
+versionContext: "Patterns apply to table formats, warehouses and event schemas; exact support for type changes varies by engine"
+---
+
+Schemas change because businesses change. The goal is to change them **without breaking the people and pipelines that read the data.**
+
+## Classify the change first
+
+| Change | Compatibility | Default approach |
+|--------|---------------|------------------|
+| Add an optional (nullable) column | Backward compatible | Add it; old readers ignore it |
+| Add a required column | Breaks old writers or rows | Add as nullable, backfill, then enforce |
+| Widen a type | Usually compatible, check support | Allowed where the engine supports it |
+| Narrow or change a type | Breaking | Expand and contract |
+| Rename a column | Breaking for readers | Expand and contract |
+| Remove a column | Breaking for readers | Deprecate, then remove |
+
+## Pattern 1: additive by default
+
+Most changes can be made additive. New information goes in new nullable columns; nothing existing changes meaning. Make this the team default and many problems never happen.
+
+## Pattern 2: expand and contract
+
+For a rename or type change (`amount` string → `amount_decimal`):
+
+1. **Expand**: add `amount_decimal`; write both columns.
+2. **Backfill**: populate the new column for historical rows.
+3. **Migrate readers**: update every consumer to the new column.
+4. **Contract**: stop writing the old column, then drop it after a notice period.
+
+Each step is reversible and no consumer breaks.
+
+## Pattern 3: contracts at the boundary
+
+A **data contract** states the schema, meaning, keys and freshness a producer promises. Validate incoming data against it (schema registry for events, schema checks for batch loads) so violations are caught where they enter, not three layers downstream.
+
+## Pattern 4: versioned events
+
+For event streams, use a schema registry with a compatibility rule (for example backward compatibility, so new readers can read old data and fields are added with defaults). If a change cannot be compatible, publish a new event version or topic and run both during migration.
+
+## Pattern 5: explicit, not automatic, evolution
+
+Automatic schema merging is convenient for raw landing tables, where capturing whatever arrives is the point. For curated tables, make evolution explicit (`ALTER TABLE ... ADD COLUMNS`, reviewed in code) so a typo upstream cannot silently create a new column.
+
+<Callout tone="info" title="Tell people">
+
+Even compatible changes surprise someone. Announce schema changes, document them in the catalog, and give consumers a deprecation window for breaking ones.
+
+</Callout>
+
+## Common mistakes
+
+1. Renaming a column in place.
+2. Enabling automatic merge on curated tables.
+3. Changing the meaning of a column without changing its name.
+4. No owner or notice process for schema changes.
+
+## Key takeaway
+
+Prefer additive changes, use expand-and-contract for breaking ones, validate contracts at the boundary, and keep evolution of curated tables explicit.

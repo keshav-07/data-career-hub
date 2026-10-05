@@ -1,0 +1,61 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Kafka vs Queue-Based Messaging for Data Pipelines"
+seoTitle: "Kafka vs Message Queues for Data Pipelines"
+description: "When to use a distributed log like Kafka and when a traditional message queue fits better: retention, replay, ordering, fan-out, per-message acknowledgement and operations."
+inventoryId: "SUPPORT-06"
+technology: ["kafka"]
+topic: ["comparison", "messaging"]
+difficulty: "Intermediate"
+prerequisites: ["articles:kafka/topics-partitions-consumer-groups"]
+related: ["system-designs:kafka-ingestion-system", "interview-questions:kafka/at-least-once-delivery"]
+sources: [{"label": "Apache Kafka documentation: Introduction", "url": "https://kafka.apache.org/intro"}]
+versionContext: "Conceptual; individual queue products differ, and Kafka has added queue-like consumption features in recent releases"
+---
+
+Both move messages between systems. They are built around different models, and that decides which fits a data pipeline.
+
+| | Distributed log (Kafka) | Message queue (typical) |
+|--|-------------------------|-------------------------|
+| Model | Append-only log; consumers track their own position | Messages delivered to a consumer and removed after acknowledgement |
+| Retention | Time- or size-based, independent of consumption | Usually until consumed (or expired) |
+| Replay | Yes: reset the offset and read again | Generally no, once acknowledged |
+| Many independent consumers | Natural: each consumer group reads everything | Needs fan-out (topics/exchanges) configured per subscriber |
+| Ordering | Per partition | Varies; often per queue, weakened by multiple consumers |
+| Work distribution | By partition | Per message, flexible |
+| Typical strengths | High-throughput event streams, CDC, replayable pipelines | Task queues, per-message work, request decoupling |
+
+## Choose a log when
+
+- Several systems need the **same** events (lakehouse, search, alerts).
+- You need to **replay** history after a bug or to bootstrap a new consumer.
+- Throughput is high and events are part of an ongoing stream.
+- Per-key ordering matters (all changes for one order in sequence).
+
+## Choose a queue when
+
+- Each message is a **unit of work** that one worker should do once (resize an image, send an email).
+- You want per-message acknowledgement, retries and dead-lettering without managing offsets.
+- Volumes are moderate and replay is not needed.
+
+## In data engineering
+
+Most pipeline use cases (event streaming, CDC, feeding a lakehouse) fit the log model because replay and multiple consumers are valuable. Task orchestration between pipeline steps is usually handled by an orchestrator, not by either.
+
+<Callout tone="info" title="The boundary is moving">
+
+Recent Kafka releases add queue-style consumption options, and some queue products add streams and replay. Compare the specific products and versions you would run.
+
+</Callout>
+
+## Common mistakes
+
+1. Using a queue where consumers later need to replay history.
+2. Using Kafka for a small task queue and taking on its operational overhead.
+3. Expecting global ordering from either.
+
+## Key takeaway
+
+Logs retain and replay events for many consumers; queues distribute units of work and forget them. Pick by replay, fan-out and ordering needs.

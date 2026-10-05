@@ -1,0 +1,62 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Pipeline Observability Fundamentals"
+seoTitle: "Data Pipeline Observability Fundamentals"
+description: "What to measure and alert on in data pipelines: run status, duration, volume, freshness, quality results, lag and lineage, so problems are found before consumers notice."
+inventoryId: "SUPPORT-13"
+technology: ["etl-elt", "data-engineering"]
+topic: ["observability", "monitoring"]
+difficulty: "Intermediate"
+related: ["articles:etl-elt/data-quality-checks-contracts", "articles:etl-elt/pipeline-reliability-and-retries", "interview-questions:data-engineering/investigate-slow-pipeline"]
+sources: [{"label": "Apache Airflow documentation: Logging and monitoring", "url": "https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/index.html"}]
+versionContext: "Tool-neutral"
+---
+
+A pipeline can succeed and still produce wrong or late data. **Observability** means you can tell, from signals you already collect, whether data is arriving on time, in the right amount and with the right content, and where to look when it is not.
+
+## The signals
+
+| Signal | Question | Example metric |
+|--------|----------|----------------|
+| Run status | Did it run and succeed? | Success/failure per task |
+| Duration | Is it getting slower? | Runtime per task vs recent baseline |
+| Volume | Is the amount plausible? | Rows in, rows out, rows rejected |
+| Freshness | Is the data current? | Time since last successful publish per table |
+| Quality | Is it correct? | Check results per run |
+| Lag (streaming) | Are we keeping up? | Consumer lag, end-to-end latency |
+| Lineage | What is affected? | Upstream and downstream dependencies |
+
+## Alert on outcomes, not just failures
+
+The most important alert is **freshness**: "table X has not been updated in N hours". It catches failures, stuck runs, skipped schedules and silent upstream outages, all with one rule. Add volume and quality alerts next. Task-failure alerts are necessary but not sufficient.
+
+## Make runs self-describing
+
+Write a small audit record for every run: pipeline, data interval, start and end time, rows read, written and rejected, check results and code version. That one table answers most incident questions and feeds dashboards and baselines.
+
+## Structured logs
+
+Log with context (run id, data interval, table, file, row counts) in a consistent, parseable format, so you can search for "everything that happened to 2026-10-01".
+
+## Lineage
+
+When a table is wrong, lineage tells you which upstream table or job to inspect and which downstream dashboards to warn. Many catalogs and orchestrators capture lineage automatically; make sure yours does for production pipelines.
+
+<Callout tone="info" title="Baselines beat fixed numbers">
+
+Compare duration and volume with the same weekday over recent weeks. Fixed thresholds generate false alarms on weekends, month ends and holidays.
+
+</Callout>
+
+## Common mistakes
+
+1. Monitoring only task failures.
+2. No record of row counts per run.
+3. Alerts with no owner or runbook.
+4. Too many alerts, all ignored.
+
+## Key takeaway
+
+Measure status, duration, volume, freshness, quality and lag per run, alert first on freshness, and keep an audit record that explains every run.

@@ -1,0 +1,62 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "JSON vs Parquet for Analytics Pipelines"
+seoTitle: "JSON vs Parquet for Analytics Pipelines"
+description: "Why raw JSON is convenient to land but expensive to query, how Parquet fixes size, types and scan cost, and a practical pattern for converting between them."
+inventoryId: "SUPPORT-08"
+technology: ["delta-lake", "spark"]
+topic: ["file-formats", "comparison"]
+difficulty: "Beginner"
+related: ["articles:delta-lake/parquet-vs-avro-vs-orc", "articles:pyspark/dataframes-and-schemas"]
+sources: [{"label": "Spark documentation: JSON files", "url": "https://spark.apache.org/docs/latest/sql-data-sources-json.html"}, {"label": "Spark documentation: Parquet files", "url": "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html"}]
+versionContext: "Measurements and behaviour checked with PySpark 4.2"
+---
+
+APIs and applications produce JSON, so pipelines receive a lot of it. JSON is a fine **landing** format and a poor **analytics** format.
+
+| | JSON (newline-delimited) | Parquet |
+|--|--------------------------|---------|
+| Human-readable | Yes | No |
+| Schema | Implicit; inferred on read | Explicit, stored in the file |
+| Types | Strings, numbers, booleans; dates are strings | Rich types (dates, timestamps, decimals) |
+| Size | Large: field names repeated on every row | Compact columnar compression |
+| Read a few columns | Must parse every row fully | Reads only needed columns |
+| Nested data | Natural | Supported (structs, arrays, maps) |
+
+## The cost of querying JSON
+
+In a PySpark 4.2 test, the same 200,000 rows took 21,260 KB as JSON and 2,382 KB as Parquet. Size is only part of it: every JSON query parses text and repeated field names, and schema inference requires an extra pass over the data. Inference also has side effects you might not expect; Spark's inferred JSON schema lists fields in alphabetical order rather than the order they appear in the data.
+
+## A practical pattern
+
+1. **Land** raw JSON unchanged (bronze), partitioned by arrival date. It preserves exactly what the source sent.
+2. **Parse** with an explicit schema, cast types (timestamps, decimals), and capture malformed records.
+3. **Write** Parquet or a Parquet-based table format (silver) for all downstream use.
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.getOrCreate()
+schema = "event_id STRING, user_id BIGINT, event_type STRING, event_ts TIMESTAMP, amount DECIMAL(12,2)"
+
+(spark.read.schema(schema).json("raw/events/dt=2026-10-01/")
+      .write.mode("overwrite").parquet("silver/events/dt=2026-10-01/"))
+```
+
+## When to keep JSON
+
+- Raw landing and replay.
+- Small configuration or reference files.
+- Truly schemaless payloads you store as a single column for later parsing.
+
+## Common mistakes
+
+1. Building dashboards directly on raw JSON.
+2. Relying on schema inference in production.
+3. Storing timestamps as strings in the analytics layer.
+
+## Key takeaway
+
+Land JSON, analyse Parquet. Convert once, with an explicit schema, as early as possible.

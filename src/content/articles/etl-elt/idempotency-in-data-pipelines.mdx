@@ -1,0 +1,69 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Idempotency in Data Pipelines"
+seoTitle: "Idempotency in Data Pipelines"
+description: "Make every pipeline step safe to rerun: deterministic inputs, overwrite and merge patterns, atomic publishing, idempotent consumers and guarded side effects."
+inventoryId: "SUPPORT-11"
+technology: ["etl-elt", "data-engineering"]
+topic: ["idempotency", "reliability"]
+difficulty: "Intermediate"
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:python/idempotent-csv-loader", "interview-questions:airflow/retries-and-idempotency", "articles:etl-elt/pipeline-reliability-and-retries"]
+sources: [{"label": "Apache Airflow documentation: Best practices", "url": "https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html"}]
+versionContext: "Patterns are engine-neutral; SQL shown in standard form"
+---
+
+An operation is **idempotent** if doing it twice has the same effect as doing it once. In pipelines this is the property that makes retries, backfills, duplicate triggers and replays safe, so it is worth designing in from the start.
+
+## Where reruns come from
+
+Automatic retries, manual reruns after a fix, backfills, schedulers firing twice, streaming consumers reprocessing after a crash, and producers resending messages. In a long-lived system, every step will run more than once eventually.
+
+## The four ingredients
+
+### 1. Deterministic scope
+
+Each run processes a precisely defined slice: a date partition, an offset range, a set of files. The slice comes from parameters (the run's data interval), never from "now". Rerunning the same parameters reads the same input.
+
+### 2. Replace or merge, never blind append
+
+| Pattern | SQL shape | Use when |
+|---------|-----------|----------|
+| Partition overwrite | `INSERT OVERWRITE ... PARTITION (dt=...)` or delete-then-insert for the slice | Output is naturally partitioned by the run's slice |
+| Merge / upsert | `MERGE ... ON key WHEN MATCHED UPDATE WHEN NOT MATCHED INSERT` | Rows have a stable unique key (dimensions, CDC) |
+| Build and swap | Build a new table, then rename or swap atomically | Small tables rebuilt fully |
+| Insert-if-absent | Insert only keys not yet present | Immutable events with unique ids |
+
+### 3. Atomic publish
+
+Readers must never see half a run. Use transactions, table formats with atomic commits, or write to a staging location and swap.
+
+### 4. Guarded side effects
+
+Emails, webhooks, payments and API writes are not undone by overwriting a table. Record each side effect with a key (run id plus entity id) and check before acting.
+
+## Streaming consumers
+
+Delivery is usually at-least-once, so the sink must tolerate duplicates: upsert on an event id, or deduplicate within a bounded window before writing.
+
+## Testing idempotency
+
+The simplest and most valuable pipeline test: run the step twice on the same input and assert the output is identical (row count, keys, checksums of key aggregates). The [idempotent CSV loader tutorial](/python/idempotent-csv-loader/) shows this test in Python.
+
+<Callout tone="warning" title="Append is not automatically wrong">
+
+Append-only is fine for immutable event logs **if** each event has a unique id and duplicates are removed downstream. What is wrong is appending without any way to detect a duplicate.
+
+</Callout>
+
+## Common mistakes
+
+1. Using the current date to select input.
+2. Delete-then-insert without a transaction.
+3. Upserting without a truly unique key.
+4. Forgetting side effects.
+
+## Key takeaway
+
+Fix the input slice, replace or merge instead of appending, publish atomically, and guard side effects. Then test by running twice.

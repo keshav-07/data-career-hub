@@ -1,0 +1,69 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Quality: Checks, Contracts and Failure Handling"
+seoTitle: "Data Quality: Checks, Contracts and Failures"
+description: "Build a data quality practice: which checks to run where, how contracts set expectations between teams, and how to decide whether a failure blocks or alerts."
+inventoryId: "SUPPORT-12"
+technology: ["etl-elt", "data-engineering"]
+topic: ["data-quality", "data-contracts"]
+difficulty: "Intermediate"
+related: ["interview-questions:data-engineering/data-quality-checks", "articles:delta-lake/schema-evolution-patterns", "articles:etl-elt/pipeline-observability"]
+sources: [{"label": "dbt documentation: Data tests", "url": "https://docs.getdbt.com/docs/build/data-tests"}]
+versionContext: "Tool-neutral; checks shown as SQL"
+---
+
+Data quality is not a single test suite. It is a set of **expectations**, checked at the right **points**, with a clear **response** when they fail.
+
+## Dimensions to check
+
+| Dimension | Example check |
+|-----------|---------------|
+| Freshness | Latest partition or `loaded_at` within the agreed delay |
+| Volume | Row count within a range learned from history |
+| Schema | Expected columns and types |
+| Uniqueness | Primary key unique |
+| Completeness | Required fields non-null |
+| Validity | Values within ranges or allowed sets |
+| Consistency | Facts reference existing dimensions; totals reconcile with source |
+
+## Where to check
+
+1. **At ingestion**: schema and parseability. Quarantine bad records instead of dropping them silently.
+2. **After transformation**: keys, nulls, relationships and business rules on staging and curated tables.
+3. **Before publishing**: reconciliation with the source and volume checks. This is the last gate before consumers see the data.
+
+## Blocking versus alerting
+
+| Severity | Examples | Response |
+|----------|----------|----------|
+| Critical | Duplicate keys in a fact table, missing required columns, reconciliation failure | Block publish; consumers keep the previous good version |
+| Warning | Volume 20% below normal, unusual distribution | Publish, alert owner to investigate |
+| Informational | Small number of quarantined records | Record and trend |
+
+Blocking only works if publishing is a separate, atomic step (swap, commit or view switch), so failing it leaves the old data in place.
+
+## Data contracts
+
+A **data contract** is an agreement between a producing team and consumers: schema, meaning of fields, keys, freshness and how changes are communicated. Contracts move quality upstream: the producer validates against the contract before publishing, and breaking changes follow a process. They work best for important cross-team datasets, not every table.
+
+## Choosing thresholds
+
+Static thresholds ("at least 10,000 rows") break on weekends and holidays. Compare against a recent baseline for the same weekday, and tune thresholds from observed false alarms.
+
+<Callout tone="info" title="Every check needs an owner">
+
+A check that fails with no owner or runbook becomes noise and is eventually ignored. Assign an owner and a documented response to each critical check.
+
+</Callout>
+
+## Common mistakes
+
+1. Testing only after data is already in dashboards.
+2. Dropping bad records without counting them.
+3. Hundreds of low-value checks and alert fatigue.
+
+## Key takeaway
+
+Check freshness, volume, schema, keys and validity at ingestion, transformation and publish; block on critical failures, alert on anomalies, and formalise expectations for important datasets as contracts.

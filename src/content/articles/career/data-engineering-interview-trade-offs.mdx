@@ -1,0 +1,51 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Engineering Interview Trade-offs: A Practical Guide"
+seoTitle: "Data Engineering Interview Trade-offs Guide"
+description: "The trade-offs interviewers expect Data Engineers to reason about, with how to frame each one: latency vs cost, consistency vs availability, normalisation and more."
+inventoryId: "SUPPORT-19"
+technology: ["career", "data-engineering"]
+topic: ["interview", "system-design"]
+difficulty: "Intermediate"
+section: "career"
+related: ["cheat-sheets:data-engineering-system-design", "system-designs:scalable-batch-pipeline", "articles:career/explain-a-data-engineering-project"]
+versionContext: "Technology-neutral"
+---
+
+Senior interviewers rarely want "the right tool". They want to hear you **name a trade-off, pick a side for this scenario, and say what you give up.** Use this structure:
+
+> "We could do A or B. A gives us X but costs Y. Because the requirement here is Z, I would choose A, and I would mitigate Y by W."
+
+## The trade-offs that come up most
+
+| Trade-off | Lean one way when | Lean the other way when |
+|-----------|-------------------|-------------------------|
+| **Batch vs streaming** | Freshness of hours is acceptable; simplicity and cost matter | Decisions depend on data within seconds or minutes |
+| **ETL vs ELT** | Data must be masked before storage; target cannot compute | Warehouse compute scales; you need to reprocess from raw |
+| **Normalised vs dimensional** | Write-heavy operational data | Read-heavy analytics with simple queries |
+| **Full refresh vs incremental** | Small tables; simplicity | Large tables; cost and runtime matter |
+| **Exactly-once vs at-least-once + idempotency** | Within a system that supports transactions end to end | Across systems (the usual case) |
+| **Partition by date vs by key** | Most queries filter by time | Most queries look up by key (then cluster instead) |
+| **Managed service vs self-hosted** | Small team, speed matters | Strict control, special requirements, very large scale |
+| **Strong vs eventual consistency** | Financial correctness, deduplication | Dashboards that tolerate seconds of delay |
+| **Precompute vs compute on read** | Repeated heavy queries, strict latency | Ad-hoc, rarely used queries |
+| **Wide denormalised tables vs star schema** | One consumer, simple access | Many consumers, shared dimensions |
+
+## How to sound senior
+
+1. **Tie every choice to a requirement** stated by the interviewer, or one you clarified.
+2. **Quantify roughly**: "50 GB a day is fine for a single daily batch."
+3. **Name the cost** of your choice and how you would mitigate it.
+4. **Say when you would revisit**: "If the business later needs 5-minute freshness, I would move ingestion to streaming but keep modelling in batch."
+
+## Common mistakes
+
+1. Picking the newest technology without a requirement.
+2. Listing pros and cons without deciding.
+3. Absolute statements ("always use streaming").
+
+## Key takeaway
+
+State the options, choose for the scenario's requirement, name what you give up and how you mitigate it, and say what would change your mind.

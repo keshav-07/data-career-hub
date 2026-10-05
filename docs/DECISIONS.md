@@ -83,3 +83,16 @@ question exists, so there are no empty hubs.
 
 **D-015 Redirects** for `/data-engineering/interview-preparation/` and `/data-engineering/projects/` (listed in the
 plan's sitemap) point to `/interview/` and `/projects/` instead of duplicating those hubs.
+
+**D-016 Consolidated inventory items (deviation).** Eight Appendix A items share their search intent with a page
+that already exists, and the plan forbids duplicate or doorway intent. They are recorded in
+`docs/content-inventory.json` as covered by the existing page rather than published as near-duplicates:
+PILLAR-01 → `/data-engineering/roadmap/` (same as ROAD-01), SUPPORT-01 → `/etl-elt/etl-vs-elt/`,
+SUPPORT-02 → `/data-warehousing/lake-vs-warehouse-vs-lakehouse/`, SUPPORT-04 → `/etl-elt/batch-vs-streaming/`,
+SUPPORT-05 → `/airflow/dags-scheduling-retries/`, SUPPORT-15 → `/data-warehousing/partitioning-clustering-data-layout/`,
+SUPPORT-16 → `/spark/partitions-shuffles-skew/`, SUPPORT-17 → `/data-warehousing/slowly-changing-dimensions/`.
+Revisit if Search Console shows distinct queries that the existing page does not satisfy.
+
+**D-017 Code verification scope.** SQL examples were executed on SQLite 3.45, Python on Python 3.12, PySpark on
+PySpark 4.2 (local mode), and Airflow DAGs parsed on Airflow 3.3. Snowflake, Databricks, Kafka-cluster and dbt
+examples could not be executed in the build environment; those pages say so in their version context.

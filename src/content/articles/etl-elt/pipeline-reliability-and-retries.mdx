@@ -1,0 +1,66 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Pipeline Reliability and Retry Design"
+seoTitle: "Data Pipeline Reliability and Retry Design"
+description: "Design pipelines that recover on their own: classify failures, retry with backoff and limits, isolate bad records, make steps idempotent and plan backfills."
+inventoryId: "SUPPORT-14"
+technology: ["etl-elt", "data-engineering"]
+topic: ["reliability", "retries"]
+difficulty: "Intermediate"
+related: ["articles:etl-elt/idempotency-in-data-pipelines", "interview-questions:python/exceptions-in-pipelines", "articles:airflow/dags-scheduling-retries"]
+sources: [{"label": "Apache Airflow documentation: Tasks (retries)", "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/tasks.html"}]
+versionContext: "Tool-neutral; retry options shown in Airflow terms"
+---
+
+Reliable pipelines are not pipelines that never fail. They are pipelines where **failures are expected, contained and recoverable**, usually without a human.
+
+## Classify failures
+
+| Class | Examples | Strategy |
+|-------|----------|----------|
+| Transient | Timeouts, throttling, lock contention, preempted nodes | Retry with exponential backoff and a cap |
+| Data | A malformed record, an unexpected value | Quarantine and count; fail if the rate is high |
+| Upstream not ready | Source file late | Wait (sensor or schedule offset) with a timeout, then alert |
+| Systemic | Bad credentials, schema change, bug | Fail fast and alert; retrying will not help |
+
+Retrying a systemic failure only delays the alert.
+
+## Retry design
+
+- **Exponential backoff with jitter**: wait longer after each failure, with randomness so many tasks do not retry at the same moment.
+- **Limits**: a small number of attempts and a maximum delay.
+- **Retry the smallest unit**: small tasks repeat less work when they fail.
+- **Idempotency first**: a retry must be safe to run (see [idempotency](/etl-elt/idempotency-in-data-pipelines/)).
+
+## Timeouts
+
+A task with no timeout can hang forever and block downstream work silently. Set execution timeouts on tasks and on calls to external services.
+
+## Isolate failures
+
+- Quarantine bad records rather than failing a whole batch for one row.
+- Separate independent sources into separate tasks so one failing source does not stop the others.
+- Use circuit breakers for unstable APIs: after repeated failures, stop calling for a while.
+
+## Recovery and backfills
+
+Plan how to recover before you need to: reprocess a date range with the same code path (backfill), limit concurrency so backfills do not starve daily runs, and keep raw data so you can rebuild.
+
+<Callout tone="warning" title="Silent success is the worst failure">
+
+A pipeline that "succeeds" while writing zero rows looks healthy. Volume and freshness checks turn silent failures into visible ones.
+
+</Callout>
+
+## Common mistakes
+
+1. Unlimited retries without backoff.
+2. Retrying non-transient errors.
+3. No timeouts.
+4. Large tasks that redo hours of work on retry.
+
+## Key takeaway
+
+Classify failures, retry only transient ones with backoff and limits, set timeouts, isolate bad data, make every step idempotent and plan backfills in advance.
