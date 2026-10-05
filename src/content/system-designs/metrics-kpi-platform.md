@@ -152,7 +152,7 @@ FROM daily_conversion;
 
  ratio_of_sums
 ---------------
-        0.0307
+        0.0329
 ```
 
 The wrong method more than doubles the conversion rate because the small German rows (10% and 11%) count as much as the large UK rows (3%). So metric tables store **components**: numerators and denominators, sums and counts, never finished ratios or averages.
