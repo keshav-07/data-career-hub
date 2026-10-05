@@ -70,6 +70,7 @@ related:
   - "articles:etl-elt/data-quality-checks-contracts"
   - "system-designs:reporting-analytics-platform"
 previous: "system-designs:metrics-kpi-platform"
+next: "system-designs:scalable-batch-pipeline"
 versionContext: "dbt and Snowflake snippets are illustrative (dbt 1.9+ syntax for microbatch) and were not executed in this environment."
 sources:
   - { label: "dbt documentation: introduction", url: "https://docs.getdbt.com/docs/introduction" }
