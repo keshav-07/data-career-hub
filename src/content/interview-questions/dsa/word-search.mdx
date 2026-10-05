@@ -1,0 +1,173 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Word Search: Trace a Word Through a Letter Grid with DFS Backtracking"
+seoTitle: "Word Search: Grid DFS with Backtracking"
+description: "Decide whether a word can be traced through adjacent grid cells without reusing a cell, using DFS backtracking with in-place marking, plus tests."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Try every cell as a start. From a cell that matches the current letter, mark it as used, recurse into the four neighbours with the next letter, then restore it. Return true as soon as the index reaches the end of the word. The time is O(R * C * 3^L) for word length L (four choices at the first step, at most three afterwards) and the extra space is O(L) for the recursion."
+followUps: ["How would you speed this up when you must search for many words?", "What cheap checks can reject the word before any search?", "Why does starting from the rarer end of the word help?"]
+previous: "interview-questions:dsa/combination-sum-ii"
+next: "interview-questions:dsa/palindrome-partitioning"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a grid of letters and a word, decide whether the word can be spelled by a path of cells. The path moves
+horizontally or vertically between neighbouring cells, and one cell cannot be used twice in the same path.
+
+This is widely known as LeetCode 79, "Word Search". The multi-word version is
+[Word Search II](/interview/dsa/word-search-ii/).
+
+Assume a grid up to 6 by 6 and a word up to 15 letters.
+
+## Examples
+
+```text
+grid:
+  d o g
+  a t e
+  m i l
+
+"dog"   -> True    d(0,0) o(0,1) g(0,2)
+"date"  -> True    d(0,0) a(1,0) t(1,1) e(1,2)
+"tile"  -> True    t(1,1) i(2,1) l(2,2) e(1,2)
+"toga"  -> False   t(1,1) o(0,1) g(0,2), but no 'a' next to g(0,2)
+"dad"   -> False   needs the only 'd' twice
+```
+
+## Approach 1: explore every path, copying a visited set
+
+A direct recursion carries a set of visited coordinates and copies it at every step:
+
+```python
+def exist_brute(grid, word):
+    if not word:
+        return True
+    rows, cols = len(grid), len(grid[0]) if grid else 0
+
+    def dfs(r, c, i, visited):
+        if grid[r][c] != word[i]:
+            return False
+        if i == len(word) - 1:
+            return True
+        visited = visited | {(r, c)}             # copy: O(L) per step
+        for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+            if 0 <= nr < rows and 0 <= nc < cols and (nr, nc) not in visited:
+                if dfs(nr, nc, i + 1, visited):
+                    return True
+        return False
+
+    return any(dfs(r, c, 0, frozenset()) for r in range(rows) for c in range(cols))
+```
+
+It is correct, but each step copies the visited set, adding an O(L) factor.
+
+## Approach 2: optimal, in-place backtracking
+
+### Template
+
+```text
+dfs(r, c, i):
+    if i == len(word): return True
+    if (r, c) is outside the grid or grid[r][c] != word[i]: return False
+    mark grid[r][c] as used          # choose
+    found = any neighbour dfs(nr, nc, i + 1)   # explore
+    restore grid[r][c]               # un-choose
+    return found
+```
+
+Marking in place (overwriting the letter with a sentinel) replaces the visited set with O(1) work.
+
+### Python solution
+
+```python
+from collections import Counter
+
+def exist(grid, word):
+    if not word:
+        return True
+    if not grid or not grid[0]:
+        return False
+    rows, cols = len(grid), len(grid[0])
+
+    # Cheap rejections: too long, or not enough of some letter.
+    if len(word) > rows * cols:
+        return False
+    have = Counter(ch for row in grid for ch in row)
+    if any(have[ch] < n for ch, n in Counter(word).items()):
+        return False
+    # Start from the rarer end to prune earlier.
+    if have[word[0]] > have[word[-1]]:
+        word = word[::-1]
+
+    def dfs(r, c, i):
+        if i == len(word):
+            return True
+        if r < 0 or r >= rows or c < 0 or c >= cols or grid[r][c] != word[i]:
+            return False
+        saved, grid[r][c] = grid[r][c], "#"
+        found = (dfs(r + 1, c, i + 1) or dfs(r - 1, c, i + 1)
+                 or dfs(r, c + 1, i + 1) or dfs(r, c - 1, i + 1))
+        grid[r][c] = saved
+        return found
+
+    return any(dfs(r, c, 0) for r in range(rows) for c in range(cols))
+```
+
+Reversing the word is safe because a path read backwards is still a valid path.
+
+### Complexity
+
+- Time: O(R * C * 3^L). Each of the R * C starts explores at most 4 neighbours at the first step and 3 afterwards,
+  because the cell you came from is marked.
+- Space: O(L) recursion depth. The letter count check uses O(alphabet) space.
+
+## Tests
+
+```python
+def g():
+    return [list("dog"), list("ate"), list("mil")]
+
+for fn in (exist, exist_brute):
+    assert fn(g(), "dog")
+    assert fn(g(), "date")
+    assert fn(g(), "tile")
+    assert not fn(g(), "toga")            # 'a' not adjacent to 'g'
+    assert not fn(g(), "dad")             # would reuse the only 'd'
+    assert fn([["x"]], "x")               # single cell
+    assert not fn([["x"]], "xx")
+    assert fn(g(), "")                    # empty word is trivially present
+
+assert not exist([], "a")                 # empty grid
+assert not exist(g(), "dogatemilx")       # longer than the grid
+grid = g()
+exist(grid, "date")
+assert grid == g()                        # grid restored
+
+# A snake path that needs backtracking out of a dead end
+assert exist([list("aab"), list("aaa")], "aaaab")
+```
+
+## Edge cases and pitfalls
+
+- **Not restoring the cell** after a failed branch, which hides letters from later attempts.
+- **Restoring too late.** If you `return True` before the restore, the grid stays modified. That is fine when the
+  caller does not reuse the grid, but say so, or restore before returning as above.
+- **Reusing a cell**, for example accepting `dad` in a grid with a single `d`.
+- **Bounds checks after indexing.** Check the coordinates before reading `grid[r][c]`, or negative indices silently
+  wrap around in Python.
+- **Diagonals.** They are not allowed unless the interviewer says otherwise.
+
+## Where this shows up in data engineering
+
+This is a constrained path search on a small graph. The transferable parts are cheap pre-checks before expensive
+work (the letter count is a tiny version of checking partition statistics before scanning) and undoing state after
+exploring, which is how backtracking parsers and schema matchers work.

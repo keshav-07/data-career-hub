@@ -1,0 +1,160 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Palindrome Partitioning: Split a String into Palindromes by Backtracking"
+seoTitle: "Palindrome Partitioning: Backtracking + DP"
+description: "List every way to cut a string into palindromic pieces using backtracking over cut positions, with a precomputed palindrome table, tests and pitfalls."
+technology: ["dsa"]
+topic: ["backtracking", "dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+shortAnswer: "Backtrack over the position of the next cut: from index start, try every end index whose substring s[start..end] is a palindrome, add it to the path and recurse from end + 1; record the path when start reaches the end of the string. Precompute an n by n table of which substrings are palindromes so each check is O(1). There can be 2^(n-1) partitions, so the time is O(n * 2^n) and the table costs O(n^2) space."
+followUps: ["How would you return only the minimum number of cuts (Palindrome Partitioning II)?", "How do you fill the palindrome table in O(n^2)?", "How many partitions does a string of identical letters have?"]
+previous: "interview-questions:dsa/word-search"
+next: "interview-questions:dsa/letter-combinations-of-a-phone-number"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string, return every way to split it into consecutive pieces so that each piece reads the same forwards and
+backwards. Every character must belong to exactly one piece, and the pieces keep their original order.
+
+This is widely known as LeetCode 131, "Palindrome Partitioning".
+
+Assume a string of up to 16 lowercase letters.
+
+## Examples
+
+```text
+"noon"  -> ["n","o","o","n"], ["n","oo","n"], ["noon"]
+"abc"   -> ["a","b","c"]
+"aab"   -> ["a","a","b"], ["aa","b"]
+"z"     -> ["z"]
+```
+
+## Approach 1: backtracking with a direct palindrome check
+
+Choose the first piece, check it, and recurse on the rest.
+
+```python
+def partition_brute(s):
+    result, path = [], []
+
+    def backtrack(start):
+        if start == len(s):
+            result.append(path[:])
+            return
+        for end in range(start, len(s)):
+            piece = s[start:end + 1]
+            if piece == piece[::-1]:            # O(length) check each time
+                path.append(piece)
+                backtrack(end + 1)
+                path.pop()
+
+    backtrack(0)
+    return result
+```
+
+This is already the right search. Its weakness is that the same substring is checked for being a palindrome many
+times across different branches.
+
+## Approach 2: optimal, backtracking with a palindrome table
+
+### The table
+
+Let `pal[i][j]` be true when `s[i..j]` (inclusive) is a palindrome.
+
+- Base cases: every single character is a palindrome; two characters are a palindrome when they are equal.
+- Recurrence: `pal[i][j] = s[i] == s[j] and pal[i + 1][j - 1]` for longer substrings.
+- Fill order: `i` from the end of the string backwards, so `pal[i + 1][...]` is ready.
+
+For `"aab"` (T marks a palindrome):
+
+| i \ j | 0 (a) | 1 (a) | 2 (b) |
+|---|---|---|---|
+| 0 | T | T | F |
+| 1 | | T | F |
+| 2 | | | T |
+
+### Template
+
+```text
+backtrack(start):
+    if start == n: record path
+    for end in start .. n-1:
+        if pal[start][end]:
+            path.append(s[start..end]); backtrack(end + 1); path.pop()
+```
+
+### Python solution
+
+```python
+def partition(s):
+    size = len(s)
+    pal = [[False] * size for _ in range(size)]
+    for i in range(size - 1, -1, -1):
+        for j in range(i, size):
+            if s[i] == s[j] and (j - i < 2 or pal[i + 1][j - 1]):
+                pal[i][j] = True
+
+    result, path = [], []
+
+    def backtrack(start):
+        if start == size:
+            result.append(path[:])
+            return
+        for end in range(start, size):
+            if pal[start][end]:
+                path.append(s[start:end + 1])
+                backtrack(end + 1)
+                path.pop()
+
+    backtrack(0)
+    return result
+```
+
+### Complexity
+
+- Table: O(n^2) time and space.
+- Search: a string of identical letters has 2^(n-1) partitions (each gap is cut or not), and building each costs
+  O(n), so the worst case is O(n * 2^n). No algorithm can beat the size of the output.
+- Recursion depth: O(n).
+
+## Tests
+
+```python
+def norm(result):
+    return sorted(map(tuple, result))
+
+for fn in (partition, partition_brute):
+    assert norm(fn("noon")) == norm([["n", "o", "o", "n"], ["n", "oo", "n"], ["noon"]])
+    assert norm(fn("abc")) == [("a", "b", "c")]
+    assert norm(fn("aab")) == norm([["a", "a", "b"], ["aa", "b"]])
+    assert fn("z") == [["z"]]                       # single character
+    assert fn("") == [[]]                           # empty string: one empty partition
+
+# Identical letters: every gap may be cut, so 2^(n-1) partitions
+assert len(partition("aaaaa")) == 2 ** 4
+
+# Agreement on a mixed string
+assert norm(partition("abacaba")) == norm(partition_brute("abacaba"))
+```
+
+## Edge cases and pitfalls
+
+- **Inclusive versus exclusive ends.** The table uses inclusive `j`; slicing needs `end + 1`. Mixing them up drops
+  the last character.
+- **Fill order of the table.** `pal[i][j]` depends on `pal[i + 1][j - 1]`, so `i` must go from high to low.
+- **Empty string.** Decide and state the convention; here it returns one empty partition, matching the recursion.
+- **Copying the path** before recording it.
+- **Minimum cuts only.** If the interviewer only wants the count of cuts, switch to a 1D DP over prefixes, which is
+  O(n^2) instead of exponential.
+
+## Where this shows up in data engineering
+
+There is no direct pipeline use. The useful lesson is splitting a problem into "precompute a lookup table, then
+search using it", which is the same reason you build dimension lookups or bloom filters before a heavy join.

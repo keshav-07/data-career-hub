@@ -1,0 +1,142 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Combination Sum II: Use Each Value Once and Avoid Duplicate Answers"
+seoTitle: "Combination Sum II: No Reuse, No Duplicates"
+description: "Find unique combinations that sum to a target when each value may be used once and the input repeats values, using sorted backtracking and pruning."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Sort the candidates and backtrack with a start index and the remaining total. Recurse with i + 1 because each element may be used once, skip a candidate equal to its left neighbour at the same level (i > start and c[i] == c[i - 1]) so the same combination is not built twice, and break when a candidate exceeds the remainder. The worst case is O(n * 2^n) time and O(n) extra space."
+followUps: ["What changes if you only need to know whether any combination exists?", "How would you count combinations with dynamic programming instead?", "Why can you break rather than continue when a candidate is too large?"]
+previous: "interview-questions:dsa/subsets-ii"
+next: "interview-questions:dsa/word-search"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You have a list of positive integers that may contain repeats, and a positive target. Return every distinct
+combination of list elements that sums to the target. Each element of the list can be used at most once (so a value
+that appears twice in the list may appear up to twice in one combination). The result must not contain the same
+combination twice.
+
+This is widely known as LeetCode 40, "Combination Sum II". It combines the reuse rule of
+[Subsets](/interview/dsa/subsets/) (each element once) with the duplicate rule of
+[Subsets II](/interview/dsa/subsets-ii/), and the pruning of [Combination Sum](/interview/dsa/combination-sum/).
+
+Assume up to 100 candidates between 1 and 50 and a target up to 30.
+
+## Examples
+
+```text
+candidates: [2, 6, 3, 2, 4, 1], target: 7
+answer: [1, 2, 4], [1, 6], [2, 2, 3], [3, 4]
+
+candidates: [4, 4, 4], target: 8
+answer: [4, 4]
+
+candidates: [5, 9], target: 3
+answer: []
+```
+
+## Approach 1: all subsets, filter and deduplicate
+
+```python
+def combination_sum2_brute(candidates, target):
+    nums = sorted(candidates)
+    found = set()
+    for mask in range(1 << len(nums)):
+        chosen = tuple(nums[i] for i in range(len(nums)) if mask >> i & 1)
+        if sum(chosen) == target:
+            found.add(chosen)
+    return [list(c) for c in found]
+```
+
+This is O(n * 2^n) on every input and hopeless beyond about 20 candidates, since it ignores both the target and the
+duplicates while searching.
+
+## Approach 2: optimal, sorted backtracking with skip and break
+
+### The three rules
+
+| Rule | Code | Why |
+|---|---|---|
+| Use each element once | recurse with `i + 1` | the element at `i` is consumed |
+| No duplicate combinations | `if i > start and c[i] == c[i - 1]: continue` | equal siblings give identical subtrees |
+| Prune | `if c[i] > remaining: break` | sorted, so every later candidate is also too big |
+
+### Python solution
+
+```python
+def combination_sum2(candidates, target):
+    nums = sorted(candidates)
+    result, path = [], []
+
+    def backtrack(start, remaining):
+        if remaining == 0:
+            result.append(path[:])
+            return
+        for i in range(start, len(nums)):
+            if i > start and nums[i] == nums[i - 1]:
+                continue
+            if nums[i] > remaining:
+                break
+            path.append(nums[i])
+            backtrack(i + 1, remaining - nums[i])
+            path.pop()
+
+    backtrack(0, target)
+    return result
+```
+
+Trace for sorted `[1, 2, 2, 3, 4, 6]`, target 7: from `[1]` you try 2 (giving `[1, 2, 4]` later), then skip the second
+2 at that level, then 3, 4 and 6 (`[1, 6]`). From `[2]` you can take the second 2 one level deeper (`[2, 2, 3]`), and
+from `[3]` you reach `[3, 4]`.
+
+### Complexity
+
+- Time: O(n * 2^n) in the worst case, because there are at most 2^n subsets and copying one is O(n). Pruning makes
+  real inputs much faster, especially with a small target.
+- Space: O(n) for the recursion depth and the path, excluding the output.
+
+## Tests
+
+```python
+def norm(result):
+    return sorted(tuple(sorted(c)) for c in result)
+
+for fn in (combination_sum2, combination_sum2_brute):
+    assert norm(fn([2, 6, 3, 2, 4, 1], 7)) == [(1, 2, 4), (1, 6), (2, 2, 3), (3, 4)]
+    assert norm(fn([4, 4, 4], 8)) == [(4, 4)]
+    assert fn([5, 9], 3) == []                     # unreachable
+    assert fn([], 5) == []                         # empty input
+    assert norm(fn([5], 5)) == [(5,)]               # single element
+    assert norm(fn([1, 1, 1], 4)) == []             # not enough copies
+
+# Each list element at most once: one 3 cannot make 6
+assert combination_sum2([3], 6) == []
+
+# Agreement on a larger mixed case
+data = [10, 1, 2, 7, 6, 1, 5]
+assert norm(combination_sum2(data, 8)) == norm(combination_sum2_brute(data, 8))
+```
+
+## Edge cases and pitfalls
+
+- **`continue` versus `break`.** Skipping a duplicate is a `continue` (later values may differ); an oversized
+  candidate is a `break` (later values are larger still).
+- **`i > 0` instead of `i > start`.** That blocks `[2, 2, 3]`, because the second 2 at the deeper level is not a
+  sibling of the first.
+- **Recursing with `i`.** That reuses an element, which is Combination Sum I behaviour.
+- **Forgetting to sort.** Both the skip and the break rely on sorted order.
+
+## Where this shows up in data engineering
+
+Exact subset-sum searches appear in reconciliation work: find which unmatched ledger entries add up to a bank
+transfer. It is only feasible for small candidate sets, so in practice you narrow candidates by date and account
+before searching, which is the same pruning idea at a different level.

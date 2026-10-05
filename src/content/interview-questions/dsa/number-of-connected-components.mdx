@@ -1,0 +1,170 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Number of Connected Components in an Undirected Graph with Union-Find"
+seoTitle: "Connected Components: Union-Find or BFS"
+description: "Count the connected components of an undirected graph using union-find with path compression or a BFS over an adjacency list, with complexity and tests."
+technology: ["dsa"]
+topic: ["graphs", "union-find"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Start with n components, one per node. For each edge, union its endpoints with union-find; every union that joins two different sets reduces the count by one, and the final count is the answer. Path compression and union by size make each operation effectively constant, so the total is O(n + E * α(n)) time and O(n) space. A BFS or DFS that launches a new search from every unvisited node gives the same count in O(n + E)."
+followUps: ["Which approach would you choose if edges arrive as a stream?", "How would you return the members of each component?", "How do you compute connected components on a graph too big for one machine?"]
+previous: "interview-questions:dsa/graph-valid-tree"
+next: "interview-questions:dsa/redundant-connection"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given `n` nodes labelled 0 to `n - 1` and a list of undirected edges. Return the number of connected
+components: groups of nodes where every node can reach every other through edges, and no edge leaves the group.
+Isolated nodes count as components of size one.
+
+This is widely known as LeetCode 323, "Number of Connected Components in an Undirected Graph" (a premium problem). It
+is the explicit-graph version of [Number of Islands](/interview/dsa/number-of-islands/).
+
+Assume up to 2,000 nodes and 5,000 edges.
+
+## Examples
+
+```text
+n = 6, edges [[0,1],[1,2],[3,4]]
+components: {0,1,2}, {3,4}, {5}  -> 3
+
+n = 4, edges [[0,1],[1,2],[2,3],[3,0]]  -> 1   (a cycle is still one component)
+n = 3, edges []                         -> 3
+```
+
+## Approach 1: BFS from every unvisited node
+
+```python
+from collections import deque
+
+def count_components_bfs(n, edges):
+    graph = [[] for _ in range(n)]
+    for a, b in edges:
+        graph[a].append(b)
+        graph[b].append(a)
+    seen = [False] * n
+    components = 0
+    for start in range(n):
+        if seen[start]:
+            continue
+        components += 1
+        seen[start] = True
+        queue = deque([start])
+        while queue:
+            node = queue.popleft()
+            for nxt in graph[node]:
+                if not seen[nxt]:
+                    seen[nxt] = True
+                    queue.append(nxt)
+    return components
+```
+
+This is already optimal at O(n + E), and it is a fine answer. Union-find is shown next because it needs no adjacency
+list, handles edges arriving one by one, and is the tool for the related problems.
+
+## Approach 2: union-find (disjoint set union)
+
+### Template
+
+```text
+parent = [0, 1, ..., n-1]; size = [1] * n; components = n
+
+find(v):
+    while parent[v] != v:
+        parent[v] = parent[parent[v]]    # path halving
+        v = parent[v]
+    return v
+
+union(a, b):
+    ra, rb = find(a), find(b)
+    if ra == rb: return                  # already together
+    if size[ra] < size[rb]: swap
+    parent[rb] = ra; size[ra] += size[rb]
+    components -= 1
+```
+
+Path compression keeps trees flat; union by size keeps them shallow. Together they bring each operation down to
+O(α(n)), where α is the inverse Ackermann function, which is at most 4 for any input you could store.
+
+### Python solution
+
+```python
+class DisjointSet:
+    def __init__(self, n):
+        self.parent = list(range(n))
+        self.size = [1] * n
+        self.components = n
+
+    def find(self, v):
+        while self.parent[v] != v:
+            self.parent[v] = self.parent[self.parent[v]]
+            v = self.parent[v]
+        return v
+
+    def union(self, a, b):
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return False
+        if self.size[ra] < self.size[rb]:
+            ra, rb = rb, ra
+        self.parent[rb] = ra
+        self.size[ra] += self.size[rb]
+        self.components -= 1
+        return True
+
+
+def count_components(n, edges):
+    dsu = DisjointSet(n)
+    for a, b in edges:
+        dsu.union(a, b)
+    return dsu.components
+```
+
+### Complexity
+
+- Union-find: O(n + E * α(n)) time, O(n) space.
+- BFS: O(n + E) time and space (the adjacency list stores every edge twice).
+
+## Tests
+
+```python
+for fn in (count_components, count_components_bfs):
+    assert fn(6, [[0, 1], [1, 2], [3, 4]]) == 3
+    assert fn(4, [[0, 1], [1, 2], [2, 3], [3, 0]]) == 1      # cycle
+    assert fn(3, []) == 3                                    # no edges
+    assert fn(1, []) == 1                                    # single node
+    assert fn(0, []) == 0                                    # empty graph
+    assert fn(3, [[0, 1], [0, 1], [1, 0]]) == 2              # repeated edges
+    assert fn(5, [[0, 0], [1, 2]]) == 4                      # self-loop
+
+# Long chain merges into one
+assert count_components(2000, [[i, i + 1] for i in range(1999)]) == 1
+
+# The DSU also answers "are these connected?"
+d = DisjointSet(5)
+d.union(0, 1); d.union(3, 4)
+assert d.find(0) == d.find(1) and d.find(0) != d.find(3)
+```
+
+## Edge cases and pitfalls
+
+- **Counting roots without compressing.** If you count components at the end by scanning `parent[i] == i`, that is
+  fine; counting distinct `parent[i]` values without calling `find` is wrong, because parents may not be roots.
+- **Decrementing on every edge** instead of only on successful unions over-counts merges when edges repeat or form
+  cycles.
+- **Isolated nodes** never appear in the edge list but still count.
+- **Recursive `find`** can hit the recursion limit on a long unbalanced chain; the iterative version avoids it.
+
+## Where this shows up in data engineering
+
+Connected components are the core of identity resolution: union every pair of records that share an email, phone or
+device ID, and each component is one person. At warehouse or Spark scale the same idea runs as iterative label
+propagation (each node repeatedly takes the minimum label among its neighbours until nothing changes), and graph
+libraries for Spark such as GraphFrames ship a ready-made connected-components routine.

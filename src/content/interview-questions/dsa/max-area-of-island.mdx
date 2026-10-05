@@ -1,0 +1,146 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Max Area of Island: Largest Connected Land Region with Flood Fill"
+seoTitle: "Max Area of Island: Flood Fill with BFS"
+description: "Find the size of the largest island in a 0/1 grid by flood-filling each unvisited land cell with BFS or DFS and counting cells, with tests and pitfalls."
+technology: ["dsa"]
+topic: ["graphs"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Scan the grid; from every land cell not yet visited, flood-fill its island with BFS or an explicit-stack DFS, counting the cells you mark, and keep the largest count. Mark a cell visited when you push it so it is counted once. Each cell is processed once, so the time is O(R * C) and the extra space is O(R * C) for the visited marks and the stack in the worst case."
+followUps: ["How would you find the largest island if you may turn one water cell into land?", "How would you also return the cells of the largest island?", "How would union-find with component sizes solve it?"]
+previous: "interview-questions:dsa/clone-graph"
+next: "interview-questions:dsa/pacific-atlantic-water-flow"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a grid of 0s (water) and 1s (land). An island is a group of land cells connected up, down, left or
+right. The area of an island is its number of cells. Return the largest area, or 0 if there is no land.
+
+This is widely known as LeetCode 695, "Max Area of Island". It is [Number of Islands](/interview/dsa/number-of-islands/)
+with a size returned instead of a count.
+
+Assume up to 50 by 50 cells.
+
+## Examples
+
+```text
+1 1 0 0
+1 0 0 1
+0 0 1 1
+0 1 1 0
+-> 5   (cells (1,3),(2,2),(2,3),(3,1),(3,2)); the top-left island has 3
+
+0 0
+0 0
+-> 0
+
+1
+-> 1
+```
+
+## Approach 1: recursive DFS returning the area
+
+```python
+def max_area_recursive(grid):
+    if not grid or not grid[0]:
+        return 0
+    rows, cols = len(grid), len(grid[0])
+    seen = set()
+
+    def area(r, c):
+        if not (0 <= r < rows and 0 <= c < cols) or grid[r][c] != 1 or (r, c) in seen:
+            return 0
+        seen.add((r, c))
+        return 1 + area(r + 1, c) + area(r - 1, c) + area(r, c + 1) + area(r, c - 1)
+
+    return max((area(r, c) for r in range(rows) for c in range(cols)), default=0)
+```
+
+Clean and O(R * C), but a large island can exceed Python's recursion limit.
+
+## Approach 2: optimal, iterative flood fill
+
+### Template
+
+```text
+best = 0
+for each cell s that is land and unvisited:
+    mark s; stack = [s]; size = 0
+    while stack:
+        cell = stack.pop(); size += 1
+        for each land, unvisited neighbour nb: mark nb; stack.append(nb)
+    best = max(best, size)
+```
+
+Using a stack gives DFS order and a queue gives BFS order; for counting, either works.
+
+### Python solution
+
+```python
+def max_area_of_island(grid):
+    if not grid or not grid[0]:
+        return 0
+    rows, cols = len(grid), len(grid[0])
+    seen = [[False] * cols for _ in range(rows)]
+    best = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] != 1 or seen[r][c]:
+                continue
+            seen[r][c] = True
+            stack, size = [(r, c)], 0
+            while stack:
+                cr, cc = stack.pop()
+                size += 1
+                for nr, nc in ((cr + 1, cc), (cr - 1, cc), (cr, cc + 1), (cr, cc - 1)):
+                    if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1 and not seen[nr][nc]:
+                        seen[nr][nc] = True
+                        stack.append((nr, nc))
+            best = max(best, size)
+    return best
+```
+
+### Complexity
+
+- Time: O(R * C). Each cell is pushed at most once and checks four neighbours.
+- Space: O(R * C) for the visited grid and, in the worst case, the stack.
+
+## Tests
+
+```python
+g = [[1, 1, 0, 0],
+     [1, 0, 0, 1],
+     [0, 0, 1, 1],
+     [0, 1, 1, 0]]
+
+for fn in (max_area_of_island, max_area_recursive):
+    assert fn(g) == 5
+    assert fn([[0, 0], [0, 0]]) == 0            # no land
+    assert fn([[1]]) == 1                        # single cell
+    assert fn([]) == 0 and fn([[]]) == 0         # empty
+    assert fn([[1, 0, 1], [0, 1, 0]]) == 1       # diagonals do not join
+    assert fn([[1, 1, 1], [1, 0, 1], [1, 1, 1]]) == 8   # ring
+
+# Large single island: iterative version has no recursion problem
+assert max_area_of_island([[1] * 100 for _ in range(100)]) == 10_000
+```
+
+## Edge cases and pitfalls
+
+- **Counting a cell twice** because it was marked when popped rather than when pushed.
+- **`max()` of an empty sequence** raises in Python; use `default=0` or start `best` at 0.
+- **Recursion depth** for big islands.
+- **Integer versus string cells.** This version uses integers; Number of Islands uses `"1"` strings.
+
+## Where this shows up in data engineering
+
+The same flood fill sizes clusters: after grouping matched records into entities, you often want the largest
+clusters, because a giant cluster usually means a bad match rule (for example everyone sharing a placeholder phone
+number) rather than one real customer.

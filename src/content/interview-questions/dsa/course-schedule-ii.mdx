@@ -1,0 +1,188 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Course Schedule II: Return a Valid Course Order with Topological Sort"
+seoTitle: "Course Schedule II: Topological Order"
+description: "Return an order that respects all prerequisites, or an empty list when a cycle makes it impossible, using Kahn's algorithm or DFS post-order, with tests."
+technology: ["dsa"]
+topic: ["graphs", "topological-sort"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Build a graph with an edge from each prerequisite to the course that needs it and count in-degrees. Kahn's algorithm repeatedly takes a course with in-degree zero, appends it to the order and decrements its successors. If the order contains every course it is a valid topological order; otherwise a cycle blocked some courses and you return an empty list. A DFS that appends nodes after their descendants and then reverses the list works too. Both are O(V + E)."
+followUps: ["How would you return the lexicographically smallest valid order?", "How would you group courses into semesters so the number of semesters is minimal?", "How would you verify that a given order is valid?"]
+previous: "interview-questions:dsa/course-schedule"
+next: "interview-questions:dsa/graph-valid-tree"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+There are `num_courses` courses labelled 0 to `num_courses - 1` and a list of pairs `[course, prereq]`. Return any
+order in which all courses can be taken so that every prerequisite comes before the course that needs it. If no such
+order exists, return an empty list.
+
+This is widely known as LeetCode 210, "Course Schedule II". It is [Course Schedule](/interview/dsa/course-schedule/)
+with the order returned instead of a yes/no answer.
+
+Assume up to 2,000 courses and 5,000 pairs.
+
+## Examples
+
+```text
+4 courses, pairs [[1,0],[2,0],[3,1],[3,2]]
+0 -> 1 -> 3
+0 -> 2 -> 3
+-> [0, 1, 2, 3]  or  [0, 2, 1, 3]   (both valid)
+
+2 courses, pairs [[0,1],[1,0]]  -> []   (cycle)
+3 courses, no pairs              -> any permutation, for example [0, 1, 2]
+```
+
+## Approach 1: repeatedly pick any course whose prerequisites are done
+
+Scan all courses each round, take every course whose prerequisites are all taken, and stop when a round adds nothing.
+
+```python
+def find_order_rounds(num_courses, prerequisites):
+    needs = [set() for _ in range(num_courses)]
+    for course, prereq in prerequisites:
+        needs[course].add(prereq)
+    taken, order = set(), []
+    while len(order) < num_courses:
+        ready = [c for c in range(num_courses) if c not in taken and needs[c] <= taken]
+        if not ready:
+            return []                 # the remaining courses wait on each other
+        for c in ready:
+            taken.add(c)
+            order.append(c)
+    return order
+```
+
+It is correct but each round scans every course, so it is O(V * (V + E)) for a long chain.
+
+## Approach 2: optimal, topological sort
+
+### Kahn's algorithm template
+
+```text
+indegree[v] = number of prerequisites of v
+queue = [v for v with indegree 0]
+order = []
+while queue:
+    v = queue.popleft(); order.append(v)
+    for w in adj[v]:
+        indegree[w] -= 1
+        if indegree[w] == 0: queue.append(w)
+return order if len(order) == V else []
+```
+
+### Python solution
+
+```python
+from collections import deque
+
+def find_order(num_courses, prerequisites):
+    graph = [[] for _ in range(num_courses)]
+    indegree = [0] * num_courses
+    for course, prereq in prerequisites:
+        graph[prereq].append(course)
+        indegree[course] += 1
+
+    queue = deque(c for c in range(num_courses) if indegree[c] == 0)
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for nxt in graph[node]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    return order if len(order) == num_courses else []
+```
+
+### DFS post-order version
+
+In DFS, a node is finished only after everything reachable from it is finished. Appending nodes when they finish
+therefore lists every course after all courses that depend on it; reversing that list gives a valid order.
+
+```python
+def find_order_dfs(num_courses, prerequisites):
+    graph = [[] for _ in range(num_courses)]
+    for course, prereq in prerequisites:
+        graph[prereq].append(course)
+    colour = [0] * num_courses          # 0 new, 1 on path, 2 done
+    post = []
+
+    for start in range(num_courses):
+        if colour[start]:
+            continue
+        colour[start] = 1
+        stack = [(start, iter(graph[start]))]
+        while stack:
+            node, children = stack[-1]
+            nxt = next(children, None)
+            if nxt is None:
+                colour[node] = 2
+                post.append(node)
+                stack.pop()
+            elif colour[nxt] == 1:
+                return []               # cycle
+            elif colour[nxt] == 0:
+                colour[nxt] = 1
+                stack.append((nxt, iter(graph[nxt])))
+    return post[::-1]
+```
+
+### Complexity
+
+O(V + E) time and space for both versions.
+
+## Tests
+
+```python
+def is_valid(order, num_courses, prerequisites):
+    if sorted(order) != list(range(num_courses)):
+        return False
+    pos = {c: i for i, c in enumerate(order)}
+    return all(pos[p] < pos[c] for c, p in prerequisites)
+
+cases_ok = [
+    (4, [[1, 0], [2, 0], [3, 1], [3, 2]]),
+    (3, []),                                      # no edges
+    (1, []),                                      # single course
+    (6, [[1, 0], [2, 1], [4, 3], [5, 4]]),        # two disconnected chains
+    (3, [[2, 0], [2, 1], [2, 0]]),                # duplicate pair
+]
+cases_cycle = [
+    (2, [[0, 1], [1, 0]]),
+    (1, [[0, 0]]),                                # self-loop
+    (4, [[1, 0], [2, 1], [3, 2], [1, 3]]),        # cycle not involving node 0
+]
+
+for fn in (find_order, find_order_dfs, find_order_rounds):
+    for n, pre in cases_ok:
+        assert is_valid(fn(n, pre), n, pre), (fn.__name__, n, pre)
+    for n, pre in cases_cycle:
+        assert fn(n, pre) == []
+    assert fn(0, []) == []                         # no courses: empty order is valid
+
+assert find_order(4, [[1, 0], [2, 0], [3, 1], [3, 2]]) == [0, 1, 2, 3]
+```
+
+## Edge cases and pitfalls
+
+- **Returning a partial order** when there is a cycle. Check the length; a cycle leaves some courses out.
+- **Reversed edges.** With the edge pointing from course to prerequisite, Kahn's algorithm outputs the order backwards.
+- **Forgetting to reverse** the DFS post-order.
+- **Assuming the answer is unique.** Many valid orders usually exist; test with a validity checker, not a fixed list.
+- **Zero courses.** An empty list is both "no order" and "the valid empty order"; with zero courses that ambiguity is
+  harmless, but mention it.
+
+## Where this shows up in data engineering
+
+This is how orchestrators decide execution order. Airflow's scheduler runs a task once its upstream tasks are in an
+allowed state, dbt builds models in dependency order, and `make` builds targets after their prerequisites. Grouping by
+Kahn levels (all in-degree-zero nodes at once) gives the batches that can run in parallel.

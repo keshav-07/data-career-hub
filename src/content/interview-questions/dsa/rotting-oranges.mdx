@@ -1,0 +1,166 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Rotting Oranges: Minutes to Spread via Level-by-Level Multi-Source BFS"
+seoTitle: "Rotting Oranges: Multi-Source BFS"
+description: "Compute the minutes until every orange rots by running a multi-source BFS from all rotten oranges at once, one level per minute, with tests and pitfalls."
+technology: ["dsa"]
+topic: ["graphs"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Put every rotten orange in the queue at the start and count the fresh ones. Process the queue one level at a time: each level is one minute, and every fresh neighbour of the current level becomes rotten and joins the next level. Stop when the queue empties; if fresh oranges remain, return -1, otherwise return the number of levels that rotted something. Each cell is enqueued at most once, so the time and space are O(R * C)."
+followUps: ["Why does starting BFS from each rotten orange separately give the wrong time?", "How would you return the minute at which each orange rots?", "What changes if some oranges take two minutes to rot?"]
+previous: "interview-questions:dsa/surrounded-regions"
+next: "interview-questions:dsa/course-schedule"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A grid holds 0 (empty), 1 (fresh orange) or 2 (rotten orange). Every minute, each rotten orange makes the fresh
+oranges directly above, below, left and right of it rotten. Return the number of minutes until no fresh orange is
+left, or -1 if some fresh orange can never rot. If there are no fresh oranges at the start, the answer is 0.
+
+This is widely known as LeetCode 994, "Rotting Oranges".
+
+Assume up to 10 by 10 cells.
+
+## Examples
+
+```text
+2 1 1          minute 1: (0,1),(1,0) rot
+1 1 0          minute 2: (0,2),(1,1) rot
+0 1 1          minute 3: (2,1) rots;  minute 4: (2,2) rots
+-> 4
+
+2 1 0
+0 0 1          (1,2) is fresh but walled off -> -1
+
+0 2
+-> 0           (no fresh oranges)
+```
+
+## Approach 1: simulate minute by minute
+
+Repeatedly scan the whole grid, rot every fresh orange next to a rotten one, and stop when nothing changes.
+
+```python
+def oranges_rotting_simulate(grid):
+    grid = [row[:] for row in grid]
+    rows, cols = len(grid), len(grid[0]) if grid else 0
+    minutes = 0
+    while True:
+        to_rot = [
+            (r, c)
+            for r in range(rows) for c in range(cols)
+            if grid[r][c] == 1 and any(
+                0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 2
+                for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)))
+        ]
+        if not to_rot:
+            break
+        for r, c in to_rot:
+            grid[r][c] = 2
+        minutes += 1
+    fresh_left = any(cell == 1 for row in grid for cell in row)
+    return -1 if fresh_left else minutes
+```
+
+Collecting `to_rot` before changing anything is essential, or an orange that rots this minute would spread in the
+same minute. Each round scans the whole grid and there can be O(R * C) rounds, so it is O((R * C)^2).
+
+## Approach 2: optimal, multi-source BFS by levels
+
+### Why multi-source
+
+All rotten oranges spread at the same time. Putting all of them in the queue before starting makes BFS distance equal
+to "minutes from the nearest rotten orange", which is exactly when each orange rots.
+
+### Template
+
+```text
+queue = every source; fresh = count of targets
+levels = 0
+while queue and fresh > 0:
+    for _ in range(len(queue)):          # exactly one level
+        cell = queue.popleft()
+        for nb in 4 neighbours that are fresh:
+            make nb rotten; fresh -= 1; queue.append(nb)
+    levels += 1
+return levels if fresh == 0 else -1
+```
+
+### Python solution
+
+```python
+from collections import deque
+
+def oranges_rotting(grid):
+    grid = [row[:] for row in grid]          # do not modify the caller's grid
+    rows, cols = len(grid), len(grid[0]) if grid else 0
+    queue, fresh = deque(), 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] == 2:
+                queue.append((r, c))
+            elif grid[r][c] == 1:
+                fresh += 1
+
+    minutes = 0
+    while queue and fresh:
+        for _ in range(len(queue)):
+            r, c = queue.popleft()
+            for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+                if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1:
+                    grid[nr][nc] = 2
+                    fresh -= 1
+                    queue.append((nr, nc))
+        minutes += 1
+    return minutes if fresh == 0 else -1
+```
+
+The loop condition `while queue and fresh` avoids counting an extra minute for the last level, whose oranges have no
+fresh neighbours left.
+
+### Complexity
+
+- Time: O(R * C). Every cell enters the queue at most once.
+- Space: O(R * C) for the queue and the grid copy.
+
+## Tests
+
+```python
+for fn in (oranges_rotting, oranges_rotting_simulate):
+    assert fn([[2, 1, 1], [1, 1, 0], [0, 1, 1]]) == 4
+    assert fn([[2, 1, 0], [0, 0, 1]]) == -1          # unreachable fresh orange
+    assert fn([[0, 2]]) == 0                         # nothing fresh
+    assert fn([[0]]) == 0                            # empty cell only
+    assert fn([[1]]) == -1                           # fresh, no rotten source
+    assert fn([[2]]) == 0
+    assert fn([[2, 1, 1, 1, 2]]) == 2                # two sources meet in the middle
+    assert fn([[1, 1, 1], [1, 2, 1], [1, 1, 1]]) == 2
+
+assert oranges_rotting([]) == 0                      # empty grid
+
+g = [[2, 1]]
+oranges_rotting(g)
+assert g == [[2, 1]]                                 # caller's grid unchanged
+```
+
+## Edge cases and pitfalls
+
+- **Running a separate BFS per rotten orange** and taking the maximum: oranges are rotted by the nearest source, so
+  that overestimates the time.
+- **Off-by-one minute** from incrementing after the final level; stop when no fresh oranges remain.
+- **No fresh oranges** must return 0 even if there are no rotten ones.
+- **Fresh oranges and no rotten ones** must return -1.
+- **Mutating the input**; copy it if the caller might reuse the grid.
+
+## Where this shows up in data engineering
+
+Multi-source BFS by levels is how you compute "hops from the nearest source" in a dependency graph, for example how
+many stages downstream each table is from any raw ingestion table. The level count is also how backfills are staged:
+everything at depth 1 runs first, then depth 2, and so on.

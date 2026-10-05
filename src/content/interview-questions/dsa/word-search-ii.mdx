@@ -1,0 +1,208 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Word Search II: Find Many Words in a Grid with a Trie and Backtracking"
+seoTitle: "Word Search II: Trie Plus Backtracking"
+description: "Find every dictionary word hidden in a letter grid by walking a trie during DFS, pruning dead prefixes, with brute force, optimal code and tests."
+technology: ["dsa"]
+topic: ["backtracking", "trie"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+shortAnswer: "Load all words into a trie, then start a depth-first search from every cell, moving down the trie one letter at a time and abandoning a path as soon as the prefix is not in the trie. Mark a cell as visited while it is on the path and restore it on the way back. Record a word when you reach its end node and clear the marker so it is reported once. The trie costs O(total letters) to build; the search is bounded by O(R * C * 4 * 3^(L-1)) for longest word length L, but prefix pruning makes it far faster in practice."
+followUps: ["How would you prune trie nodes once all words below them have been found?", "Why is running single-word search once per word too slow?", "How does the complexity change if the grid also allows diagonal moves?", "How would you return each word with the path of cells that spells it?"]
+next: "interview-questions:dsa/subsets"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a rectangular grid of lowercase letters and a list of distinct words. Return every word from the list
+that can be traced in the grid. A trace starts at any cell and moves one step at a time up, down, left or right; it
+may not use the same cell twice within one word. The order of the returned words does not matter.
+
+This is widely known as LeetCode 212, "Word Search II". It is the multi-word version of
+[Word Search](/interview/dsa/word-search/), and the point of the question is to share work between words.
+
+Assume the grid has up to 12 by 12 cells, there are up to a few thousand words, and each word has up to 10 letters.
+
+## Examples
+
+```text
+grid:
+  c a t
+  o r e
+  w s t
+
+words: ["cat", "cow", "rest", "tea", "car", "arc"]
+```
+
+- `cat`: c(0,0) → a(0,1) → t(0,2). Found.
+- `cow`: c(0,0) → o(1,0) → w(2,0). Found.
+- `rest`: r(1,1) → e(1,2) → s? The only `s` is at (2,1), which is not next to (1,2). Not found.
+- `tea`: t(0,2) → e(1,2) → a? No `a` next to (1,2). Not found.
+- `car`: c(0,0) → a(0,1) → r(1,1). Found.
+- `arc`: a(0,1) → r(1,1) → c? (0,0) is diagonal to (1,1), so not allowed. Not found.
+
+Answer: `["cat", "cow", "car"]` in any order.
+
+## Approach 1: run single-word search for every word
+
+The obvious approach reuses the single-word backtracking search: for each word, try every starting cell and
+explore the four neighbours recursively.
+
+```python
+def find_words_brute(grid, words):
+    if not grid or not grid[0]:
+        return []
+    rows, cols = len(grid), len(grid[0])
+
+    def exists(word):
+        def dfs(r, c, i):
+            if i == len(word):
+                return True
+            if r < 0 or r >= rows or c < 0 or c >= cols or grid[r][c] != word[i]:
+                return False
+            saved, grid[r][c] = grid[r][c], "#"      # mark visited
+            found = (dfs(r + 1, c, i + 1) or dfs(r - 1, c, i + 1)
+                     or dfs(r, c + 1, i + 1) or dfs(r, c - 1, i + 1))
+            grid[r][c] = saved                        # undo
+            return found
+
+        return any(dfs(r, c, 0) for r in range(rows) for c in range(cols))
+
+    return [w for w in words if exists(w)]
+```
+
+With W words of length up to L, this costs O(W * R * C * 4 * 3^(L-1)). Words that share a prefix (`cat`, `car`,
+`cart`) repeat the same exploration over and over, which is what makes it time out on large word lists.
+
+## Approach 2: optimal, trie-guided backtracking
+
+### Idea
+
+Put every word into a trie (prefix tree). Then run one DFS from each cell, carrying a pointer to the trie node
+that matches the letters on the current path. If the next letter is not a child of the current node, no word can
+continue this way, so you stop immediately. All words that share a prefix share the same exploration.
+
+Backtracking template used here:
+
+1. **Choose**: step into a neighbouring cell whose letter is a child of the current trie node.
+2. **Explore**: recurse from that cell with the child node.
+3. **Un-choose**: restore the cell's letter so other paths can use it.
+
+### Python solution
+
+```python
+def find_words(grid, words):
+    if not grid or not grid[0] or not words:
+        return []
+
+    # Build the trie: nested dicts; "$" holds the full word at a word end.
+    root = {}
+    for word in words:
+        node = root
+        for ch in word:
+            node = node.setdefault(ch, {})
+        node["$"] = word
+
+    rows, cols = len(grid), len(grid[0])
+    found = []
+
+    def dfs(r, c, parent):
+        ch = grid[r][c]
+        node = parent.get(ch)
+        if node is None:
+            return
+        word = node.pop("$", None)          # report each word once
+        if word is not None:
+            found.append(word)
+
+        grid[r][c] = "#"                    # mark visited
+        for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] != "#":
+                dfs(nr, nc, node)
+        grid[r][c] = ch                     # undo
+
+        if not node:                        # prune an exhausted branch
+            parent.pop(ch)
+
+    for r in range(rows):
+        for c in range(cols):
+            dfs(r, c, root)
+    return found
+```
+
+Two details make this fast in practice:
+
+- `node.pop("$")` removes the word marker the first time the word is found, so duplicates are impossible and
+  later searches do not report it again.
+- When a trie node has no children and no word left, the parent drops it. Branches whose words have all been
+  found disappear, so later starting cells skip them.
+
+### Complexity
+
+- Building the trie: O(S), where S is the total number of letters across all words.
+- Search: from each of the R * C cells, the first step has 4 directions and each later step at most 3 (you never
+  go back to the cell you came from), so the worst case is O(R * C * 4 * 3^(L-1)). It no longer multiplies by the
+  number of words.
+- Space: O(S) for the trie plus O(L) recursion depth.
+
+## Tests
+
+```python
+def make_grid():
+    return [list("cat"), list("ore"), list("wst")]
+
+words = ["cat", "cow", "rest", "tea", "car", "arc"]
+assert sorted(find_words(make_grid(), words)) == ["car", "cat", "cow"]
+assert sorted(find_words_brute(make_grid(), words)) == ["car", "cat", "cow"]
+
+# Grid is restored after the search
+g = make_grid()
+find_words(g, words)
+assert g == make_grid()
+
+# Empty inputs
+assert find_words([], ["a"]) == []
+assert find_words([[]], ["a"]) == []
+assert find_words(make_grid(), []) == []
+
+# Single cell: a cell may not be reused, so "aa" is impossible
+assert find_words([["a"]], ["a", "aa"]) == ["a"]
+
+# Words sharing a prefix, one being a prefix of the other
+assert sorted(find_words([list("ab"), list("dc")], ["ab", "abc", "abcd", "abd"])) == ["ab", "abc", "abcd"]
+
+# Repeated letters must not produce duplicate answers
+assert find_words([list("aa"), list("aa")], ["aaa"]) == ["aaa"]
+
+# Brute force agrees on a small random case
+import random
+random.seed(7)
+for _ in range(30):
+    g = [[random.choice("ab") for _ in range(3)] for _ in range(3)]
+    ws = list({"".join(random.choice("ab") for _ in range(random.randint(1, 4))) for _ in range(6)})
+    assert sorted(find_words([row[:] for row in g], ws)) == sorted(find_words_brute([row[:] for row in g], ws))
+```
+
+## Edge cases and pitfalls
+
+- **Reporting a word twice.** The same word can often be traced along several paths. Remove the end marker (or
+  use a result set) when you first find it.
+- **Forgetting to restore the cell.** If you overwrite a letter with `#` and return early before restoring it, the
+  grid stays corrupted for later starts. Restore in every path, which is why the code restores before pruning.
+- **Stopping at the first word.** Finding `ab` must not stop the search, because `abc` may continue the path.
+- **Reusing a cell.** A one-cell grid `a` contains `a` but not `aa`.
+- **Pruning too eagerly.** Only drop a trie node once it has no children and no word marker left.
+- **Recursion depth** is bounded by the longest word, so Python's recursion limit is not a problem here.
+
+## Where this shows up in data engineering
+
+The data structure transfers better than the grid. Tries (and prefix-sorted keys in general) are how you match
+many patterns at once: tagging log lines against thousands of known prefixes, routing records by key prefix, or
+autocomplete over table and column names in a catalogue. The interview habit to keep is "share the work between
+queries instead of answering each one separately".

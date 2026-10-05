@@ -1,0 +1,178 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "N-Queens: Place Non-Attacking Queens Row by Row with Backtracking"
+seoTitle: "N-Queens: Backtracking with Column Sets"
+description: "Place n queens on an n by n board so none attack each other, using row-by-row backtracking with column and diagonal sets, plus tests and pitfalls."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "Place exactly one queen per row. For each row, try every column that is not already used and whose two diagonals are free; cells share a diagonal when row - col is equal, and an anti-diagonal when row + col is equal. Keep three sets for the occupied columns and diagonals so each check is O(1), add the queen, recurse to the next row, then remove it. The search is bounded by O(n!) and uses O(n) extra space."
+followUps: ["How would you count solutions only, and how can bitmasks make that faster?", "How can symmetry halve the work?", "Why does one queen per row reduce the search so much compared with trying all cells?"]
+previous: "interview-questions:dsa/letter-combinations-of-a-phone-number"
+next: "interview-questions:dsa/number-of-islands"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Place n queens on an n by n chessboard so that no two queens attack each other: no two may share a row, a column or
+a diagonal. Return every valid arrangement, each drawn as a list of n strings where `Q` is a queen and `.` is an empty
+square.
+
+This is widely known as LeetCode 51, "N-Queens". LeetCode 52 asks only for the number of arrangements.
+
+Assume n between 1 and 9.
+
+## Examples
+
+```text
+n = 4: two arrangements
+  . Q . .        . . Q .
+  . . . Q        Q . . .
+  Q . . .        . . . Q
+  . . Q .        . Q . .
+
+n = 1: one arrangement, ["Q"]
+n = 2 and n = 3: no arrangements
+n = 5: 10 arrangements;  n = 6: 4;  n = 8: 92
+```
+
+## Approach 1: try every placement, check at the end
+
+A naive search places one queen per row in any column (n^n possibilities) and only checks validity once the board is
+full.
+
+```python
+from itertools import product
+
+def solve_n_queens_brute(size):
+    def valid(cols):
+        for r1 in range(size):
+            for r2 in range(r1 + 1, size):
+                if cols[r1] == cols[r2] or abs(cols[r1] - cols[r2]) == r2 - r1:
+                    return False
+        return True
+
+    boards = []
+    for cols in product(range(size), repeat=size):
+        if valid(cols):
+            boards.append(["." * c + "Q" + "." * (size - c - 1) for c in cols])
+    return boards
+```
+
+It is O(n^n * n^2). Even n = 8 means about 16.7 million candidate boards, most of which fail in the first two rows.
+
+## Approach 2: optimal, backtracking with column and diagonal sets
+
+### Encoding the attacks
+
+- Same column: equal `col`.
+- Same diagonal (top-left to bottom-right): equal `row - col`.
+- Same anti-diagonal (top-right to bottom-left): equal `row + col`.
+
+Keeping one set for each lets you test a square in O(1) and reject it before going deeper.
+
+### Template
+
+```text
+backtrack(row):
+    if row == n: record the board
+    for col in 0 .. n-1:
+        if col, row-col or row+col is taken: continue
+        place queen; add to the three sets       # choose
+        backtrack(row + 1)                       # explore
+        remove queen; remove from the sets       # un-choose
+```
+
+### Python solution
+
+```python
+def solve_n_queens(size):
+    cols, diag, anti = set(), set(), set()
+    placement = []                 # placement[row] = column of the queen in that row
+    boards = []
+
+    def backtrack(row):
+        if row == size:
+            boards.append(["." * c + "Q" + "." * (size - c - 1) for c in placement])
+            return
+        for col in range(size):
+            if col in cols or row - col in diag or row + col in anti:
+                continue
+            cols.add(col); diag.add(row - col); anti.add(row + col)
+            placement.append(col)
+            backtrack(row + 1)
+            placement.pop()
+            cols.remove(col); diag.remove(row - col); anti.remove(row + col)
+
+    backtrack(0)
+    return boards
+
+
+def total_n_queens(size):
+    """Count only, with bitmasks for the three attack sets."""
+    full = (1 << size) - 1
+
+    def count(cols, diag, anti):
+        if cols == full:
+            return 1
+        total = 0
+        free = full & ~(cols | diag | anti)
+        while free:
+            bit = free & -free           # lowest free column
+            free -= bit
+            total += count(cols | bit, ((diag | bit) << 1) & full, (anti | bit) >> 1)
+        return total
+
+    return count(0, 0, 0)
+```
+
+In the bitmask version, shifting the diagonal masks by one bit as you move down a row moves each attacked square to
+where it lands in the next row.
+
+### Complexity
+
+- Time: the first row has n choices, the second at most n - 1, and so on, so the search is bounded by O(n!), and
+  diagonal pruning cuts far below that. Building each board costs O(n^2).
+- Space: O(n) for the sets, the placement and the recursion, excluding the output.
+
+## Tests
+
+```python
+assert solve_n_queens(1) == [["Q"]]                  # single square
+assert solve_n_queens(2) == [] and solve_n_queens(3) == []   # no solution
+assert sorted(solve_n_queens(4)) == sorted([
+    [".Q..", "...Q", "Q...", "..Q."],
+    ["..Q.", "Q...", "...Q", ".Q.."],
+])
+assert [len(solve_n_queens(k)) for k in range(1, 9)] == [1, 0, 0, 2, 10, 4, 40, 92]
+assert [total_n_queens(k) for k in range(1, 9)] == [1, 0, 0, 2, 10, 4, 40, 92]
+
+# Brute force agrees on small boards
+for k in range(1, 6):
+    assert sorted(solve_n_queens(k)) == sorted(solve_n_queens_brute(k))
+
+# Every returned board is valid
+for board in solve_n_queens(6):
+    qs = [(r, row.index("Q")) for r, row in enumerate(board)]
+    assert len({c for _, c in qs}) == 6
+    assert len({r - c for r, c in qs}) == 6 and len({r + c for r, c in qs}) == 6
+```
+
+## Edge cases and pitfalls
+
+- **n = 2 and n = 3** have no solutions; returning an empty list is correct.
+- **Forgetting the anti-diagonal**, or using `abs(row - col)`, which merges different diagonals.
+- **Not removing from all three sets** when backtracking.
+- **Building boards with a shared list**: create each row string fresh, or every board ends up identical.
+- **Mixing up rows and columns** in the board output. One queen per row means `placement[row]` is a column.
+
+## Where this shows up in data engineering
+
+N-Queens itself does not. It is a small constraint-satisfaction problem, and the same "assign one variable at a time
+and reject conflicts early" approach underlies schedulers that place tasks on workers under resource constraints.

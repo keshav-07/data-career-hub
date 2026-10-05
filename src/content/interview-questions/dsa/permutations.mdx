@@ -1,0 +1,169 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Permutations: Every Ordering of Distinct Values with Backtracking"
+seoTitle: "Permutations: Backtracking with a Used Set"
+description: "Generate every ordering of a list of distinct values with used-flag backtracking or in-place swapping, with complexity, tests and common pitfalls."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Build the ordering one position at a time. At each position try every value not yet used, mark it used, recurse, then unmark it and remove it from the path. When the path is as long as the input, record a copy. There are n! permutations and each copy costs O(n), so the time is O(n * n!), with O(n) extra space for the path, the used flags and the recursion."
+followUps: ["How do you avoid duplicate permutations when the input has repeated values?", "How would you find the next permutation in lexicographic order without generating all of them?", "How would you generate only the k-th permutation?"]
+previous: "interview-questions:dsa/combination-sum"
+next: "interview-questions:dsa/subsets-ii"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of distinct integers, return every possible ordering of those integers. Each ordering uses every value
+exactly once. The order in which you return the orderings does not matter.
+
+This is widely known as LeetCode 46, "Permutations". Unlike [Subsets](/interview/dsa/subsets/), where order inside
+a result does not matter, here `[1, 2]` and `[2, 1]` are different answers.
+
+Assume up to 8 values.
+
+## Examples
+
+```text
+values: [8, 1]
+answer: [8, 1], [1, 8]
+
+values: [3, 6, 9]
+answer: [3, 6, 9], [3, 9, 6], [6, 3, 9], [6, 9, 3], [9, 3, 6], [9, 6, 3]   (3! = 6)
+
+values: [42]
+answer: [42]
+```
+
+## Approach 1: recursion by inserting into smaller permutations
+
+The permutations of `[a] + rest` are obtained by inserting `a` into every gap of every permutation of `rest`.
+
+```python
+def permutations_insert(nums):
+    if not nums:
+        return [[]]
+    first, rest = nums[0], nums[1:]
+    result = []
+    for perm in permutations_insert(rest):
+        for pos in range(len(perm) + 1):
+            result.append(perm[:pos] + [first] + perm[pos:])
+    return result
+```
+
+It is correct and also O(n * n!), but it builds many intermediate lists. The backtracking version is what the
+interviewer usually wants, because it extends to duplicates and to constraints (for example "no two adjacent values
+may differ by more than 3").
+
+## Approach 2: optimal, backtracking with a used set
+
+### Template
+
+```text
+backtrack(path):
+    if len(path) == n: record a copy of path; return
+    for each value v in nums:
+        if v is used: continue
+        mark v used; path.append(v)        # choose
+        backtrack(path)                    # explore
+        path.pop(); unmark v               # un-choose
+```
+
+The difference from Subsets is that the loop always starts at 0 (any unused value can go in the next position) and a
+result is recorded only at full length.
+
+### Python solution
+
+```python
+def permutations(nums):
+    result, path = [], []
+    used = [False] * len(nums)
+
+    def backtrack():
+        if len(path) == len(nums):
+            result.append(path[:])
+            return
+        for i, value in enumerate(nums):
+            if used[i]:
+                continue
+            used[i] = True
+            path.append(value)
+            backtrack()
+            path.pop()
+            used[i] = False
+
+    backtrack()
+    return result
+```
+
+An in-place alternative swaps each candidate into position `first`, recurses on `first + 1`, then swaps back. It
+saves the `used` array:
+
+```python
+def permutations_swap(nums):
+    nums = list(nums)
+    result = []
+
+    def backtrack(first):
+        if first == len(nums):
+            result.append(nums[:])
+            return
+        for i in range(first, len(nums)):
+            nums[first], nums[i] = nums[i], nums[first]
+            backtrack(first + 1)
+            nums[first], nums[i] = nums[i], nums[first]
+
+    backtrack(0)
+    return result
+```
+
+### Complexity
+
+- Time: O(n * n!). There are n! leaves and copying each result is O(n). The internal nodes add only a constant
+  factor (the sum n!/k! over k is below e * n!).
+- Space: O(n) for the path, the flags and the recursion, excluding the output.
+
+## Tests
+
+```python
+import itertools
+
+def norm(result):
+    return sorted(map(tuple, result))
+
+for fn in (permutations, permutations_swap, permutations_insert):
+    assert norm(fn([])) == [()]                       # one empty ordering
+    assert norm(fn([42])) == [(42,)]                  # single element
+    assert norm(fn([8, 1])) == [(1, 8), (8, 1)]
+    assert len(fn([3, 6, 9])) == 6
+    assert norm(fn([3, 6, 9, 12])) == sorted(itertools.permutations([3, 6, 9, 12]))
+    assert len(set(map(tuple, fn([1, 2, 3, 4, 5])))) == 120   # all distinct
+
+# Input list is not modified
+data = [5, 4, 3]
+permutations_swap(data)
+assert data == [5, 4, 3]
+```
+
+## Edge cases and pitfalls
+
+- **Recording `path` without copying it.** All results would end up as the same, finally empty, list.
+- **Forgetting to unmark.** Leaving `used[i] = True` after returning blocks the value from later positions.
+- **Repeated values.** With `[1, 1, 2]` this code returns duplicates. Sort first and skip a value equal to the
+  previous one when the previous one is not currently used (LeetCode 47, Permutations II).
+- **Using `value in path` instead of flags.** It works for distinct values but costs O(n) per check and breaks
+  when values repeat.
+- **Growth.** 10 values give 3,628,800 orderings. If you only need one ordering with a property, search with
+  pruning instead of generating everything.
+
+## Where this shows up in data engineering
+
+Rarely directly. The honest connection is in testing: you can check that a merge or aggregation is order-independent
+by running it on every permutation of a small input, and you can explain why join-order search in a query planner
+cannot try all n! orders for many tables and falls back on dynamic programming or heuristics.

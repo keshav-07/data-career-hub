@@ -1,0 +1,154 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Graph Valid Tree: Check Edge Count, Connectivity and Cycles with Union-Find"
+seoTitle: "Graph Valid Tree: Union-Find or BFS"
+description: "Decide whether an undirected graph is a tree by checking it has n - 1 edges and no cycle with union-find, or is connected with BFS, plus tests."
+technology: ["dsa"]
+topic: ["graphs", "union-find"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "Medium"
+shortAnswer: "An undirected graph with n nodes is a tree exactly when it has n - 1 edges and is connected (equivalently, n - 1 edges and no cycle). Check the edge count first, then either union the endpoints of every edge with union-find and fail if an edge joins two nodes already in the same set, or run BFS from node 0 and check that all n nodes are reached. Union-find runs in O(n + E * α(n)) and BFS in O(n + E)."
+followUps: ["Why is n - 1 edges plus connectivity enough, without a separate cycle check?", "How do you detect a cycle in an undirected graph with DFS without flagging the edge back to the parent?", "How would you find the edge to remove so the graph becomes a tree?"]
+previous: "interview-questions:dsa/course-schedule-ii"
+next: "interview-questions:dsa/number-of-connected-components"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given `n` nodes labelled 0 to `n - 1` and a list of undirected edges. Decide whether these edges form a valid
+tree: every node is reachable from every other node and there are no cycles.
+
+This is widely known as LeetCode 261, "Graph Valid Tree" (a premium problem; also on LintCode as 178). It combines the
+ideas of [Number of Connected Components](/interview/dsa/number-of-connected-components/) and
+[Redundant Connection](/interview/dsa/redundant-connection/).
+
+Assume up to 2,000 nodes and no repeated edges.
+
+## Examples
+
+```text
+n = 5, edges [[0,1],[0,2],[2,3],[2,4]]   -> True   (4 edges, connected)
+n = 5, edges [[0,1],[1,2],[2,0],[3,4]]   -> False  (4 edges, but a cycle 0-1-2 and {3,4} cut off)
+n = 4, edges [[0,1],[2,3]]               -> False  (too few edges: two components)
+n = 1, edges []                          -> True   (a single node is a tree)
+```
+
+## Approach 1: DFS cycle check plus reachability
+
+Run a DFS from node 0. If you ever reach an already visited node that is not the parent you came from, there is a
+cycle. Afterwards, check that every node was visited.
+
+```python
+def valid_tree_dfs(n, edges):
+    graph = [[] for _ in range(n)]
+    for a, b in edges:
+        graph[a].append(b)
+        graph[b].append(a)
+    if n == 0:
+        return True
+    seen = {0}
+    stack = [(0, -1)]
+    while stack:
+        node, parent = stack.pop()
+        for nxt in graph[node]:
+            if nxt == parent:
+                continue
+            if nxt in seen:
+                return False             # reached by a second route: cycle
+            seen.add(nxt)
+            stack.append((nxt, node))
+    return len(seen) == n
+```
+
+This is O(n + E) and correct for graphs without parallel edges. The parent bookkeeping is easy to get wrong, which is
+why the edge-count shortcut below is popular.
+
+## Approach 2: optimal, edge count plus union-find
+
+### The key fact
+
+A tree on n nodes has exactly n - 1 edges. If the count is different, answer immediately. If it is n - 1, then the
+graph is a tree exactly when it has no cycle (or, equivalently, when it is connected).
+
+### Union-find template
+
+```text
+parent[i] = i for every node
+find(v): follow parent pointers to the root, compressing the path
+union(a, b):
+    ra, rb = find(a), find(b)
+    if ra == rb: return False     # already connected: this edge closes a cycle
+    attach the smaller tree under the larger; return True
+```
+
+### Python solution
+
+```python
+def valid_tree(n, edges):
+    if len(edges) != n - 1:
+        return False
+    parent = list(range(n))
+    size = [1] * n
+
+    def find(v):
+        while parent[v] != v:
+            parent[v] = parent[parent[v]]
+            v = parent[v]
+        return v
+
+    for a, b in edges:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return False                  # cycle
+        if size[ra] < size[rb]:
+            ra, rb = rb, ra
+        parent[rb] = ra
+        size[ra] += size[rb]
+    return True
+```
+
+With n - 1 edges and no cycle, the graph must be connected: each successful union reduces the number of components by
+one, from n down to 1.
+
+### Complexity
+
+- Time: O(n + E * α(n)), effectively linear.
+- Space: O(n) for the parent and size arrays.
+
+## Tests
+
+```python
+for fn in (valid_tree, valid_tree_dfs):
+    assert fn(5, [[0, 1], [0, 2], [2, 3], [2, 4]])
+    assert not fn(5, [[0, 1], [1, 2], [2, 0], [3, 4]])   # cycle and disconnected
+    assert not fn(4, [[0, 1], [2, 3]])                   # disconnected forest
+    assert fn(1, [])                                     # single node
+    assert fn(2, [[1, 0]])
+    assert not fn(3, [[0, 1], [1, 2], [2, 0]])           # cycle, too many edges
+    assert not fn(2, [])                                 # two isolated nodes
+    assert fn(4, [[0, 1], [0, 2], [0, 3]])               # star
+    assert not fn(4, [[0, 1], [1, 2], [2, 0]])           # n - 1 edges, but a cycle
+
+# A long path is a tree
+assert valid_tree(2000, [[i, i + 1] for i in range(1999)])
+```
+
+## Edge cases and pitfalls
+
+- **One node, no edges** is a valid tree; two nodes and no edges is not.
+- **Counting edges is not enough on its own.** With `n = 4`, the edges 0-1, 1-2 and 2-0 number exactly n - 1, yet
+  they form a cycle and leave node 3 isolated. The union-find check catches it.
+- **Undirected cycle detection with DFS** must ignore the edge back to the parent, or every edge looks like a cycle.
+- **Parallel edges** (the same pair twice) form a cycle of length two. Union-find reports it naturally; the
+  parent-skipping DFS above does not, so state the "no repeated edges" assumption if you use it.
+
+## Where this shows up in data engineering
+
+Hierarchies stored as parent-child rows (org charts, product categories, account trees) should form a tree. Before
+flattening one into a closure table or a recursive CTE, check that each child has one parent and that there is no
+cycle; a single bad row otherwise makes a recursive query loop until it hits its depth limit.

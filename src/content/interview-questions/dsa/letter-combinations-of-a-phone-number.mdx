@@ -1,0 +1,136 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Letter Combinations of a Phone Number: Cartesian Product by Backtracking"
+seoTitle: "Phone Letter Combinations: Backtracking"
+description: "Turn a string of phone keypad digits into every possible letter string with backtracking or an iterative product, plus complexity and tests."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+shortAnswer: "Map each digit to its letters and build the output one position at a time: for the digit at index i, append each of its letters to the path, recurse to i + 1, then remove it. Record the path when it is as long as the digit string, and return an empty list for empty input. With up to 4 letters per digit the time is O(n * 4^n) and the extra space is O(n)."
+followUps: ["How would you produce the combinations lazily for a very long digit string?", "How would you filter the output to real dictionary words efficiently?", "What does itertools.product do here, and when is it acceptable in an interview?"]
+previous: "interview-questions:dsa/palindrome-partitioning"
+next: "interview-questions:dsa/n-queens"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A phone keypad maps the digits 2 to 9 to letters: 2 is `abc`, 3 is `def`, 4 is `ghi`, 5 is `jkl`, 6 is `mno`, 7 is
+`pqrs`, 8 is `tuv` and 9 is `wxyz`. Given a string of such digits, return every letter string that the digits could
+spell, in any order. An empty digit string gives an empty list.
+
+This is widely known as LeetCode 17, "Letter Combinations of a Phone Number".
+
+Assume up to 4 digits, each between 2 and 9.
+
+## Examples
+
+```text
+"9"    -> w, x, y, z
+"52"   -> ja, jb, jc, ka, kb, kc, la, lb, lc         (3 x 3 = 9)
+"79"   -> 16 strings, from pw to sz                  (4 x 4)
+""     -> []
+```
+
+## Approach 1: iterative product
+
+Start from the list containing one empty string and, for each digit, extend every partial string with every letter
+of that digit.
+
+```python
+KEYPAD = {
+    "2": "abc", "3": "def", "4": "ghi", "5": "jkl",
+    "6": "mno", "7": "pqrs", "8": "tuv", "9": "wxyz",
+}
+
+def letter_combinations_iterative(digits):
+    if not digits:
+        return []
+    partial = [""]
+    for digit in digits:
+        partial = [prefix + letter for prefix in partial for letter in KEYPAD[digit]]
+    return partial
+```
+
+This is a correct, optimal-complexity answer (it is a Cartesian product). It keeps every partial string in memory at
+once, which is fine at this size.
+
+## Approach 2: backtracking
+
+### Template
+
+```text
+backtrack(i, path):
+    if i == len(digits): record "".join(path); return
+    for letter in KEYPAD[digits[i]]:
+        path.append(letter)        # choose
+        backtrack(i + 1, path)     # explore
+        path.pop()                 # un-choose
+```
+
+Each level of the recursion corresponds to one digit, so the depth equals the length of the input.
+
+### Python solution
+
+```python
+def letter_combinations(digits):
+    if not digits:
+        return []
+    result, path = [], []
+
+    def backtrack(i):
+        if i == len(digits):
+            result.append("".join(path))
+            return
+        for letter in KEYPAD[digits[i]]:
+            path.append(letter)
+            backtrack(i + 1)
+            path.pop()
+
+    backtrack(0)
+    return result
+```
+
+### Complexity
+
+- Time: O(n * 4^n). Each digit has at most 4 letters (7 and 9), so there are at most 4^n strings, each of length n.
+- Space: O(n) for the path and recursion, excluding the output.
+
+Using `itertools.product(*(KEYPAD[d] for d in digits))` gives the same result in one line. Mention it, but be ready to
+write the recursion, because that is what the question tests.
+
+## Tests
+
+```python
+import itertools
+
+for fn in (letter_combinations, letter_combinations_iterative):
+    assert fn("") == []                                    # empty input
+    assert fn("9") == ["w", "x", "y", "z"]                 # single digit
+    assert sorted(fn("52")) == ["ja", "jb", "jc", "ka", "kb", "kc", "la", "lb", "lc"]
+    assert len(fn("79")) == 16
+    assert len(fn("234")) == 27
+    assert sorted(fn("78")) == sorted("".join(p) for p in itertools.product("pqrs", "tuv"))
+
+# Order follows keypad order with backtracking
+assert letter_combinations("23")[:3] == ["ad", "ae", "af"]
+```
+
+## Edge cases and pitfalls
+
+- **Empty input.** The expected answer is `[]`, not `[""]`; the recursion as written would otherwise record one
+  empty string.
+- **Digits 0 and 1** have no letters. If they may appear, decide whether to skip them or return nothing, and say so.
+- **Forgetting that 7 and 9 have four letters**, which matters for the complexity bound.
+- **String concatenation in the path.** Building `path + letter` at each level is fine here; a list with `join` at the
+  leaf avoids repeated copying for long inputs.
+
+## Where this shows up in data engineering
+
+This is a Cartesian product, the same thing a `CROSS JOIN` computes. The row count multiplies with every dimension,
+which is why an accidental cross join (a missing join condition) can blow up a query's output.

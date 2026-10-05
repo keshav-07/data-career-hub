@@ -1,0 +1,135 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Subsets II: Power Set Without Duplicates When Values Repeat"
+seoTitle: "Subsets II: Skip Duplicates in Backtracking"
+description: "Generate the distinct subsets of a list that may contain repeated values by sorting and skipping equal siblings during backtracking, with tests."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Sort the input so equal values sit next to each other, then run the start-index subsets backtracking. Inside the loop, skip a value when it equals the value just before it at the same level (i > start and nums[i] == nums[i - 1]); that means each distinct value is chosen as the next element only once per level. Time is O(n * 2^n) in the worst case and the extra space is O(n)."
+followUps: ["Why is the condition i > start and not i > 0?", "How would you solve it by counting each value's frequency instead?", "How does the same skip rule apply to Combination Sum II and Permutations II?"]
+previous: "interview-questions:dsa/permutations"
+next: "interview-questions:dsa/combination-sum-ii"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers that may contain repeated values, return all distinct subsets. Two subsets are the same if
+they contain the same values with the same multiplicities, whatever the order. The empty subset counts.
+
+This is widely known as LeetCode 90, "Subsets II". It extends [Subsets](/interview/dsa/subsets/), and the
+duplicate-skipping rule it teaches is reused in [Combination Sum II](/interview/dsa/combination-sum-ii/).
+
+Assume up to 10 values.
+
+## Examples
+
+```text
+values: [3, 1, 3]
+answer: [], [1], [3], [1, 3], [3, 3], [1, 3, 3]          (6 subsets, not 8)
+
+values: [5, 5, 5]
+answer: [], [5], [5, 5], [5, 5, 5]
+
+values: [2, 7]
+answer: [], [2], [7], [2, 7]                             (no repeats: same as Subsets)
+```
+
+## Approach 1: generate everything, deduplicate with a set
+
+Generate all 2^n subsets as sorted tuples and let a set remove the repeats.
+
+```python
+def subsets_with_dup_brute(nums):
+    nums = sorted(nums)
+    seen = set()
+    for mask in range(1 << len(nums)):
+        seen.add(tuple(nums[i] for i in range(len(nums)) if mask >> i & 1))
+    return [list(t) for t in seen]
+```
+
+This works, but it does all the duplicate work and then throws it away. With `[5] * 10` it builds 1024 subsets to
+keep 11.
+
+## Approach 2: optimal, sort and skip equal siblings
+
+### Why sorting plus one comparison is enough
+
+After sorting, the copies of a value are adjacent. In the start-index template, the loop at one level chooses which
+value comes next in the subset. Choosing the first `3` or the second `3` as the next element leads to identical
+subtrees, so only the first copy should be tried at each level. Deeper levels may still take the second copy, which is
+how `[3, 3]` is produced.
+
+```text
+sorted: [1, 3, 3]
+level 0 chooses next value from index 0..2:  1, 3, (3 skipped: same as sibling)
+under [3] (index 1), level 1 may choose index 2: the second 3 is NOT a sibling here, so [3, 3] is allowed
+```
+
+### Python solution
+
+```python
+def subsets_with_dup(nums):
+    nums = sorted(nums)
+    result, path = [], []
+
+    def backtrack(start):
+        result.append(path[:])
+        for i in range(start, len(nums)):
+            if i > start and nums[i] == nums[i - 1]:
+                continue                      # same value already tried at this level
+            path.append(nums[i])
+            backtrack(i + 1)
+            path.pop()
+
+    backtrack(0)
+    return result
+```
+
+### Complexity
+
+- Time: O(n * 2^n) in the worst case (all values distinct). With many repeats it is proportional to the number of
+  distinct subsets times their length, which is much smaller.
+- Space: O(n) for recursion and the path, excluding the output.
+
+## Tests
+
+```python
+def norm(result):
+    return sorted(tuple(sorted(s)) for s in result)
+
+for fn in (subsets_with_dup, subsets_with_dup_brute):
+    assert norm(fn([])) == [()]                                        # empty input
+    assert norm(fn([4])) == [(), (4,)]                                  # single element
+    assert norm(fn([3, 1, 3])) == [(), (1,), (1, 3), (1, 3, 3), (3,), (3, 3)]
+    assert norm(fn([5, 5, 5])) == [(), (5,), (5, 5), (5, 5, 5)]
+    assert len(fn([2, 7])) == 4
+
+# The optimal version never produces a duplicate in the first place
+res = subsets_with_dup([2, 2, 1, 1])
+assert len(res) == len({tuple(s) for s in res}) == 9                  # 3 choices for 1s x 3 for 2s
+
+# Agrees with brute force on a mixed case
+assert norm(subsets_with_dup([4, 1, 4, 2, 1])) == norm(subsets_with_dup_brute([4, 1, 4, 2, 1]))
+```
+
+## Edge cases and pitfalls
+
+- **Not sorting.** The `nums[i] == nums[i - 1]` check only catches duplicates that are adjacent.
+- **Using `i > 0` instead of `i > start`.** That also skips the second copy one level deeper, so `[3, 3]` is lost.
+- **Deduplicating unsorted subsets.** `(3, 1)` and `(1, 3)` would both survive a set; sort each subset first if you
+  use the brute-force approach.
+- **Counting check.** The number of distinct subsets is the product of (count + 1) over each distinct value, which
+  is a quick sanity check for your output.
+
+## Where this shows up in data engineering
+
+The same idea, "sort so duplicates are adjacent, then compare with the previous row", is how you deduplicate a sorted
+file in one pass or detect runs in a stream. Spark's sort-based aggregation and `uniq` on sorted input rely on the
+same adjacency property.

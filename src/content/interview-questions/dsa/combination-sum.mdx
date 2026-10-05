@@ -1,0 +1,155 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Combination Sum: Reach a Target with Reusable Values via Backtracking"
+seoTitle: "Combination Sum: Backtracking with Reuse"
+description: "List every combination of reusable candidate values that adds up to a target, using sorted backtracking with pruning, plus complexity and tests."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Sort the candidates, then backtrack with a start index and a remaining total. At each step try candidates from the start index onward; recurse with the same index so a value can be reused, and break out of the loop as soon as a candidate exceeds what is left. Starting at the current index rather than 0 stops the same multiset appearing in different orders. The running time is exponential, roughly O(n^(T/m + 1)) for target T and smallest candidate m, and the extra space is O(T/m) for the path."
+followUps: ["How does the code change if each candidate may be used at most once?", "How would you count the combinations instead of listing them?", "What if candidates could be zero or negative?"]
+previous: "interview-questions:dsa/subsets"
+next: "interview-questions:dsa/permutations"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You have a list of distinct positive integers (candidates) and a positive target. Return every unique combination of
+candidates whose sum equals the target. Any candidate may be used as many times as you like. Two combinations are
+the same if they use the same values the same number of times, regardless of order.
+
+This is widely known as LeetCode 39, "Combination Sum". Its sibling
+[Combination Sum II](/interview/dsa/combination-sum-ii/) allows each value once and has duplicates in the input, and
+Coin Change II asks only for the number of combinations.
+
+Assume up to 30 candidates between 2 and 40, and a target up to 40.
+
+## Examples
+
+```text
+candidates: [3, 4, 5], target: 8
+answer: [3, 5], [4, 4]
+
+candidates: [2, 3], target: 7
+answer: [2, 2, 3]
+
+candidates: [5, 6], target: 4
+answer: []      (every candidate is larger than the target)
+```
+
+## Approach 1: plain recursion over "use it or move on"
+
+At each index, either use the current candidate again (stay at the same index, lower the target) or skip to the next
+candidate. This is a binary decision tree and naturally avoids reordered duplicates.
+
+```python
+def combination_sum_brute(candidates, target):
+    result = []
+
+    def go(i, remaining, path):
+        if remaining == 0:
+            result.append(path[:])
+            return
+        if i == len(candidates) or remaining < 0:
+            return
+        path.append(candidates[i])
+        go(i, remaining - candidates[i], path)   # use candidates[i] (again)
+        path.pop()
+        go(i + 1, remaining, path)               # move on to the next candidate
+
+    go(0, target, [])
+    return result
+```
+
+It is correct but explores many branches that cannot work, because it only notices an overshoot after stepping into
+it.
+
+## Approach 2: optimal, sorted backtracking with pruning
+
+### Template
+
+```text
+backtrack(start, remaining, path):
+    if remaining == 0: record path
+    for i in start .. n-1:
+        if candidates[i] > remaining: break     # sorted, so every later one is too big
+        path.append(candidates[i])              # choose
+        backtrack(i, remaining - candidates[i]) # i, not i + 1: reuse allowed
+        path.pop()                              # un-choose
+```
+
+Passing `i` (not `i + 1`) lets the same value be picked again. Never going back to indices below `start` keeps each
+combination in non-decreasing order, so `[3, 5]` and `[5, 3]` cannot both appear.
+
+### Python solution
+
+```python
+def combination_sum(candidates, target):
+    candidates = sorted(candidates)
+    result, path = [], []
+
+    def backtrack(start, remaining):
+        if remaining == 0:
+            result.append(path[:])
+            return
+        for i in range(start, len(candidates)):
+            value = candidates[i]
+            if value > remaining:
+                break                      # pruning works because the list is sorted
+            path.append(value)
+            backtrack(i, remaining - value)
+            path.pop()
+
+    backtrack(0, target)
+    return result
+```
+
+### Complexity
+
+Let T be the target and m the smallest candidate. The path is at most T/m long and each level branches up to n ways,
+so the worst case is O(n^(T/m + 1)) plus the cost of copying results. That bound is loose; sorting and the `break`
+cut most branches in practice. Extra space is O(T/m) for the recursion and the path.
+
+## Tests
+
+```python
+def norm(result):
+    return sorted(sorted(c) for c in result)
+
+for fn in (combination_sum, combination_sum_brute):
+    assert norm(fn([3, 4, 5], 8)) == [[3, 5], [4, 4]]
+    assert norm(fn([2, 3], 7)) == [[2, 2, 3]]
+    assert fn([5, 6], 4) == []                    # unreachable target
+    assert norm(fn([7], 7)) == [[7]]                # single element, exact
+    assert norm(fn([2], 1)) == []                   # single element, unreachable
+    assert norm(fn([], 3)) == []                    # empty input
+
+# Unsorted input gives the same answer
+assert norm(combination_sum([5, 3, 4], 8)) == [[3, 5], [4, 4]]
+
+# The two approaches agree on a bigger case
+assert norm(combination_sum([2, 3, 5], 10)) == norm(combination_sum_brute([2, 3, 5], 10))
+assert len(combination_sum([2, 3, 5], 10)) == 4
+assert norm(combination_sum([2, 3, 5], 10)) == [[2, 2, 2, 2, 2], [2, 2, 3, 3], [2, 3, 5], [5, 5]]
+```
+
+## Edge cases and pitfalls
+
+- **Recursing with `i + 1`.** That forbids reuse and silently turns this into a different problem.
+- **Looping from 0 at every level.** You get `[3, 5]` and `[5, 3]` as separate answers.
+- **`break` without sorting.** The early exit is only valid when later candidates are at least as large.
+- **Appending `path` itself.** Store a copy.
+- **Zero or negative candidates.** With a zero the recursion never ends; with negatives there can be infinitely
+  many combinations. The positive-integer constraint is what makes the problem finite, so mention it.
+
+## Where this shows up in data engineering
+
+The pattern resembles bin-packing style batching (choose files whose sizes add up to a target block size), although
+real compaction jobs use greedy heuristics rather than exhaustive search because the exact problem is exponential.
+Knowing when an exhaustive search is acceptable (small inputs) and when it is not is the transferable lesson.

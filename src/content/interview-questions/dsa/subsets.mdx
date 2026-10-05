@@ -1,0 +1,157 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Subsets: Generate the Power Set with Include/Exclude Backtracking"
+seoTitle: "Subsets: Power Set with Backtracking"
+description: "Generate every subset of a list of distinct values using include/exclude backtracking, with a bitmask version, complexity analysis and tests."
+technology: ["dsa"]
+topic: ["backtracking"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Walk the values in order and, at each index, branch twice: once leaving the value out and once putting it in, recording the current path at the leaves (or at every node with the start-index form). There are 2^n subsets and copying each costs up to O(n), so the time is O(n * 2^n) and the output dominates the space; the recursion itself uses O(n) extra space."
+followUps: ["How do you change the solution when the input contains duplicates?", "How would you generate only subsets of size k?", "How would you produce subsets lazily with a generator instead of a list?"]
+previous: "interview-questions:dsa/word-search-ii"
+next: "interview-questions:dsa/combination-sum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of distinct integers, return all of its subsets (the power set). Each subset is a list of values; the
+empty subset counts. No subset may appear twice, and the order of the subsets and of the values inside them does not
+matter.
+
+The problem is widely known as LeetCode 78, "Subsets". It is the entry point to the backtracking family:
+[Subsets II](/interview/dsa/subsets-ii/), [Combination Sum](/interview/dsa/combination-sum/) and
+[Permutations](/interview/dsa/permutations/) all reuse its shape.
+
+Assume up to 10 values, each distinct.
+
+## Examples
+
+```text
+values: [4, 7]
+subsets: [], [4], [7], [4, 7]
+
+values: [2, 5, 9]
+subsets: [], [2], [5], [9], [2, 5], [2, 9], [5, 9], [2, 5, 9]   (8 = 2^3)
+
+values: []
+subsets: []          (only the empty subset)
+```
+
+## Approach 1: build iteratively by doubling
+
+Start with the list holding only the empty subset. For each value, copy every subset you have so far and add the
+value to the copy. Each value doubles the number of subsets.
+
+```python
+def subsets_iterative(nums):
+    result = [[]]
+    for value in nums:
+        result += [s + [value] for s in result]
+    return result
+```
+
+This is O(n * 2^n) time like the optimal solution, and it is a perfectly good answer. Interviewers usually still
+want the backtracking version, because it extends to the harder variants. A third option counts a bitmask from 0
+to 2^n - 1 and includes value i when bit i is set:
+
+```python
+def subsets_bitmask(nums):
+    n = len(nums)
+    return [[nums[i] for i in range(n) if mask >> i & 1] for mask in range(1 << n)]
+```
+
+## Approach 2: optimal, backtracking
+
+### Decision tree
+
+Each index is a yes/no decision. For `[2, 5, 9]`:
+
+```text
+                        []
+              /                   \
+         skip 2                  take 2
+          []                      [2]
+        /     \                 /      \
+      []      [5]            [2]      [2,5]
+     /  \     /  \          /  \      /    \
+   []  [9]  [5] [5,9]     [2] [2,9] [2,5] [2,5,9]
+```
+
+The eight leaves are the eight subsets.
+
+### Template
+
+```text
+backtrack(start, path):
+    record a copy of path            # every node is a valid subset
+    for i in start .. n-1:
+        path.append(nums[i])         # choose
+        backtrack(i + 1, path)       # explore: only later values, so no repeats
+        path.pop()                   # un-choose
+```
+
+### Python solution
+
+```python
+def subsets(nums):
+    result, path = [], []
+
+    def backtrack(start):
+        result.append(path[:])          # copy, because path keeps changing
+        for i in range(start, len(nums)):
+            path.append(nums[i])
+            backtrack(i + 1)
+            path.pop()
+
+    backtrack(0)
+    return result
+```
+
+Starting the loop at `start` means a value can only be followed by values that come after it, so `[5, 2]` is never
+generated alongside `[2, 5]`.
+
+### Complexity
+
+- Time: O(n * 2^n). There are 2^n subsets and each copy takes up to O(n).
+- Space: O(n) for the recursion and the path, not counting the output, which itself holds O(n * 2^n) values.
+
+## Tests
+
+```python
+def norm(result):
+    return sorted(sorted(s) for s in result)
+
+for fn in (subsets, subsets_iterative, subsets_bitmask):
+    assert norm(fn([])) == [[]]                       # empty input
+    assert norm(fn([3])) == [[], [3]]                  # single element
+    assert norm(fn([4, 7])) == [[], [4], [4, 7], [7]]
+    assert len(fn([2, 5, 9])) == 8
+    assert len(fn(list(range(10)))) == 1024
+
+# No duplicates and every subset is distinct
+res = subsets([1, 2, 3, 4])
+assert len({tuple(sorted(s)) for s in res}) == 16
+
+# Negative numbers and zero are just values
+assert norm(subsets([-1, 0])) == [[], [-1], [-1, 0], [0]]
+```
+
+## Edge cases and pitfalls
+
+- **Appending `path` instead of a copy.** Every stored subset would point to the same list, which ends empty.
+- **Starting the loop at 0 instead of `start`.** You generate permutations of subsets and repeats.
+- **Forgetting the empty subset.** It is part of the power set; the template records it at the root.
+- **Input with duplicates.** This solution then returns duplicate subsets; that is Subsets II.
+- **Large n.** 2^n grows quickly: 20 values already means over a million subsets. Say so if asked to scale.
+
+## Where this shows up in data engineering
+
+Power sets are exactly what `GROUP BY CUBE` computes: every combination of the grouping columns, 2^n grouping sets
+for n columns. Knowing that the count doubles with each column explains why a cube over many dimensions explodes
+and why `ROLLUP` or explicit `GROUPING SETS` are used instead.
