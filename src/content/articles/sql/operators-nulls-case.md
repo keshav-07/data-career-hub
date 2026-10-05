@@ -199,7 +199,7 @@ WHERE NOT EXISTS (SELECT 1 FROM discontinued d WHERE d.sku = p.sku);
 |---|
 | 7 |
 
-`IN` with a `NULL` in the list is harmless: matches are still found, the `NULL` just never matches anything. The semi-joins and anti-joins lesson later in the course covers these patterns in depth.
+`IN` with a `NULL` in the list is harmless: matches are still found, the `NULL` just never matches anything. The [semi-joins and anti-joins lesson](/sql/semi-anti-lateral-joins/) covers these patterns in depth.
 
 ### BETWEEN
 

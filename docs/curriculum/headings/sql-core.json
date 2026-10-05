@@ -102,5 +102,17 @@
   "Multi-table joins": {
     "ref": "articles:sql/joins",
     "heading": "Multi-table joins"
+  },
+  "Semi-join with EXISTS": {
+    "ref": "articles:sql/semi-anti-lateral-joins",
+    "heading": "Semi-join with EXISTS"
+  },
+  "Anti-join (NOT EXISTS / LEFT JOIN NULL)": {
+    "ref": "articles:sql/semi-anti-lateral-joins",
+    "heading": "Anti-join with NOT EXISTS or LEFT JOIN ... IS NULL"
+  },
+  "LATERAL / CROSS APPLY joins": {
+    "ref": "articles:sql/semi-anti-lateral-joins",
+    "heading": "LATERAL joins and CROSS APPLY"
   }
 }

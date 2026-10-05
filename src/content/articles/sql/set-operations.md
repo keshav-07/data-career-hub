@@ -229,7 +229,7 @@ An order that appears on both sides (103) changed; one that appears only on the 
 | Duplicates | Removed (unless `EXCEPT ALL`) | Left-side rows kept as they are |
 | Returns | Only the compared columns | Any columns of the outer table |
 
-Use `EXCEPT` to compare full rows, and `NOT EXISTS` when you match on a key but need other columns in the output. The semi-joins and anti-joins lesson later in the course covers the second pattern.
+Use `EXCEPT` to compare full rows, and `NOT EXISTS` when you match on a key but need other columns in the output. The [semi-joins and anti-joins lesson](/sql/semi-anti-lateral-joins/) covers the second pattern.
 
 ### ALL variants and precedence
 

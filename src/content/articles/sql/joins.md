@@ -19,6 +19,7 @@ learningObjectives:
 prerequisites: ["articles:sql/aggregations-group-by-having"]
 related: ["articles:pyspark/joins-and-join-strategy", "interview-questions:sql/inner-vs-left-join", "interview-questions:sql/window-functions-vs-group-by"]
 previous: "articles:sql/set-operations"
+next: "articles:sql/semi-anti-lateral-joins"
 sources:
   - { label: "PostgreSQL documentation: Joins between tables (tutorial)", url: "https://www.postgresql.org/docs/16/tutorial-join.html" }
   - { label: "PostgreSQL documentation: Table expressions and joined tables", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
