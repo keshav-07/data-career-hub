@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:kafka/topics-partitions-consumer-groups"]
 related: ["articles:kafka/kafka-vs-message-queues", "articles:etl-elt/cdc-patterns-and-failure-modes"]
 previous: "articles:kafka/topics-partitions-consumer-groups"
+next: "articles:kafka/producers"
 sources:
   - { label: "Apache Kafka documentation: Design (log compaction)", url: "https://kafka.apache.org/documentation/#design" }
   - { label: "Apache Kafka documentation: Operations", url: "https://kafka.apache.org/39/operations/" }
@@ -94,7 +95,7 @@ offset: 2045 position: 16212
 offset: 2076 position: 32424
 ```
 
-Each batch of 31 records is 16,212 bytes, and the index has an entry roughly every 4 KiB of log (`index.interval.bytes`, default 4096). The batch header also shows the producer ID and sequence numbers that the idempotent producer uses, which the producers lesson explains.
+Each batch of 31 records is 16,212 bytes, and the index has an entry roughly every 4 KiB of log (`index.interval.bytes`, default 4096). The batch header also shows the producer ID and sequence numbers that the idempotent producer uses, which the [producers lesson](/kafka/producers/) explains.
 
 ### When a segment rolls
 

@@ -46,5 +46,41 @@
   "Tiered storage": {
     "ref": "articles:kafka/log-storage-retention-compaction",
     "heading": "Tiered storage"
+  },
+  "Producer API": {
+    "ref": "articles:kafka/producers",
+    "heading": "Producer API"
+  },
+  "acks (0/1/all)": {
+    "ref": "articles:kafka/producers",
+    "heading": "acks: 0, 1 and all"
+  },
+  "Idempotent producer": {
+    "ref": "articles:kafka/producers",
+    "heading": "Idempotent producer"
+  },
+  "Batching & linger.ms": {
+    "ref": "articles:kafka/producers",
+    "heading": "Batching and linger.ms"
+  },
+  "Compression (snappy/lz4/zstd)": {
+    "ref": "articles:kafka/producers",
+    "heading": "Compression: snappy, lz4 and zstd"
+  },
+  "Partitioner strategies": {
+    "ref": "articles:kafka/producers",
+    "heading": "Partitioner strategies"
+  },
+  "Retries & delivery": {
+    "ref": "articles:kafka/producers",
+    "heading": "Retries and delivery"
+  },
+  "max.in.flight & ordering": {
+    "ref": "articles:kafka/producers",
+    "heading": "max.in.flight and ordering"
+  },
+  "Producer buffering": {
+    "ref": "articles:kafka/producers",
+    "heading": "Producer buffering"
   }
 }

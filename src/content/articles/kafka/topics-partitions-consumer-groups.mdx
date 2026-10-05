@@ -233,7 +233,7 @@ Pick the **narrowest entity whose events must stay in order**. A key with few di
 ### Pitfalls
 
 - **Different clients, different hashes.** librdkafka-based clients (the Confluent Python, Go and .NET clients) default to a CRC32-based partitioner. On the same topic, the Confluent Python client's default agreed with the Java producer on only 7 of 30 test keys. Set `partitioner: murmur2_random` in those clients when Java and non-Java producers write the same keyed topic.
-- **Retries and reordering.** Ordering within a partition also depends on producer settings; the idempotent producer (on by default since Kafka 3.0) keeps order through retries. See the producers lesson.
+- **Retries and reordering.** Ordering within a partition also depends on producer settings; the idempotent producer (on by default since Kafka 3.0) keeps order through retries. See the [producers lesson](/kafka/producers/).
 - **Null keys** give no ordering. Do not rely on arrival order for unkeyed data.
 
 ### In interviews
