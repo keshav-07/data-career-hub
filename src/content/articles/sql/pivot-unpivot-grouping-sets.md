@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/aggregations-group-by-having", "articles:sql/ctes-subqueries-temp-tables"]
 related: ["articles:sql/semi-anti-lateral-joins", "articles:data-warehousing/star-schema"]
 previous: "articles:sql/ctes-subqueries-temp-tables"
+next: "articles:sql/window-functions"
 sources:
   - { label: "PostgreSQL documentation: GROUPING SETS, CUBE and ROLLUP", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
   - { label: "PostgreSQL documentation: tablefunc (crosstab)", url: "https://www.postgresql.org/docs/16/tablefunc.html" }

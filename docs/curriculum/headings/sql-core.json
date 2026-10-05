@@ -158,5 +158,33 @@
   "ROLLUP and CUBE": {
     "ref": "articles:sql/pivot-unpivot-grouping-sets",
     "heading": "ROLLUP and CUBE"
+  },
+  "Window function basics (OVER)": {
+    "ref": "articles:sql/window-functions",
+    "heading": "Window function basics: the OVER clause"
+  },
+  "PARTITION BY clause": {
+    "ref": "articles:sql/window-functions",
+    "heading": "The PARTITION BY clause"
+  },
+  "ROW_NUMBER()": {
+    "ref": "articles:sql/window-functions",
+    "heading": "ROW_NUMBER()"
+  },
+  "RANK() vs DENSE_RANK()": {
+    "ref": "articles:sql/window-functions",
+    "heading": "RANK() versus DENSE_RANK()"
+  },
+  "NTILE() bucketing": {
+    "ref": "articles:sql/window-functions",
+    "heading": "NTILE() bucketing"
+  },
+  "LAG() and LEAD()": {
+    "ref": "articles:sql/window-functions",
+    "heading": "LAG() and LEAD()"
+  },
+  "FIRST_VALUE / LAST_VALUE": {
+    "ref": "articles:sql/window-functions",
+    "heading": "FIRST_VALUE and LAST_VALUE"
   }
 }
