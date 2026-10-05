@@ -18,7 +18,7 @@ Exit code is non-zero if any block fails.
 """
 import json, os, re, subprocess, sys, tempfile, uuid
 
-FENCE = re.compile(r"((?:(?:<!--[^>]*-->|\{/\*.*?\*/\})\s*\n)*)```(sql|python)[^\n]*\n(.*?)```", re.S)
+FENCE = re.compile(r"((?:(?:<!--[^>]*-->|\{/\*[^\n]*?\*/\})\s*\n)*)```(sql|python)[^\n]*\n(.*?)```", re.S)
 
 RUNNER = r'''
 import sys, json, io, contextlib, traceback
