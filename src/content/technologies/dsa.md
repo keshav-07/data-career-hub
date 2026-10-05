@@ -8,7 +8,7 @@ keyFacts: ["Most DE coding rounds are easy to medium: arrays, hashing, strings, 
 whatToLearnFirst: ["articles:dsa/dsa-for-data-engineers"]
 relatedTechnologies: ["python", "sql"]
 monogram: "DSA"
-lessons: ["articles:dsa/dsa-for-data-engineers"]
+lessons: ["articles:dsa/dsa-for-data-engineers", "articles:dsa/arrays-and-hashing"]
 updatedDate: 2026-10-05
 ---
 
