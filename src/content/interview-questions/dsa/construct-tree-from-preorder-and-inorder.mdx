@@ -1,0 +1,166 @@
+---
+title: "Construct Binary Tree from Preorder and Inorder Traversal"
+seoTitle: "Build a Tree from Preorder and Inorder"
+description: "Rebuild a binary tree from its preorder and inorder sequences: slicing recursion first, then an O(n) version with an index map. Python code and round-trip tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "The first preorder value is the root. Its position in the inorder sequence splits the inorder list into the left subtree (before it) and the right subtree (after it), and the size of the left part tells you how many following preorder values belong to the left subtree. Recurse on both parts. With a dictionary from value to inorder index and index bounds instead of list slices, each node is placed in O(1): O(n) time and O(n) space."
+followUps: ["Why do you need inorder in addition to preorder?", "Can you rebuild a tree from preorder and postorder alone?", "What goes wrong if values are not unique?", "How would you do it from inorder and postorder?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+---
+
+## Problem
+
+You are given two lists describing the same binary tree: its **preorder** traversal (node, then left subtree, then right subtree) and its **inorder** traversal (left subtree, then node, then right subtree). All values are distinct. Rebuild the tree and return its root.
+
+This is widely known as LeetCode 105 (Construct Binary Tree from Preorder and Inorder Traversal). It tests whether you understand what each traversal order tells you about the tree's structure.
+
+Constraints for this version: 1 to 3,000 nodes, distinct integer values, and the two lists are guaranteed to describe a valid tree.
+
+## Examples
+
+| `preorder` | `inorder` | Tree (level order) |
+|---|---|---|
+| `[8, 4, 2, 6, 12, 14]` | `[2, 4, 6, 8, 12, 14]` | `[8, 4, 12, 2, 6, None, 14]` |
+| `[1, 2, 3]` | `[3, 2, 1]` | `[1, 2, None, 3]` (left chain) |
+| `[1, 2, 3]` | `[1, 2, 3]` | `[1, None, 2, None, 3]` (right chain) |
+| `[5]` | `[5]` | `[5]` |
+
+The last two show why one traversal is not enough: the preorder is the same, but the trees differ.
+
+## Approach 1: brute force
+
+The direct recursion: take the root from the front of `preorder`, find it in `inorder` with a linear search, slice both lists and recurse.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def build_tree_slicing(preorder, inorder):
+    if not preorder:
+        return None
+    root_val = preorder[0]
+    mid = inorder.index(root_val)              # O(n) search
+    root = TreeNode(root_val)
+    root.left = build_tree_slicing(preorder[1:mid + 1], inorder[:mid])
+    root.right = build_tree_slicing(preorder[mid + 1:], inorder[mid + 1:])
+    return root
+```
+
+It is correct and easy to explain, but `index` and the slices cost O(n) per node, giving O(n^2) time and memory on skewed trees.
+
+## Approach 2: optimal
+
+**Key insight.** Two facts drive the reconstruction:
+
+1. In preorder, a subtree's root comes first.
+2. In inorder, everything left of the root belongs to its left subtree, and everything to the right belongs to its right subtree.
+
+So if the root sits at inorder index `mid` within a range starting at `in_lo`, the left subtree has `mid - in_lo` nodes, and those are the next `mid - in_lo` values in preorder. Precompute a dictionary from value to inorder index to avoid searching, and pass index bounds instead of slices.
+
+An even simpler bookkeeping trick: consume preorder from left to right with a single moving pointer. Because preorder lists a root, then its whole left subtree, then its right subtree, building the left subtree first always consumes exactly the right values.
+
+**Walkthrough** for `preorder = [8, 4, 2, 6, 12, 14]`, `inorder = [2, 4, 6, 8, 12, 14]`:
+
+| Next preorder value | Inorder range | Split at | Left range | Right range |
+|---|---|---|---|---|
+| 8 | 0..5 | 3 | 0..2 | 4..5 |
+| 4 | 0..2 | 1 | 0..0 | 2..2 |
+| 2 | 0..0 | 0 | empty | empty |
+| 6 | 2..2 | 2 | empty | empty |
+| 12 | 4..5 | 4 | empty | 5..5 |
+| 14 | 5..5 | 5 | empty | empty |
+
+```python
+def build_tree(preorder, inorder):
+    index_of = {v: i for i, v in enumerate(inorder)}
+    pre_iter = iter(preorder)                  # consumed strictly left to right
+
+    def build(in_lo, in_hi):                   # inclusive inorder bounds
+        if in_lo > in_hi:
+            return None
+        root_val = next(pre_iter)
+        mid = index_of[root_val]
+        root = TreeNode(root_val)
+        root.left = build(in_lo, mid - 1)      # must be built before the right
+        root.right = build(mid + 1, in_hi)
+        return root
+
+    return build(0, len(inorder) - 1)
+```
+
+**Complexity.** O(n) time: every node is created once with an O(1) lookup. O(n) space for the dictionary, plus O(h) recursion depth. For a degenerate chain of thousands of nodes, raise the recursion limit or convert to an explicit stack.
+
+## Tests
+
+```python
+from collections import deque
+import random, sys
+
+def to_level_list(root):
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
+        if node:
+            out.append(node.val)
+            queue.extend([node.left, node.right])
+        else:
+            out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+def preorder_of(node):
+    return [] if node is None else [node.val] + preorder_of(node.left) + preorder_of(node.right)
+
+def inorder_of(node):
+    return [] if node is None else inorder_of(node.left) + [node.val] + inorder_of(node.right)
+
+cases = [
+    ([8, 4, 2, 6, 12, 14], [2, 4, 6, 8, 12, 14], [8, 4, 12, 2, 6, None, 14]),
+    ([1, 2, 3], [3, 2, 1], [1, 2, None, 3]),
+    ([1, 2, 3], [1, 2, 3], [1, None, 2, None, 3]),
+    ([5], [5], [5]),
+    ([], [], []),
+]
+for fn in (build_tree_slicing, build_tree):
+    for pre, ino, want in cases:
+        assert to_level_list(fn(pre, ino)) == want, (fn.__name__, pre, ino)
+
+def random_tree(rng, values):
+    if not values:
+        return None
+    k = rng.randrange(len(values))
+    return TreeNode(values[k], random_tree(rng, values[:k]), random_tree(rng, values[k + 1:]))
+
+rng = random.Random(12)
+for _ in range(300):
+    vals = rng.sample(range(-100, 100), rng.randint(1, 25))
+    tree = random_tree(rng, vals)
+    pre, ino = preorder_of(tree), inorder_of(tree)
+    rebuilt = build_tree(pre, ino)
+    assert preorder_of(rebuilt) == pre and inorder_of(rebuilt) == ino
+    assert to_level_list(rebuilt) == to_level_list(tree)
+print("all construct tree tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Building the right subtree first** while consuming preorder from the front assigns the wrong values. Left before right.
+- **Off-by-one in slice boundaries** (`preorder[1:mid + 1]`) is the usual bug in the slicing version; check with a two-node tree in both shapes.
+- **Duplicate values** make the inorder position ambiguous, and the tree may not be uniquely determined. Ask the interviewer; the standard problem promises distinct values.
+- **Preorder and postorder alone** do not determine a binary tree uniquely when a node has one child, so inorder is needed (unless the tree is full).
+
+## Where this shows up in data engineering
+
+Reconstructing a structure from flat, ordered records is common: rebuilding a hierarchy from an export that lists nodes in a known traversal order, or decoding a nested schema stored as a flattened list of fields with positions. The general lesson is that a single ordering usually loses information, so a flat export needs enough extra metadata (parent ids, depth, or a second ordering) to be reversible.
