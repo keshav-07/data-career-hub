@@ -1,0 +1,151 @@
+---
+title: "Implement Queue using Stacks: FIFO With Two Stacks in Amortised O(1)"
+seoTitle: "Implement Queue using Stacks: Amortised O(1)"
+description: "Build a first-in, first-out queue from two stacks. Learn the lazy transfer that reverses items only when needed, giving amortised O(1) time per operation."
+technology: ["dsa"]
+topic: ["queue", "stack", "design"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Use an inbox stack for pushes and an outbox stack for pops. Pop and peek read from the outbox; only when the outbox is empty, move every item from the inbox to the outbox, which reverses them into FIFO order. Each item is pushed and popped at most twice in total, so every operation is amortised O(1), with O(n) worst case for a single pop that triggers a transfer."
+followUps: ["Explain why the cost is amortised O(1) even though one pop can be O(n).", "Why must you not transfer while the outbox still has items?", "How would you get worst-case O(1) per operation?"]
+previous: "interview-questions:dsa/implement-stack-using-queues"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Implement a queue with `push(x)` (add to the back), `pop()` (remove and return the front), `peek()` (return the front) and `empty()`, using only stack operations: push to top, pop from top, look at top, size and is-empty. This is widely known as LeetCode 232, Implement Queue using Stacks.
+
+In Python, use lists and only call `append`, `pop()`, `[-1]` and `len`.
+
+## Examples
+
+```text
+push(3), push(8), peek() -> 3
+pop() -> 3, push(5), pop() -> 8
+pop() -> 5, empty() -> True
+```
+
+## Approach 1: brute force (move everything on every push)
+
+Keep the queue in one stack with the front on top. To push, move everything to a helper stack, push the new item, and move everything back.
+
+```python
+class QueueEagerTransfer:
+    def __init__(self):
+        self.s = []                      # front of the queue is on top
+
+    def push(self, x):
+        helper = []
+        while self.s:
+            helper.append(self.s.pop())
+        self.s.append(x)
+        while helper:
+            self.s.append(helper.pop())
+
+    def pop(self):
+        return self.s.pop()
+
+    def peek(self):
+        return self.s[-1]
+
+    def empty(self):
+        return not self.s
+```
+
+**Complexity:** push O(n); pop and peek O(1). O(n) space.
+
+## Approach 2: optimal (lazy transfer)
+
+**Key insight:** reversing a stack once puts its items in FIFO order. Do the reversal only when the outbox runs dry; items already in the outbox are older than anything in the inbox, so they must be served first.
+
+Walkthrough of the example:
+
+| Operation | inbox (bottom → top) | outbox (bottom → top) | Result |
+|---|---|---|---|
+| push(3) | 3 | | |
+| push(8) | 3 8 | | |
+| peek() | | 8 3 | transfer, then 3 |
+| pop() | | 8 | 3 |
+| push(5) | 5 | 8 | |
+| pop() | 5 | | 8 (no transfer: outbox not empty) |
+| pop() | | | transfer 5, then 5 |
+
+```python
+class MyQueue:
+    def __init__(self):
+        self.inbox, self.outbox = [], []
+
+    def push(self, x):
+        self.inbox.append(x)
+
+    def _shift(self):
+        if not self.outbox:
+            while self.inbox:
+                self.outbox.append(self.inbox.pop())
+
+    def pop(self):
+        self._shift()
+        return self.outbox.pop()
+
+    def peek(self):
+        self._shift()
+        return self.outbox[-1]
+
+    def empty(self):
+        return not self.inbox and not self.outbox
+```
+
+**Complexity:** amortised O(1) per operation. Each item is pushed onto the inbox once, moved once, and popped from the outbox once. A single pop can cost O(n) when it triggers a transfer. O(n) space.
+
+## Tests
+
+```python
+import random
+
+for cls in (MyQueue, QueueEagerTransfer):
+    q = cls()
+    assert q.empty() is True                    # new queue is empty
+    q.push(3); q.push(8)
+    assert q.peek() == 3
+    assert q.pop() == 3
+    q.push(5)
+    assert q.pop() == 8 and q.pop() == 5 and q.empty() is True
+    q.push(-2); q.push(-2)                      # duplicates and negatives
+    assert q.pop() == -2 and q.peek() == -2
+    q.push(10**18)                              # large value
+    assert q.pop() == -2 and q.pop() == 10**18
+
+big = MyQueue()
+for i in range(100_000):
+    big.push(i)
+assert [big.pop() for _ in range(100_000)] == list(range(100_000))
+
+random.seed(41)
+for _ in range(100):
+    a, b, ref = MyQueue(), QueueEagerTransfer(), []
+    for _ in range(40):
+        if ref and random.random() < 0.4:
+            assert a.pop() == b.pop() == ref.pop(0)
+        else:
+            x = random.randint(-5, 5)
+            a.push(x); b.push(x); ref.append(x)
+        assert a.empty() == b.empty() == (not ref)
+        if ref:
+            assert a.peek() == b.peek() == ref[0]
+```
+
+## Edge cases and pitfalls
+
+- Transferring while the outbox still holds items puts newer items on top of older ones and breaks FIFO order.
+- `empty()` must check both stacks.
+- Know how to argue the amortised bound: count the operations each item ever experiences (four at most), not the cost of the worst single call.
+
+## Where this shows up in data engineering
+
+Amortised reasoning is everywhere in data infrastructure: Python lists, hash tables and write buffers occasionally pay a large cost (resize, flush, compaction) so that the average operation stays cheap. Being able to explain why a rare O(n) step still yields O(1) average cost is the real point of this question.
