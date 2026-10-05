@@ -1,0 +1,109 @@
+---
+title: "Valid Anagram: Check Whether Two Strings Use the Same Letters"
+seoTitle: "Valid Anagram: Same Letters, Same Counts"
+description: "Decide whether one string is a rearrangement of another. Compare sorting at O(n log n) with an O(n) character count using a dictionary or Counter."
+technology: ["dsa"]
+topic: ["hashing"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Two strings are anagrams when every character occurs the same number of times in both. Reject early if the lengths differ, then count characters of the first string up and the second string down in one dictionary; they are anagrams if every count ends at zero. This is O(n) time and O(k) space, where k is the number of distinct characters (constant for a fixed alphabet)."
+followUps: ["What changes if the strings can contain any Unicode characters?", "How would you do it with a fixed-size array instead of a dictionary?", "How would you group a whole list of words by anagram?"]
+previous: "interview-questions:dsa/contains-duplicate"
+next: "interview-questions:dsa/two-sum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given two strings `s` and `t`, return `True` if `t` can be formed by rearranging all the characters of `s`, using each character exactly as often as it appears in `s`. Otherwise return `False`. This is widely known as LeetCode 242, Valid Anagram.
+
+Comparison is case-sensitive and every character counts, including spaces. Strings may be empty and may be up to about 5 × 10^4 characters long.
+
+## Examples
+
+```text
+s = "silent",  t = "listen"   ->  True
+s = "kayak",   t = "kayaks"   ->  False   (different lengths)
+s = "aab",     t = "abb"      ->  False   (same letters, different counts)
+s = "",        t = ""         ->  True
+```
+
+## Approach 1: brute force
+
+Sort both strings and compare. Anagrams have identical sorted forms.
+
+```python
+def is_anagram_sorted(s, t):
+    return sorted(s) == sorted(t)
+```
+
+**Complexity:** O(n log n) time, O(n) space for the sorted copies. This is short and perfectly acceptable as a first answer; the interviewer usually then asks for linear time. (A truly naive version, removing each character of `s` from a list copy of `t`, is O(n²).)
+
+## Approach 2: optimal
+
+**Key insight:** an anagram is defined by character counts, and counts can be built in one pass with a hash map.
+
+Walkthrough on `s = "aab"`, `t = "abb"`: add 1 for each character of `s`, subtract 1 for each of `t`.
+
+| After | counts |
+|---|---|
+| counting `s` | `{a: 2, b: 1}` |
+| subtracting `t` | `{a: 1, b: -1}` |
+
+Not all zero, so `False`.
+
+```python
+def is_anagram(s, t):
+    if len(s) != len(t):
+        return False
+    counts = {}
+    for a, b in zip(s, t):
+        counts[a] = counts.get(a, 0) + 1
+        counts[b] = counts.get(b, 0) - 1
+    return all(v == 0 for v in counts.values())
+```
+
+In Python you can also write `collections.Counter(s) == collections.Counter(t)`, which is the same idea. Be ready to write the explicit loop if asked.
+
+**Complexity:** O(n) time, O(k) extra space for k distinct characters. For lowercase English letters only, a list of 26 counters makes the space O(1).
+
+## Tests
+
+```python
+import random
+from collections import Counter
+
+for f in (is_anagram, is_anagram_sorted):
+    assert f("silent", "listen") is True
+    assert f("kayak", "kayaks") is False
+    assert f("aab", "abb") is False          # same letters, wrong counts
+    assert f("", "") is True                 # empty
+    assert f("x", "x") is True               # single character
+    assert f("x", "y") is False
+    assert f("Tea", "eat") is False          # case-sensitive
+    assert f("a b", "ba ") is True           # spaces count as characters
+    assert f("café", "éfac") is True         # non-ASCII
+    assert f("ab" * 50_000, "ba" * 50_000) is True   # long input
+
+random.seed(2)
+for _ in range(300):
+    s = "".join(random.choice("abc") for _ in range(random.randint(0, 6)))
+    t = "".join(random.choice("abc") for _ in range(random.randint(0, 6)))
+    assert is_anagram(s, t) == is_anagram_sorted(s, t) == (Counter(s) == Counter(t))
+```
+
+## Edge cases and pitfalls
+
+- Check lengths first; it is the cheapest rejection and guarantees the zip covers both strings.
+- Comparing `set(s) == set(t)` is wrong: it ignores counts, so `"aab"` and `"abb"` would pass.
+- Clarify case sensitivity and whether spaces or punctuation count before coding.
+- A 26-slot array only works for lowercase English letters; with Unicode use a dictionary. Characters that look identical can have different code points (for example a precomposed `é` versus `e` plus a combining accent), so normalise with `unicodedata.normalize` if that matters.
+
+## Where this shows up in data engineering
+
+Comparing multisets is the core of reconciliation: checking that a target table holds the same keys with the same multiplicities as the source, regardless of order. A `Counter` comparison on a sample, or a `GROUP BY key` count compared across both sides, is the same technique at a larger scale.

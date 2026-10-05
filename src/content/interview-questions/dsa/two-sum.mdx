@@ -1,0 +1,108 @@
+---
+title: "Two Sum: Find Two Indices That Add Up to a Target"
+description: "Find the positions of two numbers that sum to a target. Learn the O(n²) pair scan and the one-pass hash map of complements that runs in O(n)."
+technology: ["dsa"]
+topic: ["hashing"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Scan the array once while keeping a dictionary from each value seen so far to its index. For each number x, look up target - x: if it is already in the dictionary you have the pair, otherwise store x. Checking before inserting stops an element pairing with itself. This is O(n) time and O(n) space, versus O(n²) for checking every pair."
+followUps: ["What if the array is sorted: can you do it in O(1) extra space?", "How would you return every distinct pair of values instead of one pair of indices?", "How does this generalise to three numbers that sum to zero?"]
+previous: "interview-questions:dsa/valid-anagram"
+next: "interview-questions:dsa/group-anagrams"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of integers `nums` and an integer `target`. Exactly one pair of different positions `i` and `j` has `nums[i] + nums[j] == target`. Return those two indices as a list, smaller index first. This is widely known as LeetCode 1, Two Sum.
+
+The list has at least two elements and up to about 10^4. Values and the target can be negative.
+
+## Examples
+
+```text
+nums = [5, 11, 2, 9],  target = 14   ->  [0, 3]   (5 + 9)
+nums = [-4, 7, 1],     target = -3   ->  [0, 2]   (-4 + 1)
+nums = [6, 6],         target = 12   ->  [0, 1]   (two different positions with the same value)
+```
+
+## Approach 1: brute force
+
+Try every pair of positions.
+
+```python
+def two_sum_brute(nums, target):
+    for i in range(len(nums)):
+        for j in range(i + 1, len(nums)):
+            if nums[i] + nums[j] == target:
+                return [i, j]
+    return []
+```
+
+**Complexity:** O(n²) time, O(1) extra space.
+
+## Approach 2: optimal
+
+**Key insight:** for each value `x` you know exactly which partner you need, `target - x`. A dictionary of values already seen answers "have I seen the partner?" in O(1) on average.
+
+Walkthrough on `nums = [5, 11, 2, 9]`, `target = 14`:
+
+| i | x | need | seen before step | Result |
+|---|---|---|---|---|
+| 0 | 5 | 9 | `{}` | store 5 → 0 |
+| 1 | 11 | 3 | `{5: 0}` | store 11 → 1 |
+| 2 | 2 | 12 | `{5: 0, 11: 1}` | store 2 → 2 |
+| 3 | 9 | 5 | `{5: 0, 11: 1, 2: 2}` | 5 found at 0 → `[0, 3]` |
+
+```python
+def two_sum(nums, target):
+    index_of = {}
+    for i, num in enumerate(nums):
+        need = target - num
+        if need in index_of:
+            return [index_of[need], i]
+        index_of[num] = i
+    return []
+```
+
+**Complexity:** O(n) time on average, O(n) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (two_sum, two_sum_brute):
+    assert f([5, 11, 2, 9], 14) == [0, 3]
+    assert f([-4, 7, 1], -3) == [0, 2]                 # negatives
+    assert f([6, 6], 12) == [0, 1]                     # duplicate values
+    assert f([3, 2, 4], 6) == [1, 2]                   # must not use index 0 twice
+    assert f([0, 8, 0], 0) == [0, 2]                   # zeros
+    assert f([10**9, -10**9, 7], 0) == [0, 1]          # large values
+    assert f([1, 2], 10) == []                         # no pair (defensive)
+    assert f([], 5) == [] and f([4], 8) == []          # too short (defensive)
+
+random.seed(3)
+for _ in range(300):
+    arr = [random.randint(-20, 20) for _ in range(random.randint(2, 10))]
+    i, j = sorted(random.sample(range(len(arr)), 2))
+    t = arr[i] + arr[j]
+    a, b = two_sum(arr, t)
+    assert a < b and arr[a] + arr[b] == t
+```
+
+## Edge cases and pitfalls
+
+- Insert the current value **after** the lookup. Inserting first lets `x` pair with itself when `2 * x == target`.
+- Duplicates are fine: the dictionary keeps the earlier index, and the later copy finds it.
+- Sorting the array and using two pointers loses the original indices unless you sort `(value, index)` pairs, and costs O(n log n).
+- The problem promises one answer. Say what you would return if there were none (here, an empty list).
+
+## Where this shows up in data engineering
+
+The "look up the complement in a hash table" move is a hash join in miniature: build a table on one side, probe it with the other. Matching debits to credits of equal and opposite amounts in a reconciliation job is a direct use.
