@@ -1,0 +1,146 @@
+---
+title: "Min Stack: A Stack That Returns Its Minimum in Constant Time"
+seoTitle: "Min Stack: O(1) push, pop, top and get_min"
+description: "Design a stack supporting push, pop, top and get-minimum, all in O(1). Store the running minimum alongside each element so popping restores the old minimum."
+technology: ["dsa"]
+topic: ["stack", "design"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Store each element together with the minimum of the stack at the moment it was pushed: push (x, min(x, current_min)). The top pair then always holds the current minimum, and popping automatically reveals the previous minimum. Every operation is O(1) time, at the cost of O(n) extra space. A second stack that only records new minima (including equal ones) saves space when minima change rarely."
+followUps: ["Why must the auxiliary min stack also push values equal to the current minimum?", "Can you do it with O(1) extra space by storing differences?", "How would you build a queue that reports its minimum in O(1)?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Design a stack class with these operations, each running in O(1) time:
+
+- `push(x)`: add `x` on top;
+- `pop()`: remove the top element;
+- `top()`: return the top element;
+- `get_min()`: return the smallest element currently in the stack.
+
+`pop`, `top` and `get_min` are only called on a non-empty stack. This is widely known as LeetCode 155, Min Stack.
+
+## Examples
+
+```text
+push(5), push(2), push(8)   get_min() -> 2   top() -> 8
+pop()                       get_min() -> 2
+pop()                       get_min() -> 5   (2 is gone, the old minimum returns)
+```
+
+## Approach 1: brute force
+
+Use a plain list and scan it for the minimum on demand.
+
+```python
+class MinStackScan:
+    def __init__(self):
+        self.items = []
+
+    def push(self, x):
+        self.items.append(x)
+
+    def pop(self):
+        self.items.pop()
+
+    def top(self):
+        return self.items[-1]
+
+    def get_min(self):
+        return min(self.items)
+```
+
+**Complexity:** O(1) for push, pop and top; O(n) for `get_min`. Fails the requirement.
+
+## Approach 2: optimal
+
+**Key insight:** a stack only changes at the top, so the minimum of everything below an element never changes while that element is present. Record it at push time.
+
+Walkthrough of the example (pairs are `(value, min so far)`):
+
+| Operation | Stack (bottom → top) | get_min |
+|---|---|---|
+| push(5) | (5, 5) | 5 |
+| push(2) | (5, 5) (2, 2) | 2 |
+| push(8) | (5, 5) (2, 2) (8, 2) | 2 |
+| pop() | (5, 5) (2, 2) | 2 |
+| pop() | (5, 5) | 5 |
+
+```python
+class MinStack:
+    def __init__(self):
+        self.items = []            # (value, minimum including this value)
+
+    def push(self, x):
+        current = x if not self.items else min(x, self.items[-1][1])
+        self.items.append((x, current))
+
+    def pop(self):
+        self.items.pop()
+
+    def top(self):
+        return self.items[-1][0]
+
+    def get_min(self):
+        return self.items[-1][1]
+```
+
+**Complexity:** O(1) time for every operation, O(n) space.
+
+## Tests
+
+```python
+import random
+
+for cls in (MinStack, MinStackScan):
+    s = cls()
+    s.push(5); s.push(2); s.push(8)
+    assert s.get_min() == 2 and s.top() == 8
+    s.pop()
+    assert s.get_min() == 2
+    s.pop()
+    assert s.get_min() == 5 and s.top() == 5
+
+    d = cls()                                   # duplicate minimums
+    d.push(1); d.push(1); d.pop()
+    assert d.get_min() == 1
+
+    n = cls()                                   # negatives and large values
+    n.push(10**9); n.push(-10**9); n.push(0)
+    assert n.get_min() == -10**9
+    n.pop(); n.pop()
+    assert n.get_min() == 10**9
+
+    one = cls()                                 # single element
+    one.push(7)
+    assert one.top() == one.get_min() == 7
+
+random.seed(34)
+for _ in range(100):
+    a, b = MinStack(), MinStackScan()
+    for _ in range(50):
+        if a.items and random.random() < 0.4:
+            a.pop(); b.pop()
+        else:
+            x = random.randint(-5, 5)
+            a.push(x); b.push(x)
+        if a.items:
+            assert a.get_min() == b.get_min() and a.top() == b.top()
+```
+
+## Edge cases and pitfalls
+
+- With the two-stack variant (a main stack plus a stack of minima), push onto the min stack when `x <= current_min`, not `<`. Otherwise pushing a duplicate minimum and popping it once loses the minimum.
+- Decide what `pop` on an empty stack should do; the problem rules it out, but say so.
+- A heap does not help: it gives the minimum, but cannot remove the element that was pushed last.
+
+## Where this shows up in data engineering
+
+Snapshotting an aggregate alongside each state change is the same idea as storing running totals or running minimums with each record, so that rolling back (popping) never requires recomputation. Undo logs and versioned state in stream processors use this "store the derived value with the change" pattern.

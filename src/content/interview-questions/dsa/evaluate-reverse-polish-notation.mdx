@@ -1,0 +1,121 @@
+---
+title: "Evaluate Reverse Polish Notation: Compute a Postfix Expression"
+seoTitle: "Evaluate Reverse Polish Notation With a Stack"
+description: "Evaluate an arithmetic expression written in postfix order using a stack. Covers operand order for - and /, and integer division that truncates toward zero."
+technology: ["dsa"]
+topic: ["stack"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Read tokens left to right. Push numbers onto a stack. For an operator, pop the right operand first, then the left, apply the operator, and push the result. At the end the stack holds exactly one value, the answer. Division must truncate toward zero, so in Python use int(a / b) rather than a // b, which floors. This is O(n) time and O(n) space."
+followUps: ["How would you convert an ordinary infix expression to postfix (the shunting-yard algorithm)?", "How would you detect a malformed expression?", "Why does postfix notation need no parentheses?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You receive a list of string tokens forming a valid expression in Reverse Polish (postfix) notation: each operator comes after its two operands. Operators are `+`, `-`, `*` and `/`; operands are integers, possibly negative. Return the integer result. Division truncates toward zero, and there is no division by zero. This is widely known as LeetCode 150, Evaluate Reverse Polish Notation.
+
+## Examples
+
+```text
+["3", "4", "+", "2", "*"]           ->  14    ((3 + 4) * 2)
+["15", "7", "1", "1", "+", "-", "/"] ->  3    (15 / (7 - (1 + 1)))
+["-7", "2", "/"]                    ->  -3    (truncate toward zero, not -4)
+```
+
+## Approach 1: brute force
+
+Repeatedly find the first operator, combine the two tokens before it, and splice the result back into the list.
+
+```python
+def apply_op(op, a, b):
+    if op == "+":
+        return a + b
+    if op == "-":
+        return a - b
+    if op == "*":
+        return a * b
+    return int(a / b)          # truncates toward zero
+
+def eval_rpn_brute(tokens):
+    items = list(tokens)
+    while len(items) > 1:
+        i = next(i for i, t in enumerate(items) if t in "+-*/" and len(t) == 1)
+        value = apply_op(items[i], int(items[i - 2]), int(items[i - 1]))
+        items[i - 2:i + 1] = [str(value)]
+    return int(items[0])
+```
+
+**Complexity:** O(n²) time, because each splice and each search is O(n).
+
+## Approach 2: optimal
+
+**Key insight:** in postfix, an operator always applies to the two most recent unconsumed values. A stack keeps exactly those on top.
+
+Walkthrough on `["15", "7", "1", "1", "+", "-", "/"]`:
+
+| Token | Stack after |
+|---|---|
+| 15 | 15 |
+| 7 | 15 7 |
+| 1 | 15 7 1 |
+| 1 | 15 7 1 1 |
+| + | 15 7 2 |
+| - | 15 5 |
+| / | 3 |
+
+```python
+def eval_rpn(tokens):
+    stack = []
+    for t in tokens:
+        if t in ("+", "-", "*", "/"):
+            b = stack.pop()
+            a = stack.pop()
+            stack.append(apply_op(t, a, b))
+        else:
+            stack.append(int(t))
+    return stack[0]
+```
+
+**Complexity:** O(n) time, O(n) space.
+
+## Tests
+
+```python
+import random
+
+for f in (eval_rpn, eval_rpn_brute):
+    assert f(["3", "4", "+", "2", "*"]) == 14
+    assert f(["15", "7", "1", "1", "+", "-", "/"]) == 3
+    assert f(["-7", "2", "/"]) == -3                 # truncation toward zero
+    assert f(["7", "-2", "/"]) == -3
+    assert f(["42"]) == 42                           # single operand
+    assert f(["-5"]) == -5                           # negative number token
+    assert f(["2", "9", "-"]) == -7                  # operand order matters
+    assert f(["100000", "100000", "*"]) == 10**10    # large values
+
+random.seed(35)
+for _ in range(300):
+    vals = [str(random.randint(-9, 9)) for _ in range(random.randint(1, 6))]
+    tokens, depth = [vals[0]], 1
+    for v in vals[1:]:
+        tokens.append(v)
+        op = random.choice("+-*")
+        tokens.append(op)
+    assert eval_rpn(tokens) == eval_rpn_brute(tokens)
+```
+
+## Edge cases and pitfalls
+
+- Pop order: the first pop is the **right** operand. Getting it backwards breaks `-` and `/`.
+- Python's `//` floors: `-7 // 2` is `-4`. The problem wants `-3`, so use `int(a / b)`. For very large values, float division can lose precision; an exact alternative is `q = abs(a) // abs(b)` with the sign applied afterwards.
+- `"-5"` is a number, not an operator. Test operators by exact match, not by checking whether the token starts with `-`.
+
+## Where this shows up in data engineering
+
+Query engines compile expressions such as `price * (1 - discount)` into a postfix sequence of operations and evaluate them with a stack, or into a tree that is walked the same way. Rule engines that let analysts write filters for a pipeline often do the same: parse to postfix once, evaluate per row.
