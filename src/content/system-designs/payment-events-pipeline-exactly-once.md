@@ -73,6 +73,7 @@ sources:
   - { label: "Debezium documentation", url: "https://debezium.io/documentation/" }
   - { label: "PostgreSQL 16: transaction isolation", url: "https://www.postgresql.org/docs/16/transaction-iso.html" }
 previous: "system-designs:order-events-processing-system"
+next: "system-designs:ride-hailing-surge-pricing-pipeline"
 ---
 
 ## Approach
