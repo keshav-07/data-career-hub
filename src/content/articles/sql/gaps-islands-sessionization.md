@@ -15,6 +15,7 @@ learningObjectives:
   - "Sessionize event streams with an inactivity timeout and summarise each session"
 prerequisites: ["articles:sql/window-functions"]
 related: ["articles:sql/recursive-ctes-hierarchies", "articles:pyspark/window-functions", "system-designs:clickstream-data-platform"]
+next: "articles:sql/retention-cohort-funnel-analysis"
 previous: "articles:sql/recursive-ctes-hierarchies"
 versionContext: "All SQL examples run on PostgreSQL 16.14. The techniques use standard window functions; date arithmetic syntax differs by engine and is noted where it matters."
 sources:

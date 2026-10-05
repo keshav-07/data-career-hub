@@ -22,5 +22,25 @@
   "Sessionization of events": {
     "ref": "articles:sql/gaps-islands-sessionization",
     "heading": "Sessionization of events"
+  },
+  "Retention analysis": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Retention analysis"
+  },
+  "Cohort analysis": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Cohort analysis"
+  },
+  "Funnel / conversion analysis": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Funnel and conversion analysis"
+  },
+  "First & last touch attribution": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "First and last touch attribution"
+  },
+  "Market basket / co-occurrence": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Market basket and co-occurrence analysis"
   }
 }
