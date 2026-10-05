@@ -99,7 +99,7 @@ RDD ids vary between runs, and `<block 2>:2` is the source location of the `redu
 
 ### RDDs versus DataFrames today
 
-RDD records are opaque Python objects, so Spark cannot optimise them: no column pruning, no predicate pushdown, no code generation, and every record crosses between the JVM and Python. DataFrames carry a schema, so the Catalyst optimiser can do all of that (see [Catalyst and Tungsten](/spark/catalyst-tungsten-optimizer/)). Use DataFrames by default and drop to RDDs for genuinely unstructured processing or low-level control. Also note that **Spark Connect clients have no RDD API at all**, which is a growing reason to keep RDD code out of new pipelines.
+RDD records are opaque Python objects, so Spark cannot optimise them: no column pruning, no predicate pushdown, no code generation, and every record crosses between the JVM and Python. DataFrames carry a schema, so the Catalyst optimiser can do all of that (see Catalyst and Tungsten). Use DataFrames by default and drop to RDDs for genuinely unstructured processing or low-level control. Also note that **Spark Connect clients have no RDD API at all**, which is a growing reason to keep RDD code out of new pipelines.
 
 ### Pitfalls
 
@@ -379,7 +379,7 @@ counter on driver: 0
 accumulator: 100
 ```
 
-In local mode, with some cluster setups, code like this can appear to work, which is why the RDD programming guide calls its behaviour undefined. Use an [accumulator](/spark/caching-broadcast-accumulators/) for counters, or better, compute the value with an action.
+In local mode, with some cluster setups, code like this can appear to work, which is why the RDD programming guide calls its behaviour undefined. Use an accumulator for counters, or better, compute the value with an action.
 
 **2. Everything in the closure must be serializable.** Locks, open sockets, database connections, file handles and SparkContext itself cannot be pickled:
 
@@ -411,43 +411,50 @@ Interviewers often show the counter example and ask what it prints. Explain that
 
 ## Practice questions
 
-<details><summary>How does Spark rebuild a lost RDD partition, and when is that expensive?</summary>
+<details>
+<summary>How does Spark rebuild a lost RDD partition, and when is that expensive?</summary>
 
 Spark walks the partition's lineage back to the nearest available data (the source, a cached copy, surviving shuffle files or a checkpoint) and re-runs only the transformations needed for that partition. It becomes expensive when the lineage is long or crosses shuffles whose files were also lost, because whole parent stages must rerun. Caching or checkpointing intermediate results shortens the recovery path.
 
 </details>
 
-<details><summary>You run rdd.map(parse).filter(valid) and nothing happens. Why, and what makes it run?</summary>
+<details>
+<summary>You run rdd.map(parse).filter(valid) and nothing happens. Why, and what makes it run?</summary>
 
 `map` and `filter` are transformations; they only build lineage. Spark runs tasks only when an action such as `count()`, `take()`, `collect()` or `saveAsTextFile()` requests a result. Any bug inside `parse` will surface at that action.
 
 </details>
 
-<details><summary>What is the output count of map versus flatMap over 4 lines where one line is empty and you split on whitespace?</summary>
+<details>
+<summary>What is the output count of map versus flatMap over 4 lines where one line is empty and you split on whitespace?</summary>
 
 `map(lambda l: l.split())` always returns 4 records (one list per line, the empty line giving `[]`). `flatMap` returns the total number of words, and the empty line contributes nothing because its list is empty.
 
 </details>
 
-<details><summary>Why is groupByKey followed by summing slower than reduceByKey, and when is groupByKey still right?</summary>
+<details>
+<summary>Why is groupByKey followed by summing slower than reduceByKey, and when is groupByKey still right?</summary>
 
 reduceByKey sums values inside each map partition before the shuffle, so only one partial sum per key per partition crosses the network. groupByKey ships every value and holds all values of a key in one task's memory, risking spills or out-of-memory errors on hot keys. groupByKey is still right when you genuinely need all values together, for example to sort a user's events or run a non-associative calculation, ideally after reducing the data first.
 
 </details>
 
-<details><summary>How would you compute the average value per key with RDDs?</summary>
+<details>
+<summary>How would you compute the average value per key with RDDs?</summary>
 
 Use `aggregateByKey((0.0, 0), seqOp, combOp)` (or `combineByKey`) to build a `(sum, count)` pair per key with map-side combining, then `mapValues(lambda t: t[0] / t[1])`. Averaging partial averages is wrong because partitions hold different numbers of records.
 
 </details>
 
-<details><summary>A job writes each record to a REST API with map and creates a client per record. How do you fix it?</summary>
+<details>
+<summary>A job writes each record to a REST API with map and creates a client per record. How do you fix it?</summary>
 
 Switch to `foreachPartition` (or `mapPartitions` if you need results) and create one client per partition, sending records in batches. Close the client in `finally`. Because tasks may be retried or speculatively duplicated, make the writes idempotent, for example by using upserts keyed on a record id.
 
 </details>
 
-<details><summary>What is a closure in Spark and what goes wrong with it?</summary>
+<details>
+<summary>What is a closure in Spark and what goes wrong with it?</summary>
 
 The closure is the function plus the variables it references, serialized and sent to executors. Each task gets its own copy, so mutations do not return to the driver, and anything unpicklable (locks, connections, the SparkContext) makes the job fail at submission. Large captured objects are re-sent with every task; broadcast them instead.
 

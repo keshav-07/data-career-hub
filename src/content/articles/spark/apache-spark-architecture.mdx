@@ -126,7 +126,7 @@ The cluster manager is the resource broker. The driver says "I need ten executor
 
 | Cluster manager | Master URL | How executors run | Typical use |
 |-----------------|-----------|-------------------|-------------|
-| Local (not a cluster) | `local`, `local[4]`, `local[*]` | Driver and one executor in one JVM; `[n]` is the number of task threads | Development, tests, this course |
+| Local (not a cluster) | `local`, `local[4]`, `local[*]` | Driver and one executor in one JVM; the number in brackets is the number of task threads | Development, tests, this course |
 | Standalone | `spark://host:7077` | Spark's own master and worker daemons start executor JVMs | Small dedicated Spark clusters, simple setups |
 | YARN | `yarn` (cluster location comes from `HADOOP_CONF_DIR` or `YARN_CONF_DIR`) | Executors run in YARN containers on NodeManagers; an ApplicationMaster negotiates them | Hadoop clusters, Amazon EMR on EC2, on-premises data lakes |
 | Kubernetes | `k8s://https://<api-server>:<port>` | Driver and executors are pods built from a container image | Cloud-native platforms, shared clusters running other workloads |
@@ -165,8 +165,8 @@ spark-submit --master k8s://https://k8s-api.example.internal:6443 --deploy-mode 
 ### How each one differs in practice
 
 - **Standalone** is the simplest: start a master (`sbin/start-master.sh`) and workers, and Spark manages everything. It has no multi-tenant queues beyond basic limits, so it suits clusters dedicated to Spark.
-- **YARN** adds queues, capacity limits and Kerberos-secured HDFS access. Each executor is a container whose size is executor memory plus memory overhead; if the process exceeds the container limit, YARN kills it, which shows up as a lost executor. The [memory and tuning lesson](/spark/memory-executors-tuning/) works through the arithmetic.
-- **Kubernetes** packages Spark and your dependencies in a container image. The driver pod needs a service account allowed to create executor pods. Shared clusters let Spark sit next to other services, with namespaces and resource quotas as the isolation tools. The [deployment lesson](/spark/deployment-monitoring/) covers it in depth.
+- **YARN** adds queues, capacity limits and Kerberos-secured HDFS access. Each executor is a container whose size is executor memory plus memory overhead; if the process exceeds the container limit, YARN kills it, which shows up as a lost executor. The memory and tuning lesson works through the arithmetic.
+- **Kubernetes** packages Spark and your dependencies in a container image. The driver pod needs a service account allowed to create executor pods. Shared clusters let Spark sit next to other services, with namespaces and resource quotas as the isolation tools. The deployment lesson covers it in depth.
 
 ### Pitfalls
 
@@ -257,45 +257,51 @@ Each later lesson zooms into one part of this picture:
 1. [RDD fundamentals](/spark/rdd-fundamentals/): the low-level data abstraction the engine is built on.
 2. [Execution model](/spark/execution-model-jobs-stages-tasks/): how actions become jobs, stages and tasks.
 3. [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/): where most cost comes from.
-4. [Caching, broadcast and accumulators](/spark/caching-broadcast-accumulators/): sharing data between driver and executors.
-5. [Catalyst and Tungsten](/spark/catalyst-tungsten-optimizer/): how the driver optimises a query.
+4. Caching, broadcast and accumulators: sharing data between driver and executors.
+5. Catalyst and Tungsten: how the driver optimises a query.
 6. [Adaptive Query Execution](/spark/adaptive-query-execution/): re-planning at run time.
-7. [Memory and executor tuning](/spark/memory-executors-tuning/): sizing executors.
-8. [Deployment and monitoring](/spark/deployment-monitoring/): Kubernetes and the History Server.
+7. Memory and executor tuning: sizing executors.
+8. Deployment and monitoring: Kubernetes and the History Server.
 
 ## Practice questions
 
-<details><summary>What happens, step by step, between spark-submit and the job finishing?</summary>
+<details>
+<summary>What happens, step by step, between spark-submit and the job finishing?</summary>
 
 spark-submit starts the driver (locally in client mode, on the cluster in cluster mode). The driver creates a SparkContext, which registers with the cluster manager and requests executors. Your code builds a logical plan without running anything. An action triggers optimisation into a physical plan; the DAG scheduler splits it into stages at shuffle boundaries; the task scheduler launches one task per partition on free executor slots, preferring local data. Executors run tasks, write shuffle output for the next stage, and report back. When the final stage finishes, results go to the driver or to storage, and when the program ends the executors are released.
 
 </details>
 
-<details><summary>An executor is lost halfway through a job. What does Spark do?</summary>
+<details>
+<summary>An executor is lost halfway through a job. What does Spark do?</summary>
 
 The driver marks the executor's running tasks as failed and reschedules them on other executors. Any cached partitions and shuffle files on that executor are gone, so stages whose output is missing are rerun for the lost partitions only, using lineage. The job continues unless a single task fails `spark.task.maxFailures` times (4 by default). Losing the driver, in contrast, ends the application.
 
 </details>
 
-<details><summary>When would you choose cluster deploy mode over client mode?</summary>
+<details>
+<summary>When would you choose cluster deploy mode over client mode?</summary>
 
 For scheduled or long-running production jobs: the driver runs inside the cluster, close to the executors, and the job does not depend on the submitting machine staying connected. Client mode suits interactive work (shells, notebooks) where you want results printed locally, and debugging where you want the driver logs in your terminal.
 
 </details>
 
-<details><summary>Your notebook calls spark.conf.set("spark.executor.memory", "16g") and nothing changes. Why?</summary>
+<details>
+<summary>Your notebook calls spark.conf.set("spark.executor.memory", "16g") and nothing changes. Why?</summary>
 
 Executor memory is a static setting read when the SparkContext starts and executors are launched. In Spark 4 the call raises `CANNOT_MODIFY_CONFIG`, as shown above. Set it with `spark-submit --conf`, in `spark-defaults.conf`, or on the builder before the first session is created, and restart the application.
 
 </details>
 
-<details><summary>What is the relationship between SparkSession and SparkContext, and when do you still need SparkContext?</summary>
+<details>
+<summary>What is the relationship between SparkSession and SparkContext, and when do you still need SparkContext?</summary>
 
 A SparkSession wraps one SparkContext and adds the SQL catalog, parser, optimiser and runtime SQL config. Several sessions can share one SparkContext. You still need the SparkContext for RDD operations, broadcast variables, accumulators and job groups. Under Spark Connect there is no SparkContext on the client, so such code must be rewritten with DataFrame APIs.
 
 </details>
 
-<details><summary>Which cluster managers does Spark 4 support, and what replaced Mesos?</summary>
+<details>
+<summary>Which cluster managers does Spark 4 support, and what replaced Mesos?</summary>
 
 Standalone, YARN and Kubernetes (plus local mode for development). Mesos support was deprecated in 3.2 and removed in 4.0; Kubernetes is the usual choice for container-based clusters that Mesos used to serve.
 

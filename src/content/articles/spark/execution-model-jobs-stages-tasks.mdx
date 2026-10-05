@@ -251,7 +251,7 @@ AdaptiveSparkPlan isFinalPlan=true
 
 ### What it is
 
-Every running application serves a web UI from the driver, on port 4040 by default (4041, 4042 and so on if the port is taken). Managed platforms link to it from the job page. After the application ends, the same pages are available from the [History Server](/spark/deployment-monitoring/) if event logging was enabled. Work through it top-down: query, then job, then stage, then task.
+Every running application serves a web UI from the driver, on port 4040 by default (4041, 4042 and so on if the port is taken). Managed platforms link to it from the job page. After the application ends, the same pages are available from the History Server if event logging was enabled. Work through it top-down: query, then job, then stage, then task.
 
 ### What each tab tells you
 
@@ -275,10 +275,10 @@ Every running application serves a web UI from the driver, on port 4040 by defau
 |---------|--------------|--------|
 | A few tasks far slower than the rest | Data skew on a hot key | [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) |
 | Large shuffle read and write | Wide transformation over too much data; filter or aggregate earlier, broadcast the small side | [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) |
-| Spill to memory and disk | Partitions too large for execution memory | [Memory and executor tuning](/spark/memory-executors-tuning/) |
+| Spill to memory and disk | Partitions too large for execution memory | Memory and executor tuning |
 | Thousands of tasks lasting milliseconds | Too many small partitions or small files | [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) |
 | Huge row counts after a join | Fan-out on a non-unique key | [Joins and join strategy](/pyspark/joins-and-join-strategy/) |
-| High GC time | Memory pressure, large cached objects, wide rows | [Memory and executor tuning](/spark/memory-executors-tuning/) |
+| High GC time | Memory pressure, large cached objects, wide rows | Memory and executor tuning |
 
 <Callout tone="info" title="Name your jobs">
 
@@ -298,37 +298,43 @@ Every running application serves a web UI from the driver, on port 4040 by defau
 
 ## Practice questions
 
-<details><summary>How many stages does df.filter(...).groupBy("k").count().collect() produce, and why?</summary>
+<details>
+<summary>How many stages does df.filter(...).groupBy("k").count().collect() produce, and why?</summary>
 
 Without AQE, two stages: one that reads, filters and partially aggregates, ending at the shuffle by `k`; and one that reads the shuffle and finishes the aggregation, producing the result. The filter does not add a stage because it is narrow and pipelined into the first one. With AQE on, you may see two jobs (one per query stage) and a skipped stage, but the same two pieces of work.
 
 </details>
 
-<details><summary>Why can one action create several jobs?</summary>
+<details>
+<summary>Why can one action create several jobs?</summary>
 
 Adaptive Query Execution submits each shuffle stage as its own job so it can re-plan using real statistics. Other causes: a broadcast join collects the small side in a separate job, a global sort runs a sampling job to pick range boundaries, and file sources may run a job to list or infer schema. Stages already computed by an earlier job are shown as skipped.
 
 </details>
 
-<details><summary>Classify these as narrow or wide: filter, join with a broadcast table, distinct, coalesce(10), repartition(10), withColumn, window with partitionBy.</summary>
+<details>
+<summary>Classify these as narrow or wide: filter, join with a broadcast table, distinct, coalesce(10), repartition(10), withColumn, window with partitionBy.</summary>
 
 Narrow: filter, withColumn, coalesce(10) (it merges partitions without a shuffle), and the broadcast join (the large side does not move). Wide: distinct, repartition(10) (a full shuffle even when reducing) and a window with partitionBy (rows are shuffled by the partition key).
 
 </details>
 
-<details><summary>A stage has 200 tasks: the median takes 4 seconds and the max takes 9 minutes. What do you check next?</summary>
+<details>
+<summary>A stage has 200 tasks: the median takes 4 seconds and the max takes 9 minutes. What do you check next?</summary>
 
 This is the signature of skew. In the stage detail, compare max and median shuffle read size and records: if the slow task read far more data, one key dominates. Find the key with a `groupBy(key).count().orderBy(desc("count"))` on the input, then choose a fix: let AQE split the skewed join partition, broadcast the smaller side, filter or separately handle NULL or default keys, or salt the key.
 
 </details>
 
-<details><summary>Your notebook code fails with a cast error at df.write(...), but the cast is 30 lines earlier. Why?</summary>
+<details>
+<summary>Your notebook code fails with a cast error at df.write(...), but the cast is 30 lines earlier. Why?</summary>
 
 Lazy evaluation. The cast was only recorded in the plan; it executed when the write action ran the job. The stack trace shows the action, so look at the operator in the error message (or run `explain()`) to locate the transformation.
 
 </details>
 
-<details><summary>Which Spark UI tab confirms that a configuration change took effect, and which shows whether a cached DataFrame is actually in memory?</summary>
+<details>
+<summary>Which Spark UI tab confirms that a configuration change took effect, and which shows whether a cached DataFrame is actually in memory?</summary>
 
 The Environment tab lists the effective Spark properties for the application. The Storage tab lists cached datasets with their storage level, the fraction of partitions cached, and the size in memory and on disk.
 
