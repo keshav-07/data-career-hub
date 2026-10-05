@@ -209,7 +209,7 @@ FROM dim_customer ORDER BY customer_id, valid_from;
 | 2 | C2 | Delhi | ravi@example.com | 2026-01-01 | 9999-12-31 | t |
 | 4 | C3 | Bengaluru | meera@example.com | 2026-03-10 | 9999-12-31 | t |
 
-Asha now has two versions; Ravi, unchanged, still has one; Meera is new. The new versions copy `signup_date` from the existing row's source value; to enforce Type 0 strictly, copy it from the previous version instead.
+Asha now has two versions; Ravi, unchanged, still has one; Meera is new. One detail to notice: the new Mumbai version took `signup_date` from the extract, which still carries the source bug from the Type 1 example (2026-03-10 instead of 2025-11-20). To enforce Type 0 strictly, copy Type 0 columns from the previous version rather than from staging.
 
 **Idempotency check.** Running the same three steps again changes nothing: step 1 finds no differences, step 2 finds no customer without a current row, step 3 finds no email differences.
 

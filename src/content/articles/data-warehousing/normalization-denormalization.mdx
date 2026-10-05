@@ -15,6 +15,7 @@ learningObjectives:
 prerequisites: ["articles:data-warehousing/star-schema", "articles:sql/joins"]
 related: ["articles:sql/ctes-subqueries-temp-tables", "articles:data-warehousing/partitioning-clustering-data-layout"]
 previous: "articles:data-warehousing/star-schema"
+next: "articles:data-warehousing/fact-tables"
 versionContext: "All SQL examples executed on PostgreSQL 16.14. Behaviour of columnar engines is described, not executed."
 sources:
   - { label: "PostgreSQL 16 documentation: Constraints", url: "https://www.postgresql.org/docs/16/ddl-constraints.html" }
@@ -201,7 +202,7 @@ The cost: the rule "one hub per courier per pincode" can no longer be enforced b
 
 You may be asked to define the normal forms or to normalise a sample table. State each form as "what it removes" (repeating groups, partial dependencies, transitive dependencies, non-key determinants), name the functional dependencies out loud, and finish with the anomalies normalisation prevents. Knowing that OLTP systems sit around 3NF while warehouses deliberately denormalise is the point most interviewers want to hear.
 
-## Denormalization trade-offs
+## Denormalisation trade-offs
 
 ### What it is and why it matters
 
