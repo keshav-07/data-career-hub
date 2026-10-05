@@ -270,7 +270,7 @@ An alternative that scales better for large bronze tables is to encrypt personal
 
 Using the assumptions above:
 
-- **Daily growth**: 0.5 TB/day into bronze would be consistent with the stated 50% yearly growth; this section uses that figure. Silver is usually smaller than bronze after deduplication and columnar compression; assume 50% (0.25 TB/day). Gold aggregates are small; assume 0.05 TB/day.
+- **Daily growth**: 0.5 TB/day into bronze. Silver is usually smaller than bronze after deduplication and columnar compression; assume 50% (0.25 TB/day). Gold aggregates are small; assume 0.05 TB/day.
 - **Yearly growth**: (0.5 + 0.25 + 0.05) × 365 ≈ 290 TB/year. If bronze older than 13 months is expired or archived, net growth of hot storage is roughly 250 TB/year, which matches 50% of 500 TB.
 - **Streaming**: 30% of 0.5 TB/day ≈ 150 GB/day ≈ 1.7 MB/s on average; with a 5× peak factor about 9 MB/s, comfortably within a small Kafka cluster and a few streaming executors.
 - **Files**: a silver table merged every minute by 8 tasks writes up to 11,520 files/day before compaction; daily `OPTIMIZE` brings that back to tens of files per partition.
