@@ -69,6 +69,7 @@ sources:
   - { label: "OpenSearch documentation: Index aliases", url: "https://docs.opensearch.org/latest/im-plugin/index-alias/" }
   - { label: "Debezium documentation", url: "https://debezium.io/documentation/" }
 previous: "system-designs:time-series-metrics-store"
+next: "system-designs:notification-alerting-pipeline"
 ---
 
 ## Approach
