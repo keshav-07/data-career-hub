@@ -76,6 +76,7 @@ related:
   - "projects:kafka-spark-delta-streaming"
   - "system-designs:change-data-capture-platform"
 previous: "system-designs:change-data-capture-platform"
+next: "system-designs:event-driven-architecture"
 versionContext: "Design discussion based on Apache Kafka 4.x (KRaft only) and Apache Flink 2.x behaviour; configuration snippets are illustrative and were not executed."
 sources:
   - { label: "Apache Kafka documentation: design", url: "https://kafka.apache.org/documentation/#design" }
