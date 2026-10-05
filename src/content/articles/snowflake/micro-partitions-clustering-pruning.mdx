@@ -354,37 +354,43 @@ The usual question is "clustering or search optimization?". Answer by selectivit
 
 ## Practice questions
 
-<details><summary>A query on a 15 TB table returns 50 rows but the profile shows 980,000 of 1,000,000 partitions scanned. What do you do?</summary>
+<details>
+<summary>A query on a 15 TB table returns 50 rows but the profile shows 980,000 of 1,000,000 partitions scanned. What do you do?</summary>
 
 It is a pruning problem, not a size problem. Check the filter: is the column wrapped in a function or cast, preventing min/max pruning? If the filter is clean, check clustering on that column with `SYSTEM$CLUSTERING_INFORMATION('t', '(col)')`. If depth is high and the query matters, consider a clustering key on that column (coarsened if high cardinality), or search optimization if the lookup is very selective (50 rows out of billions suggests it could be). Estimate the cost of each first and measure partitions scanned afterwards.
 
 </details>
 
-<details><summary>Why is an events table usually fast to filter by date and slow to filter by customer?</summary>
+<details>
+<summary>Why is an events table usually fast to filter by date and slow to filter by customer?</summary>
 
 Natural clustering. Events arrive roughly in time order, so each micro-partition covers a narrow range of dates and date filters skip most of them. Customer IDs are spread across all days, so every micro-partition's min/max for customer covers almost the whole range and nothing can be skipped.
 
 </details>
 
-<details><summary>What does an average clustering depth of 1 mean, and can it be lower?</summary>
+<details>
+<summary>What does an average clustering depth of 1 mean, and can it be lower?</summary>
 
 Each value of the clustering columns is found in about one micro-partition's range, so a point lookup scans roughly one micro-partition: the table is very well clustered for those columns. It cannot be lower than 1 for a populated table.
 
 </details>
 
-<details><summary>Why is CLUSTER BY (event_id) on a table with a unique event_id usually a bad idea, and what would you do instead?</summary>
+<details>
+<summary>Why is CLUSTER BY (event_id) on a table with a unique event_id usually a bad idea, and what would you do instead?</summary>
 
 A unique ID has extremely high cardinality: keeping it clustered requires continual reorganisation for little benefit, because almost no query filters on a range of IDs. If ID lookups are important, use the search optimization service with `EQUALITY(event_id)`. If you must cluster on a high-cardinality column, cluster on an expression that coarsens it, and choose the key from the columns your queries actually filter on (often a date).
 
 </details>
 
-<details><summary>You added a clustering key two weeks ago. How do you decide whether to keep it?</summary>
+<details>
+<summary>You added a clustering key two weeks ago. How do you decide whether to keep it?</summary>
 
 Compare the target queries' partitions scanned and elapsed time (and their warehouse credits) before and after, using `QUERY_HISTORY` or the profiles. Compare that saving with the reclustering credits in `AUTOMATIC_CLUSTERING_HISTORY` and the extra Time Travel storage. Keep it if the savings clearly exceed the cost; otherwise drop the key or suspend reclustering.
 
 </details>
 
-<details><summary>Why does a large UPDATE make a table worse clustered?</summary>
+<details>
+<summary>Why does a large UPDATE make a table worse clustered?</summary>
 
 Micro-partitions are immutable. The update writes the changed rows to new micro-partitions, which can contain rows from many different key ranges, so their min/max ranges overlap many others. The old micro-partitions are retired. Clustering depth rises until Automatic Clustering (if a key is defined) reorganises the affected data.
 

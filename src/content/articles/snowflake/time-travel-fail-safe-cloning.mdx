@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Snowflake Time Travel, Fail-safe and Zero-Copy Cloning"
 seoTitle: "Snowflake Time Travel, Fail-safe and Cloning"
-description: "Query and restore past data with Snowflake Time Travel, configure retention by edition, understand the 7-day Fail-safe, and use zero-copy clones safely for testing and recovery."
+description: "Query and restore past data with Snowflake Time Travel, set retention by edition, understand the 7-day Fail-safe and use zero-copy clones safely."
 technology: ["snowflake", "data-warehousing"]
 topic: ["time-travel", "fail-safe", "cloning", "data-recovery"]
 difficulty: "Intermediate"
@@ -15,7 +15,7 @@ learningObjectives:
   - "Explain what Fail-safe is for and why it is not a backup you can query"
   - "Create zero-copy clones, including clones at a point in time, and know what they do and do not copy"
 prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
-related: ["articles:snowflake/cost-optimization", "articles:etl-elt/pipeline-reliability-and-retries"]
+related: ["articles:etl-elt/pipeline-reliability-and-retries"]
 previous: "articles:snowflake/loading-copy-snowpipe"
 next: "articles:snowflake/table-types-semi-structured"
 sources:
@@ -305,37 +305,43 @@ Explain "zero-copy" (metadata pointers to immutable micro-partitions, copy-on-wr
 
 ## Practice questions
 
-<details><summary>Someone ran `CREATE OR REPLACE TABLE customers AS SELECT ...` on production by mistake. How do you recover?</summary>
+<details>
+<summary>Someone ran `CREATE OR REPLACE TABLE customers AS SELECT ...` on production by mistake. How do you recover?</summary>
 
 The original table counts as dropped and is in Time Travel. Rename the new table (`ALTER TABLE customers RENAME TO customers_bad`), then `UNDROP TABLE customers` to restore the original with its data and grants. Verify, then drop `customers_bad`. This works only within the table's retention period.
 
 </details>
 
-<details><summary>A MERGE at 03:00 corrupted 2% of rows in a 5 TB table. Writes have continued since. What do you do?</summary>
+<details>
+<summary>A MERGE at 03:00 corrupted 2% of rows in a 5 TB table. Writes have continued since. What do you do?</summary>
 
 Find the query ID of the bad `MERGE` in query history. Create a clone `BEFORE(STATEMENT => '<id>')` (or query the table with `BEFORE`) to get the correct values, identify the affected rows by comparing with the current table, and update just those rows from the historical version. Restoring the whole table would lose the legitimate writes since 03:00. Then fix the cause and drop the restore clone.
 
 </details>
 
-<details><summary>Your company is on Standard Edition. How far back can you recover a permanent table yourself, and what happens after that?</summary>
+<details>
+<summary>Your company is on Standard Edition. How far back can you recover a permanent table yourself, and what happens after that?</summary>
 
 One day of Time Travel at most (retention 0 or 1 on Standard). After that, data spends 7 days in Fail-safe, which only Snowflake Support can recover from, on a best-effort basis. Beyond that it is purged.
 
 </details>
 
-<details><summary>Why are staging tables often created as transient?</summary>
+<details>
+<summary>Why are staging tables often created as transient?</summary>
 
 Transient tables have no Fail-safe and at most 1 day of Time Travel, so data that is rewritten frequently does not accumulate 7 extra days of billed Fail-safe storage. Staging data can be rebuilt from source files, so the extra protection is not needed.
 
 </details>
 
-<details><summary>You cloned a 10 TB production database for testing three months ago. Storage costs have risen. Why?</summary>
+<details>
+<summary>You cloned a 10 TB production database for testing three months ago. Storage costs have risen. Why?</summary>
 
 The clone shares micro-partitions with production. As production changed, the micro-partitions it replaced could not be purged, because the clone still references them; they are billed (shown as `RETAINED_FOR_CLONE_BYTES` on the source tables). Any changes made in the clone also add storage. Drop the clone, or refresh it periodically, when it is no longer needed.
 
 </details>
 
-<details><summary>What is the difference between AT and BEFORE with STATEMENT?</summary>
+<details>
+<summary>What is the difference between AT and BEFORE with STATEMENT?</summary>
 
 `AT(STATEMENT => id)` returns the data including the changes made by that statement; `BEFORE(STATEMENT => id)` returns the data as it was immediately before the statement ran. For recovering from a bad statement, `BEFORE` is the one you want.
 

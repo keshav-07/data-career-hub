@@ -1,0 +1,230 @@
+{
+ "Three-layer architecture": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "The three-layer architecture"
+ },
+ "Storage layer (micro-partitions)": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "The storage layer and micro-partitions"
+ },
+ "Compute layer (virtual warehouses)": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "The compute layer and virtual warehouses"
+ },
+ "Cloud services layer": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "The cloud services layer"
+ },
+ "Separation of storage & compute": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "Separation of storage and compute"
+ },
+ "Metadata management": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "Metadata management"
+ },
+ "Multi-cluster shared data": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "Multi-cluster shared data"
+ },
+ "Snowflake editions": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "Snowflake editions"
+ },
+ "Pricing model (credits)": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "The pricing model and credits"
+ },
+ "Caching layers (result/local/metadata)": {
+  "ref": "articles:snowflake/architecture-virtual-warehouses",
+  "heading": "The caching layers"
+ },
+ "Virtual warehouse sizing": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Virtual warehouse sizing"
+ },
+ "Scaling up vs scaling out": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Scaling up versus scaling out"
+ },
+ "Multi-cluster warehouses": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Multi-cluster warehouses"
+ },
+ "Auto-suspend & auto-resume": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Auto-suspend and auto-resume"
+ },
+ "Warehouse concurrency": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Warehouse concurrency"
+ },
+ "Query queuing": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Query queuing"
+ },
+ "Workload isolation": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Workload isolation"
+ },
+ "Resource monitors": {
+  "ref": "articles:snowflake/virtual-warehouses-scaling",
+  "heading": "Resource monitors"
+ },
+ "Micro-partitions deep dive": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "Micro-partitions in depth"
+ },
+ "Natural clustering": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "Natural clustering"
+ },
+ "Clustering keys": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "Clustering keys"
+ },
+ "Clustering depth & information": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "Clustering depth and clustering information"
+ },
+ "Reclustering": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "Reclustering"
+ },
+ "When to cluster": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "When to cluster"
+ },
+ "Search optimization service": {
+  "ref": "articles:snowflake/micro-partitions-clustering-pruning",
+  "heading": "The search optimization service"
+ },
+ "Stream object basics": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Stream object basics"
+ },
+ "Standard vs append-only streams": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Standard versus append-only streams"
+ },
+ "Insert-only streams": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Insert-only streams"
+ },
+ "Stream offsets": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Stream offsets"
+ },
+ "CDC with streams": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "CDC with streams"
+ },
+ "Stale streams": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Stale streams"
+ },
+ "Task fundamentals": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Task fundamentals"
+ },
+ "Scheduled tasks (CRON)": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Scheduled tasks with CRON"
+ },
+ "Task trees / DAGs": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Task graphs (DAGs)"
+ },
+ "Serverless tasks": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Serverless tasks"
+ },
+ "Task + Stream pattern": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "The task plus stream pattern"
+ },
+ "Task error handling": {
+  "ref": "articles:snowflake/streams-and-tasks",
+  "heading": "Task error handling"
+ },
+ "File formats & staging": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "File formats and staging"
+ },
+ "Internal vs external stages": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "Internal versus external stages"
+ },
+ "COPY INTO command": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "The COPY INTO command"
+ },
+ "Snowpipe continuous ingestion": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "Snowpipe continuous ingestion"
+ },
+ "Auto-ingest with notifications": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "Auto-ingest with cloud notifications"
+ },
+ "Snowpipe REST API": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "The Snowpipe REST API"
+ },
+ "Snowpipe Streaming": {
+  "ref": "articles:snowflake/loading-copy-snowpipe",
+  "heading": "Snowpipe Streaming"
+ },
+ "Time Travel basics": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "Time Travel basics"
+ },
+ "AT / BEFORE clauses": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "The AT and BEFORE clauses"
+ },
+ "UNDROP": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "UNDROP"
+ },
+ "Retention period config": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "Configuring the retention period"
+ },
+ "Fail-safe (7 days)": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "Fail-safe and its 7 days"
+ },
+ "Cloning with Time Travel": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "Cloning with Time Travel"
+ },
+ "Zero-copy cloning": {
+  "ref": "articles:snowflake/time-travel-fail-safe-cloning",
+  "heading": "Zero-copy cloning"
+ },
+ "Transient & temporary tables": {
+  "ref": "articles:snowflake/table-types-semi-structured",
+  "heading": "Transient and temporary tables"
+ },
+ "External tables": {
+  "ref": "articles:snowflake/table-types-semi-structured",
+  "heading": "External tables"
+ },
+ "Semi-structured (VARIANT)": {
+  "ref": "articles:snowflake/table-types-semi-structured",
+  "heading": "Semi-structured data with VARIANT"
+ },
+ "FLATTEN function": {
+  "ref": "articles:snowflake/table-types-semi-structured",
+  "heading": "The FLATTEN function"
+ },
+ "Dynamic tables": {
+  "ref": "articles:snowflake/table-types-semi-structured",
+  "heading": "Dynamic tables"
+ },
+ "Iceberg tables": {
+  "ref": "articles:snowflake/table-types-semi-structured",
+  "heading": "Iceberg tables"
+ }
+}

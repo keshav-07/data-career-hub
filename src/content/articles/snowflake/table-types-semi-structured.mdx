@@ -1,0 +1,445 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Table Types and Semi-Structured Data: VARIANT, FLATTEN, Dynamic and Iceberg Tables"
+seoTitle: "Snowflake Table Types, VARIANT and FLATTEN"
+description: "Choose between permanent, transient, temporary, external, dynamic and Iceberg tables in Snowflake, and query JSON with VARIANT paths and FLATTEN."
+technology: ["snowflake", "data-warehousing"]
+topic: ["table-types", "semi-structured", "json", "dynamic-tables", "iceberg"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Choose between permanent, transient and temporary tables based on recovery needs and cost"
+  - "Explain when external tables are useful and how their partitions and refresh work"
+  - "Load JSON into VARIANT and extract fields with path notation and casts"
+  - "Explode arrays and nested objects with LATERAL FLATTEN, including OUTER and RECURSIVE"
+  - "Build declarative pipelines with dynamic tables and choose target lag and refresh mode"
+  - "Explain Snowflake-managed versus externally managed Iceberg tables"
+prerequisites: ["articles:snowflake/loading-copy-snowpipe", "articles:snowflake/time-travel-fail-safe-cloning"]
+related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "articles:snowflake/streams-and-tasks"]
+previous: "articles:snowflake/time-travel-fail-safe-cloning"
+sources:
+  - { label: "Snowflake documentation: Working with temporary and transient tables", url: "https://docs.snowflake.com/en/user-guide/tables-temp-transient" }
+  - { label: "Snowflake documentation: Introduction to external tables", url: "https://docs.snowflake.com/en/user-guide/tables-external-intro" }
+  - { label: "Snowflake documentation: FLATTEN", url: "https://docs.snowflake.com/en/sql-reference/functions/flatten" }
+  - { label: "Snowflake documentation: Querying semi-structured data", url: "https://docs.snowflake.com/en/user-guide/querying-semistructured" }
+  - { label: "Snowflake documentation: Dynamic tables", url: "https://docs.snowflake.com/en/user-guide/dynamic-tables/overview" }
+  - { label: "Snowflake documentation: CREATE ICEBERG TABLE (Snowflake as the Iceberg catalog)", url: "https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-snowflake" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. The JSON and FLATTEN analogue was run on PostgreSQL 16 with jsonb functions and its output is shown; it is PostgreSQL syntax, not Snowflake syntax. Dynamic table refresh modes and Iceberg catalog support change often; check your account's documentation."
+---
+
+A Snowflake table is not just "a table". It can be permanent, transient or temporary (which changes how long data is protected and what it costs), it can live outside Snowflake (external and Iceberg tables), or it can maintain itself from a query (dynamic tables). And its columns can hold JSON and other semi-structured data in a `VARIANT`, queried with path notation and `FLATTEN`. This lesson covers each and when to choose it.
+
+Snowflake SQL here is written from the documentation and was not executed. The semi-structured sections include a runnable PostgreSQL analogue, clearly labelled.
+
+## Transient and temporary tables
+
+Every standard Snowflake table is one of three kinds:
+
+| | Permanent (default) | Transient | Temporary |
+|--|---------------------|-----------|-----------|
+| Lifetime | Until dropped | Until dropped | Until the session ends |
+| Visible to | Anyone with privileges | Anyone with privileges | Only the creating session |
+| Time Travel | 0 to 1 day (Standard), up to 90 days (Enterprise and higher) | 0 or 1 day | 0 or 1 day, ending with the session |
+| Fail-safe | 7 days | None | None |
+| Typical use | Production data that is hard to recreate | Staging, intermediate and rebuildable tables | Scratch work inside a script or procedure |
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE TRANSIENT TABLE staging.orders_stage (order_id VARCHAR, payload VARIANT);
+
+CREATE TEMPORARY TABLE tmp_changed_ids AS
+SELECT DISTINCT order_id FROM staging.orders_stage;
+
+-- Whole schemas or databases can be transient: every table created in them is transient
+CREATE TRANSIENT SCHEMA staging_scratch;
+```
+
+Why it matters: Fail-safe storage is billed. A large staging table that is truncated and reloaded every day keeps each day's old copy in Time Travel and then 7 more days in Fail-safe if it is permanent. As transient, it keeps at most one day.
+
+Other rules:
+
+- A table's kind cannot be changed with `ALTER`. To convert, create a new table of the other kind (for example `CREATE TRANSIENT TABLE new_t AS SELECT * FROM old_t`), then swap or rename.
+- A temporary table can share a name with a permanent table in the same schema; inside that session the temporary one hides the permanent one.
+- Temporary tables still count towards storage while the session lasts.
+
+**Pitfalls**
+
+- Making important, hard-to-rebuild tables transient to save money. If they are damaged after the 1-day window, nothing can recover them.
+- Name shadowing by temporary tables, which makes a script read the wrong table.
+
+**In interviews**
+
+Explain the three kinds by lifetime, visibility, Time Travel and Fail-safe, then give the cost argument for transient staging tables.
+
+## External tables
+
+An **external table** lets you query files in an external stage (S3, Azure, GCS) without loading them. Snowflake stores only metadata about the files; the data stays in your storage.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE EXTERNAL TABLE lake.orders_ext (
+  order_date DATE    AS TO_DATE(SPLIT_PART(METADATA$FILENAME, '/', 2), 'YYYY-MM-DD'),
+  order_id   VARCHAR AS (VALUE:order_id::VARCHAR),
+  amount     NUMBER(12,2) AS (VALUE:amount::NUMBER(12,2))
+)
+PARTITION BY (order_date)
+LOCATION = @raw.s3_orders
+FILE_FORMAT = (TYPE = PARQUET)
+AUTO_REFRESH = TRUE;
+```
+
+How they work:
+
+- Every external table has a `VALUE` column (a `VARIANT` holding each row) and the `METADATA$FILENAME` pseudocolumn. Other columns are **virtual columns** defined as expressions on them.
+- **Partition columns** are expressions that parse the file path in `METADATA$FILENAME`. Filters on them let Snowflake skip whole files, much like pruning.
+- The list of files is metadata that must be **refreshed**: automatically from cloud event notifications (`AUTO_REFRESH`, `TRUE` by default) or manually with `ALTER EXTERNAL TABLE ... REFRESH`.
+- They are read-only, and usually slower than native tables because there are no micro-partition statistics beyond the file level. A materialized view on an external table can speed up frequent queries.
+- Streams on external tables must be **insert-only**.
+
+For new lakehouse designs, Snowflake generally steers users to **Iceberg tables** (below), which offer better performance and table-format features while keeping data in your storage.
+
+**Pitfalls**
+
+- Forgetting to set up notifications, so new files never appear in query results.
+- No partition columns on a large external table: every query lists and reads every file.
+
+**In interviews**
+
+Say when you would use one (query data in place, occasional access, data owned by another system), list the `VALUE`, `METADATA$FILENAME`, partition columns and refresh mechanics, and mention Iceberg as the modern alternative.
+
+## Semi-structured data with VARIANT
+
+`VARIANT` is a column type that can hold any value: an object, an array, a string, a number, a boolean or a null. It is how Snowflake stores JSON, Avro, ORC, Parquet and XML data without defining a schema first. Two related types are `OBJECT` (key-value pairs) and `ARRAY`.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE TABLE raw.orders_json (order_id INT, payload VARIANT);
+
+INSERT INTO raw.orders_json
+SELECT 1, PARSE_JSON('{"customer": {"id": "C1", "country": "GB"},
+                       "items": [{"sku": "A", "qty": 2}, {"sku": "B", "qty": 1}]}');
+
+SELECT order_id,
+       payload:customer.id::STRING      AS customer_id,   -- path, then cast
+       payload['customer']['country']::STRING AS country, -- bracket notation
+       payload:items[0].sku::STRING     AS first_sku,     -- array index from 0
+       ARRAY_SIZE(payload:items)        AS item_count
+FROM raw.orders_json;
+```
+
+Rules you need:
+
+- **Path syntax**: `col:key.subkey`, `col['key']`, `col:array[0]`. The first level uses a colon; deeper levels use dots or brackets.
+- **Keys are case-sensitive**: `payload:Customer` and `payload:customer` are different paths. (Column names are not case-sensitive unless quoted; JSON keys are.)
+- **Extracted values are still VARIANT.** Without a cast, strings display with double quotes and comparisons behave as VARIANT comparisons. Always cast to a SQL type (`::STRING`, `::NUMBER`, `::TIMESTAMP_NTZ`).
+- **Missing keys return SQL NULL.** A key that is present with JSON `null` returns a VARIANT null, which displays as `null` and is not SQL NULL; `IS_NULL_VALUE()` tests for it, and casting it to a type gives SQL NULL.
+- **Bad JSON**: `PARSE_JSON` fails on invalid input; `TRY_PARSE_JSON` returns NULL instead.
+- **Storage and pruning**: Snowflake stores frequently occurring paths in a columnar way where it can, so common fields prune and compress well. Fields with mixed types or very sparse keys benefit less; extract the important ones into typed columns.
+- A single `VARIANT` value has a maximum size; check your account's documentation for the current limit before loading very large documents.
+
+### Runnable analogue: JSON paths in PostgreSQL
+
+PostgreSQL's `jsonb` type plays the same role. The arrows `->` (returns JSON) and `->>` (returns text) correspond to Snowflake's path plus cast.
+
+```sql
+-- PostgreSQL 16 analogue (not Snowflake syntax)
+CREATE TABLE raw_orders (
+  order_id INT PRIMARY KEY,
+  payload  JSONB
+);
+
+INSERT INTO raw_orders VALUES
+ (1, '{"customer": {"id": "C1", "country": "GB"}, "items": [{"sku": "A", "qty": 2}, {"sku": "B", "qty": 1}]}'),
+ (2, '{"customer": {"id": "C2", "country": "IN"}, "items": [{"sku": "A", "qty": 5}]}'),
+ (3, '{"customer": {"id": "C3"}, "items": []}');
+
+-- Snowflake: payload:customer.id::STRING, payload:customer.country::STRING
+SELECT order_id,
+       payload -> 'customer' ->> 'id'      AS customer_id,
+       payload -> 'customer' ->> 'country' AS country
+FROM raw_orders
+ORDER BY order_id;
+```
+
+```text
+ order_id | customer_id | country
+----------+-------------+---------
+        1 | C1          | GB
+        2 | C2          | IN
+        3 | C3          |
+```
+
+Order 3 has no `country` key, so the result is NULL, as in Snowflake.
+
+**Pitfalls**
+
+- Comparing an uncast VARIANT with a string literal and getting no matches, or getting quoted strings in a BI tool.
+- Typos in key names or case: they return NULL silently, not an error. Add tests for unexpected NULL rates.
+- Leaving everything in `VARIANT` forever. Extract stable, frequently queried fields into typed columns in a staging model.
+
+**In interviews**
+
+Show the path syntax and casting, mention case-sensitive keys and the difference between a missing key and JSON `null`, and explain the "land raw in VARIANT, then extract typed columns" ELT pattern.
+
+## The FLATTEN function
+
+`FLATTEN` is a table function that turns an array or object into rows: one output row per element. Combined with `LATERAL`, it joins each element back to its parent row.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT o.order_id,
+       f.index               AS item_index,
+       f.value:sku::STRING   AS sku,
+       f.value:qty::INT      AS qty
+FROM raw.orders_json AS o,
+     LATERAL FLATTEN(INPUT => o.payload:items) AS f;
+```
+
+Output columns of `FLATTEN`:
+
+| Column | Meaning |
+|--------|---------|
+| `SEQ` | A sequence number for the input record (unique, not guaranteed gap-free or ordered) |
+| `KEY` | For objects, the key of the element; NULL for arrays |
+| `PATH` | The path to the element |
+| `INDEX` | For arrays, the element's position; NULL for objects |
+| `VALUE` | The element itself (a VARIANT) |
+| `THIS` | The element being flattened (useful with `RECURSIVE`) |
+
+Arguments:
+
+- `INPUT =>` the VARIANT, OBJECT or ARRAY to expand.
+- `PATH =>` a path inside the input to flatten.
+- `OUTER => TRUE`: keep input rows whose array is empty or missing, with NULLs in `KEY`, `INDEX` and `VALUE`. The default (`FALSE`) drops them, like an inner join.
+- `RECURSIVE => TRUE`: expand all nested levels, not just the first.
+- `MODE => 'OBJECT' | 'ARRAY' | 'BOTH'`: which kinds of elements to expand.
+
+Nested arrays need one `FLATTEN` per level, each referring to the previous one:
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- payload: {"items": [{"sku": "A", "tags": ["new", "promo"]}, ...]}
+SELECT o.order_id, i.value:sku::STRING AS sku, t.value::STRING AS tag
+FROM raw.orders_json AS o,
+     LATERAL FLATTEN(INPUT => o.payload:items) AS i,
+     LATERAL FLATTEN(INPUT => i.value:tags, OUTER => TRUE) AS t;
+```
+
+### Runnable analogue: FLATTEN with jsonb_array_elements
+
+In PostgreSQL, `jsonb_array_elements` with `CROSS JOIN LATERAL` does what `LATERAL FLATTEN` does for arrays; `WITH ORDINALITY` gives a position (1-based, so subtract 1 to match Snowflake's 0-based `INDEX`); and `LEFT JOIN LATERAL ... ON TRUE` plays the role of `OUTER => TRUE`.
+
+```sql
+-- PostgreSQL 16 analogue of LATERAL FLATTEN
+SELECT o.order_id,
+       f.idx - 1                   AS item_index,
+       f.item ->> 'sku'            AS sku,
+       (f.item ->> 'qty')::INT     AS qty
+FROM raw_orders AS o
+CROSS JOIN LATERAL jsonb_array_elements(o.payload -> 'items')
+     WITH ORDINALITY AS f(item, idx)
+ORDER BY o.order_id, item_index;
+```
+
+```text
+ order_id | item_index | sku | qty
+----------+------------+-----+-----
+        1 |          0 | A   |   2
+        1 |          1 | B   |   1
+        2 |          0 | A   |   5
+```
+
+Order 3 disappears because its `items` array is empty: the default `FLATTEN` behaviour. Keeping it needs the `OUTER` equivalent:
+
+```sql
+-- PostgreSQL 16 analogue of FLATTEN(..., OUTER => TRUE)
+SELECT o.order_id,
+       f.item ->> 'sku' AS sku
+FROM raw_orders AS o
+LEFT JOIN LATERAL jsonb_array_elements(o.payload -> 'items') AS f(item) ON TRUE
+ORDER BY o.order_id, sku;
+```
+
+```text
+ order_id | sku
+----------+-----
+        1 | A
+        1 | B
+        2 | A
+        3 |
+```
+
+**Pitfalls**
+
+- Losing parent rows with empty arrays because `OUTER` was left at its default. Row counts before and after flattening are the test.
+- Flattening two sibling arrays in one query: you get every combination (a Cartesian product per row). Flatten them in separate queries or CTEs and join on a key.
+- Aggregating after flattening without remembering the parent row now repeats once per element (fan-out), so parent-level measures are multiplied.
+
+**In interviews**
+
+Expect "turn this JSON array into rows". Write the `LATERAL FLATTEN` query, name `VALUE` and `INDEX`, and mention `OUTER => TRUE` for empty arrays and the fan-out risk.
+
+## Dynamic tables
+
+A **dynamic table** is a table defined by a query, which Snowflake keeps up to date automatically. You declare **what** the result should be and **how fresh** it must be; Snowflake decides when and how to refresh it, incrementally where possible.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE DYNAMIC TABLE analytics.order_items
+  TARGET_LAG = DOWNSTREAM          -- refresh only when a downstream table needs it
+  WAREHOUSE = transform_wh
+  REFRESH_MODE = AUTO
+AS
+SELECT o.order_id, f.value:sku::STRING AS sku, f.value:qty::INT AS qty
+FROM raw.orders_json AS o,
+     LATERAL FLATTEN(INPUT => o.payload:items) AS f;
+
+CREATE OR REPLACE DYNAMIC TABLE analytics.sku_daily
+  TARGET_LAG = '15 minutes'
+  WAREHOUSE = transform_wh
+AS
+SELECT sku, SUM(qty) AS units
+FROM analytics.order_items
+GROUP BY sku;
+```
+
+Key settings:
+
+| Setting | Meaning |
+|---------|---------|
+| `TARGET_LAG` | Maximum staleness relative to the base tables, for example `'15 minutes'`. The minimum is 60 seconds. Actual lag can exceed it if refreshes take longer |
+| `TARGET_LAG = DOWNSTREAM` | No schedule of its own: refresh when dynamic tables that depend on it refresh. Typical for intermediate tables |
+| `WAREHOUSE` | Required: the warehouse that runs refreshes |
+| `REFRESH_MODE` | `INCREMENTAL` (process only changes), `FULL` (recompute), or `AUTO` (Snowflake chooses at creation based on the query). The documentation lists the current set of modes |
+| `INITIALIZE` | `ON_CREATE` (populate immediately, the default) or `ON_SCHEDULE` |
+
+A chain of dynamic tables forms a pipeline graph that Snowflake schedules as a whole. You can suspend, resume and manually refresh them (`ALTER DYNAMIC TABLE ... SUSPEND | RESUME | REFRESH`) and inspect refreshes in Snowsight or with `DYNAMIC_TABLE_REFRESH_HISTORY`.
+
+Choosing between the options:
+
+| | Dynamic tables | Streams and tasks | Materialized views |
+|--|----------------|-------------------|--------------------|
+| Style | Declarative: a `SELECT` and a lag | Imperative: you write `MERGE` logic and schedules | Declarative |
+| Joins, aggregations, window functions | Yes (some constructs force full refresh) | Anything SQL or procedures can do | Single table, limited functions |
+| Freshness | Target lag, minimum 60 seconds | Your schedule or trigger | Always current for queries |
+| Compute | Your warehouse | Your warehouse or serverless | Serverless background maintenance |
+| Best for | Most transformation pipelines | Custom logic: deletes with conditions, SCD Type 2, calls to procedures, external side effects | Speeding up repeated queries on one large table |
+
+**Pitfalls**
+
+- Non-deterministic or unsupported constructs make a dynamic table fall back to full refresh, which can be expensive on large data. Check the refresh mode Snowflake chose after creation.
+- Setting a short target lag everywhere: every refresh resumes the warehouse. Use `DOWNSTREAM` for intermediate tables and the longest lag the business accepts.
+- Expecting dynamic tables to handle SCD Type 2 history: they compute the current result of a query; keeping history needs streams and tasks or snapshots.
+
+**In interviews**
+
+Explain target lag (including `DOWNSTREAM`), incremental versus full refresh, and the comparison with streams and tasks and materialized views. A good line: "I use dynamic tables for standard transformations and fall back to streams and tasks when I need procedural control."
+
+## Iceberg tables
+
+**Apache Iceberg tables** in Snowflake store data as Parquet files with Iceberg metadata in **your own cloud storage**, reached through an **external volume** (an account-level object holding the storage location and access identity). Other engines (Spark, Trino, Flink) can read the same tables, which is the main reason to use them.
+
+There are two kinds, depending on which **catalog** manages the table's metadata:
+
+| | Snowflake-managed (Snowflake as the catalog) | Externally managed (external catalog) |
+|--|---------------------------------------------|---------------------------------------|
+| Catalog | Snowflake | AWS Glue, an Iceberg REST catalog, Snowflake Open Catalog, or metadata files in object storage, through a **catalog integration** |
+| Writes from Snowflake | Full DML, like native tables | Historically read-only; write support depends on the catalog type, so check the current documentation |
+| Other engines | Read through Snowflake's catalog support, or by syncing to Snowflake Open Catalog (`CATALOG_SYNC`) | Read and write through their catalog as usual |
+| Snowflake features | Most table features, including clustering and Time Travel through Iceberg snapshots | More limited; metadata refreshed from the external catalog |
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- Snowflake-managed Iceberg table in your S3 bucket
+CREATE OR REPLACE ICEBERG TABLE lake.orders_iceberg (
+  order_id   STRING,
+  amount     NUMBER(12,2),
+  order_ts   TIMESTAMP_NTZ
+)
+  CATALOG = 'SNOWFLAKE'
+  EXTERNAL_VOLUME = 'lake_s3_volume'
+  BASE_LOCATION = 'orders_iceberg/';
+
+-- Externally managed: table registered in AWS Glue
+CREATE OR REPLACE ICEBERG TABLE lake.events_glue
+  EXTERNAL_VOLUME = 'lake_s3_volume'
+  CATALOG = 'glue_catalog_int'
+  CATALOG_TABLE_NAME = 'events';
+```
+
+Costs and trade-offs:
+
+- Storage is billed by **your cloud provider**, not as Snowflake storage; compute for queries is still Snowflake credits.
+- Data is in an open format, avoiding lock-in and letting several engines share one copy.
+- Native tables can still be faster and simpler for Snowflake-only workloads; Iceberg brings external file management concerns (permissions, compaction, catalog configuration).
+- Streams on externally managed Iceberg tables are insert-only.
+
+**Pitfalls**
+
+- Granting the external volume's cloud role too little access (writes fail) or too much (other data exposed).
+- Assuming every Snowflake feature works identically on externally managed tables. Check the feature list for your catalog type.
+
+**In interviews**
+
+Explain why Iceberg (open format, multi-engine), the catalog distinction (Snowflake-managed versus external through a catalog integration), the external volume, and the cost split (your storage, Snowflake compute). Compare it with external tables: Iceberg is a full table format with snapshots and schema evolution; an external table is a view over files.
+
+## Practice questions
+
+<details>
+<summary>Which table type would you use for a 2 TB staging table that is reloaded from S3 every night, and why?</summary>
+
+Transient. It can be rebuilt from the source files, so it does not need Fail-safe. As a permanent table, each night's replaced data would be kept in Time Travel and then 7 days in Fail-safe, all billed. Transient tables have no Fail-safe and at most 1 day of Time Travel.
+
+</details>
+
+<details>
+<summary>`SELECT payload:status FROM events WHERE payload:status = 'shipped'` returns quoted values and fewer rows than expected. What is wrong?</summary>
+
+The path returns a `VARIANT`, so the output shows JSON strings with quotes and the comparison is a VARIANT comparison. Cast it: `payload:status::STRING = 'shipped'`. Also check key case: if the JSON key is `Status`, the lowercase path returns NULL.
+
+</details>
+
+<details>
+<summary>After `LATERAL FLATTEN(INPUT => payload:items)`, some orders are missing from the result. Why, and how do you keep them?</summary>
+
+Orders whose `items` array is empty or missing produce no rows from `FLATTEN` by default, so the lateral join drops them. Use `FLATTEN(INPUT => payload:items, OUTER => TRUE)` to get one row with NULL `VALUE` for those orders.
+
+</details>
+
+<details>
+<summary>When would you choose a dynamic table over a stream and task?</summary>
+
+When the transformation can be expressed as a query (joins, aggregations, filters) and a freshness target is enough: the dynamic table handles change tracking, scheduling and incremental refresh. Choose streams and tasks when you need procedural control: SCD Type 2 history, conditional deletes, calls to procedures or external functions, or exactly custom `MERGE` semantics.
+
+</details>
+
+<details>
+<summary>Explain TARGET_LAG = DOWNSTREAM.</summary>
+
+The dynamic table has no refresh schedule of its own. It refreshes only when a dynamic table that depends on it needs fresh data, at the timing derived from the downstream tables' target lags. It avoids refreshing intermediate tables that nobody is waiting for.
+
+</details>
+
+<details>
+<summary>Your data science team uses Spark on S3 and analysts use Snowflake. How can both work on the same orders data without copying it?</summary>
+
+Store it as Apache Iceberg tables in S3. Either let Snowflake be the catalog (Snowflake-managed Iceberg tables, writable from Snowflake, synced to an external catalog such as Snowflake Open Catalog for Spark), or keep an external catalog such as AWS Glue and create externally managed Iceberg tables in Snowflake through a catalog integration. Decide which engine writes, because write support differs by catalog.
+
+</details>
+
+## Key takeaways
+
+- Permanent tables get full Time Travel and 7-day Fail-safe; transient tables get at most 1 day and no Fail-safe; temporary tables vanish with the session.
+- External tables query files in place through `VALUE`, `METADATA$FILENAME` and partition columns, and need metadata refresh; Iceberg is usually the better modern choice.
+- `VARIANT` stores JSON and other semi-structured data; use `col:path.to.key::TYPE`, remember keys are case-sensitive, and extract stable fields into typed columns.
+- `LATERAL FLATTEN` turns arrays and objects into rows; use `OUTER => TRUE` to keep empty arrays and watch for fan-out.
+- Dynamic tables are declarative pipelines with a target lag (minimum 60 seconds, or `DOWNSTREAM`) and incremental or full refresh.
+- Iceberg tables keep open-format data in your storage; Snowflake-managed tables are fully writable, externally managed ones depend on their catalog.

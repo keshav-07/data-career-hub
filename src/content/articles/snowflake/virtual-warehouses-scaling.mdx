@@ -16,7 +16,7 @@ learningObjectives:
   - "Diagnose queueing and design warehouses for workload isolation"
   - "Create resource monitors that notify and suspend at credit thresholds"
 prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
-related: ["interview-questions:snowflake/virtual-warehouses", "articles:snowflake/cost-optimization"]
+related: ["interview-questions:snowflake/virtual-warehouses"]
 previous: "articles:snowflake/architecture-virtual-warehouses"
 next: "articles:snowflake/micro-partitions-clustering-pruning"
 sources:
@@ -325,37 +325,43 @@ Describe a monitor with notify, suspend and suspend-immediate thresholds, say th
 
 ## Practice questions
 
-<details><summary>Dashboards are fast at 2 p.m. but slow at 9 a.m. Each query takes under 2 seconds when run alone. What do you check and change?</summary>
+<details>
+<summary>Dashboards are fast at 2 p.m. but slow at 9 a.m. Each query takes under 2 seconds when run alone. What do you check and change?</summary>
 
 Check `QUEUED_OVERLOAD_TIME` in `QUERY_HISTORY` (or `WAREHOUSE_LOAD_HISTORY`) for the BI warehouse around 9 a.m. If queries are queueing, it is a concurrency problem: make the warehouse multi-cluster in auto-scale mode (for example `MIN_CLUSTER_COUNT = 1`, `MAX_CLUSTER_COUNT = 3`, Standard policy), which needs Enterprise Edition. Also check whether batch jobs share the warehouse at that time, and move them to their own warehouse. Do not scale up; the individual queries are already fast.
 
 </details>
 
-<details><summary>A nightly MERGE takes 40 minutes on Medium. On Large it takes 35 minutes. Should you keep Large?</summary>
+<details>
+<summary>A nightly MERGE takes 40 minutes on Medium. On Large it takes 35 minutes. Should you keep Large?</summary>
 
 No. Medium costs 4 × 40/60 ≈ 2.7 credits; Large costs 8 × 35/60 ≈ 4.7 credits for a 5-minute gain. The query is not limited by compute, so look elsewhere: pruning on the target table (does the `MERGE` condition let Snowflake skip micro-partitions?), skew, or the size of the change set. Go back to Medium unless the deadline requires the 5 minutes.
 
 </details>
 
-<details><summary>What is the difference between the Standard and Economy scaling policies?</summary>
+<details>
+<summary>What is the difference between the Standard and Economy scaling policies?</summary>
 
 Both apply to multi-cluster warehouses in auto-scale mode. Standard (default) starts a cluster as soon as queries queue or Snowflake predicts they will, favouring performance, and shuts clusters down after several minutes of lower load. Economy only starts a cluster when it estimates enough work to keep it busy for at least about 6 minutes, and shuts down clusters with less than that left, favouring credits and accepting some queueing.
 
 </details>
 
-<details><summary>A warehouse has AUTO_SUSPEND = 30 and receives one small query every 40 seconds all day. What happens to cost?</summary>
+<details>
+<summary>A warehouse has AUTO_SUSPEND = 30 and receives one small query every 40 seconds all day. What happens to cost?</summary>
 
 After each query it suspends 30 seconds later, then resumes 10 seconds after that for the next query. Each resume is billed at least 60 seconds, so every 40-second cycle pays about 60 seconds of credits, and every query starts with a cold cache and a resume delay. Leaving it running (or a longer `AUTO_SUSPEND`) would cost about 40 seconds per cycle and be faster. Better still, check whether the polling query is needed or could use the result cache.
 
 </details>
 
-<details><summary>Your account-level resource monitor shows 80% used, but the invoice is much higher than the monitor suggests. Why?</summary>
+<details>
+<summary>Your account-level resource monitor shows 80% used, but the invoice is much higher than the monitor suggests. Why?</summary>
 
 Resource monitors only count warehouse credits. Serverless features (Snowpipe, serverless tasks, automatic clustering, materialized views, search optimization and others), cloud services above the 10% allowance, storage and data transfer are not included. Use budgets and `METERING_DAILY_HISTORY` to see total credits by service type.
 
 </details>
 
-<details><summary>A query shows 20 minutes of TRANSACTION_BLOCKED_TIME. Will adding clusters help?</summary>
+<details>
+<summary>A query shows 20 minutes of TRANSACTION_BLOCKED_TIME. Will adding clusters help?</summary>
 
 No. The query was waiting for a lock held by another transaction on the same table, typically two DML statements (`MERGE`, `UPDATE`, `DELETE`) on one table. Fix the scheduling or design so conflicting DML does not overlap, or batch it into one statement. Warehouse size and cluster count do not affect lock waits.
 

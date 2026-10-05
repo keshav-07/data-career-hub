@@ -637,43 +637,50 @@ Name the retry and auto-suspend parameters with the default of 10, describe noti
 
 ## Practice questions
 
-<details><summary>A stream on `orders` returned 1,000 rows. Your MERGE used `WHERE METADATA$ACTION = 'INSERT'` and committed. How many rows will the stream return now?</summary>
+<details>
+<summary>A stream on `orders` returned 1,000 rows. Your MERGE used `WHERE METADATA$ACTION = 'INSERT'` and committed. How many rows will the stream return now?</summary>
 
 Zero, until new changes arrive. Consuming a stream in a committed DML statement advances the offset past all changes as of the start of the transaction, regardless of any `WHERE` filter. The `DELETE` rows you filtered out are no longer available through that stream.
 
 </details>
 
-<details><summary>A row is inserted, updated twice and then deleted between two task runs. What does a standard stream show? An append-only stream?</summary>
+<details>
+<summary>A row is inserted, updated twice and then deleted between two task runs. What does a standard stream show? An append-only stream?</summary>
 
 The standard stream shows nothing for that row, because it returns net changes and the row did not exist at either end of the interval. The append-only stream shows one `INSERT` row with the values as originally inserted, because it records inserts and ignores updates and deletes.
 
 </details>
 
-<details><summary>Your task was suspended for three weeks during a migration. When you resume it, the MERGE fails because the stream is stale. What happened and how do you recover?</summary>
+<details>
+<summary>Your task was suspended for three weeks during a migration. When you resume it, the MERGE fails because the stream is stale. What happened and how do you recover?</summary>
 
 The stream's offset fell outside the source table's retention period. Snowflake extends retention for unconsumed streams only up to `MAX_DATA_EXTENSION_TIME_IN_DAYS` (default 14 days), so after three weeks the history was purged. Recreate the stream with `CREATE OR REPLACE STREAM` (it starts tracking from now) and reconcile the target: rebuild it from the source, or compare and apply differences. To prevent it, monitor `STALE_AFTER` and raise `MAX_DATA_EXTENSION_TIME_IN_DAYS` on that table before planned pauses.
 
 </details>
 
-<details><summary>Why does a task scheduled every minute with `WHEN SYSTEM$STREAM_HAS_DATA(...)` not cost a warehouse minute every minute?</summary>
+<details>
+<summary>Why does a task scheduled every minute with `WHEN SYSTEM$STREAM_HAS_DATA(...)` not cost a warehouse minute every minute?</summary>
 
 The `WHEN` condition is evaluated in the cloud services layer before the task needs compute. If the stream has no data, the run is skipped and the warehouse is not resumed. Only runs with data consume warehouse credits (with the usual 60-second minimum on resume).
 
 </details>
 
-<details><summary>Two teams want to consume changes from the same table on different schedules. What do you do?</summary>
+<details>
+<summary>Two teams want to consume changes from the same table on different schedules. What do you do?</summary>
 
 Create one stream per consumer. A stream has a single offset; if both teams used the same stream, whichever consumed first would advance the offset and the other would miss those changes.
 
 </details>
 
-<details><summary>When would you choose a serverless task over a warehouse task?</summary>
+<details>
+<summary>When would you choose a serverless task over a warehouse task?</summary>
 
 For short, frequent or uneven tasks where a warehouse would spend much of its billed time idle or paying the 60-second resume minimum, and when you want Snowflake to size compute to meet a completion target. Use a warehouse for long, heavy work that fully uses it, for tasks that can share an already-running warehouse, or when you need resource monitors to cap spend. Compare real costs in `SERVERLESS_TASK_HISTORY` and warehouse metering.
 
 </details>
 
-<details><summary>How do you alert someone when any task in a graph fails?</summary>
+<details>
+<summary>How do you alert someone when any task in a graph fails?</summary>
 
 Options: set `ERROR_INTEGRATION` on the root to a notification integration so failures are pushed to a cloud messaging service; add a finalizer task that checks the graph's run results and sends a notification; or create a Snowflake alert on `TASK_HISTORY` for failed states. Also alert when the root is auto-suspended after `SUSPEND_TASK_AFTER_NUM_FAILURES` consecutive failures.
 

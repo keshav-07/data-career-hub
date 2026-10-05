@@ -305,7 +305,7 @@ Doubling the size halves the time only if the query parallelises well. A query t
 
 **In interviews**
 
-Be able to compute credits for a scenario like the one above, and to explain that cost equals size × running time, so "bigger and shorter" can cost the same. The [cost optimisation lesson](/snowflake/cost-optimization/) turns this into a playbook.
+Be able to compute credits for a scenario like the one above, and to explain that cost equals size × running time, so "bigger and shorter" can cost the same. The cost optimisation lesson later in this course turns this into a playbook.
 
 ## The caching layers
 
@@ -359,37 +359,43 @@ Cloud services always holds micro-partition metadata, so some operations need no
 
 ## Practice questions
 
-<details><summary>Explain Snowflake's architecture in under a minute.</summary>
+<details>
+<summary>Explain Snowflake's architecture in under a minute.</summary>
 
 Three layers. Storage holds tables as compressed, columnar, immutable micro-partitions in cloud object storage, billed per compressed TB per month. Compute is virtual warehouses: independent clusters billed in credits per second while running, which suspend when idle. Cloud services handles authentication, access control, metadata, optimisation and transactions, and is billed only above 10% of daily warehouse credits. Because storage is shared and separate, many warehouses can work on the same data without competing, and features like Time Travel and cloning are metadata operations.
 
 </details>
 
-<details><summary>A Large standard warehouse runs for 90 seconds and then auto-suspends after 60 seconds idle. How many credits does it use?</summary>
+<details>
+<summary>A Large standard warehouse runs for 90 seconds and then auto-suspends after 60 seconds idle. How many credits does it use?</summary>
 
 Large is 8 credits per hour. Running time billed is 90 + 60 = 150 seconds, which is above the 60-second minimum. Credits = 8 × 150 / 3600 ≈ 0.33 credits. If it had only been up for 30 seconds in total, the 60-second minimum would apply: 8 × 60 / 3600 ≈ 0.13 credits.
 
 </details>
 
-<details><summary>A dashboard query takes 8 seconds the first time and 50 milliseconds the second time. A minute later, after a small INSERT into the table, it takes 3 seconds. Explain.</summary>
+<details>
+<summary>A dashboard query takes 8 seconds the first time and 50 milliseconds the second time. A minute later, after a small INSERT into the table, it takes 3 seconds. Explain.</summary>
 
 The second run was served from the result cache: identical query, unchanged data, so cloud services returned the stored result without a warehouse. The `INSERT` changed the table's micro-partitions, invalidating the cached result, so the third run executed again. It was faster than the first because the warehouse was still running and most micro-partitions were in its local disk cache.
 
 </details>
 
-<details><summary>What is the difference between multi-cluster shared data and a multi-cluster warehouse?</summary>
+<details>
+<summary>What is the difference between multi-cluster shared data and a multi-cluster warehouse?</summary>
 
 Multi-cluster shared data is the overall architecture: many independent compute clusters (warehouses) over one shared copy of the data. A multi-cluster warehouse is one warehouse configured with a minimum and maximum number of clusters, so Snowflake can add clusters of the same size when many queries run at once. Multi-cluster warehouses require Enterprise Edition or higher.
 
 </details>
 
-<details><summary>Your company is on Standard Edition and wants to mask email addresses for analysts and keep 30 days of Time Travel. What do you tell them?</summary>
+<details>
+<summary>Your company is on Standard Edition and wants to mask email addresses for analysts and keep 30 days of Time Travel. What do you tell them?</summary>
 
 Both need Enterprise Edition or higher: masking policies (column-level security) are an Enterprise feature, and Standard Edition limits Time Travel to 1 day. On Standard you could expose masked data through views that only selected roles can bypass, and keep longer history with your own snapshot or backup tables, but the native features require an upgrade. Credit prices are higher on Enterprise, so weigh the cost.
 
 </details>
 
-<details><summary>Why can `SELECT COUNT(*) FROM orders` return instantly even when every warehouse is suspended?</summary>
+<details>
+<summary>Why can `SELECT COUNT(*) FROM orders` return instantly even when every warehouse is suspended?</summary>
 
 Snowflake keeps row counts and other statistics in the metadata managed by the cloud services layer. An unfiltered `COUNT(*)` can be answered from that metadata, so no warehouse needs to start. Adding a `WHERE` clause usually forces a warehouse to evaluate the filter.
 

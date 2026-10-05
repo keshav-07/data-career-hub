@@ -373,37 +373,43 @@ The common question is "Snowpipe or Snowpipe Streaming?". Answer: Snowpipe loads
 
 ## Practice questions
 
-<details><summary>A COPY INTO ran at 09:00 and loaded 20 files. It is run again at 09:05 with no new files. What happens?</summary>
+<details>
+<summary>A COPY INTO ran at 09:00 and loaded 20 files. It is run again at 09:05 with no new files. What happens?</summary>
 
 Nothing is loaded. Snowflake keeps load metadata on the table for 64 days and skips files it has already loaded with the same name and checksum. The output reports the files as skipped or returns no rows loaded. Only `FORCE = TRUE` would load them again.
 
 </details>
 
-<details><summary>What is the difference between ON_ERROR defaults for COPY and Snowpipe, and why?</summary>
+<details>
+<summary>What is the difference between ON_ERROR defaults for COPY and Snowpipe, and why?</summary>
 
 Bulk `COPY` defaults to `ABORT_STATEMENT`: one bad record fails the statement, which suits batch jobs that someone is watching. Snowpipe defaults to `SKIP_FILE` (and does not support `ABORT_STATEMENT`) because it processes a continuous stream of independent files: one bad file should not block the others. Skipped files show in `COPY_HISTORY` and can trigger error notifications.
 
 </details>
 
-<details><summary>You recreated a pipe with CREATE OR REPLACE and ran ALTER PIPE REFRESH. Row counts doubled. Why?</summary>
+<details>
+<summary>You recreated a pipe with CREATE OR REPLACE and ran ALTER PIPE REFRESH. Row counts doubled. Why?</summary>
 
 Snowpipe's load history lives on the pipe. Replacing the pipe discarded it, so `REFRESH` treated files staged in the last 7 days as new and loaded them again. Prevent it by not recreating pipes casually (use `ALTER PIPE` where possible), refreshing with a path prefix or `MODIFIED_AFTER` to limit files, and deduplicating downstream on a natural key or `METADATA$FILENAME`.
 
 </details>
 
-<details><summary>Set up Snowpipe auto-ingest from S3 in five steps.</summary>
+<details>
+<summary>Set up Snowpipe auto-ingest from S3 in five steps.</summary>
 
 1) Create a storage integration with the IAM role ARN and allowed locations, and add its IAM user and external ID to the role's trust policy. 2) Create an external stage on the bucket path using the integration. 3) Create the target table and a pipe with `AUTO_INGEST = TRUE` wrapping a `COPY INTO`. 4) Copy the SQS ARN from the `notification_channel` column of `SHOW PIPES` and configure an S3 event notification (or SNS subscription) for object-created events on the prefix. 5) Backfill with `ALTER PIPE ... REFRESH` and monitor with `SYSTEM$PIPE_STATUS` and `COPY_HISTORY`.
 
 </details>
 
-<details><summary>A team writes one JSON file per event to S3 for Snowpipe, around 200 files per second. What would you suggest?</summary>
+<details>
+<summary>A team writes one JSON file per event to S3 for Snowpipe, around 200 files per second. What would you suggest?</summary>
 
 Per-file overhead dominates with tiny files, increasing latency and cost. Either batch events into larger files (aim for roughly 100 to 250 MB compressed, or at least much larger than one event) before writing, or switch to Snowpipe Streaming (directly or through the Kafka connector), which ingests rows without files and is built for this pattern.
 
 </details>
 
-<details><summary>Why should production external stages use a storage integration?</summary>
+<details>
+<summary>Why should production external stages use a storage integration?</summary>
 
 The integration stores a cloud identity (an IAM role, service principal or service account) at account level, so no access keys appear in stage definitions, scripts or query history. Access is limited to `STORAGE_ALLOWED_LOCATIONS`, can be granted to roles with `USAGE`, and keys do not need rotating in Snowflake.
 
