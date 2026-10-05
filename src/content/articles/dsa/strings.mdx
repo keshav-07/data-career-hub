@@ -1,0 +1,332 @@
+---
+title: "Strings for Coding Interviews: Immutability, Scanning and Parsing"
+seoTitle: "String Problems for Coding Interviews"
+description: "How Python strings work, the scanning and parsing templates behind string problems, and how they map to cleaning keys and parsing messy fields in pipelines."
+technology: ["dsa"]
+topic: ["strings", "parsing"]
+difficulty: "Beginner"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain string immutability in Python and build strings in linear time"
+  - "Use character counts, two-pointer scans and prefix comparison on strings"
+  - "Write a robust character-by-character parser with clear state and clamping"
+  - "Apply the same techniques to normalising keys and parsing dirty fields in pipelines"
+prerequisites: ["articles:dsa/arrays-and-hashing"]
+previous: "articles:dsa/arrays-and-hashing"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: Text sequence type (str)", url: "https://docs.python.org/3/library/stdtypes.html#text-sequence-type-str" }
+  - { label: "Python documentation: String methods", url: "https://docs.python.org/3/library/stdtypes.html#string-methods" }
+  - { label: "Python documentation: Unicode HOWTO", url: "https://docs.python.org/3/howto/unicode.html" }
+---
+
+Strings are arrays of characters with a few extra rules, so most string problems reuse array techniques: counting, two pointers and sliding windows. What makes them their own topic is immutability in Python, character classification, and parsing: turning messy text into clean values, which is a large part of everyday Data Engineering.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How strings work in Python
+
+A Python `str` is an **immutable** sequence of Unicode code points. Indexing `s[i]` is O(1), `len(s)` is O(1), and `s[i:j]` creates a new string in O(j − i) time.
+
+Immutability has one big consequence: `s += ch` inside a loop may copy the whole string each time, which can make the loop O(n²). (CPython sometimes optimises this in place, but you should not rely on it.) Collect pieces in a list and join once:
+
+```python
+def build_slowly(chars):
+    out = ""
+    for ch in chars:
+        out += ch          # may copy out every time
+    return out
+
+
+def build_quickly(chars):
+    parts = []
+    for ch in chars:
+        parts.append(ch)   # O(1) amortised
+    return "".join(parts)  # one O(n) pass
+
+
+chars = list("pipeline")
+assert build_slowly(chars) == build_quickly(chars) == "pipeline"
+```
+
+### Useful building blocks
+
+| Need | Tool | Note |
+|---|---|---|
+| Character to number | `ord("a")` is 97, `chr(97)` is `"a"` | `ord(c) - ord("a")` gives a 0–25 index for lowercase letters |
+| Classify characters | `c.isalnum()`, `c.isdigit()`, `c.isalpha()`, `c.isspace()` | Unicode-aware: `"٣".isdigit()` is `True` |
+| Case-insensitive compare | `s.casefold()` | Stronger than `lower()` for non-English text |
+| Split and trim | `s.split()`, `s.split(",")`, `s.strip()` | `split()` with no argument collapses runs of whitespace |
+| Reverse | `s[::-1]` | Creates a new string |
+| Mutable work area | `list(s)` then `"".join(...)` | For in-place style algorithms |
+
+### In interviews
+
+Ask whether input is ASCII or Unicode, whether case matters and whether spaces and punctuation count. If the alphabet is fixed (say 26 lowercase letters), a fixed-size count array gives O(1) extra space.
+
+## Recognising the pattern
+
+| Signal | Technique |
+|---|---|
+| "palindrome", "reverse", "compare from both ends" | Two pointers from the ends |
+| "anagram", "permutation", "same characters" | Character counts |
+| "longest substring with ..." | Sliding window (next lessons) |
+| "common prefix", "starts with" | Character-by-character comparison, or a trie |
+| "parse", "convert", "validate the format" | A left-to-right scanner with explicit states |
+| "at most one change / deletion" | Two pointers, then try both options once at the first mismatch |
+
+## Core templates in Python
+
+### Reverse in place with two pointers
+
+Python strings cannot be changed, so in-place problems give you a list of characters.
+
+```python
+def reverse_string(chars):
+    left, right = 0, len(chars) - 1
+    while left < right:
+        chars[left], chars[right] = chars[right], chars[left]
+        left += 1
+        right -= 1
+
+
+letters = list("hello")
+reverse_string(letters)
+assert letters == list("olleh")
+empty = []
+reverse_string(empty)
+assert empty == []
+```
+
+### Palindrome with at most one deletion
+
+Scan from both ends. At the first mismatch you get exactly one chance: skip the left character or skip the right one, and check that the rest is a palindrome.
+
+```python
+def valid_palindrome_ii(s):
+    def is_pal(lo, hi):
+        while lo < hi:
+            if s[lo] != s[hi]:
+                return False
+            lo += 1
+            hi -= 1
+        return True
+
+    left, right = 0, len(s) - 1
+    while left < right:
+        if s[left] != s[right]:
+            return is_pal(left + 1, right) or is_pal(left, right - 1)
+        left += 1
+        right -= 1
+    return True
+
+
+assert valid_palindrome_ii("aba") is True
+assert valid_palindrome_ii("abca") is True       # delete "b" or "c"
+assert valid_palindrome_ii("abc") is False
+assert valid_palindrome_ii("") is True
+assert valid_palindrome_ii("deeee") is True
+```
+
+Passing indices into the helper, rather than slicing, keeps the extra space at O(1).
+
+### Longest common prefix
+
+Compare column by column until a string runs out or a character differs.
+
+```python
+def longest_common_prefix(words):
+    if not words:
+        return ""
+    for i, ch in enumerate(words[0]):
+        for other in words[1:]:
+            if i == len(other) or other[i] != ch:
+                return words[0][:i]
+    return words[0]
+
+
+def longest_common_prefix_sorted(words):
+    # Only the lexicographically smallest and largest strings need comparing.
+    if not words:
+        return ""
+    lo, hi = min(words), max(words)
+    i = 0
+    while i < len(lo) and lo[i] == hi[i]:
+        i += 1
+    return lo[:i]
+
+
+for fn in (longest_common_prefix, longest_common_prefix_sorted):
+    assert fn(["flower", "flow", "flight"]) == "fl"
+    assert fn(["dog", "racecar", "car"]) == ""
+    assert fn(["solo"]) == "solo"
+    assert fn(["", "abc"]) == ""
+    assert fn([]) == ""
+```
+
+The `min`/`max` trick works because any prefix shared by the smallest and largest string in sorted order is shared by everything between them.
+
+### A small parser: string to integer
+
+Parsing problems reward a clear sequence of steps: skip whitespace, read an optional sign, read digits, stop at the first non-digit, then clamp.
+
+```python
+def my_atoi(s):
+    INT_MIN, INT_MAX = -(2 ** 31), 2 ** 31 - 1
+    i, n = 0, len(s)
+    while i < n and s[i] == " ":                     # 1. leading spaces
+        i += 1
+    sign = 1
+    if i < n and s[i] in "+-":                       # 2. optional sign
+        sign = -1 if s[i] == "-" else 1
+        i += 1
+    value = 0
+    while i < n and "0" <= s[i] <= "9":              # 3. ASCII digits only
+        value = value * 10 + (ord(s[i]) - ord("0"))
+        i += 1
+    value *= sign
+    return max(INT_MIN, min(INT_MAX, value))         # 4. clamp to 32 bits
+
+
+assert my_atoi("42") == 42
+assert my_atoi("   -042") == -42
+assert my_atoi("1337c0d3") == 1337
+assert my_atoi("0-1") == 0
+assert my_atoi("words and 987") == 0
+assert my_atoi("-91283472332") == -2147483648
+assert my_atoi("+") == 0 and my_atoi("") == 0
+```
+
+Comparing with `"0" <= c <= "9"` rather than `c.isdigit()` matters here: `isdigit()` accepts other Unicode digits such as superscripts, which `ord(c) - ord("0")` would turn into nonsense. Python integers do not overflow, so clamping once at the end is safe; in Java or C++ you would have to check before each multiplication.
+
+### Character counts with a fixed array
+
+```python
+def char_counts(s):
+    counts = [0] * 26
+    for ch in s:
+        counts[ord(ch) - ord("a")] += 1
+    return counts
+
+
+def is_permutation(a, b):
+    return len(a) == len(b) and char_counts(a) == char_counts(b)
+
+
+assert is_permutation("listen", "silent") is True
+assert is_permutation("abc", "abd") is False
+```
+
+A 26-slot list is O(1) space because its size does not grow with the input. Use `Counter` when the alphabet is open-ended.
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Reverse in place | O(n) | O(1) |
+| Palindrome with one deletion | O(n) | O(1) |
+| Longest common prefix (vertical scan) | O(total characters) | O(1) besides the output |
+| Longest common prefix (min/max) | O(total characters) for min and max | O(1) besides the output |
+| atoi parser | O(n) | O(1) |
+| Fixed-alphabet counts | O(n) | O(1) |
+| Repeated `+=` in a loop | Up to O(n²) | O(n) |
+
+## Variations and common bugs
+
+- **Building strings with `+=` in a loop.** Use a list and `"".join`.
+- **Slicing inside a loop** (`s[i:]` on each step) quietly turns O(n) into O(n²). Pass indices instead.
+- **Off-by-one at the end of the string:** always check `i < len(s)` before reading `s[i]`.
+- **Unicode surprises:** `isdigit()` and `isalnum()` accept non-ASCII characters; `lower()` does not handle every language (`casefold()` is stronger); some visible characters are made of several code points.
+- **Forgetting empty input or a single character.**
+- **Valid Palindrome II:** trying to delete more than once, or only trying one side at the mismatch.
+- **atoi:** accepting a second sign (`"+-12"` should give 0), skipping spaces after the sign, or clamping too late in fixed-width languages.
+
+## Strings in data-engineering work
+
+- **Normalising join keys.** Emails, product codes and country names arrive with stray spaces and mixed case. `key.strip().casefold()` before a join or dedup prevents silent mismatches.
+- **Parsing dirty numeric fields.** The atoi steps (trim, optional sign, digits, stop, range-check) are what a careful loader does with values like `" 1,204 "` or `"12kg"`, except that it should usually reject and log rather than guess.
+- **Prefix matching.** Object stores list files by key prefix (for example `events/date=2026-10-05/`), and longest common prefix logic finds the shared directory of a set of paths. For many prefixes, a trie (see the binary trees lesson) does it efficiently.
+- **Building large outputs.** Writing CSV or JSON lines by joining parts, or streaming them to a file, avoids quadratic string building.
+
+```python
+def parse_quantity(raw):
+    """Return an int, or None if the field is not a clean integer."""
+    text = raw.strip().replace(",", "")
+    if text[:1] in ("+", "-"):
+        sign, digits = (-1 if text[0] == "-" else 1), text[1:]
+    else:
+        sign, digits = 1, text
+    if not digits or not all("0" <= c <= "9" for c in digits):
+        return None
+    return sign * int(digits)
+
+
+rows = [" 1,204 ", "-7", "12kg", "", "+0", "１２"]   # the last one uses full-width digits
+assert [parse_quantity(r) for r in rows] == [1204, -7, None, None, 0, None]
+print([parse_quantity(r) for r in rows])
+```
+
+```text
+[1204, -7, None, None, 0, None]
+```
+
+Unlike atoi, this pipeline version rejects `"12kg"` instead of returning 12, because a silently truncated value is worse than a flagged bad row.
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Reverse String** (Easy): swap the two ends and move both pointers inwards.
+2. **Longest Common Prefix** (Easy): compare column by column, or compare only the smallest and largest strings.
+3. **Valid Palindrome II** (Easy): two pointers; at the first mismatch, check both one-deletion options.
+4. **String to Integer (atoi)** (Medium): spaces, sign, digits, stop, clamp to the 32-bit range.
+
+The two pointers and sliding window lessons contain more string problems, such as Valid Palindrome and Longest Substring Without Repeating Characters.
+
+## Practice questions
+
+<details>
+<summary>Why is building a string with += in a loop a problem, and what do you do instead?</summary>
+
+Strings are immutable, so each `+=` can create a new string and copy everything built so far, which makes the loop O(n²) overall. Append pieces to a list and call `"".join(parts)` once at the end, which is O(n).
+
+</details>
+
+<details>
+<summary>In Valid Palindrome II, why do you need to try both deletions at the first mismatch?</summary>
+
+At a mismatch you do not know which character is the extra one. For `"abca"`, deleting either `b` or `c` works, but in other strings only one choice does (for `"ebcbbececabbacecbbcbe"` only one side leads to a palindrome). Checking both remaining ranges once keeps the algorithm O(n).
+
+</details>
+
+<details>
+<summary>Why compare characters against the ASCII range "0" to "9" rather than calling c.isdigit() when parsing?</summary>
+
+`isdigit()` is true for many Unicode characters besides ASCII 0–9, such as superscript digits, and `int()` does not accept all of them. Converting those with `ord(c) - ord("0")` would produce wrong values. An explicit ASCII range keeps the parser's behaviour predictable.
+
+</details>
+
+<details>
+<summary>Two systems store customer emails differently and a join loses rows. How do you investigate and fix it?</summary>
+
+Compare unmatched keys from both sides and look for differences in whitespace, case, Unicode normalisation or hidden characters. Fix it by normalising both sides the same way before joining, for example trimming and case-folding, and add a data-quality check that counts unmatched keys so the issue is caught next time.
+
+</details>
+
+<details>
+<summary>How would you find the longest common directory prefix of a list of file paths?</summary>
+
+Split each path on `/` and run longest common prefix over the lists of components, not characters, so that `logs/app1` and `logs/app10` give `logs` rather than `logs/app1`. Sorting and comparing only the first and last items works for lists too.
+
+</details>
+
+## Key takeaways
+
+- Python strings are immutable: build output with a list and `"".join`, and avoid slicing in loops.
+- Most string problems are array techniques: counts, two pointers and sliding windows.
+- At a single permitted mismatch, try each option once.
+- Write parsers as explicit steps and state what happens to invalid input.
+- Fixed-alphabet count arrays give O(1) space; use `Counter` for open alphabets.
+- In pipelines, normalise keys before joining and reject rather than guess on dirty fields.
