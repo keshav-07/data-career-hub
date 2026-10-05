@@ -1,0 +1,109 @@
+---
+title: "Subarray Sum Equals K: Count Contiguous Slices With a Given Sum"
+seoTitle: "Subarray Sum Equals K: Prefix Sums + Hash Map"
+description: "Count contiguous subarrays whose sum is exactly k, with negatives allowed. Learn the prefix-sum and hash-map technique that brings it from O(n²) to O(n)."
+technology: ["dsa"]
+topic: ["hashing", "prefix-sum"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "The sum of a slice equals prefix[j] - prefix[i], so a slice ending at j sums to k exactly when an earlier prefix equals prefix[j] - k. Walk the array keeping the running prefix sum and a hash map counting how often each prefix value has occurred, starting with {0: 1}. At each step add the count stored for prefix - k to the answer, then record the current prefix. This is O(n) time and O(n) space, and unlike a sliding window it works with negative numbers."
+followUps: ["Why does a sliding window fail when the array contains negative numbers?", "How would you return the length of the longest subarray with sum k instead of the count?", "How would you count subarrays whose sum is divisible by k?"]
+previous: "interview-questions:dsa/set-matrix-zeroes"
+next: "interview-questions:dsa/majority-element"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers `nums` (which may include negatives and zeros) and an integer `k`, return how many contiguous, non-empty subarrays have a sum of exactly `k`. This is widely known as LeetCode 560, Subarray Sum Equals K.
+
+## Examples
+
+```text
+nums = [2, 1, 3, -1, 1],  k = 3   ->  4    ([2, 1], [3], [3, -1, 1], [1, 3, -1])
+nums = [0, 0],            k = 0   ->  3    ([0], [0], [0, 0])
+nums = [5],               k = 4   ->  0
+```
+
+## Approach 1: brute force
+
+Fix each start and extend to the right with a running sum.
+
+```python
+def subarray_sum_brute(nums, k):
+    count = 0
+    for i in range(len(nums)):
+        total = 0
+        for j in range(i, len(nums)):
+            total += nums[j]
+            if total == k:
+                count += 1
+    return count
+```
+
+**Complexity:** O(n²) time, O(1) space.
+
+## Approach 2: optimal
+
+**Key insight:** let `P` be the running prefix sum. A subarray ending here sums to `k` if and only if some earlier prefix equals `P - k`. A hash map of how many times each prefix has appeared gives the number of such subarrays in O(1). The map starts with `{0: 1}` to stand for the empty prefix, so subarrays starting at index 0 are counted.
+
+Walkthrough on `[2, 1, 3, -1, 1]`, `k = 3`:
+
+| num | P | P - k | count of P - k in map | total | map after |
+|---|---|---|---|---|---|
+| | 0 | | | 0 | `{0: 1}` |
+| 2 | 2 | -1 | 0 | 0 | `{0: 1, 2: 1}` |
+| 1 | 3 | 0 | 1 | 1 | `{0: 1, 2: 1, 3: 1}` |
+| 3 | 6 | 3 | 1 | 2 | ... 6: 1 |
+| -1 | 5 | 2 | 1 | 3 | ... 5: 1 |
+| 1 | 6 | 3 | 1 | 4 | ... 6: 2 |
+
+```python
+def subarray_sum(nums, k):
+    seen = {0: 1}
+    prefix = total = 0
+    for num in nums:
+        prefix += num
+        total += seen.get(prefix - k, 0)
+        seen[prefix] = seen.get(prefix, 0) + 1
+    return total
+```
+
+**Complexity:** O(n) time on average, O(n) space.
+
+## Tests
+
+```python
+import random
+
+for f in (subarray_sum, subarray_sum_brute):
+    assert f([2, 1, 3, -1, 1], 3) == 4
+    assert f([0, 0], 0) == 3                       # zeros, k = 0
+    assert f([5], 4) == 0 and f([5], 5) == 1       # single element
+    assert f([], 0) == 0                           # empty (non-empty subarrays only)
+    assert f([1, -1, 1, -1], 0) == 4               # negatives
+    assert f([3, 3, 3], 6) == 2                    # duplicates
+    assert f([10**9, -10**9, 10**9], 10**9) == 3   # large values
+
+random.seed(17)
+for _ in range(400):
+    arr = [random.randint(-3, 3) for _ in range(random.randint(0, 12))]
+    k = random.randint(-4, 4)
+    assert subarray_sum(arr, k) == subarray_sum_brute(arr, k)
+```
+
+## Edge cases and pitfalls
+
+- Forgetting the initial `{0: 1}` misses every subarray that starts at index 0.
+- Update the map **after** the lookup; doing it before counts an empty subarray when `k == 0`.
+- A two-pointer sliding window only works when all numbers are positive; with negatives, growing the window can shrink the sum, so the window logic breaks.
+- The map must hold counts, not just a set, because the same prefix sum can appear several times (zeros and negatives make this common).
+
+## Where this shows up in data engineering
+
+Prefix sums are cumulative totals, which is exactly `SUM(amount) OVER (ORDER BY ts)`. "How many periods had net flow of exactly k" or "find balance changes that cancel out" are this problem. The habit of turning a range-sum question into a difference of two cumulative values is what makes such queries cheap.
