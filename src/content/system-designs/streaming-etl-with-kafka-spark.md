@@ -66,6 +66,7 @@ related:
   - "articles:etl-elt/idempotency-in-data-pipelines"
   - "interview-questions:kafka/at-least-once-delivery"
 versionContext: "Written against Apache Kafka 4.x (KRaft only), Spark 4.x Structured Streaming and Delta Lake documentation. The PySpark snippet needs a Kafka broker and Delta, so it was not executed here."
+next: "system-designs:near-zero-downtime-migration"
 sources:
   - { label: "Apache Spark: Structured Streaming programming guide", url: "https://spark.apache.org/docs/4.0.0/streaming/apis-on-dataframes-and-datasets.html" }
   - { label: "Delta Lake: table streaming reads and writes", url: "https://docs.delta.io/delta-streaming/" }
