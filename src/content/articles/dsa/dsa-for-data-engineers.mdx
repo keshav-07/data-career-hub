@@ -1,0 +1,485 @@
+---
+title: "Data Structures and Algorithms for Data Engineers: How to Prepare"
+seoTitle: "DSA for Data Engineers: How to Prepare"
+description: "Big-O, a repeatable method for coding rounds, the Python built-ins that solve most problems, and a study plan for the 157 practice problems in the planner."
+technology: ["dsa"]
+topic: ["complexity", "interview-preparation", "python-built-ins"]
+difficulty: "Beginner"
+pillar: true
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Estimate time and space complexity with Big-O and use it to choose between approaches"
+  - "Run a coding round in six steps: clarify, examples, brute force, optimise, code, test"
+  - "Use dict, set, Counter, defaultdict, deque, heapq, bisect and sorted with a key fluently"
+  - "Plan your practice across the 15 patterns and 157 problems in a sensible order"
+prerequisites: ["articles:python/python-for-data-engineering"]
+related: ["articles:python/data-structures-for-interviews"]
+versionContext: "All Python examples run on CPython 3.11 with assert-based tests. The max-heap helpers in heapq need Python 3.14 and are mentioned but not executed."
+sources:
+  - { label: "Python documentation: collections", url: "https://docs.python.org/3/library/collections.html" }
+  - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
+  - { label: "Python documentation: bisect", url: "https://docs.python.org/3/library/bisect.html" }
+  - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
+  - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+---
+
+Most Data Engineering interview loops include a coding round, and it is usually the round people under-prepare for. The problems are rarely exotic: counting, deduplicating, merging ranges, finding the top K, ordering dependencies. This guide gives you the tools to handle them: a working understanding of Big-O, a method for the round itself, the Python built-ins that do most of the work, and a plan for the 157 problems in the planner.
+
+Every code block on this page is self-contained and ends with `assert` checks, so you can paste it into a Python 3.10+ shell and run it.
+
+## What DSA rounds look like in Data Engineering interviews
+
+Coding rounds for Data Engineers lean towards **easy and medium** problems. The patterns that come up most are arrays and hashing, strings, two pointers and sliding windows, followed by stacks, heaps, intervals and binary search. Graph problems appear mostly as dependency ordering (which is exactly what a scheduler does with a DAG), and dynamic programming appears at some companies, usually at medium difficulty.
+
+What the interviewer is assessing is not whether you have memorised a solution. They want to see that you:
+
+- ask about inputs and edge cases before writing code;
+- reach a correct solution, even a slow one, then improve it;
+- choose the right data structure and can say why;
+- write clean, readable Python and test it out loud;
+- state the time and space complexity correctly.
+
+A Data Engineering interview may also wrap a classic problem in pipeline language: "find duplicate event IDs in a stream", "merge overlapping maintenance windows", "return the five most active users", "given task dependencies, produce a run order". Recognising the classic problem underneath is half the work, and each lesson in this course has a section on exactly that.
+
+## Big-O: how cost grows with input size
+
+Big-O describes how the running time (or memory) of an algorithm **grows** as the input size `n` grows, ignoring constant factors. It answers "if the input is ten times bigger, roughly how much slower is this?".
+
+| Complexity | Name | Typical source | n = 1,000,000 is... |
+|---|---|---|---|
+| O(1) | Constant | dict or set lookup, list index | instant |
+| O(log n) | Logarithmic | binary search, one heap push or pop | about 20 steps |
+| O(n) | Linear | one pass over the data | fine |
+| O(n log n) | Linearithmic | sorting, n heap operations | fine |
+| O(n²) | Quadratic | nested loops over the same data | too slow in an interview |
+| O(2ⁿ), O(n!) | Exponential, factorial | trying every subset or ordering | only for tiny n |
+
+### Rules for working it out
+
+1. **Sequential steps add, nested steps multiply.** A sort followed by a loop is O(n log n + n) = O(n log n). A loop inside a loop over the same list is O(n²).
+2. **Drop constants and smaller terms.** Two passes are O(2n) = O(n).
+3. **Use separate variables for separate inputs.** Comparing every row of `a` with every row of `b` is O(a·b), not O(n²).
+4. **Know the cost of built-in operations.** `x in list` is O(n), `x in set` is O(1) on average, `list.pop(0)` is O(n), `deque.popleft()` is O(1), slicing `s[i:j]` copies and costs O(j − i).
+5. **Recursion costs stack space.** A recursive depth-first search on a tree of height h uses O(h) extra space even if you allocate nothing.
+6. **Amortised cost** is the average over many operations. `list.append` is O(1) amortised: the list occasionally resizes, but the total cost of n appends is O(n).
+
+### The constraint tells you the target
+
+Interview problems often state a limit on `n`. Use it to guess the intended complexity:
+
+| Input size | Usually acceptable |
+|---|---|
+| n ≤ 20 | O(2ⁿ) backtracking |
+| n ≤ 1,000 | O(n²) |
+| n ≤ 100,000 to 1,000,000 | O(n log n) or O(n) |
+| Data larger than memory | One streaming pass, O(1) or O(k) memory |
+
+The last row matters most for Data Engineers. When the interviewer says "now assume it does not fit in memory", they want a streaming answer (a single pass with a hash map of bounded size, a heap of size k, or an external sort and merge), not a cleverer in-memory trick.
+
+```python
+def has_duplicate_quadratic(items):
+    # Compare every pair: O(n^2) time, O(1) extra space.
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i] == items[j]:
+                return True
+    return False
+
+
+def has_duplicate_linear(items):
+    # Remember what we have seen: O(n) time, O(n) extra space.
+    seen = set()
+    for item in items:
+        if item in seen:
+            return True
+        seen.add(item)
+    return False
+
+
+for fn in (has_duplicate_quadratic, has_duplicate_linear):
+    assert fn([3, 1, 4, 1]) is True
+    assert fn([3, 1, 4]) is False
+    assert fn([]) is False
+print("both versions agree")
+```
+
+```text
+both versions agree
+```
+
+This trade (spend memory on a set to save time) is the single most common optimisation in coding interviews.
+
+### Pitfalls
+
+- Calling an O(n) operation inside a loop without noticing: `if x in some_list`, `some_list.remove(x)`, `some_list.pop(0)`, `s = s + char` in a loop, or `min(window)` on every step.
+- Forgetting the cost of sorting when you say "this is linear".
+- Saying "O(1) space" while building a new list or string of size n.
+- Hash operations are O(1) on **average**; the worst case is O(n) with heavy collisions. Saying "average" shows you know the difference.
+
+### In interviews
+
+State complexity for both time and space, and say which variable it depends on: "O(n log n) time for the sort, O(n) extra space for the map". If there is a trade-off, name it: "I can do this in O(1) space if I am allowed to sort the input in place, at the cost of O(n log n) time."
+
+## How to approach a coding round
+
+Use the same six steps every time. They keep you calm, they show the interviewer how you think, and they catch most bugs before you run anything.
+
+### 1. Clarify the problem
+
+Restate the problem in your own words and ask about the inputs:
+
+- Types and ranges: can numbers be negative, zero, very large? Are strings ASCII or Unicode? Are IDs integers or strings?
+- Size: how large is `n`? Does it fit in memory?
+- Duplicates and ties: can values repeat? If two answers tie, which one is expected?
+- Empty or invalid input: what should an empty list return?
+- Output: return or print? Indices or values? Does order matter?
+- Mutation: may I modify the input in place?
+
+### 2. Work through examples
+
+Write one normal example and one or two edge cases (empty input, a single element, all duplicates) and compute the expected output by hand. These become your tests in step 6.
+
+### 3. Describe a brute-force solution
+
+Say the obvious solution and its complexity, even if it is slow: "I could check every pair, which is O(n²)". This proves you can solve the problem, and gives you something to fall back on if you get stuck.
+
+### 4. Optimise
+
+Look for the bottleneck in the brute force and ask which pattern removes it:
+
+| Bottleneck | Usual fix |
+|---|---|
+| Repeated searching for a value | Hash map or set |
+| Pairs in a sorted array | Two pointers |
+| Recomputing a contiguous range | Sliding window or prefix sums |
+| Searching a sorted range or a monotonic answer | Binary search |
+| Repeatedly finding the smallest or largest | Heap |
+| "Next greater/smaller" for each element | Monotonic stack |
+| Dependencies or connectivity | Graph traversal, topological sort, union-find |
+| Overlapping subproblems | Dynamic programming |
+
+Agree the approach with the interviewer before you code. A sentence like "I'll keep a dict from value to index and do one pass; that's O(n) time and space. Shall I go ahead?" saves you from coding the wrong idea.
+
+### 5. Write the code
+
+Use clear names (`seen`, `left`, `right`, `window_counts`), small helper functions, and Python built-ins. Talk while you write, but do not narrate every keystroke.
+
+### 6. Test it
+
+Trace your examples through the code by hand, line by line, tracking the variables. Then check the edge cases: empty input, one element, duplicates, negative numbers, the answer at the very start or end. Fix bugs calmly; finding your own bug is a positive signal.
+
+Finish by restating complexity and mentioning what you would change for scale, for example "if the input were a stream, I would keep only the window in memory".
+
+<Callout tone="info" title="When you are stuck">
+
+Say what you have tried and why it fails. Go back to the examples and solve one by hand, slowly, noticing what you did. Interviewers often give hints, and taking a hint well is part of the assessment.
+
+</Callout>
+
+## Python built-ins that matter
+
+You do not need to implement a hash table or a heap from scratch. You do need to know which built-in to reach for and what it costs.
+
+| Tool | Use it for | Key costs |
+|---|---|---|
+| `dict` | Lookup by key, grouping, counting, memoisation | get/set/`in`: O(1) average |
+| `set` | Membership, deduplication, set algebra | add/`in`/remove: O(1) average |
+| `collections.Counter` | Frequency counts, anagram checks, top-k by count | build: O(n); `most_common(k)`: O(n log k) |
+| `collections.defaultdict` | Grouping without "if key not in dict" checks | as dict |
+| `collections.deque` | Queues (BFS), sliding windows, both-ended stacks | append/pop at either end: O(1) |
+| `heapq` | Top K, k-way merge, scheduling, Dijkstra | push/pop: O(log n); heapify: O(n) |
+| `bisect` | Binary search in a sorted list | search: O(log n); insort: O(n) because of shifting |
+| `sorted(key=...)` | Ordering records by one or more fields | O(n log n), stable |
+
+### dict and set
+
+```python
+events = [("u1", "click"), ("u2", "view"), ("u1", "view"), ("u3", "click")]
+
+# Last event per user: later rows overwrite earlier ones.
+latest = {}
+for user, action in events:
+    latest[user] = action
+assert latest == {"u1": "view", "u2": "view", "u3": "click"}
+
+# .get with a default avoids KeyError.
+assert latest.get("u9", "none") == "none"
+
+# Sets: deduplicate and compare.
+yesterday = {"u1", "u2", "u5"}
+today = {user for user, _ in events}
+assert today - yesterday == {"u3"}          # new users
+assert today & yesterday == {"u1", "u2"}    # returning users
+assert yesterday - today == {"u5"}          # churned users
+
+# Order-preserving dedup (dicts keep insertion order).
+assert list(dict.fromkeys(["b", "a", "b", "c"])) == ["b", "a", "c"]
+print(sorted(today))
+```
+
+```text
+['u1', 'u2', 'u3']
+```
+
+Keys must be hashable: strings, numbers and tuples of hashable values work; lists and dicts do not. Use a tuple such as `(user_id, day)` for a composite key.
+
+### Counter and defaultdict
+
+```python
+from collections import Counter, defaultdict
+
+words = "the cat and the hat and the bat".split()
+counts = Counter(words)
+assert counts["the"] == 3
+assert counts["dog"] == 0                     # missing keys count as zero
+assert counts.most_common(2) == [("the", 3), ("and", 2)]
+
+# Counter equality is a quick anagram test.
+assert Counter("listen") == Counter("silent")
+
+# Group values by key without checking whether the key exists.
+orders = [("north", 120), ("south", 80), ("north", 40)]
+by_region = defaultdict(list)
+for region, amount in orders:
+    by_region[region].append(amount)
+assert dict(by_region) == {"north": [120, 40], "south": [80]}
+print(counts.most_common(2))
+```
+
+```text
+[('the', 3), ('and', 2)]
+```
+
+`most_common` breaks ties by first insertion order, which is useful to know when an interviewer asks how ties are handled.
+
+### deque
+
+```python
+from collections import deque
+
+queue = deque()
+queue.append("a")       # enqueue on the right
+queue.append("b")
+assert queue.popleft() == "a"   # dequeue from the left in O(1)
+
+recent = deque(maxlen=3)        # keeps only the last 3 items
+for reading in [10, 20, 30, 40]:
+    recent.append(reading)
+assert list(recent) == [20, 30, 40]
+print(sum(recent) / len(recent))
+```
+
+```text
+30.0
+```
+
+Never use `list.pop(0)` as a queue: it shifts every remaining element, so it costs O(n) per pop.
+
+### heapq
+
+`heapq` turns a plain list into a **min-heap**: `heap[0]` is always the smallest item.
+
+```python
+import heapq
+
+heap = []
+for latency in [120, 35, 300, 80]:
+    heapq.heappush(heap, latency)
+assert heap[0] == 35
+assert heapq.heappop(heap) == 35
+
+# Top-k largest with a min-heap of size k: O(n log k) time, O(k) space.
+def top_k(values, k):
+    heap = []
+    for v in values:
+        if len(heap) < k:
+            heapq.heappush(heap, v)
+        elif v > heap[0]:
+            heapq.heapreplace(heap, v)   # pop smallest, push v
+    return sorted(heap, reverse=True)
+
+assert top_k([5, 1, 9, 3, 7, 9], 3) == [9, 9, 7]
+assert heapq.nlargest(3, [5, 1, 9, 3, 7, 9]) == [9, 9, 7]
+
+# Max-heap trick before Python 3.14: push negated values.
+max_heap = [-x for x in [4, 10, 2]]
+heapq.heapify(max_heap)
+assert -max_heap[0] == 10
+
+# Tuples compare element by element, so (priority, tiebreak, item) is the safe pattern.
+tasks = []
+heapq.heappush(tasks, (2, 0, "load"))
+heapq.heappush(tasks, (1, 1, "extract"))
+assert heapq.heappop(tasks)[2] == "extract"
+print(top_k([5, 1, 9, 3, 7, 9], 3))
+```
+
+```text
+[9, 9, 7]
+```
+
+Python 3.14 added max-heap functions to `heapq` (`heappush_max`, `heappop_max`, `heapify_max` and others). Interview environments often run older versions, so know the negation trick.
+
+### bisect
+
+`bisect` finds insertion points in a **sorted** list in O(log n).
+
+```python
+import bisect
+
+partition_starts = ["2026-01-01", "2026-04-01", "2026-07-01", "2026-10-01"]
+
+def partition_for(day):
+    # Index of the last start that is <= day.
+    i = bisect.bisect_right(partition_starts, day) - 1
+    return partition_starts[i] if i >= 0 else None
+
+assert partition_for("2026-05-17") == "2026-04-01"
+assert partition_for("2026-10-01") == "2026-10-01"
+assert partition_for("2025-12-31") is None
+
+scores = [10, 20, 20, 30]
+assert bisect.bisect_left(scores, 20) == 1    # first position of 20
+assert bisect.bisect_right(scores, 20) == 3   # just after the last 20
+print(partition_for("2026-05-17"))
+```
+
+```text
+2026-04-01
+```
+
+`bisect_left` gives the first index where the value could go (before equal items); `bisect_right` gives the index after equal items. Since Python 3.10 the functions also accept a `key` argument.
+
+### sorted with a key
+
+```python
+rows = [
+    {"user": "ana", "country": "UK", "spend": 40},
+    {"user": "bo",  "country": "US", "spend": 90},
+    {"user": "cy",  "country": "UK", "spend": 90},
+]
+
+# Highest spend first, then user name ascending for ties.
+ranked = sorted(rows, key=lambda r: (-r["spend"], r["user"]))
+assert [r["user"] for r in ranked] == ["bo", "cy", "ana"]
+
+# Sorting is stable: equal keys keep their input order,
+# so you can sort by the secondary key first, then the primary key.
+by_country = sorted(rows, key=lambda r: r["country"])
+assert [r["user"] for r in by_country] == ["ana", "cy", "bo"]
+print([r["user"] for r in ranked])
+```
+
+```text
+['bo', 'cy', 'ana']
+```
+
+`sorted()` returns a new list; `list.sort()` sorts in place and returns `None`, a classic bug when you write `x = items.sort()`.
+
+### Pitfalls
+
+- Mutable default arguments (`def f(seen=set())`) are shared between calls. Use `None` and create the set inside.
+- `heapq` compares whole tuples, so two items with equal priority fall through to comparing the payloads, which fails for dicts. Add a counter as a tie-breaker.
+- `bisect.insort` is O(n) because the list shifts. For many inserts, collect then sort, or use a heap.
+- Recursion depth: CPython's default limit is about 1,000 frames, so a recursive DFS on a long chain can fail. Prefer an explicit stack for deep inputs.
+
+### In interviews
+
+Using `Counter`, `defaultdict`, `deque` and `heapq` is normally welcome; it is how you would write production Python. If the interviewer asks you to implement the structure yourself (for example a heap or an LRU cache), they will say so.
+
+## How to study the 157 problems in the planner
+
+The planner lists 157 problems across 15 patterns. Do not work through them alphabetically or at random. Learn a pattern, then solve its problems from easy to hard so that each one reinforces the same template.
+
+### Recommended order
+
+| Order | Pattern | Problems | Priority for DE interviews |
+|---|---|---|---|
+| 1 | Arrays and hashing | 23 | Core |
+| 2 | Strings | 4 | Core |
+| 3 | Two pointers | 7 | Core |
+| 4 | Sliding window | 7 | Core |
+| 5 | Stacks | 8 | Core |
+| 6 | Queues | 4 | Core |
+| 7 | Binary search | 8 | Core |
+| 8 | Linked lists | 11 | Useful |
+| 9 | Binary trees and tries | 15 | Useful |
+| 10 | Binary search trees | 6 | Useful |
+| 11 | Heaps and priority queues | 7 | Core |
+| 12 | Backtracking | 10 | Occasional |
+| 13 | Graphs | 18 | Useful (topological sort is core) |
+| 14 | Dynamic programming | 22 | Occasional to useful |
+| 15 | Greedy and intervals | 7 | Useful |
+
+If your interview is soon, do the "Core" rows first, plus topological sort from the graphs lesson and the interval problems from arrays and greedy. These cover the majority of what Data Engineering coding rounds ask.
+
+### How to work a single problem
+
+1. Read the problem and spend up to 20 minutes on it with a timer, following the six steps above.
+2. If you are stuck, read the pattern lesson again, not the solution. Try once more.
+3. Only then read a solution. Close it and rewrite the code from memory.
+4. Write down the **key idea in one sentence** (the lessons' "Problems in this pattern" sections show the style). That sentence is what you will remember in the interview, not the code.
+5. Revisit the problem after about three days and again after about two weeks. If you cannot solve it in 15 minutes, it goes back in the queue.
+
+### A realistic weekly plan
+
+Two or three problems a day, on most days of the week, gets you through all 157 in around three months; the core patterns alone take a few weeks at that pace. Keep one session a week for **mixed** practice: pick problems from different patterns without looking at the label, because recognising the pattern is the skill the real interview tests.
+
+### In interviews
+
+Interviewers can tell the difference between a memorised answer and an understood one: they change a constraint ("what if the array is sorted?", "what if it is a stream?") and watch what happens. Practise saying how each solution changes under those follow-ups.
+
+## Practice questions
+
+<details>
+<summary>What is the time complexity of checking `x in my_list` inside a loop over `my_list`, and how do you fix it?</summary>
+
+Each membership check scans the list, which is O(n), and it runs n times, so the total is O(n²). Build a set once (O(n)) and check membership in the set (O(1) on average), giving O(n) overall at the cost of O(n) extra memory.
+
+</details>
+
+<details>
+<summary>An interviewer says the input no longer fits in memory. How does that change your answer?</summary>
+
+You need a single pass (or a few passes) over the data with bounded memory. Examples: a heap of size k for top-K, a hash map keyed by a bounded set of IDs, counting approximately with a sketch, or partitioning the data by hash into files that do fit and processing each one. For sorting, use an external merge sort: sort chunks that fit, write them out, then merge with a heap.
+
+</details>
+
+<details>
+<summary>Why do you describe a brute-force solution before optimising?</summary>
+
+It shows you understand the problem and can produce a correct answer, it gives you a baseline complexity to improve on, and it is a fallback if you run out of time. It also often reveals the bottleneck (a repeated search, a recomputed sum) that points to the right pattern.
+
+</details>
+
+<details>
+<summary>How do you get a max-heap from Python's heapq?</summary>
+
+`heapq` is a min-heap. Push negated values (`-x`) and negate again when you pop. For tuples, negate the priority field only. Python 3.14 adds dedicated functions such as `heappush_max` and `heappop_max`, but many interview environments run older versions.
+
+</details>
+
+<details>
+<summary>What is the difference between bisect_left and bisect_right?</summary>
+
+Both return an insertion point in a sorted list. `bisect_left` returns the position before any items equal to the value; `bisect_right` returns the position after them. So `bisect_right(a, x) - bisect_left(a, x)` counts occurrences of `x`, and `bisect_right(a, x) - 1` is the index of the last item `<= x`.
+
+</details>
+
+<details>
+<summary>You need to sort records by spend descending, then name ascending. How?</summary>
+
+Use a tuple key with the numeric field negated: `sorted(rows, key=lambda r: (-r["spend"], r["name"]))`. If the descending field is not numeric, sort twice using stability: first by name ascending, then by spend with `reverse=True`.
+
+</details>
+
+## Key takeaways
+
+- DE coding rounds are mostly easy to medium problems on arrays, hashing, strings, two pointers and sliding windows; topological sort is the graph topic worth prioritising.
+- Use Big-O to pick an approach, and let the input size constraint suggest the target complexity.
+- Follow the same six steps every time: clarify, examples, brute force, optimise, code, test.
+- Know the costs of Python built-ins: set and dict lookups are O(1) on average, `list.pop(0)` and `x in list` are O(n), heap operations are O(log n).
+- Learn one pattern at a time, solve its problems from easy to hard, and keep a one-sentence key idea for each problem.
+- Always be ready for the follow-up "what if it does not fit in memory?".
