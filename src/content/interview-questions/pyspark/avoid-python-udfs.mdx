@@ -1,0 +1,44 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "When should you avoid Python UDFs in PySpark?"
+description: "Interview answer: avoid Python UDFs whenever built-in functions can express the logic, because UDFs add serialisation cost and block optimisation; prefer pandas UDFs."
+seoTitle: "When to Avoid Python UDFs in PySpark: Interview Answer"
+inventoryId: "INT-15"
+technology: ["pyspark", "spark"]
+topic: ["udfs", "performance"]
+difficulty: "Medium"
+questionType: ["conceptual", "optimization"]
+estimatedMinutes: 6
+interviewRelevance: "High"
+shortAnswer: "Avoid a Python UDF whenever built-in Spark functions can express the logic. A UDF moves data between the JVM and Python workers and is a black box to the optimiser, so it is slower and prevents optimisations such as predicate pushdown. If Python is genuinely needed, prefer a vectorised pandas UDF that processes batches through Apache Arrow, and keep any UDF pure, null-safe and tested."
+followUps: ["What is a pandas UDF and why is it faster?", "What changed for Python UDFs in Spark 4?", "How would you test a UDF?"]
+related: ["articles:pyspark/udfs-and-safer-alternatives"]
+versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+---
+
+## Detailed explanation
+
+Built-in functions run in the JVM with code generation and are understood by the optimiser. A Python UDF adds a separate Python evaluation step in the physical plan. In Spark 4, regular Python UDFs can use Arrow for transfer by default when PyArrow is installed, which narrows the serialisation gap, but the function is still opaque to the optimiser and still executes Python.
+
+## Decision order
+
+1. **Built-in function** (`when`, `regexp_extract`, `date_trunc`, array functions).
+2. **SQL expression** (`F.expr("...")`) if it reads more clearly.
+3. **pandas UDF** for vectorisable Python logic.
+4. **Plain Python UDF** only when nothing else works.
+
+## Example
+
+```python
+# Instead of a UDF that classifies amounts:
+from pyspark.sql import functions as F
+banded = F.when(F.col("amount") >= 1000, "large").when(F.col("amount") >= 100, "medium").otherwise("small")
+```
+
+## Common mistakes
+
+1. Row-by-row API or database calls from a UDF.
+2. Forgetting `None` handling.
+3. Wrong declared return type producing `NULL`s.

@@ -1,0 +1,94 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "PySpark Transformations vs Actions"
+description: "Understand lazy evaluation in PySpark: transformations build a plan, actions run it, and narrow versus wide transformations decide where Spark shuffles data."
+inventoryId: "TECH-11"
+technology: ["pyspark", "spark"]
+topic: ["lazy-evaluation", "execution-model"]
+difficulty: "Beginner"
+prerequisites: ["articles:pyspark/dataframes-and-schemas"]
+related: ["interview-questions:spark/transformation-vs-action", "articles:spark/execution-model-jobs-stages-tasks"]
+previous: "articles:pyspark/dataframes-and-schemas"
+next: "articles:pyspark/joins-and-join-strategy"
+sources: [{"label": "Spark documentation: RDD programming guide (transformations and actions)", "url": "https://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-operations"}]
+versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+---
+
+PySpark code looks like it runs line by line. It does not. **Transformations** only describe a new DataFrame; **actions** make Spark plan and execute the whole chain.
+
+## Laziness in practice
+
+```python
+from pyspark.sql import SparkSession, functions as F
+
+spark = SparkSession.builder.master("local[2]").appName("example").getOrCreate()
+
+events = spark.range(0, 1_000_000).withColumn("bucket", F.col("id") % 10)   # transformation
+big = events.filter(F.col("id") > 500_000)                                   # transformation
+counts = big.groupBy("bucket").count()                                        # transformation
+
+print(type(counts).__name__)        # still just a plan
+print(counts.orderBy("bucket").first())   # action: now Spark runs a job
+```
+
+```text
+DataFrame
+Row(bucket=0, count=49999)
+```
+
+Until `first()`, nothing was computed. Spark could see the whole chain and optimise it: the filter is applied before the grouping, and only the needed columns are read.
+
+## Common transformations and actions
+
+| Transformations (lazy) | Actions (run a job) |
+|------------------------|---------------------|
+| `select`, `withColumn`, `filter` | `show`, `count`, `collect`, `first`, `take` |
+| `join`, `groupBy().agg()`, `distinct` | `write....save()`, `saveAsTable`, `foreach` |
+| `orderBy`, `repartition`, `union` | `toPandas`, `toLocalIterator` |
+
+## Narrow versus wide
+
+- **Narrow**: each output partition depends on one input partition (`filter`, `select`, `withColumn`). No data moves.
+- **Wide**: output partitions need data from many input partitions (`groupBy`, `join`, `distinct`, `orderBy`). Spark must **shuffle**, and that creates a stage boundary.
+
+You can see the shuffle in the plan as an `Exchange`:
+
+```python
+counts.explain()
+```
+
+The plan shows a partial aggregation, then `Exchange hashpartitioning(bucket, ...)`, then the final aggregation. Spark pre-aggregates on each partition before shuffling, which is why `groupBy().count()` moves far less data than the raw rows.
+
+## Why repeated actions can be slow
+
+Each action re-executes the plan from the source unless results are cached:
+
+```python
+counts.count()
+counts.show(3)
+```
+
+Both lines recompute `events → filter → groupBy`. If an expensive DataFrame is reused by several actions, `cache()` it (and `unpersist()` when done). Do not cache everything: memory is finite and caching cheap steps adds overhead.
+
+<Callout tone="warning" title="collect() pulls everything to the driver">
+
+`collect()` and `toPandas()` bring all rows into the driver's memory. Use them only on small, aggregated results. To inspect data, use `show()` or `take(n)`.
+
+</Callout>
+
+## Common mistakes
+
+1. Timing a transformation line and concluding it is fast (nothing ran).
+2. Calling `count()` "just to check" between every step in production code, triggering a full job each time.
+3. Caching without reuse.
+4. `collect()` on large data.
+
+## Interview relevance
+
+This is one of the most common Spark interview questions. Combine it with narrow versus wide and where shuffles occur. See the [interview answer](/interview/spark/transformation-vs-action/).
+
+## Key takeaway
+
+Transformations build a plan; actions run it. Know which of your transformations are wide, because those are where Spark shuffles.

@@ -1,0 +1,128 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "PySpark DataFrames and Schemas"
+description: "Create PySpark DataFrames with explicit schemas, understand nullability and type inference, and choose how malformed records are handled when reading files."
+inventoryId: "TECH-10"
+technology: ["pyspark", "spark"]
+topic: ["dataframes", "schemas"]
+difficulty: "Beginner"
+related: ["articles:pyspark/transformations-vs-actions", "articles:delta-lake/transactions-schema-evolution"]
+next: "articles:pyspark/transformations-vs-actions"
+sources: [{"label": "PySpark API reference: DataFrame", "url": "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/dataframe.html"}, {"label": "Spark documentation: CSV files (options and parse modes)", "url": "https://spark.apache.org/docs/latest/sql-data-sources-csv.html"}]
+versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+---
+
+A DataFrame is a distributed table: named columns with types, split into partitions across a cluster. The **schema** (column names, types and nullability) is the contract every later step relies on, so in pipelines you should set it deliberately rather than let Spark guess.
+
+## Creating a DataFrame with an explicit schema
+
+```python
+from pyspark.sql import SparkSession, functions as F
+
+spark = SparkSession.builder.master("local[2]").appName("example").getOrCreate()
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+
+schema = StructType([
+    StructField("order_id", IntegerType(), nullable=False),
+    StructField("customer", StringType(), nullable=True),
+    StructField("amount", DoubleType(), nullable=True),
+])
+
+orders = spark.createDataFrame([(1, "asha", 10.0), (2, "ben", None)], schema)
+orders.printSchema()
+```
+
+```text
+root
+ |-- order_id: integer (nullable = false)
+ |-- customer: string (nullable = true)
+ |-- amount: double (nullable = true)
+```
+
+You can also write a schema as a DDL string, which is shorter: `"order_id INT NOT NULL, customer STRING, amount DOUBLE"`.
+
+## Why not infer the schema?
+
+`inferSchema` makes Spark read the data (an extra pass) and guess. Guesses change when the data changes: a column that was all numbers yesterday becomes a string the day one bad value arrives, and downstream joins or aggregations break. In this example a single malformed row makes every column a string:
+
+```python
+import tempfile, os
+
+path = os.path.join(tempfile.mkdtemp(), "orders.csv")
+with open(path, "w") as f:
+    f.write("order_id,customer,amount\n1,asha,10\nx,ben,abc\n")
+
+print(spark.read.option("header", True).option("inferSchema", True).csv(path).dtypes)
+```
+
+```text
+[('order_id', 'string'), ('customer', 'string'), ('amount', 'string')]
+```
+
+Use inference to explore; use explicit schemas in pipelines.
+
+## Malformed records: parse modes
+
+When you supply a schema and a value does not fit, the CSV and JSON readers follow a **mode**:
+
+| Mode | Behaviour |
+|------|-----------|
+| `PERMISSIVE` (default) | Keep the row; fields that cannot be parsed become `NULL` (optionally capture the raw line in a corrupt-record column) |
+| `DROPMALFORMED` | Drop rows that do not fit |
+| `FAILFAST` | Fail the read on the first malformed row |
+
+```python
+spark.read.schema(schema).option("header", True).csv(path).show()
+```
+
+```text
++--------+--------+------+
+|order_id|customer|amount|
++--------+--------+------+
+|       1|    asha|  10.0|
+|    NULL|     ben|  NULL|
++--------+--------+------+
+```
+
+`PERMISSIVE` kept the bad row with `NULL`s. That is convenient but dangerous: the bad data looks like missing data. In production either fail fast, or capture corrupt records and count them, so problems are visible.
+
+## Nullability is not validation
+
+Declaring `nullable=False` documents intent and helps the optimiser, but file readers do not reject `NULL`s because of it. Enforce required fields with explicit checks (for example, count rows where `order_id IS NULL` and fail if non-zero), or with a table format that enforces constraints.
+
+## Selecting and deriving columns
+
+```python
+cleaned = (
+    orders
+    .withColumn("customer", F.initcap("customer"))
+    .withColumn("amount", F.coalesce("amount", F.lit(0.0)))
+    .select("order_id", "customer", "amount")
+)
+cleaned.show()
+```
+
+Prefer built-in functions in `pyspark.sql.functions`; they run inside Spark's engine and are optimised.
+
+<Callout tone="info" title="ANSI mode is on by default in Spark 4">
+
+Spark 4 enables ANSI SQL behaviour by default (`spark.sql.ansi.enabled = true`), so invalid casts and arithmetic overflow raise errors instead of silently returning `NULL`. Spark 3.x defaulted to non-ANSI behaviour. Check this setting when migrating jobs.
+
+</Callout>
+
+## Common mistakes
+
+1. Relying on `inferSchema` in production pipelines.
+2. Treating `PERMISSIVE` nulls as genuine missing values.
+3. Assuming `nullable=False` rejects nulls on read.
+4. Converting to pandas (`toPandas()`) to do work that built-in functions can do in Spark.
+
+## Interview relevance
+
+Expect "How do you handle schema changes or bad records when reading files?" Mention explicit schemas, parse modes, corrupt-record capture and quality checks.
+
+## Key takeaway
+
+Define schemas explicitly, choose a parse mode on purpose, and make bad records visible instead of letting them turn silently into nulls.

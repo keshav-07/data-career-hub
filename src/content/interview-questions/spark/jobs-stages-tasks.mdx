@@ -1,0 +1,44 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Explain Spark jobs, stages and tasks."
+description: "Interview answer: an action creates a job, shuffle boundaries split it into stages, and each stage runs one task per partition on executor cores."
+seoTitle: "Spark Jobs, Stages and Tasks: Interview Answer"
+inventoryId: "INT-14"
+technology: ["spark", "pyspark"]
+topic: ["execution-model"]
+difficulty: "Medium"
+questionType: ["conceptual"]
+estimatedMinutes: 6
+interviewRelevance: "High"
+shortAnswer: "When you call an action, Spark creates a job to compute it. The job is divided into stages at shuffle boundaries, because each wide transformation needs all data for a key before continuing. Each stage runs as a set of tasks, one per partition, executed in parallel on executor cores. With Adaptive Query Execution enabled, one action may show up as several jobs, because Spark re-plans after each shuffle stage."
+followUps: ["What determines the number of tasks in a stage?", "Where would you look to find a straggler task?", "What does the driver do versus the executors?"]
+related: ["articles:spark/execution-model-jobs-stages-tasks", "interview-questions:spark/what-causes-a-shuffle"]
+versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+---
+
+## Detailed explanation
+
+| Concept | Created by | Count determined by |
+|---------|-----------|---------------------|
+| Job | An action (`count`, `write`, `show`) | One or more per action |
+| Stage | Shuffle boundaries in the plan | Number of wide transformations + 1 (roughly) |
+| Task | A partition in a stage | Number of partitions in that stage |
+
+## Example
+
+Reading a dataset with 8 input partitions, filtering, then `groupBy("country").count()` and `show()`:
+
+1. **Job**: triggered by `show()`.
+2. **Stage 1**: read + filter + partial aggregation, 8 tasks (one per input partition), ending with shuffle write.
+3. **Stage 2**: shuffle read + final aggregation, as many tasks as shuffle partitions (often fewer after AQE coalescing).
+
+## Driver versus executors
+
+The driver plans and schedules; executors run tasks and store shuffle and cached data. A slow driver usually means too much `collect()` or too many tiny tasks to schedule.
+
+## Common mistakes
+
+1. Saying each transformation is a stage (only shuffles create new stages).
+2. Equating tasks with executors (tasks map to partitions; executors provide cores).

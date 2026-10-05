@@ -1,0 +1,42 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "How does partition count affect Spark performance?"
+description: "Interview answer: too few partitions underuse the cluster and create large tasks, too many add scheduling overhead; aim for evenly sized partitions of roughly 100–200 MB."
+seoTitle: "Spark Partition Count and Performance: Interview Answer"
+inventoryId: "INT-16"
+technology: ["spark", "pyspark"]
+topic: ["partitions", "performance"]
+difficulty: "Medium"
+questionType: ["optimization", "conceptual"]
+estimatedMinutes: 7
+interviewRelevance: "High"
+shortAnswer: "Each partition becomes one task, so partition count sets parallelism. Too few partitions leave cores idle and make each task large enough to spill or run out of memory; too many tiny partitions waste time on scheduling and produce small output files. Aim for evenly sized partitions, often in the range of 100 to 200 MB, at least a few times the number of cores, and let Adaptive Query Execution coalesce shuffle partitions for you."
+followUps: ["How are input partitions decided when reading files?", "When would you use repartition versus coalesce?", "How does partitioning affect the number of output files?"]
+related: ["articles:spark/partitions-shuffles-skew", "articles:spark/adaptive-query-execution"]
+versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+---
+
+## Detailed explanation
+
+- **Input partitions** when reading files come mostly from file sizes and `spark.sql.files.maxPartitionBytes` (128 MB by default).
+- **Shuffle partitions** come from `spark.sql.shuffle.partitions` (200 by default), which AQE can coalesce.
+- **Output files**: each task writing to a location usually produces at least one file, so partition count also controls the small-files problem.
+
+## Rules of thumb
+
+| Situation | Action |
+|-----------|--------|
+| Tasks spill or run out of memory | More, smaller partitions |
+| Thousands of tasks of a few MB | Fewer partitions; rely on AQE coalescing; compact inputs |
+| Many tiny output files | `coalesce` before writing, or repartition by the output partition column |
+| A few tasks much slower | Skew, not count: fix the key distribution |
+
+`repartition(n)` does a full shuffle and can increase or decrease the count evenly; `coalesce(n)` only decreases it, merging partitions without a full shuffle, but may leave them uneven.
+
+## Common mistakes
+
+1. Treating skew as a partition-count problem.
+2. `repartition(1)` before writing large data (one task does all the work).
+3. Hard-coding 200 shuffle partitions for every job size.
