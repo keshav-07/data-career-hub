@@ -19,9 +19,9 @@ next: "articles:sql/retention-cohort-funnel-analysis"
 previous: "articles:sql/recursive-ctes-hierarchies"
 versionContext: "All SQL examples run on PostgreSQL 16.14. The techniques use standard window functions; date arithmetic syntax differs by engine and is noted where it matters."
 sources:
-  - { label: "PostgreSQL documentation: Window functions", url: "https://www.postgresql.org/docs/current/functions-window.html" }
-  - { label: "PostgreSQL documentation: Set returning functions (generate_series)", url: "https://www.postgresql.org/docs/current/functions-srf.html" }
-  - { label: "Apache Spark documentation: session_window function", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.session_window.html" }
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL documentation: Window functions tutorial", url: "https://www.postgresql.org/docs/current/tutorial-window.html" }
+  - { label: "Apache Spark documentation: Window functions (SQL reference)", url: "https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-window.html" }
 ---
 
 "Gaps and islands" is the name for a family of problems about **runs of consecutive rows**: which values are missing from a sequence (gaps), which rows belong to the same unbroken run (islands), how long the runs are (streaks) and where activity pauses long enough to start a new run (sessions). They are among the most common advanced SQL interview questions, and the same patterns power user engagement metrics, SLA reporting and clickstream pipelines.

@@ -54,5 +54,25 @@
   "Regex matching in SQL": {
     "ref": "articles:sql/json-arrays-regex",
     "heading": "Regex matching in SQL"
+  },
+  "Query optimization & cost reduction": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Query optimization and cost reduction"
+  },
+  "Reading EXPLAIN / execution plans": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Reading EXPLAIN and execution plans"
+  },
+  "Query rewriting for performance": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Query rewriting for performance"
+  },
+  "Avoiding full table scans": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Avoiding full table scans"
+  },
+  "Anti-pattern detection": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Anti-pattern detection"
   }
 }

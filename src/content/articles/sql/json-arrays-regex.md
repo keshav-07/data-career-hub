@@ -16,6 +16,7 @@ learningObjectives:
   - "Map PostgreSQL syntax to Snowflake VARIANT/FLATTEN and BigQuery JSON/UNNEST"
 prerequisites: ["articles:sql/joins", "articles:sql/aggregations-group-by-having"]
 related: ["articles:delta-lake/json-vs-parquet", "articles:delta-lake/schema-evolution-patterns", "articles:pyspark/dataframes-and-schemas"]
+next: "articles:sql/query-optimization-fundamentals"
 previous: "articles:sql/retention-cohort-funnel-analysis"
 versionContext: "PostgreSQL examples run on PostgreSQL 16.14 (regexp_count needs PostgreSQL 15 or later; IS JSON needs 16). The Snowflake and BigQuery snippets were written from their documentation and were not executed."
 sources:
