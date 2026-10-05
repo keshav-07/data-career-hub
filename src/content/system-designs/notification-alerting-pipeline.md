@@ -68,6 +68,7 @@ sources:
   - { label: "AWS decision guide: SNS, SQS or EventBridge", url: "https://docs.aws.amazon.com/decision-guides/latest/decision-guides/sns-or-sqs-or-eventbridge.html" }
   - { label: "Apache Kafka documentation: delivery semantics", url: "https://kafka.apache.org/documentation/#semantics" }
 previous: "system-designs:search-indexing-pipeline"
+next: "system-designs:order-events-processing-system"
 ---
 
 ## Approach
