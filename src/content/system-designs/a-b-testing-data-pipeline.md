@@ -69,6 +69,7 @@ sources:
   - { label: "GrowthBook documentation: CUPED", url: "https://docs.growthbook.io/statistics/cuped" }
   - { label: "PostgreSQL 16: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
 previous: "system-designs:near-zero-downtime-migration"
+next: "system-designs:marketing-attribution-pipeline"
 ---
 
 ## Approach
