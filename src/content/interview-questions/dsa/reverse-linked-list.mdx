@@ -1,0 +1,150 @@
+---
+title: "Reverse Linked List: Iterative and Recursive Solutions"
+description: "Reverse a singly linked list in place with three pointers, then recursively. Python code for both, a pointer walkthrough, pitfalls and assert-based tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Walk the list once with three pointers: prev (the already reversed part, initially None), curr and the saved next node. At each step point curr.next back at prev, then advance prev and curr. When curr is None, prev is the new head. This is O(n) time and O(1) space; the recursive version is also O(n) time but uses O(n) stack space."
+followUps: ["Reverse only the nodes between positions left and right.", "Why can the recursive version fail on a very long list in Python?", "How would you check whether a linked list is a palindrome in O(1) extra space?", "Reverse the list in groups of k nodes."]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/find-first-and-last-position"
+next: "interview-questions:dsa/merge-two-sorted-lists"
+---
+
+## Problem
+
+You are given the head node of a singly linked list, where each node holds a value and a reference to the next node. Rearrange the links so that the list runs in the opposite direction, and return the new head. Do it by changing pointers, not by creating a new list of values.
+
+This is widely known as LeetCode 206 (Reverse Linked List). It is the most common linked list warm-up, and it is a building block for harder problems such as reordering a list or reversing it in groups.
+
+Constraints for this version: 0 to 5,000 nodes, values are integers.
+
+## Examples
+
+| Input | Output |
+|---|---|
+| `10 -> 20 -> 30 -> 40` | `40 -> 30 -> 20 -> 10` |
+| `7 -> 3` | `3 -> 7` |
+| `5` | `5` |
+| empty list | empty list |
+
+## Approach 1: brute force
+
+Copy the values into a Python list, then write them back in reverse order (or build fresh nodes). It is easy to get right, but it uses O(n) extra memory and sidesteps the pointer manipulation the interviewer is testing.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def reverse_by_values(head):
+    values = []
+    node = head
+    while node:
+        values.append(node.val)
+        node = node.next
+    node = head
+    while node:                      # overwrite values in reverse order
+        node.val = values.pop()
+        node = node.next
+    return head
+```
+
+O(n) time and O(n) space.
+
+## Approach 2: optimal
+
+**Key insight.** You only need to flip one arrow at a time. Before you flip `curr.next`, save the node it points to, or you lose the rest of the list.
+
+**Walkthrough** for `10 -> 20 -> 30`:
+
+| Step | `prev` | `curr` | Saved `nxt` | After flipping |
+|---|---|---|---|---|
+| 1 | None | 10 | 20 | `10 -> None` |
+| 2 | 10 | 20 | 30 | `20 -> 10 -> None` |
+| 3 | 20 | 30 | None | `30 -> 20 -> 10 -> None` |
+| end | 30 | None | | return 30 |
+
+### Iterative (the answer interviewers expect)
+
+```python
+def reverse_list(head):
+    prev, curr = None, head
+    while curr:
+        nxt = curr.next      # 1. remember the rest of the list
+        curr.next = prev     # 2. flip the arrow
+        prev = curr          # 3. grow the reversed part
+        curr = nxt           # 4. move on
+    return prev
+```
+
+### Recursive
+
+Reverse everything after the head, then hook the head on at the end. After the recursive call, `head.next` is the last node of the reversed tail, so `head.next.next = head` attaches it.
+
+```python
+def reverse_list_recursive(head):
+    if head is None or head.next is None:
+        return head
+    new_head = reverse_list_recursive(head.next)
+    head.next.next = head    # the old next node now points back to head
+    head.next = None         # head becomes the tail
+    return new_head
+```
+
+**Complexity.** Both are O(n) time. Iterative uses O(1) extra space. Recursive uses O(n) call-stack frames, and Python's default recursion limit (about 1,000 frames, see `sys.getrecursionlimit()`) means it raises `RecursionError` on long lists.
+
+## Tests
+
+```python
+def build_list(values):
+    dummy = ListNode()
+    tail = dummy
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head, limit=100_000):
+    out = []
+    while head and len(out) < limit:   # limit guards against accidental cycles
+        out.append(head.val)
+        head = head.next
+    return out
+
+cases = [[], [5], [7, 3], [10, 20, 30, 40], [1, 1, 2, 2], list(range(500))]
+for fn in (reverse_by_values, reverse_list, reverse_list_recursive):
+    for values in cases:
+        assert to_list(fn(build_list(values))) == values[::-1], (fn.__name__, values)
+
+# the iterative version reuses the same node objects (no copying)
+head = build_list([1, 2, 3])
+original_nodes = {id(head), id(head.next), id(head.next.next)}
+rev = reverse_list(head)
+assert {id(rev), id(rev.next), id(rev.next.next)} == original_nodes
+assert head.next is None                   # old head is now the tail
+
+# long input: iterative is fine where recursion would hit the limit
+long_head = build_list(range(50_000))
+assert to_list(reverse_list(long_head))[:3] == [49_999, 49_998, 49_997]
+print("all reverse list tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Losing the rest of the list.** Assigning `curr.next = prev` before saving `curr.next` cuts the list off. Save first.
+- **Returning the wrong node.** At the end `curr` is `None`; the new head is `prev`.
+- **Forgetting `head.next = None` in the recursive version** leaves a two-node cycle between the first two nodes.
+- **Empty and single-node lists** must work without special handling in the iterative version; check that yours does.
+- **Recursion depth.** Mention the Python recursion limit if you present the recursive version.
+
+## Where this shows up in data engineering
+
+You will rarely reverse a hand-built linked list in pipeline code. The transferable skill is careful in-place pointer or index rewiring, which matters when you work with linked structures such as version chains, and when you reason about the cost of recursion on deep inputs (for example recursive JSON flattening, which hits the same recursion limit).

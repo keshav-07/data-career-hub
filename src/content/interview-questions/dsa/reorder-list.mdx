@@ -1,0 +1,173 @@
+---
+title: "Reorder List: Find the Middle, Reverse, Then Interleave"
+description: "Reorder a linked list to first, last, second, second-last and so on in O(1) space by combining three linked list techniques. Python code, walkthrough and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Split the list at its middle with slow and fast pointers, reverse the second half in place, then interleave the two halves by alternating one node from each. Each phase is a single pass, so the whole thing is O(n) time and O(1) extra space. A simpler alternative stores the nodes in an array and uses two indices, at O(n) space."
+followUps: ["Why does the first half get the middle node when the length is odd?", "How would you check if a linked list is a palindrome using the same steps?", "Can you restore the original list afterwards?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/linked-list-cycle"
+next: "interview-questions:dsa/remove-nth-node-from-end-of-list"
+---
+
+## Problem
+
+Given the head of a singly linked list with nodes `N0, N1, ..., Nk`, rearrange the nodes in place into the order `N0, Nk, N1, Nk-1, N2, ...`: first, last, second, second-last, and so on until every node is used once. Change links only; do not modify values. The function returns nothing.
+
+This is widely known as LeetCode 143 (Reorder List). It is a favourite because it chains three smaller techniques: finding the middle, reversing a list and merging two lists.
+
+Constraints for this version: 1 to 50,000 nodes.
+
+## Examples
+
+| Before | After |
+|---|---|
+| `a -> b -> c -> d -> e -> f` | `a -> f -> b -> e -> c -> d` |
+| `1 -> 2 -> 3 -> 4 -> 5` | `1 -> 5 -> 2 -> 4 -> 3` |
+| `9 -> 8` | `9 -> 8` |
+| `6` | `6` |
+
+## Approach 1: brute force
+
+Put every node into a Python list, then relink them using two indices that move towards each other.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def reorder_with_array(head):
+    nodes = []
+    node = head
+    while node:
+        nodes.append(node)
+        node = node.next
+    i, j = 0, len(nodes) - 1
+    while i < j:
+        nodes[i].next = nodes[j]
+        i += 1
+        if i == j:
+            break
+        nodes[j].next = nodes[i]
+        j -= 1
+    if nodes:
+        nodes[i].next = None          # the node in the middle becomes the tail
+```
+
+O(n) time and O(n) space. A clear, correct answer to give first.
+
+## Approach 2: optimal
+
+**Key insight.** The reordered list is the first half interleaved with the **reversed** second half. All three steps can be done in place:
+
+1. **Find the middle** with slow and fast pointers. When `fast` can no longer move two steps, `slow` is at the end of the first half.
+2. **Cut and reverse** the second half.
+3. **Interleave**: take one node from the first half, then one from the reversed second half, until the second half runs out.
+
+**Walkthrough** for `1 -> 2 -> 3 -> 4 -> 5`:
+
+| Phase | State |
+|---|---|
+| Middle | `slow` stops at 3; first half `1 -> 2 -> 3`, second half `4 -> 5` |
+| Reverse | second half becomes `5 -> 4` |
+| Interleave | `1 -> 5 -> 2 -> 4 -> 3` |
+
+```python
+def reorder_list(head):
+    if head is None or head.next is None:
+        return
+
+    # 1. find the end of the first half
+    slow, fast = head, head
+    while fast.next and fast.next.next:
+        slow = slow.next
+        fast = fast.next.next
+
+    # 2. cut, then reverse the second half
+    second = slow.next
+    slow.next = None
+    prev = None
+    while second:
+        nxt = second.next
+        second.next = prev
+        prev = second
+        second = nxt
+    second = prev
+
+    # 3. interleave the two halves
+    first = head
+    while second:
+        first_next, second_next = first.next, second.next
+        first.next = second
+        second.next = first_next
+        first, second = first_next, second_next
+```
+
+With the loop condition `fast.next and fast.next.next`, an odd-length list leaves the middle node at the end of the first half, which is exactly where it belongs in the result. The first half is never shorter than the second, so the interleave loop only needs to watch the second half.
+
+**Complexity.** Three linear passes: O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+def build_list(values):
+    dummy = tail = ListNode()
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head, limit=200_000):
+    out = []
+    while head and len(out) < limit:
+        out.append(head.val)
+        head = head.next
+    return out
+
+def expected_order(values):
+    out, i, j = [], 0, len(values) - 1
+    while i <= j:
+        out.append(values[i])
+        if i != j:
+            out.append(values[j])
+        i += 1
+        j -= 1
+    return out
+
+for fn in (reorder_with_array, reorder_list):
+    for values in [[6], [9, 8], [1, 2, 3], [1, 2, 3, 4, 5], list("abcdef"),
+                   [3, 3, 3, 3], list(range(101))]:
+        head = build_list(values)
+        fn(head)
+        assert to_list(head) == expected_order(values), (fn.__name__, values)
+
+assert to_list(build_list(list("abcdef"))) == list("abcdef")
+head = build_list(list("abcdef"))
+reorder_list(head)
+assert "".join(to_list(head)) == "afbecd"
+
+reorder_list(None)                  # empty input does nothing
+big = build_list(range(50_000))
+reorder_list(big)
+assert to_list(big)[:4] == [0, 49_999, 1, 49_998] and len(to_list(big)) == 50_000
+print("all reorder tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting to cut** (`slow.next = None`) leaves the first half still pointing into the second, which creates a cycle after interleaving. The `limit` in `to_list` above exists to catch exactly that bug in tests.
+- **Wrong middle for even lengths.** With `while fast and fast.next`, `slow` lands one node later on even lengths, and the halves come out uneven. Either variant can work, but you must interleave consistently.
+- **Returning a new head.** The head never changes here; the problem modifies in place.
+- **Short lists** (one or two nodes) are already in the target order; return early.
+
+## Where this shows up in data engineering
+
+There is no direct pipeline equivalent. The value is in decomposition: splitting a problem into small, separately testable steps (find a split point, transform one part, merge) is how you should approach any non-trivial transformation, and interviewers look for that habit here.

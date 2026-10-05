@@ -1,0 +1,161 @@
+---
+title: "Add Two Numbers: Digit-by-Digit Addition on Linked Lists"
+seoTitle: "Add Two Numbers as Linked Lists"
+description: "Add two non-negative numbers stored as reversed digit linked lists, carrying like school addition. Python iterative and recursive code, pitfalls and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "Medium"
+shortAnswer: "Because the digits are stored least significant first, walk both lists together like column addition: add the two digits and the carry, append (sum mod 10) to the result, and keep (sum div 10) as the new carry. Continue while either list has nodes or the carry is non-zero. This is O(max(m, n)) time and O(1) extra space besides the output."
+followUps: ["How would you solve it if the digits were stored most significant first?", "Why not convert both lists to integers and add them?", "How would you subtract or multiply numbers stored this way?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/copy-list-with-random-pointer"
+next: "interview-questions:dsa/find-the-duplicate-number"
+---
+
+## Problem
+
+Two non-negative integers are each stored as a linked list of decimal digits, **least significant digit first**: the number 352 is `2 -> 5 -> 3`. Neither has leading zeros, except the number zero itself, which is a single `0` node. Return the sum as a linked list in the same format.
+
+This is widely known as LeetCode 2 (Add Two Numbers). It checks that you can walk two lists of different lengths at once and handle a final carry.
+
+Constraints for this version: each list has 1 to 100 nodes, so the numbers can be far larger than 64-bit integers.
+
+## Examples
+
+| `a` (number) | `b` (number) | Result (number) |
+|---|---|---|
+| `2 -> 5 -> 3` (352) | `9 -> 4` (49) | `1 -> 0 -> 4` (401) |
+| `9 -> 9 -> 9` (999) | `1` (1) | `0 -> 0 -> 0 -> 1` (1000) |
+| `0` (0) | `0` (0) | `0` (0) |
+| `6` (6) | `7 -> 2` (27) | `3 -> 3` (33) |
+
+## Approach 1: brute force
+
+Turn each list into an integer, add them, and turn the sum back into a list. In Python this works because integers have arbitrary precision.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def add_via_int(a, b):
+    def to_int(node):
+        value, place = 0, 1
+        while node:
+            value += node.val * place
+            place *= 10
+            node = node.next
+        return value
+
+    total = to_int(a) + to_int(b)
+    dummy = tail = ListNode()
+    while True:
+        total, digit = divmod(total, 10)
+        tail.next = ListNode(digit)
+        tail = tail.next
+        if total == 0:
+            return dummy.next
+```
+
+It is O(m + n) digit operations in principle, but big-integer arithmetic makes it slower in practice, and in Java or C++ it overflows for long lists. Interviewers will ask you to avoid it.
+
+## Approach 2: optimal
+
+**Key insight.** The least significant digits come first, which is exactly the order in which you add columns by hand. Keep a carry between columns. When one list runs out, treat its digits as 0. After both run out, a remaining carry of 1 becomes one more node.
+
+**Walkthrough** for 352 + 49:
+
+| Column | Digits | With carry in | Write | Carry out |
+|---|---|---|---|---|
+| units | 2 + 9 | 11 | 1 | 1 |
+| tens | 5 + 4 | 10 | 0 | 1 |
+| hundreds | 3 + (none) | 4 | 4 | 0 |
+
+Result: `1 -> 0 -> 4`, which is 401.
+
+### Iterative
+
+```python
+def add_two_numbers(a, b):
+    dummy = tail = ListNode()
+    carry = 0
+    while a or b or carry:
+        total = carry
+        if a:
+            total += a.val
+            a = a.next
+        if b:
+            total += b.val
+            b = b.next
+        carry, digit = divmod(total, 10)
+        tail.next = ListNode(digit)
+        tail = tail.next
+    return dummy.next
+```
+
+### Recursive
+
+```python
+def add_two_numbers_recursive(a, b, carry=0):
+    if a is None and b is None and carry == 0:
+        return None
+    total = carry + (a.val if a else 0) + (b.val if b else 0)
+    node = ListNode(total % 10)
+    node.next = add_two_numbers_recursive(a.next if a else None,
+                                          b.next if b else None,
+                                          total // 10)
+    return node
+```
+
+**Complexity.** O(max(m, n)) time. The iterative version uses O(1) extra space beyond the result; the recursive one uses O(max(m, n)) stack.
+
+## Tests
+
+```python
+def build_list(digits):
+    dummy = tail = ListNode()
+    for d in digits:
+        tail.next = ListNode(d)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head):
+    out = []
+    while head:
+        out.append(head.val)
+        head = head.next
+    return out
+
+def from_number(n):
+    return build_list([int(c) for c in reversed(str(n))])
+
+def to_number(head):
+    return int("".join(str(d) for d in reversed(to_list(head))))
+
+for fn in (add_via_int, add_two_numbers, add_two_numbers_recursive):
+    assert to_list(fn(build_list([2, 5, 3]), build_list([9, 4]))) == [1, 0, 4]
+    assert to_list(fn(build_list([9, 9, 9]), build_list([1]))) == [0, 0, 0, 1]
+    assert to_list(fn(build_list([0]), build_list([0]))) == [0]
+    assert to_list(fn(build_list([6]), build_list([7, 2]))) == [3, 3]
+    for x, y in [(0, 5), (5, 5), (123, 98765), (10**60 - 1, 1), (2**200, 3**120)]:
+        assert to_number(fn(from_number(x), from_number(y))) == x + y, (fn.__name__, x, y)
+print("all add-two-numbers tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **The final carry.** Ending the loop when both lists are empty loses the last `1` in sums like 999 + 1. Include `carry` in the loop condition.
+- **Different lengths.** Advance each pointer only if it is not `None`.
+- **Zero.** `0 + 0` must give a single `0` node, not an empty list. The iterative version handles it because the first iteration runs while `a` and `b` are non-empty.
+- **Most significant digit first** (LeetCode 445) changes the approach: reverse both lists first, or push digits onto two stacks, then build the result from the front.
+
+## Where this shows up in data engineering
+
+Carry-based arithmetic on sequences of digits (or machine words) is how arbitrary-precision numbers work, including Python's `int` and its `decimal` module. You will not write this in a pipeline, but the related practical point comes up often: `DECIMAL` columns in warehouses and Spark store exact scaled integers, so money totals do not pick up the rounding errors that floating-point columns do.

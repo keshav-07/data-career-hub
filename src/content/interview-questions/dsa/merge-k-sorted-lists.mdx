@@ -1,0 +1,179 @@
+---
+title: "Merge k Sorted Lists: Min-Heap and Divide-and-Conquer Solutions"
+seoTitle: "Merge k Sorted Lists: Heap and Divide and Conquer"
+description: "Merge k sorted linked lists in O(N log k) with a min-heap or pairwise divide and conquer. Python code with heapq tie-breaking, walkthrough and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "Put the head of each non-empty list in a min-heap keyed by value (with a tie-breaking counter, since nodes are not comparable). Repeatedly pop the smallest node, append it to the result and push its successor. With N total nodes and k lists, each heap operation is O(log k), so the merge is O(N log k) time and O(k) extra space. Merging lists in pairs, round by round, achieves the same O(N log k) with O(1) extra space."
+followUps: ["Why is merging the lists one at a time into an accumulator O(N k)?", "How does an external merge sort use this idea on files that do not fit in memory?", "What does heapq.merge do, and is it lazy?", "How would you merge k sorted streams that never end?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/lru-cache"
+next: "interview-questions:dsa/reverse-nodes-in-k-group"
+---
+
+## Problem
+
+You receive a Python list containing `k` linked lists, each sorted in non-decreasing order. Some of them may be empty, and the outer list itself may be empty. Merge all of them into one sorted linked list and return its head.
+
+This is widely known as LeetCode 23 (Merge k Sorted Lists). It generalises merging two sorted lists and is a classic heap question.
+
+Constraints for this version: `0 <= k <= 10,000`, up to 10,000 nodes in total, integer values.
+
+## Examples
+
+| Input lists | Result |
+|---|---|
+| `[3 -> 8 -> 20, 1 -> 9, 4 -> 8 -> 30]` | `1 -> 3 -> 4 -> 8 -> 8 -> 9 -> 20 -> 30` |
+| `[empty, 6]` | `6` |
+| `[]` (no lists) | empty |
+| `[empty, empty]` | empty |
+
+## Approach 1: brute force
+
+Two simple ideas, both slower than necessary:
+
+- Collect all values, sort, rebuild: O(N log N).
+- Merge the lists one by one into an accumulator. The accumulator grows each time, so with lists of similar size the total work is about `N/k + 2N/k + ... + N`, which is O(N k).
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def merge_two(a, b):
+    dummy = tail = ListNode()
+    while a and b:
+        if a.val <= b.val:
+            tail.next, a = a, a.next
+        else:
+            tail.next, b = b, b.next
+        tail = tail.next
+    tail.next = a or b
+    return dummy.next
+
+def merge_k_sequential(lists):
+    result = None
+    for head in lists:
+        result = merge_two(result, head)
+    return result
+```
+
+## Approach 2: optimal
+
+### Min-heap
+
+**Key insight.** At any moment the next node of the output is the smallest among the current heads of the `k` lists. A min-heap of size at most `k` gives that smallest head in O(log k).
+
+Python's `heapq` compares tuples element by element. If two values are equal it would compare the nodes next, and `ListNode` defines no ordering, so it raises `TypeError`. Add a unique counter as the second element to break ties.
+
+**Walkthrough** for `[3 -> 8 -> 20, 1 -> 9, 4 -> 8 -> 30]`:
+
+| Heap (values) | Pop | Push | Output |
+|---|---|---|---|
+| 3, 1, 4 | 1 | 9 | `1` |
+| 3, 4, 9 | 3 | 8 | `1 3` |
+| 4, 8, 9 | 4 | 8 | `1 3 4` |
+| 8, 8, 9 | 8 | 20 | `1 3 4 8` |
+| ... | | | `1 3 4 8 8 9 20 30` |
+
+```python
+import heapq
+from itertools import count
+
+def merge_k_lists(lists):
+    tie = count()
+    heap = [(head.val, next(tie), head) for head in lists if head]
+    heapq.heapify(heap)                         # O(k)
+    dummy = tail = ListNode()
+    while heap:
+        _, _, node = heapq.heappop(heap)
+        tail.next = node
+        tail = node
+        if node.next:
+            heapq.heappush(heap, (node.next.val, next(tie), node.next))
+    tail.next = None
+    return dummy.next
+```
+
+O(N log k) time, O(k) extra space for the heap.
+
+### Divide and conquer
+
+**Key insight.** Merge lists in pairs: `k` lists become `k/2`, then `k/4`, and so on. Each round touches every node once, and there are about `log2 k` rounds, so the total is O(N log k), with no heap.
+
+```python
+def merge_k_divide_conquer(lists):
+    lists = [head for head in lists if head]
+    if not lists:
+        return None
+    step = 1
+    while step < len(lists):
+        for i in range(0, len(lists) - step, step * 2):
+            lists[i] = merge_two(lists[i], lists[i + step])
+        step *= 2
+    return lists[0]
+```
+
+**Complexity.** O(N log k) time, O(1) extra space (the merge is iterative and reuses nodes).
+
+## Tests
+
+```python
+import random
+
+def build_list(values):
+    dummy = tail = ListNode()
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head):
+    out = []
+    while head:
+        out.append(head.val)
+        head = head.next
+    return out
+
+fixed = [
+    [[3, 8, 20], [1, 9], [4, 8, 30]],
+    [[], [6]],
+    [],
+    [[], []],
+    [[5, 5], [5], [5, 5, 5]],                  # all equal: needs the tie-breaker
+    [[1, 2, 3]],
+    [[-3, 0], [-10, 100]],
+]
+rng = random.Random(9)
+randoms = [[sorted(rng.randint(-50, 50) for _ in range(rng.randint(0, 12)))
+            for _ in range(rng.randint(0, 9))] for _ in range(200)]
+
+for fn in (merge_k_sequential, merge_k_lists, merge_k_divide_conquer):
+    for lists in fixed + randoms:
+        heads = [build_list(v) for v in lists]
+        expected = sorted(x for v in lists for x in v)
+        assert to_list(fn(heads)) == expected, (fn.__name__, lists)
+
+# the standard library has a lazy k-way merge for any sorted iterables
+assert list(heapq.merge([3, 8, 20], [1, 9], [4, 8, 30])) == [1, 3, 4, 8, 8, 9, 20, 30]
+print("all merge-k tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Comparing nodes on ties.** `heapq.heappush(heap, (node.val, node))` crashes with `TypeError` as soon as two values are equal. Use a counter (or the list index) as a tie-breaker.
+- **Empty lists inside the input**, and an empty input list, must both work. Filter out `None` heads before building the heap.
+- **Heap size is k, not N.** Pushing every node up front works but costs O(N) memory and O(N log N) time.
+- **Stating complexity.** Say O(N log k), and explain why sequential merging is O(N k), since that comparison is what the interviewer is looking for.
+
+## Where this shows up in data engineering
+
+This is one of the most directly relevant algorithm questions for data engineers. The k-way merge is the second phase of an **external merge sort**: sort chunks that fit in memory, write them as sorted runs, then merge all runs with a heap while streaming from disk. Databases use it for big `ORDER BY` and sort-merge joins, Spark merges sorted spill files during shuffles, and LSM-tree stores merge sorted files during compaction. In Python, `heapq.merge` gives you a lazy k-way merge over sorted files or iterators without loading them into memory.

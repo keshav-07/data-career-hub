@@ -1,0 +1,125 @@
+---
+title: "Koko Eating Bananas: Binary Search on the Answer"
+description: "Find the slowest steady eating rate that clears every pile in time by binary searching the answer space. Python solution, proof of monotonicity and tests."
+technology: ["dsa"]
+topic: ["binary-search"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "The hours needed at speed k is the sum of ceil(pile / k), which only goes down as k goes up. That monotonic yes/no test lets you binary search k between 1 and the largest pile for the smallest speed that fits within h hours. Each check is O(n), so the total is O(n log M) time, where M is the largest pile, and O(1) space."
+followUps: ["How would you split an array into k contiguous parts minimising the largest sum (the same pattern)?", "What changes if each hour may be spent across several piles?", "How do you compute ceiling division without floating point?", "What would the lower bound be if you wanted to tighten the search range?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/search-a-2d-matrix"
+next: "interview-questions:dsa/find-minimum-in-rotated-sorted-array"
+---
+
+## Problem
+
+There are several piles of bananas, given as a list of positive integers, and a deadline of `h` hours. You choose a fixed eating speed `k` (bananas per hour). In each hour you pick one pile and eat up to `k` bananas from it; if the pile has fewer than `k` left you finish it and the rest of that hour is wasted. Return the smallest integer `k` that lets you finish every pile within `h` hours.
+
+This is widely known as LeetCode 875 (Koko Eating Bananas). It is the standard introduction to **binary search on the answer**: you are not searching an array, you are searching the range of possible speeds.
+
+Constraints for this version: `1 <= len(piles) <= h <= 1,000,000,000`, and each pile holds between 1 and 1,000,000,000 bananas. Because `h` is at least the number of piles, an answer always exists.
+
+## Examples
+
+| `piles` | `h` | Result | Why |
+|---|---|---|---|
+| `[5, 9, 2, 14]` | `6` | `7` | at 7 per hour: 1 + 2 + 1 + 2 = 6 hours; at 6 per hour it takes 7 |
+| `[5, 9, 2, 14]` | `4` | `14` | one hour per pile, so the speed must cover the biggest pile |
+| `[5, 9, 2, 14]` | `10` | `4` | 2 + 3 + 1 + 4 = 10 hours |
+| `[100]` | `7` | `15` | 14 per hour leaves 2 bananas after 7 hours |
+
+## Approach 1: brute force
+
+Try every speed from 1 upward and return the first one that finishes in time.
+
+```python
+def hours_needed(piles, k):
+    # ceil(p / k) without floats: (p + k - 1) // k
+    return sum((p + k - 1) // k for p in piles)
+
+def min_speed_linear(piles, h):
+    k = 1
+    while hours_needed(piles, k) > h:
+        k += 1
+    return k
+```
+
+This is O(n * M) where `M` is the largest pile. With piles up to a billion that is far too slow.
+
+## Approach 2: optimal
+
+**Key insight.** Define `ok(k)` as "speed `k` finishes within `h` hours". If `ok(k)` is true, any faster speed is also true, because every pile takes the same or fewer hours. So the answers look like `False, False, ..., False, True, True, ...` over `k = 1..M`, and binary search finds the first `True`.
+
+**Search range.** The smallest sensible speed is 1. The largest you ever need is `max(piles)`: at that speed each pile takes exactly one hour, and `h` is at least the number of piles.
+
+**Walkthrough** for `piles = [5, 9, 2, 14]`, `h = 6`, range `[1, 14]`:
+
+| `lo` | `hi` | `mid` | hours at `mid` | Decision |
+|---|---|---|---|---|
+| 1 | 14 | 7 | 6 | fits, so the answer is 7 or lower: `hi = 7` |
+| 1 | 7 | 4 | 2+3+1+4 = 10 | too slow: `lo = 5` |
+| 5 | 7 | 6 | 1+2+1+3 = 7 | too slow: `lo = 7` |
+| 7 | 7 | | | range is one value: answer 7 |
+
+```python
+def min_eating_speed(piles, h):
+    lo, hi = 1, max(piles)
+    while lo < hi:                       # search for the first k where ok(k) is true
+        mid = (lo + hi) // 2
+        if hours_needed(piles, mid) <= h:
+            hi = mid                     # mid works; maybe something smaller does too
+        else:
+            lo = mid + 1                 # mid is too slow
+    return lo
+```
+
+This uses the "first true" template: a half-open style where `hi = mid` keeps a working candidate in range, and the loop ends when `lo == hi`. It is worth memorising because the same template solves many problems (ship packages within D days, split array largest sum, minimum days to make bouquets).
+
+**Complexity.** Each feasibility check is O(n), and there are O(log M) checks, so O(n log M) time and O(1) extra space.
+
+## Tests
+
+```python
+def check(fn):
+    assert fn([5, 9, 2, 14], 6) == 7
+    assert fn([5, 9, 2, 14], 4) == 14
+    assert fn([5, 9, 2, 14], 10) == 4
+    assert fn([100], 7) == 15
+    assert fn([1], 1) == 1
+    assert fn([3, 3, 3], 9) == 1          # plenty of time: slowest speed
+    assert fn([7, 7, 7, 7], 4) == 7       # duplicates, exactly one hour each
+
+def brute_matches_optimal():
+    import random
+    rng = random.Random(7)
+    for _ in range(300):
+        piles = [rng.randint(1, 40) for _ in range(rng.randint(1, 6))]
+        h = rng.randint(len(piles), 60)
+        assert min_eating_speed(piles, h) == min_speed_linear(piles, h), (piles, h)
+
+check(min_speed_linear)
+check(min_eating_speed)
+brute_matches_optimal()
+# huge values: only the logarithmic version is practical here
+assert min_eating_speed([1_000_000_000], 2) == 500_000_000
+assert min_eating_speed([1_000_000_000, 1_000_000_000], 1_000_000_000) == 2
+print("all Koko tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Ceiling division.** `p // k` rounds down and undercounts hours. Use `(p + k - 1) // k` or `-(-p // k)`. Avoid `math.ceil(p / k)` with large values, since float division can lose precision.
+- **Starting the range at 0** causes a division by zero. The lower bound is 1.
+- **Mixing templates.** With `while lo < hi` you must use `hi = mid` (not `mid - 1`) when `mid` works, or you can skip the answer.
+- **Overflow in other languages.** The sum of hours can exceed 32 bits in Java or C++; use a 64-bit accumulator.
+- **Explaining monotonicity.** Interviewers want to hear why binary search is valid, not just see it. Say that more speed never needs more hours.
+
+## Where this shows up in data engineering
+
+The "smallest setting that meets a deadline" shape is common in capacity planning: the fewest workers, the smallest batch size or the lowest throughput that finishes a backfill inside a time window, given a cost model that is monotonic in that setting. When evaluating the model is cheap, binary searching it is a quick and defensible way to size a job.

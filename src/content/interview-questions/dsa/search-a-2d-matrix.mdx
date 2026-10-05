@@ -1,0 +1,148 @@
+---
+title: "Search a 2D Matrix: Binary Search over a Flattened Sorted Grid"
+seoTitle: "Search a 2D Matrix with Binary Search"
+description: "Search a row-sorted matrix whose rows continue each other by treating it as one sorted array: index mapping, Python solution, complexity and tests."
+technology: ["dsa"]
+topic: ["binary-search"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Because each row is sorted and every row starts above where the previous one ended, the matrix read row by row is one sorted list of m times n values. Binary search over virtual indices 0 to m*n - 1 and convert each index with divmod(index, n) into a row and column. That is O(log(m*n)) time and O(1) space, with no copying."
+followUps: ["How would you search a matrix where rows and columns are sorted but rows do not continue each other?", "Would two binary searches (first the row, then the column) be any faster?", "How would you count how many values are less than a threshold?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/binary-search"
+next: "interview-questions:dsa/koko-eating-bananas"
+---
+
+## Problem
+
+You are given a grid of integers with `m` rows and `n` columns. Every row is sorted in ascending order, and the first value of each row is larger than the last value of the row above it. Given a target, report whether it appears in the grid. Aim for a running time logarithmic in the number of cells.
+
+The problem is widely known as LeetCode 74 (Search a 2D Matrix). It tests whether you notice that the grid is secretly a single sorted list.
+
+Constraints for this version: `1 <= m, n <= 200` and values fit in a 32-bit signed integer.
+
+## Examples
+
+Grid used below:
+
+```text
+[ 2,  5,  8, 11]
+[14, 17, 21, 26]
+[30, 33, 40, 51]
+```
+
+| `target` | Result | Why |
+|---|---|---|
+| `21` | `True` | row 1, column 2 |
+| `12` | `False` | it would sit between 11 and 14, the boundary of two rows |
+| `2` | `True` | the very first cell |
+| `60` | `False` | larger than every value |
+
+## Approach 1: brute force
+
+Check every cell, or slightly better, find the row whose range covers the target with a linear scan and then use `in` on that row.
+
+```python
+def search_matrix_scan(matrix, target):
+    for row in matrix:
+        if row and row[0] <= target <= row[-1]:
+            return target in row
+    return False
+```
+
+This is O(m + n) time: up to `m` rows checked, then a linear scan of one row. Fine for small grids, but it does not use the sorted order inside the row.
+
+## Approach 2: optimal
+
+**Key insight.** Reading the grid row by row produces one ascending list of `m * n` values. You never need to build that list. A virtual index `k` maps to `matrix[k // n][k % n]`, so you can run ordinary binary search on `k`.
+
+**Walkthrough** with the grid above (`n = 4`) and `target = 33`:
+
+| `lo` | `hi` | `mid` | cell (`divmod(mid, 4)`) | value | Decision |
+|---|---|---|---|---|---|
+| 0 | 11 | 5 | (1, 1) | 17 | 17 is less than 33, `lo = 6` |
+| 6 | 11 | 8 | (2, 0) | 30 | less than 33, `lo = 9` |
+| 9 | 11 | 10 | (2, 2) | 40 | greater, `hi = 9` |
+| 9 | 9 | 9 | (2, 1) | 33 | found |
+
+```python
+def search_matrix(matrix, target):
+    if not matrix or not matrix[0]:
+        return False
+    m, n = len(matrix), len(matrix[0])
+    lo, hi = 0, m * n - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        r, c = divmod(mid, n)
+        value = matrix[r][c]
+        if value == target:
+            return True
+        if value < target:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return False
+```
+
+An equally good answer is two searches: binary search the first column to find the last row whose first value is at most the target, then binary search inside that row. Both are O(log m + log n), which equals O(log(m*n)).
+
+```python
+from bisect import bisect_left, bisect_right
+
+def search_matrix_two_step(matrix, target):
+    if not matrix or not matrix[0]:
+        return False
+    firsts = [row[0] for row in matrix]          # O(m) to build; fine to explain, or search in place
+    r = bisect_right(firsts, target) - 1         # last row starting at or below target
+    if r < 0:
+        return False
+    row = matrix[r]
+    c = bisect_left(row, target)
+    return c < len(row) and row[c] == target
+```
+
+Note that building `firsts` costs O(m); in an interview, say you could search the first column in place to keep it logarithmic.
+
+**Complexity.** O(log(m*n)) time, O(1) extra space for `search_matrix`.
+
+## Tests
+
+```python
+grid = [
+    [2, 5, 8, 11],
+    [14, 17, 21, 26],
+    [30, 33, 40, 51],
+]
+
+def check(fn):
+    for row in grid:
+        for v in row:
+            assert fn(grid, v), (fn.__name__, v)
+    for v in [1, 3, 12, 13, 27, 29, 52, 60, -5]:
+        assert not fn(grid, v), (fn.__name__, v)
+    assert fn([[7]], 7) and not fn([[7]], 8)
+    assert fn([[1, 3, 5, 7, 9]], 9)               # single row
+    assert fn([[1], [4], [6], [10]], 6)           # single column
+    assert not fn([[1], [4], [6], [10]], 5)
+    assert not fn([], 3) and not fn([[]], 3)
+
+for fn in (search_matrix_scan, search_matrix, search_matrix_two_step):
+    check(fn)
+print("all 2D matrix tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Use the column count for the mapping.** `divmod(mid, n)` uses `n`, the number of columns. Using `m` only works for square grids, so the bug hides in square test cases.
+- **Single row or single column** grids are where index mapping mistakes show up first; test both.
+- **Do not flatten.** Building a flat list costs O(m*n) time and memory, which defeats the purpose.
+- **Different problem, similar name.** If rows and columns are sorted but rows do not continue each other (LeetCode 240), the flattening trick fails. There you start in the top-right corner and step left or down, which is O(m + n).
+
+## Where this shows up in data engineering
+
+The index-mapping idea is the useful part: a row-major array addressed as `(row, col)` is how many columnar and tensor buffers store a 2D block, and the two-step version mirrors searching a sorted list of file or block boundaries first, then searching inside the chosen block.

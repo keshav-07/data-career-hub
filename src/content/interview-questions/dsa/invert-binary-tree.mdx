@@ -1,0 +1,164 @@
+---
+title: "Invert Binary Tree: Recursive and Iterative Mirror Solutions"
+description: "Mirror a binary tree by swapping every node's children, recursively or with a queue. Python code, a walkthrough, pitfalls and tests with tree-building helpers."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Visit every node once and swap its left and right children. Recursively: invert the left and right subtrees and assign them to the opposite sides. Iteratively: pop nodes from a queue or stack, swap their children and push the non-empty ones. Both are O(n) time; recursion uses O(h) stack for tree height h, and the iterative version uses O(w) or O(h) memory for the queue or stack."
+followUps: ["How would you check whether a tree is symmetric (a mirror of itself)?", "Why could the recursive version fail on a very deep tree in Python?", "Does the traversal order (pre-order, post-order, level order) matter here?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+---
+
+## Problem
+
+Given the root of a binary tree, turn it into its mirror image: for every node, the left subtree and the right subtree trade places. Do it in place and return the root.
+
+This is widely known as LeetCode 226 (Invert Binary Tree). It is a short warm-up that checks you are comfortable with recursion on trees and with an explicit-stack alternative.
+
+Constraints for this version: 0 to 100 nodes in the classic version; the iterative solution below also handles very deep trees.
+
+## Examples
+
+Trees are written in level order, with `None` for a missing child.
+
+| Input | Output |
+|---|---|
+| `[10, 5, 15, 2, 7, None, 20]` | `[10, 15, 5, 20, None, 7, 2]` |
+| `[1, 2]` (only a left child) | `[1, None, 2]` (only a right child) |
+| `[4]` | `[4]` |
+| `[]` | `[]` |
+
+Drawn out, the first example becomes:
+
+```text
+     10                10
+    /  \              /  \
+   5    15    ->    15    5
+  / \     \        /     / \
+ 2   7     20     20    7   2
+```
+
+## Approach 1: brute force
+
+There is no meaningfully slower correct method, because every node must be touched. A "simple" alternative some candidates try is to serialise the tree, rebuild it mirrored from the serialisation and return a new tree. That uses O(n) extra memory and creates new nodes, so treat the straightforward recursion below as the baseline answer and the iterative version as the robust one.
+
+## Approach 2: optimal
+
+**Key insight.** A mirrored tree is a root whose left child is the mirrored right subtree and whose right child is the mirrored left subtree. The swap at each node is independent of the others, so any traversal works.
+
+### Recursive
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def invert_tree(root):
+    if root is None:
+        return None
+    root.left, root.right = invert_tree(root.right), invert_tree(root.left)
+    return root
+```
+
+The tuple assignment evaluates both recursive calls before assigning, so you do not need a temporary variable.
+
+### Iterative (breadth-first)
+
+```python
+from collections import deque
+
+def invert_tree_iterative(root):
+    queue = deque([root] if root else [])
+    while queue:
+        node = queue.popleft()
+        node.left, node.right = node.right, node.left
+        if node.left:
+            queue.append(node.left)
+        if node.right:
+            queue.append(node.right)
+    return root
+```
+
+**Walkthrough** on the example: the root 10 swaps 5 and 15. Then 15 (now on the left) swaps `None` and 20, and 5 swaps 2 and 7. Leaves swap two `None` children, which changes nothing.
+
+**Complexity.** O(n) time for both. The recursive version uses O(h) call-stack space, where `h` is the height: O(log n) for a balanced tree and O(n) for a skewed one. The queue holds at most one level, O(w) for maximum width `w`.
+
+## Tests
+
+```python
+def build_tree(values):
+    """Build a tree from a level-order list where None marks a missing child."""
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue = deque([root])
+    i = 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+def to_level_list(root):
+    """Inverse of build_tree, with trailing Nones removed."""
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
+        if node:
+            out.append(node.val)
+            queue.append(node.left)
+            queue.append(node.right)
+        else:
+            out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+cases = [
+    ([10, 5, 15, 2, 7, None, 20], [10, 15, 5, 20, None, 7, 2]),
+    ([1, 2], [1, None, 2]),
+    ([1, None, 2, None, 3], [1, 2, None, 3]),     # right-skewed becomes left-skewed
+    ([4], [4]),
+    ([], []),
+    ([3, 3, 3, 3], [3, 3, 3, None, None, None, 3]),  # duplicates
+]
+for fn in (invert_tree, invert_tree_iterative):
+    for given, want in cases:
+        assert to_level_list(fn(build_tree(given))) == want, (fn.__name__, given)
+    tree = build_tree([10, 5, 15, 2, 7, None, 20])
+    assert to_level_list(fn(fn(tree))) == [10, 5, 15, 2, 7, None, 20]   # inverting twice restores it
+
+# a very deep left-skewed tree: fine iteratively, beyond the default recursion limit recursively
+deep = node = TreeNode(0)
+for v in range(1, 5000):
+    node.left = TreeNode(v)
+    node = node.left
+invert_tree_iterative(deep)
+assert deep.left is None and deep.right.val == 1
+print("all invert tree tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Swapping in two separate statements** without a temporary (`root.left = invert(root.right)` then `root.right = invert(root.left)`) inverts the already-replaced left side twice. Use tuple assignment or a temporary.
+- **Empty tree** returns `None` without error.
+- **Deep trees.** Python's default recursion limit is about 1,000 frames; a skewed tree deeper than that raises `RecursionError` in the recursive version.
+- **Return the root.** Some callers expect the same object back; both versions return it.
+
+## Where this shows up in data engineering
+
+Directly, rarely. Recursively walking and rewriting a tree is, however, how query optimisers transform logical plans (Spark's Catalyst applies rules to plan trees with `transform` functions) and how you process nested JSON or schema trees. The recursion-depth caveat is also real when flattening deeply nested documents.

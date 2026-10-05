@@ -1,0 +1,150 @@
+---
+title: "Find the Duplicate Number: Cycle Detection on an Array"
+seoTitle: "Find the Duplicate Number with Floyd's Cycle"
+description: "Find the repeated value among n + 1 numbers in 1..n without modifying the array and in O(1) space, using Floyd's cycle detection or binary search. Python and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+shortAnswer: "Treat each index i as a node with an edge to nums[i]. Because values lie in 1..n and index 0 is never a target, following edges from 0 must enter a cycle, and the cycle's entrance is the value that two indices point to: the duplicate. Floyd's fast and slow pointers find it in O(n) time and O(1) space without changing the array. A counting binary search over values gives O(n log n) time as an alternative."
+followUps: ["Why is the entrance of the cycle guaranteed to be the duplicate?", "How does the binary search on value ranges work, and what is its complexity?", "What would you do if you were allowed to modify the array?", "What if several different values were duplicated?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/add-two-numbers"
+next: "interview-questions:dsa/lru-cache"
+---
+
+## Problem
+
+You are given a list of `n + 1` integers, each between 1 and `n` inclusive. By the pigeonhole principle at least one value must repeat; you are told exactly one value repeats, although it may appear more than twice. Return that value. Do not modify the list, and use only constant extra space.
+
+This is widely known as LeetCode 287 (Find the Duplicate Number). It sits in the linked list section because the clever solution reinterprets the array as a linked list and applies cycle detection.
+
+Constraints for this version: `1 <= n <= 100,000`, so the list has 2 to 100,001 values.
+
+## Examples
+
+| `nums` | Result |
+|---|---|
+| `[3, 1, 4, 2, 4]` | `4` |
+| `[2, 5, 1, 2, 3, 4]` | `2` |
+| `[1, 1]` | `1` |
+| `[3, 3, 3, 3]` | `3` (appears more than twice) |
+
+## Approach 1: brute force
+
+Remember what you have seen in a set. It is O(n) time but O(n) space, which breaks the constant-space rule. Sorting a copy also uses O(n) space, and sorting in place modifies the input.
+
+```python
+def find_duplicate_set(nums):
+    seen = set()
+    for v in nums:
+        if v in seen:
+            return v
+        seen.add(v)
+    raise ValueError("no duplicate")
+```
+
+A constant-space middle ground is **binary search on the value range**. For a candidate `mid`, count how many values are at most `mid`. Without a duplicate at or below `mid` the count would be at most `mid`; if the count is larger, the duplicate is in `1..mid`.
+
+```python
+def find_duplicate_binary_search(nums):
+    lo, hi = 1, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        count = sum(1 for v in nums if v <= mid)
+        if count > mid:
+            hi = mid          # too many small values: duplicate is in [lo, mid]
+        else:
+            lo = mid + 1
+    return lo
+```
+
+O(n log n) time, O(1) space, input untouched. A good answer if you cannot recall Floyd's method.
+
+## Approach 2: optimal
+
+**Key insight.** Read the list as a function: from index `i` go to index `nums[i]`. Every value is a valid index (1 to `n`), so you can follow this forever. Index 0 is never a value, so starting at 0 you never return to it, and since there are finitely many indices you must eventually loop. The node where the path enters the loop has **two** incoming edges, one from the path and one from inside the loop, which means two different indices hold the same value. That value is the duplicate.
+
+So the problem becomes "find the start of the cycle in a linked list", solved by Floyd's algorithm in two phases:
+
+1. Move `slow` one step and `fast` two steps until they meet inside the cycle.
+2. Restart one pointer from 0 and move both one step at a time; they meet at the cycle entrance.
+
+**Walkthrough** for `[3, 1, 4, 2, 4]`, whose edges are `0→3`, `1→1`, `2→4`, `3→2` and `4→4`:
+
+Path from 0: `0 → 3 → 2 → 4 → 4 → 4 ...`. The cycle is the self-loop at 4, entered from index 2 and from index 4 itself, so the duplicate is 4.
+
+| Phase | `slow` | `fast` |
+|---|---|---|
+| 1, step 1 | 3 | 2 |
+| 1, step 2 | 2 | 4 |
+| 1, step 3 | 4 | 4: meet |
+| 2, start | 0 | 4 |
+| 2, step 1 | 3 | 4 |
+| 2, step 2 | 2 | 4 |
+| 2, step 3 | 4 | 4: entrance is 4 |
+
+```python
+def find_duplicate(nums):
+    slow = fast = 0
+    while True:                       # phase 1: meet inside the cycle
+        slow = nums[slow]
+        fast = nums[nums[fast]]
+        if slow == fast:
+            break
+    finder = 0
+    while finder != slow:             # phase 2: walk to the entrance
+        finder = nums[finder]
+        slow = nums[slow]
+    return finder
+```
+
+**Complexity.** O(n) time, O(1) space, and the list is only read.
+
+## Tests
+
+```python
+import random
+
+def check(fn):
+    assert fn([3, 1, 4, 2, 4]) == 4
+    assert fn([2, 5, 1, 2, 3, 4]) == 2
+    assert fn([1, 1]) == 1
+    assert fn([3, 3, 3, 3]) == 3
+    assert fn([1, 4, 4, 2, 4]) == 4
+    rng = random.Random(3)
+    for _ in range(300):
+        n = rng.randint(1, 30)
+        dup = rng.randint(1, n)
+        values = list(range(1, n + 1))
+        # replace some values (not dup itself) with extra copies of dup, keeping length n + 1
+        extra = rng.randint(1, n)
+        others = [v for v in values if v != dup]
+        rng.shuffle(others)
+        kept = others[: n - extra] if extra <= n - 1 else []
+        nums = kept + [dup] * (n + 1 - len(kept))
+        rng.shuffle(nums)
+        original = list(nums)
+        assert fn(nums) == dup, (fn.__name__, nums)
+        assert nums == original, "input was modified"
+
+for fn in (find_duplicate_set, find_duplicate_binary_search, find_duplicate):
+    check(fn)
+print("all find-duplicate tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Start at index 0**, not at `nums[0]` with an unrelated second pointer. Phase 2 must restart from the same place phase 1 started.
+- **The duplicate may appear many times.** Tricks based on `sum(nums) - n*(n+1)/2` or XOR only work when it appears exactly twice and every other value appears once.
+- **Do not mark visited values by negating entries.** That is O(1) space but modifies the input, which the problem forbids. Mention it as an option only if mutation is allowed.
+- **Why 0 matters.** If values could be 0, index 0 could be inside the cycle and the argument would break. The 1..n range is what guarantees the path from 0 leads into a cycle whose entrance is the duplicate.
+
+## Where this shows up in data engineering
+
+In practice you find duplicates with a hash set, `GROUP BY ... HAVING COUNT(*) > 1`, or a window function, because memory is rarely that tight. The reusable idea is the counting binary search: "how many values fall at or below X" is the same question used to find percentiles and to choose range-partition boundaries without sorting everything.

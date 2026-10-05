@@ -1,0 +1,167 @@
+---
+title: "Merge Two Sorted Lists: Dummy Head Iteration and Recursion"
+seoTitle: "Merge Two Sorted Linked Lists in Python"
+description: "Splice two sorted linked lists into one sorted list using a dummy head, plus the recursive version. Python code, walkthrough, edge cases and assert-based tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Create a dummy node and a tail pointer. While both lists have nodes, attach the smaller head to the tail and advance that list; when one runs out, attach the remainder of the other in one step. Return dummy.next. This reuses the existing nodes, runs in O(m + n) time and needs O(1) extra space; the recursive version is shorter but uses O(m + n) stack."
+followUps: ["How would you merge k sorted lists efficiently?", "How do you keep the merge stable when values are equal?", "How is this step used inside merge sort for linked lists?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/reverse-linked-list"
+next: "interview-questions:dsa/linked-list-cycle"
+---
+
+## Problem
+
+You are given the heads of two singly linked lists, each sorted in non-decreasing order. Combine them into one sorted linked list by relinking the existing nodes, and return its head. Either list may be empty.
+
+This is widely known as LeetCode 21 (Merge Two Sorted Lists). It is the merge step of merge sort, and the base operation for merging many sorted lists.
+
+Constraints for this version: each list has 0 to 1,000 nodes; values are integers.
+
+## Examples
+
+| `a` | `b` | Result |
+|---|---|---|
+| `2 -> 6 -> 9` | `1 -> 6 -> 7 -> 12` | `1 -> 2 -> 6 -> 6 -> 7 -> 9 -> 12` |
+| empty | `4 -> 8` | `4 -> 8` |
+| `3` | `3` | `3 -> 3` |
+| empty | empty | empty |
+
+## Approach 1: brute force
+
+Collect every value from both lists, sort them, and build a new list.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def merge_by_sorting(a, b):
+    values = []
+    for head in (a, b):
+        while head:
+            values.append(head.val)
+            head = head.next
+    dummy = tail = ListNode()
+    for v in sorted(values):
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+```
+
+O((m + n) log(m + n)) time and O(m + n) extra space, and it throws away the fact that both inputs are already sorted.
+
+## Approach 2: optimal
+
+**Key insight.** The smallest remaining value is always at the head of one of the two lists. Keep taking the smaller head. A **dummy node** in front of the result means you never need a special case for "the result is still empty".
+
+**Walkthrough** for `a = 2 -> 6 -> 9`, `b = 1 -> 6 -> 7 -> 12`:
+
+| Compare | Take | Result so far |
+|---|---|---|
+| 2 vs 1 | 1 from `b` | `1` |
+| 2 vs 6 | 2 from `a` | `1 2` |
+| 6 vs 6 | 6 from `a` (ties take `a` first) | `1 2 6` |
+| 9 vs 6 | 6 from `b` | `1 2 6 6` |
+| 9 vs 7 | 7 from `b` | `1 2 6 6 7` |
+| 9 vs 12 | 9 from `a` | `1 2 6 6 7 9` |
+| `a` empty | attach rest of `b` | `1 2 6 6 7 9 12` |
+
+### Iterative
+
+```python
+def merge_two_lists(a, b):
+    dummy = ListNode()
+    tail = dummy
+    while a and b:
+        if a.val <= b.val:          # <= keeps the merge stable
+            tail.next, a = a, a.next
+        else:
+            tail.next, b = b, b.next
+        tail = tail.next
+    tail.next = a if a else b       # attach whatever is left, in one step
+    return dummy.next
+```
+
+### Recursive
+
+The smaller head becomes the head of the result, and its `next` is the merge of everything else.
+
+```python
+def merge_two_lists_recursive(a, b):
+    if a is None:
+        return b
+    if b is None:
+        return a
+    if a.val <= b.val:
+        a.next = merge_two_lists_recursive(a.next, b)
+        return a
+    b.next = merge_two_lists_recursive(a, b.next)
+    return b
+```
+
+**Complexity.** O(m + n) time for both. Iterative is O(1) extra space; recursive is O(m + n) stack depth, so it is limited by Python's recursion limit on long lists.
+
+## Tests
+
+```python
+def build_list(values):
+    dummy = tail = ListNode()
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head):
+    out = []
+    while head:
+        out.append(head.val)
+        head = head.next
+    return out
+
+cases = [
+    ([2, 6, 9], [1, 6, 7, 12]),
+    ([], [4, 8]),
+    ([4, 8], []),
+    ([], []),
+    ([3], [3]),
+    ([1, 2, 3], [10, 20]),          # no interleaving
+    ([-5, 0, 0], [-5, -1, 0]),      # duplicates and negatives
+]
+for fn in (merge_by_sorting, merge_two_lists, merge_two_lists_recursive):
+    for a, b in cases:
+        assert to_list(fn(build_list(a), build_list(b))) == sorted(a + b), (fn.__name__, a, b)
+
+# stability: on ties, nodes from the first list come first
+a, b = build_list([5]), build_list([5])
+merged = merge_two_lists(a, b)
+assert merged is a and merged.next is b
+
+# no new nodes are created by the iterative merge
+a, b = build_list([1, 3]), build_list([2])
+ids = {id(a), id(a.next), id(b)}
+m = merge_two_lists(a, b)
+assert {id(m), id(m.next), id(m.next.next)} == ids
+print("all merge tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Return `dummy.next`, not `dummy`.** The dummy is a placeholder with a meaningless value.
+- **Forgetting the leftover tail.** When one list ends, the other may still have many nodes. Attach the remainder in one assignment; do not loop over it.
+- **Forgetting to advance `tail`** overwrites the same `next` pointer each time and loses nodes.
+- **Stability.** Use `<=` so equal values keep their original order, which matters when nodes carry more than a value.
+- **Both empty** must return `None`.
+
+## Where this shows up in data engineering
+
+Merging sorted runs is a core database operation: external sort writes sorted runs to disk and merges them, sort-merge joins in Spark and SQL engines walk two sorted inputs together, and LSM-tree stores such as those behind Cassandra and RocksDB merge sorted files during compaction. The two-pointer merge here is the in-memory version of that idea.

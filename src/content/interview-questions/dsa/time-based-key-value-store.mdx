@@ -1,0 +1,165 @@
+---
+title: "Time Based Key-Value Store: Versioned Lookups with Binary Search"
+seoTitle: "Time Based Key-Value Store with Binary Search"
+description: "Design a key-value store that returns the latest value at or before a timestamp: per-key sorted version lists, bisect lookups, Python code and tests."
+technology: ["dsa"]
+topic: ["binary-search"]
+difficulty: "Medium"
+questionType: ["coding", "architecture"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Keep a dictionary from each key to two parallel lists of timestamps and values. Writes arrive with increasing timestamps, so appending keeps each list sorted in O(1). A read binary searches the timestamps for the last one at or before the requested time (bisect_right minus one) and returns that value, or an empty string if none exists. Reads are O(log v) for v versions of the key; memory is O(total writes)."
+followUps: ["What changes if writes can arrive out of timestamp order?", "How would you expire old versions to bound memory?", "How does this relate to point-in-time joins or slowly changing dimensions?", "How would you make it safe for concurrent readers and writers?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/search-in-rotated-sorted-array"
+next: "interview-questions:dsa/median-of-two-sorted-arrays"
+---
+
+## Problem
+
+Build a class that stores several versions of each key. It has two operations:
+
+- `set(key, value, timestamp)` records that `key` had `value` from time `timestamp`.
+- `get(key, timestamp)` returns the value of the version with the largest timestamp that is less than or equal to the given one. If the key has no version at or before that time, return an empty string.
+
+For every key, `set` is called with strictly increasing timestamps. This is widely known as LeetCode 981 (Time Based Key-Value Store). It is a design question with a binary search at its core, and it is popular in data engineering interviews because it is a tiny version of an "as of" lookup.
+
+Constraints for this version: keys and values are short strings; timestamps are positive integers up to 10,000,000; up to 200,000 total calls.
+
+## Examples
+
+```text
+set("price:ABC", "101.5", 10)
+set("price:ABC", "99.0", 25)
+get("price:ABC", 5)    -> ""        no version yet
+get("price:ABC", 10)   -> "101.5"   exact match
+get("price:ABC", 24)   -> "101.5"   latest version before 24
+get("price:ABC", 90)   -> "99.0"
+get("price:XYZ", 50)   -> ""        unknown key
+```
+
+## Approach 1: brute force
+
+Store a list of `(timestamp, value)` pairs per key and, on `get`, scan backwards for the first timestamp at or before the requested time.
+
+```python
+from collections import defaultdict
+
+class TimeMapLinear:
+    def __init__(self):
+        self.versions = defaultdict(list)
+
+    def set(self, key, value, timestamp):
+        self.versions[key].append((timestamp, value))
+
+    def get(self, key, timestamp):
+        for ts, value in reversed(self.versions.get(key, [])):
+            if ts <= timestamp:
+                return value
+        return ""
+```
+
+`set` is O(1), but `get` is O(v) for a key with `v` versions. A hot key with many updates makes reads slow.
+
+## Approach 2: optimal
+
+**Key insight.** Because timestamps per key only increase, each key's version list is already sorted by timestamp. "The last timestamp at or before `t`" is exactly what `bisect_right(timestamps, t) - 1` returns: `bisect_right` gives the insertion point after any equal timestamps, so the element just before it is the latest one not after `t`.
+
+Storing timestamps and values in two parallel lists lets you call `bisect_right` on a plain list of integers. (Since Python 3.10 `bisect` also accepts a `key=` argument, but parallel lists work on every version and are fast.)
+
+**Walkthrough** for timestamps `[10, 25]` and `get(..., 24)`: `bisect_right([10, 25], 24)` is 1, so index 0 holds the answer, `"101.5"`. For `get(..., 5)`, the insertion point is 0 and index `-1` means "no version", so return `""`.
+
+```python
+from bisect import bisect_right
+
+class TimeMap:
+    def __init__(self):
+        self.times = {}     # key -> [t1, t2, ...] ascending
+        self.values = {}    # key -> [v1, v2, ...] aligned with times
+
+    def set(self, key, value, timestamp):
+        if key not in self.times:
+            self.times[key] = []
+            self.values[key] = []
+        self.times[key].append(timestamp)
+        self.values[key].append(value)
+
+    def get(self, key, timestamp):
+        times = self.times.get(key)
+        if not times:
+            return ""
+        i = bisect_right(times, timestamp) - 1
+        return self.values[key][i] if i >= 0 else ""
+```
+
+If interviewers ask you to write the search by hand, it is the "last index where `times[i] <= t`" template:
+
+```python
+def last_at_or_before(times, t):
+    lo, hi, ans = 0, len(times) - 1, -1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if times[mid] <= t:
+            ans = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return ans
+```
+
+**Complexity.** `set` is O(1) amortised, `get` is O(log v). Memory is O(n) for `n` calls to `set`.
+
+### Design discussion
+
+- **Out-of-order writes.** If timestamps can arrive late, appending breaks the sorted order. Use `bisect.insort` (O(v) per insert because of shifting), or a balanced tree or skip list for O(log v) inserts.
+- **Retention.** Drop versions older than a retention window by slicing off the prefix found with `bisect_left`, the same trick a time-series store uses to compact old data.
+- **Concurrency.** Readers can run in parallel; writers append. In a real service you would use a lock per key or an append-only log with immutable segments.
+
+## Tests
+
+```python
+def check(cls):
+    tm = cls()
+    assert tm.get("price:ABC", 1) == ""
+    tm.set("price:ABC", "101.5", 10)
+    tm.set("price:ABC", "99.0", 25)
+    assert tm.get("price:ABC", 5) == ""
+    assert tm.get("price:ABC", 10) == "101.5"
+    assert tm.get("price:ABC", 24) == "101.5"
+    assert tm.get("price:ABC", 25) == "99.0"
+    assert tm.get("price:ABC", 90) == "99.0"
+    assert tm.get("price:XYZ", 50) == ""
+    tm.set("k", "a", 1)
+    tm.set("k", "a", 2)                    # duplicate values are fine
+    tm.set("k", "b", 3)
+    assert [tm.get("k", t) for t in range(0, 5)] == ["", "a", "a", "b", "b"]
+
+check(TimeMapLinear)
+check(TimeMap)
+
+assert last_at_or_before([], 5) == -1
+assert last_at_or_before([3, 8, 13], 2) == -1
+assert last_at_or_before([3, 8, 13], 8) == 1
+assert last_at_or_before([3, 8, 13], 100) == 2
+
+big = TimeMap()
+for t in range(1, 100_001):
+    big.set("hot", f"v{t}", t * 2)          # timestamps 2, 4, ..., 200000
+assert big.get("hot", 77_777) == "v38888"   # 77776 is the last even timestamp at or before
+assert big.get("hot", 1) == ""
+print("all time map tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **`bisect_left` versus `bisect_right`.** `bisect_left(times, t) - 1` misses an exact match at `t`. You want `bisect_right`.
+- **Index `-1` in Python** silently returns the last element. Check `i >= 0` before indexing, or you return the newest version for a time before the first write.
+- **Unknown keys** must return `""`, not raise `KeyError`.
+- **Do not store a dict per timestamp** and scan downward from `t` one tick at a time; with large timestamps that is unbounded work.
+
+## Where this shows up in data engineering
+
+This is a miniature "as of" lookup. The same idea powers point-in-time joins in feature stores (pick each feature's value as of the label's timestamp), lookups against slowly changing dimension type 2 tables (find the row valid at the event time), `merge_asof` in pandas, and `ASOF JOIN` in engines such as DuckDB. Explaining that connection is a good way to stand out in a data engineering interview.
