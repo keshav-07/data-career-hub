@@ -68,6 +68,7 @@ sources:
   - { label: "Prometheus remote write specification", url: "https://prometheus.io/docs/specs/remote_write_spec/" }
   - { label: "PostgreSQL: window functions", url: "https://www.postgresql.org/docs/current/functions-window.html" }
 previous: "system-designs:financial-reconciliation-pipeline"
+next: "system-designs:search-indexing-pipeline"
 ---
 
 ## Approach
