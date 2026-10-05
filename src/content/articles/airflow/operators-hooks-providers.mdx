@@ -102,10 +102,12 @@ print(values)
 ```
 
 ```text
-OUTPUT_BASH
+failed
+{'broken': 'failed', 'build_command': 'success', 'nothing_to_do': 'skipped', 'templated': 'success'}
+{'build_command': 'vacuuming orders', 'templated': 'processing dt=2026-03-01 for eu'}
 ```
 
-The run failed because one task failed, the exit-99 task was skipped rather than failed, and each successful task's last stdout line became its return value.
+The DAG run failed because `broken` failed, the exit-99 task was skipped rather than failed, and each successful task's last stdout line became its return value.
 
 ### Pitfalls
 
@@ -138,7 +140,7 @@ from airflow.providers.standard.operators.python import PythonOperator, ShortCir
 
 def summarise(table, min_rows, ds=None, **context):
     run_id = context["run_id"]
-    return f"{table}: checked {ds} (min_rows={min_rows}, run={run_id.split('__')[0]})"
+    return f"{table}: checked {ds} (min_rows={min_rows!r}, run={run_id.split('__')[0]})"
 
 def has_new_data(ds=None):
     return ds.endswith("-01")          # pretend data only lands on the first of the month
@@ -159,10 +161,11 @@ print(run_dag(python_dag, logical_date=pendulum.datetime(2026, 3, 2, tz="UTC"))[
 ```
 
 ```text
-OUTPUT_PY
+({'has_new_data': 'success', 'summarise': 'success'}, {'has_new_data': True, 'summarise': "orders: checked 2026-03-01 (min_rows='10', run=manual)"})
+({'has_new_data': 'success', 'summarise': 'skipped'}, {})
 ```
 
-On 2 March the short-circuit returned `False`, so `summarise` was skipped instead of failing. Notice also that the templated `min_rows` arrived as the *string* `'10'`: Jinja renders to text unless the DAG sets `render_template_as_native_obj=True`.
+On 2 March the short-circuit returned `False`, so `summarise` was skipped instead of failing. Notice also that the templated `min_rows` arrived as the *string* `'10'`, not the integer 10: Jinja renders to text unless the DAG sets `render_template_as_native_obj=True`.
 
 ### Pitfalls
 
@@ -219,7 +222,7 @@ print(WeatherHook().get_conn())
 ```
 
 ```text
-OUTPUT_HOOK
+{'base_url': 'https://api.example.com', 'auth': ('svc_airflow', '***'), 'timeout': 5}
 ```
 
 The hook never hard-codes a host or password, so the same DAG works in dev, staging and production with different connections.
@@ -247,7 +250,7 @@ A custom operator is a subclass of `BaseOperator` that packages a repeated piece
 - Declare `template_fields` so arguments such as dates are rendered by Jinja before `execute` runs. Templates are not rendered in `__init__`.
 - Keep `__init__` cheap: it runs at parse time. Create hooks and connections inside `execute`.
 - Raise an exception to fail (and retry); raise `AirflowSkipException` to skip.
-- Optional: `ui_color`, `template_ext`, `on_kill()` for cleanup when a task is stopped, and deferral for long waits (covered in the [sensors lesson](/airflow/sensors-deferrable-operators/)).
+- Optional: `ui_color`, `template_ext`, `on_kill()` for cleanup when a task is stopped, and deferral for long waits (covered in the sensors lesson).
 
 ```python
 from airflow.sdk import BaseOperator
@@ -283,7 +286,7 @@ print(run_dag(op_dag, logical_date=pendulum.datetime(2026, 3, 1, tz="UTC"))[1:])
 ```
 
 ```text
-OUTPUT_CUSTOM
+({'export_orders': 'success', 'export_scratch': 'skipped'}, {'export_orders': {'table': 'orders', 'target': 's3://lake/orders/dt=2026-03-01/', 'api': 'https://api.example.com'}})
 ```
 
 Package custom operators and hooks as a normal Python package (or under the DAG bundle's `plugins`/shared folder) so they can be unit tested and versioned separately from DAG files.
@@ -322,7 +325,11 @@ for name, info in sorted(ProvidersManager().providers.items()):
 ```
 
 ```text
-OUTPUT_PROVIDERS
+apache-airflow-providers-common-compat     1.20.0
+apache-airflow-providers-common-io         1.10.0
+apache-airflow-providers-common-sql        2.2.0
+apache-airflow-providers-smtp              3.1.0
+apache-airflow-providers-standard          1.20.0
 ```
 
 From the command line, `airflow providers list` shows the same.
@@ -426,7 +433,8 @@ print(run_dag(branch_dag, logical_date=pendulum.datetime(2026, 3, 2, tz="UTC"))[
 ```
 
 ```text
-OUTPUT_BRANCH
+{'choose_load': 'success', 'full_reload': 'success', 'incremental_load': 'skipped', 'join_all_success': 'skipped', 'join_none_failed': 'success'}
+{'choose_load': 'success', 'full_reload': 'skipped', 'incremental_load': 'success', 'join_all_success': 'skipped', 'join_none_failed': 'success'}
 ```
 
 The classic form is identical in behaviour:
@@ -441,7 +449,7 @@ print(run_dag(classic_branch)[1])
 ```
 
 ```text
-OUTPUT_BRANCH2
+{'apac': 'skipped', 'eu': 'success', 'pick': 'success', 'us': 'success'}
 ```
 
 ### Pitfalls
@@ -521,7 +529,13 @@ for task_id, s in states.items():
 ```
 
 ```text
-OUTPUT_TR
+failed
+alert      success
+cleanup    success
+extract    success
+load       upstream_failed
+publish    upstream_failed
+transform  failed
 ```
 
 `transform` failed, so `load` became `upstream_failed` and that propagated to `publish`. `alert` and `cleanup` still ran because their rules allow a failed parent. The DAG run is failed because a task that is a leaf (`publish`) did not succeed.

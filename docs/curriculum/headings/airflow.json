@@ -26,5 +26,37 @@
  "Dynamic task mapping": {
   "ref": "articles:airflow/dag-fundamentals-taskflow",
   "heading": "Dynamic task mapping"
+ },
+ "BashOperator": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "BashOperator"
+ },
+ "PythonOperator": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "PythonOperator"
+ },
+ "Custom operators": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "Custom operators"
+ },
+ "Hooks": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "Hooks"
+ },
+ "Provider packages": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "Provider packages"
+ },
+ "KubernetesPodOperator": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "KubernetesPodOperator"
+ },
+ "Branching (BranchPythonOperator)": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "Branching with BranchPythonOperator"
+ },
+ "Trigger rules": {
+  "ref": "articles:airflow/operators-hooks-providers",
+  "heading": "Trigger rules"
  }
 }

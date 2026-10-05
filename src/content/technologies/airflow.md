@@ -8,7 +8,7 @@ keyFacts: ["Workflows are Python-defined DAGs","Retries are only safe if tasks a
 whatToLearnFirst: ["articles:airflow/dag-fundamentals-taskflow", "articles:airflow/dags-scheduling-retries"]
 relatedTechnologies: ["python","kafka","spark"]
 monogram: "Af"
-lessons: ["articles:airflow/dag-fundamentals-taskflow","articles:airflow/dags-scheduling-retries"]
+lessons: ["articles:airflow/dag-fundamentals-taskflow","articles:airflow/operators-hooks-providers","articles:airflow/dags-scheduling-retries"]
 updatedDate: 2026-10-05
 ---
 
