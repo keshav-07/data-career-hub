@@ -1,0 +1,109 @@
+---
+title: "Container With Most Water: Maximise Area Between Two Lines"
+seoTitle: "Container With Most Water: Two Pointers"
+description: "Pick two vertical lines that hold the most water between them. Learn why moving the shorter line inward is safe, giving an O(n) two-pointer solution."
+technology: ["dsa"]
+topic: ["two-pointers", "greedy"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Start with pointers at both ends, which gives the widest container. The area is width times the shorter line. Move the pointer at the shorter line inward: keeping it can never help, because any narrower container using it is capped at the same height and has less width. Track the best area as you go. This is O(n) time and O(1) space."
+followUps: ["Prove that discarding the shorter line never loses the optimum.", "What do you move when both lines are equal, and does it matter?", "How is this different from Trapping Rain Water?"]
+previous: "interview-questions:dsa/3sum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of non-negative integers where `heights[i]` is the height of a vertical line at position `i`. Choose two lines; together with the x-axis they form a container holding `min(heights[i], heights[j]) * (j - i)` units of water. Return the largest amount any pair can hold. This is widely known as LeetCode 11, Container With Most Water.
+
+The list has at least two lines and up to about 10^5.
+
+## Examples
+
+```text
+heights = [2, 5, 4, 8, 3, 6]   ->  20    (lines at 1 and 5: min(5, 6) * 4)
+heights = [4, 4]               ->  4
+heights = [0, 9, 0]            ->  0
+```
+
+## Approach 1: brute force
+
+Evaluate every pair.
+
+```python
+def max_area_brute(heights):
+    best = 0
+    for i in range(len(heights)):
+        for j in range(i + 1, len(heights)):
+            best = max(best, min(heights[i], heights[j]) * (j - i))
+    return best
+```
+
+**Complexity:** O(n²) time, O(1) space.
+
+## Approach 2: optimal
+
+**Key insight:** for the current pair, suppose the left line is shorter. Every other pair that uses this left line with a right line further in is narrower, and its height is still capped by the left line, so it holds no more water. The left line has nothing more to offer, and you can discard it.
+
+Walkthrough on `[2, 5, 4, 8, 3, 6]`:
+
+| left | right | area | Move |
+|---|---|---|---|
+| 0 (2) | 5 (6) | 2 × 5 = 10 | left is shorter, left++ |
+| 1 (5) | 5 (6) | 5 × 4 = **20** | left is shorter, left++ |
+| 2 (4) | 5 (6) | 4 × 3 = 12 | left++ |
+| 3 (8) | 5 (6) | 6 × 2 = 12 | right is shorter, right-- |
+| 3 (8) | 4 (3) | 3 × 1 = 3 | right-- |
+
+Best is 20.
+
+```python
+def max_area(heights):
+    left, right = 0, len(heights) - 1
+    best = 0
+    while left < right:
+        h = min(heights[left], heights[right])
+        best = max(best, h * (right - left))
+        if heights[left] < heights[right]:
+            left += 1
+        else:
+            right -= 1
+    return best
+```
+
+**Complexity:** O(n) time, O(1) space.
+
+## Tests
+
+```python
+import random
+
+for f in (max_area, max_area_brute):
+    assert f([2, 5, 4, 8, 3, 6]) == 20
+    assert f([4, 4]) == 4                        # two lines
+    assert f([0, 9, 0]) == 0                     # zeros
+    assert f([3, 3, 3, 3]) == 9                  # all equal
+    assert f([1, 2, 3, 4, 5]) == 6               # increasing
+    assert f([10**4, 1, 10**4]) == 2 * 10**4     # large values
+
+random.seed(22)
+for _ in range(400):
+    hs = [random.randint(0, 10) for _ in range(random.randint(2, 12))]
+    assert max_area(hs) == max_area_brute(hs)
+```
+
+## Edge cases and pitfalls
+
+- Move the **shorter** line. Moving the taller one can only lose width without raising the cap.
+- With equal heights, moving either is safe: no container that keeps one of them and narrows can beat the current one.
+- The area uses the gap `right - left`, not the count of lines between.
+- Do not confuse with Trapping Rain Water, where every bar holds water above it; here only two lines matter and the lines in between are ignored.
+
+## Where this shows up in data engineering
+
+Rarely directly. The reasoning pattern, proving that a whole set of candidates can be discarded with one comparison, is the same one behind partition pruning and predicate pushdown: skip what provably cannot match instead of examining it.

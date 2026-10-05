@@ -1,0 +1,126 @@
+---
+title: "3Sum: Find All Unique Triplets That Sum to Zero"
+seoTitle: "3Sum: Sort, Fix One, Two Pointers"
+description: "Return every distinct triplet of values that sums to zero. Sort, fix one value, run a two-pointer scan on the rest, and skip duplicates for an O(n²) solution."
+technology: ["dsa"]
+topic: ["two-pointers"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Sort the array. For each index i, treat nums[i] as the first value and search the part to its right for pairs summing to -nums[i] with two pointers moving inward. Skip an i whose value equals the previous one, and after finding a triplet move both pointers past equal values, so each distinct triplet is reported once. This is O(n²) time and O(1) extra space besides the output and the sort."
+followUps: ["How would you solve 3Sum Closest, returning the sum nearest to a target?", "How does this extend to 4Sum, and what is its complexity?", "Could a hash set replace the two pointers, and how would you deduplicate then?"]
+previous: "interview-questions:dsa/two-sum-ii-input-array-is-sorted"
+next: "interview-questions:dsa/container-with-most-water"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers, return all distinct triplets of values `[a, b, c]`, taken from three different positions, with `a + b + c == 0`. Two triplets are the same if they contain the same values, so each set of values appears once. Order of triplets and of values inside them does not matter. This is widely known as LeetCode 15, 3Sum.
+
+Assume up to about 3000 values.
+
+## Examples
+
+```text
+nums = [3, -1, -2, 0, 1, -1]   ->  [[-2, -1, 3], [-1, 0, 1]]
+nums = [0, 0, 0, 0]            ->  [[0, 0, 0]]
+nums = [1, 2, -4]              ->  []
+```
+
+## Approach 1: brute force
+
+Try every triple of positions and store sorted triplets in a set to deduplicate.
+
+```python
+from itertools import combinations
+
+def three_sum_brute(nums):
+    found = set()
+    for a, b, c in combinations(nums, 3):
+        if a + b + c == 0:
+            found.add(tuple(sorted((a, b, c))))
+    return [list(t) for t in sorted(found)]
+```
+
+**Complexity:** O(n³) time, O(k) space for k distinct triplets.
+
+## Approach 2: optimal
+
+**Key insight:** once the first value is fixed, the rest is Two Sum II on a sorted array, which two pointers solve in linear time. Sorting also puts equal values next to each other, which makes skipping duplicates easy.
+
+Walkthrough on `[3, -1, -2, 0, 1, -1]`, sorted to `[-2, -1, -1, 0, 1, 3]`:
+
+1. i = 0 (−2), need 2: pointers on −1 and 3 give 2, found `[-2, -1, 3]`. Move both pointers inward and skip the repeated −1, leaving pointers on 0 and 1: their sum 1 is below 2, so move left; the pointers meet.
+2. i = 1 (−1), need 1: pointers on −1 and 3 give 2 > 1, move right; −1 and 1 give 0 < 1, move left; 0 and 1 give 1, found `[-1, 0, 1]`.
+3. i = 2 (−1) equals the previous value: skip it, or `[-1, 0, 1]` would be reported again.
+4. i = 3 (0), need 0: pointers on 1 and 3 give 4, too large; move right and the pointers meet. That was the last start with two values to its right.
+
+```python
+def three_sum(nums):
+    nums = sorted(nums)
+    n = len(nums)
+    result = []
+    for i in range(n - 2):
+        if nums[i] > 0:
+            break                       # all later values are positive too
+        if i > 0 and nums[i] == nums[i - 1]:
+            continue                    # same first value as last time
+        left, right = i + 1, n - 1
+        while left < right:
+            s = nums[i] + nums[left] + nums[right]
+            if s < 0:
+                left += 1
+            elif s > 0:
+                right -= 1
+            else:
+                result.append([nums[i], nums[left], nums[right]])
+                left += 1
+                right -= 1
+                while left < right and nums[left] == nums[left - 1]:
+                    left += 1
+                while left < right and nums[right] == nums[right + 1]:
+                    right -= 1
+    return result
+```
+
+**Complexity:** O(n²) time (n starting values, each with a linear scan), O(n) for the sorted copy or O(1) extra if sorting in place, plus the output.
+
+## Tests
+
+```python
+import random
+
+def canon(triplets):
+    return sorted(sorted(t) for t in triplets)
+
+for f in (three_sum, three_sum_brute):
+    assert canon(f([3, -1, -2, 0, 1, -1])) == [[-2, -1, 3], [-1, 0, 1]]
+    assert canon(f([0, 0, 0, 0])) == [[0, 0, 0]]            # duplicates collapse
+    assert f([1, 2, -4]) == []                               # no triplet
+    assert f([]) == [] and f([0]) == [] and f([0, 0]) == []  # too short
+    assert canon(f([-4, 2, 2, -1, -1, 2])) == [[-4, 2, 2], [-1, -1, 2]]   # repeated values in a triplet
+    assert canon(f([10**5, -5 * 10**4, -5 * 10**4])) == [[-50000, -50000, 100000]]  # large
+
+random.seed(21)
+for _ in range(300):
+    arr = [random.randint(-6, 6) for _ in range(random.randint(0, 12))]
+    result = three_sum(arr)
+    assert canon(result) == canon(three_sum_brute(arr))
+    assert len(result) == len({tuple(t) for t in result})    # no duplicate triplets
+```
+
+## Edge cases and pitfalls
+
+- Deduplication has two parts: skip repeated first values, and skip repeated left and right values after a hit. Missing either produces repeated triplets.
+- Skip a repeated first value by comparing with `nums[i - 1]`, not `nums[i + 1]`; the latter wrongly skips triplets such as `[-1, -1, 2]`.
+- Early exit when `nums[i] > 0` is safe because the array is sorted.
+- Using a set of tuples to deduplicate is acceptable as a first answer, but interviewers usually want the pointer-skipping version.
+
+## Where this shows up in data engineering
+
+Directly, rarely. The transferable lesson is reducing a k-way search to a two-pointer scan over sorted data, and deduplicating by sorting so equal items are adjacent, which is how `DISTINCT` and sort-based aggregation work inside query engines.

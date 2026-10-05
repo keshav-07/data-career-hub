@@ -53,7 +53,7 @@ def insert_brute(intervals, new):
 
 Walkthrough on `[[1, 2], [4, 6], [9, 11]]`, new = `[5, 9]`:
 
-1. Before: `[1, 2]` ends at 2 < 5, copy it. `[4, 6]` ends at 6, which is not < 5, so stop.
+1. Before: `[1, 2]` ends at 2, before 5 starts: copy it. `[4, 6]` ends at 6, which is not before 5, so stop.
 2. Overlap: `[4, 6]` starts at 4 ≤ 9, widen new to `[4, 9]`. `[9, 11]` starts at 9 ≤ 9, widen to `[4, 11]`. End of list.
 3. Append `[4, 11]`. Nothing left to copy. Result `[[1, 2], [4, 11]]`.
 

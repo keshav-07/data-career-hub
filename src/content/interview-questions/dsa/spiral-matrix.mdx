@@ -70,7 +70,7 @@ Walkthrough on the 2×4 example (top = 0, bottom = 1, left = 0, right = 3):
 1. Top row, columns 0 to 3: `1 2 3 4`. top becomes 1.
 2. Right column, rows 1 to 1: `8`. right becomes 2.
 3. top (1) ≤ bottom (1), so read the bottom row, columns 2 down to 0: `7 6 5`. bottom becomes 0.
-4. left (0) ≤ right (2), so read the left column from bottom to top, rows 0 down to 1: empty, since bottom < top. left becomes 1.
+4. left (0) ≤ right (2), so read the left column from bottom to top, rows 0 down to 1: empty, since bottom is now above top. left becomes 1.
 5. top > bottom, so stop. Result `[1, 2, 3, 4, 8, 7, 6, 5]`.
 
 ```python
