@@ -58,13 +58,13 @@ def max_path_sum_brute(root):
                 stack.append(child)
     best = float("-inf")
     for start in neighbours:                    # every path starting at `start`
-        todo = [(start, None, start.val)]
-        while todo:
-            node, parent, total = todo.pop()
+        frontier = [(start, None, start.val)]
+        while frontier:
+            node, parent, total = frontier.pop()
             best = max(best, total)
             for nxt in neighbours[node]:
                 if nxt is not parent:
-                    todo.append((nxt, node, total + nxt.val))
+                    frontier.append((nxt, node, total + nxt.val))
     return best
 ```
 
