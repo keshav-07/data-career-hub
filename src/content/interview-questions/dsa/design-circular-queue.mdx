@@ -1,0 +1,172 @@
+---
+title: "Design Circular Queue: A Fixed-Capacity Ring Buffer"
+seoTitle: "Design Circular Queue: Ring Buffer in Python"
+description: "Implement a bounded FIFO queue on a fixed array that wraps around. Track the head index and a count, and use modulo arithmetic for O(1) operations."
+technology: ["dsa"]
+topic: ["queue", "design"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Allocate an array of capacity k once. Keep the index of the front element and the number of stored elements. Enqueue writes at (head + count) % k, dequeue advances head = (head + 1) % k, and the rear is at (head + count - 1) % k. Storing the count removes the classic ambiguity between full and empty when head and tail meet. Every operation is O(1) time, and space is O(k)."
+followUps: ["How would you tell full from empty if you stored head and tail but no count?", "How would you make the buffer safe for one producer and one consumer thread?", "What should happen on enqueue when full: reject, block, or overwrite the oldest?"]
+previous: "interview-questions:dsa/implement-queue-using-stacks"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Design a queue with a fixed capacity `k` that reuses its storage in a circle. Support:
+
+- `en_queue(value)`: add to the back; return `True` on success, `False` if full;
+- `de_queue()`: remove the front; return `True` on success, `False` if empty;
+- `front()` and `rear()`: return the front or back value, or -1 if empty;
+- `is_empty()` and `is_full()`.
+
+Do not use a built-in queue type. This is widely known as LeetCode 622, Design Circular Queue.
+
+## Examples
+
+```text
+q = CircularQueue(2)
+en_queue(7) -> True, en_queue(3) -> True, en_queue(9) -> False (full)
+rear() -> 3, de_queue() -> True, en_queue(9) -> True   (reuses slot 0)
+front() -> 3, rear() -> 9
+```
+
+## Approach 1: brute force (shift on dequeue)
+
+Store items in a Python list in order and remove from the front with `pop(0)`.
+
+```python
+class ListQueue:
+    def __init__(self, k):
+        self.k, self.items = k, []
+
+    def en_queue(self, value):
+        if len(self.items) == self.k:
+            return False
+        self.items.append(value)
+        return True
+
+    def de_queue(self):
+        if not self.items:
+            return False
+        self.items.pop(0)          # shifts every remaining element
+        return True
+
+    def front(self):
+        return self.items[0] if self.items else -1
+
+    def rear(self):
+        return self.items[-1] if self.items else -1
+
+    def is_empty(self):
+        return not self.items
+
+    def is_full(self):
+        return len(self.items) == self.k
+```
+
+**Complexity:** `de_queue` is O(k) because of the shift; the rest are O(1). It also misses the point of the exercise: no storage reuse.
+
+## Approach 2: optimal (ring buffer)
+
+**Key insight:** instead of moving elements, move the indices. The slot after the last one is slot 0, which modulo arithmetic expresses directly.
+
+Walkthrough with `k = 3` (`_` is an unused slot, head marked by `^`):
+
+| Operation | Slots | head | count |
+|---|---|---|---|
+| en_queue(7) | 7 _ _ (^ at 0) | 0 | 1 |
+| en_queue(3) | 7 3 _ | 0 | 2 |
+| de_queue() | _ 3 _ (^ at 1) | 1 | 1 |
+| en_queue(4) | _ 3 4 | 1 | 2 |
+| en_queue(9) | 9 3 4: written at (1 + 2) % 3 = 0 | 1 | 3 (full) |
+
+Front is `slots[1] = 3`, rear is `slots[(1 + 3 - 1) % 3] = slots[0] = 9`.
+
+```python
+class CircularQueue:
+    def __init__(self, k):
+        self.slots = [0] * k
+        self.k = k
+        self.head = 0
+        self.count = 0
+
+    def en_queue(self, value):
+        if self.count == self.k:
+            return False
+        self.slots[(self.head + self.count) % self.k] = value
+        self.count += 1
+        return True
+
+    def de_queue(self):
+        if self.count == 0:
+            return False
+        self.head = (self.head + 1) % self.k
+        self.count -= 1
+        return True
+
+    def front(self):
+        return -1 if self.count == 0 else self.slots[self.head]
+
+    def rear(self):
+        return -1 if self.count == 0 else self.slots[(self.head + self.count - 1) % self.k]
+
+    def is_empty(self):
+        return self.count == 0
+
+    def is_full(self):
+        return self.count == self.k
+```
+
+**Complexity:** O(1) time for every operation, O(k) space allocated once.
+
+## Tests
+
+```python
+import random
+
+for cls in (CircularQueue, ListQueue):
+    q = cls(2)
+    assert q.is_empty() and q.front() == -1 and q.rear() == -1   # empty
+    assert q.de_queue() is False                                  # dequeue when empty
+    assert q.en_queue(7) and q.en_queue(3)
+    assert q.en_queue(9) is False and q.is_full()                 # full
+    assert q.rear() == 3 and q.de_queue()
+    assert q.en_queue(9) and q.front() == 3 and q.rear() == 9     # wrap-around
+
+    one = cls(1)                                                  # capacity 1
+    assert one.en_queue(-5) and one.is_full() and one.front() == one.rear() == -5
+    assert one.de_queue() and one.is_empty()
+    big = cls(3)
+    big.en_queue(10**12); big.en_queue(10**12)                    # duplicates, large
+    assert big.front() == big.rear() == 10**12
+
+random.seed(42)
+for _ in range(200):
+    k = random.randint(1, 5)
+    a, b = CircularQueue(k), ListQueue(k)
+    for _ in range(40):
+        if random.random() < 0.5:
+            x = random.randint(-9, 9)
+            assert a.en_queue(x) == b.en_queue(x)
+        else:
+            assert a.de_queue() == b.de_queue()
+        assert (a.front(), a.rear(), a.is_empty(), a.is_full()) == \
+               (b.front(), b.rear(), b.is_empty(), b.is_full())
+```
+
+## Edge cases and pitfalls
+
+- With only head and tail indices, `head == tail` could mean empty or full. Fix it with a count (as here), a full flag, or by allocating `k + 1` slots and leaving one always empty.
+- The rear index is `(head + count - 1) % k`; forgetting the `% k` reads past the end after wrapping.
+- Returning -1 for an empty queue is ambiguous if -1 can be a stored value. Mention it; real APIs raise or return `None`.
+
+## Where this shows up in data engineering
+
+Ring buffers sit underneath much of the streaming stack: bounded in-memory queues between pipeline stages, log tailers, and metric buffers that keep the last N samples. The "what happens when full" decision maps directly to backpressure (block or reject the producer) versus lossy overwrite of the oldest data.
