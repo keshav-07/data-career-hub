@@ -1,0 +1,592 @@
+---
+title: "AWS IAM for Data Engineers: Roles, Policies and Cross-Account Access"
+seoTitle: "AWS IAM for Data Engineers: Roles and Policies"
+description: "IAM for data pipelines: users, groups and roles, identity and resource policies, least privilege, STS, cross-account access, boundaries and policy evaluation."
+technology: ["aws"]
+topic: ["iam", "security", "access-control"]
+difficulty: "Beginner"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Tell IAM users, groups, roles, service roles and service-linked roles apart and know which a pipeline should use"
+  - "Write identity-based, trust and resource-based policies for a Glue job reading and writing S3"
+  - "Explain how STS AssumeRole issues temporary credentials and how cross-account access works"
+  - "Use permissions boundaries to let teams create roles safely"
+  - "Walk through AWS policy evaluation logic, including explicit deny, SCPs, boundaries and resource policies"
+prerequisites: ["articles:aws/s3-for-data-engineers"]
+related: ["articles:databricks/unity-catalog-governance"]
+previous: "articles:aws/s3-for-data-engineers"
+versionContext: "Policy evaluation rules checked against the IAM User Guide in October 2026. The Python policy-evaluation simulation runs on Python 3.11 and models the documented decision order without condition keys. AWS CLI and boto3 calls were written from the AWS documentation and not executed; all IAM policy JSON documents were checked to parse."
+sources:
+  - { label: "IAM User Guide: Policy evaluation logic", url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html" }
+  - { label: "IAM User Guide: How AWS enforcement code evaluates requests", url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-denyallow.html" }
+  - { label: "IAM User Guide: Identity-based and resource-based policies", url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_identity-vs-resource.html" }
+  - { label: "IAM User Guide: Permissions boundaries for IAM entities", url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html" }
+  - { label: "IAM User Guide: Policy evaluation within a single account", url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic_policy-eval-basics.html" }
+---
+
+Every call a pipeline makes on AWS, such as reading an S3 object, starting a Glue job or running an Athena query, is checked by AWS Identity and Access Management (IAM). Most "Access Denied" tickets a Data Engineer handles come down to one of a handful of IAM rules. This lesson explains who can act (principals), what they may do (policies), how roles hand out temporary credentials, and the exact order in which AWS decides allow or deny.
+
+## Sample setup
+
+The examples use two accounts: a **data account** `111122223333` that owns the lake bucket `example-lake` and runs Glue, and an **analytics account** `444455556666` whose analysts read curated data. The Python simulation below implements AWS's documented evaluation order for the policy types in this lesson. It matches actions and resources with wildcards but ignores condition keys, so treat it as a teaching model, not a replacement for the IAM policy simulator.
+
+```python
+import json
+from fnmatch import fnmatchcase
+
+def as_list(x):
+    return x if isinstance(x, list) else list((x,))
+
+def matches(patterns, value, case_sensitive=True):
+    if not case_sensitive:
+        return any(fnmatchcase(value.lower(), p.lower()) for p in as_list(patterns))
+    return any(fnmatchcase(value, p) for p in as_list(patterns))
+
+def principal_match(stmt, req):
+    """For resource-based policies: does the Principal element name this caller?
+    Returns 'session' (names the user or role session itself), 'role' (names the role ARN),
+    'account' (names the caller's account), or None."""
+    if "Principal" not in stmt:
+        return "session"                      # identity-based policies have no Principal
+    p = stmt["Principal"]
+    if p == "*":
+        return "session"
+    arns = as_list(p.get("AWS", []))
+    if req["principal"] in arns:
+        return "session"
+    if req.get("role_arn") in arns:
+        return "role"
+    if f"arn:aws:iam::{req['account']}:root" in arns or req["account"] in arns:
+        return "account"
+    return None
+
+def statements(doc, effect, req):
+    """Statements in doc with this Effect that apply to the request (conditions not modelled)."""
+    hits = []
+    for s in as_list(doc["Statement"]):
+        if s["Effect"] != effect:
+            continue
+        if not matches(s["Action"], req["action"], case_sensitive=False):
+            continue
+        if not matches(s.get("Resource", "*"), req["resource"]):
+            continue
+        how = principal_match(s, req)
+        if how:
+            hits.append(how)
+    return hits
+
+def allows(docs, req):
+    return any(statements(d, "Allow", req) for d in docs)
+
+def evaluate(req, identity=(), boundary=None, session=None, resource=None, scps=None, rcps=None):
+    every = list(identity) + [d for d in (boundary, session, resource) if d] + (scps or []) + (rcps or [])
+    # 1. An explicit Deny anywhere wins.
+    if any(statements(d, "Deny", req) for d in every):
+        return "DENY (explicit deny)"
+    # 2-3. Organisation guardrails must allow (they never grant on their own).
+    if rcps is not None and not allows(rcps, req):
+        return "DENY (no allow in resource control policies)"
+    if scps is not None and not allows(scps, req):
+        return "DENY (no allow in service control policies)"
+    res_hits = statements(resource, "Allow", req) if resource else []
+    id_allow = allows(identity, req)
+    same_account = req["account"] == req["resource_account"]
+    if same_account:
+        # 4. A resource policy that names the user or role session itself is enough.
+        if "session" in res_hits:
+            return "ALLOW (resource-based policy names the caller)"
+        if not id_allow and not res_hits:
+            return "DENY (implicit: nothing allows it)"
+    else:
+        # Cross-account: both sides must allow.
+        if not res_hits:
+            return "DENY (cross-account: resource policy does not allow)"
+        if not id_allow:
+            return "DENY (cross-account: caller's identity policy does not allow)"
+    # 5-6. Boundaries and session policies cap what identity policies (and role-ARN grants) give.
+    if boundary is not None and not allows([boundary], req):
+        return "DENY (outside permissions boundary)"
+    if session is not None and not allows([session], req):
+        return "DENY (outside session policy)"
+    return "ALLOW"
+```
+
+## Users, groups and roles
+
+**What it is.** IAM has three kinds of identity you create:
+
+| Identity | What it is | Credentials | Use it for |
+|---|---|---|---|
+| IAM user | A long-lived identity for one person or application | Password and/or long-term access keys | Rarely now: break-glass access or a system that cannot use roles |
+| IAM group | A collection of users that share attached policies | None of its own | Giving the same permissions to many IAM users |
+| IAM role | An identity with permissions but no permanent credentials | Temporary credentials from STS when assumed | Pipelines, AWS services, cross-account access, federated humans |
+
+**How it works.** A role has two policies that matter: a **trust policy** (who may assume it) and **permissions policies** (what it may do once assumed). AWS services such as Glue, Lambda, EMR and Step Functions assume a role you give them, called a **service role**, and every API call the job makes is signed with that role's temporary credentials. Humans should sign in through IAM Identity Center or another identity provider and receive roles too, instead of having IAM users. Groups cannot be a principal in a policy and cannot contain roles.
+
+This trust policy lets the Glue service assume the job's role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "glue.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+```
+
+To attach a role to a Glue job, Lambda function or EMR cluster, the person or pipeline creating the resource needs `iam:PassRole` on that role. This is a deliberate control: without it, anyone who can create a Glue job could borrow a powerful role.
+
+**Pitfalls.**
+
+- Access keys in code, notebooks or CI variables. They never expire and leak easily. Use roles everywhere AWS can provide them.
+- Using the root user for daily work. Lock it away with MFA.
+- Granting `iam:PassRole` on `*`, which lets someone hand any role, including admin roles, to a service they control.
+
+**In interviews.** "How does a Glue job get permission to read S3?" The answer is a service role trusted by `glue.amazonaws.com`, with permissions policies scoped to the buckets it needs, attached via `iam:PassRole`. No keys are involved.
+
+## Identity-based and resource-based policies
+
+**What it is.** A policy is a JSON document of statements, each with an `Effect` (`Allow` or `Deny`), `Action`, `Resource` and optional `Condition`. Where it is attached decides its type:
+
+| Policy type | Attached to | Has a `Principal` element? | Example |
+|---|---|---|---|
+| Identity-based | User, group or role | No (the principal is whoever it is attached to) | Glue role may read `raw/*` |
+| Resource-based | A resource: S3 bucket, KMS key, SQS queue, Lambda function, Glue Data Catalog | Yes | Bucket policy allowing another account |
+| Trust policy | A role (a special resource-based policy) | Yes | Glue service may assume this role |
+| Permissions boundary | User or role | No | Maximum permissions a role can ever have |
+| Session policy | Passed when assuming a role | No | Narrow one session further |
+| SCP and RCP | AWS Organizations accounts and OUs | SCP no; RCP yes | Guardrails for whole accounts |
+
+**How it works.** Identity-based policies come as AWS managed policies (written by AWS, broad), customer managed policies (yours, reusable and versioned) and inline policies (embedded in one identity). Prefer customer managed policies for pipelines. A typical job policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadRawWriteCurated",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": ["arn:aws:s3:::example-lake/raw/*", "arn:aws:s3:::example-lake/curated/*"]
+    },
+    {
+      "Sid": "ListOnlyTheseZones",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::example-lake",
+      "Condition": { "StringLike": { "s3:prefix": ["raw/*", "curated/*"] } }
+    }
+  ]
+}
+```
+
+Note the two resource forms: object actions such as `s3:GetObject` apply to `arn:aws:s3:::bucket/key`, while `s3:ListBucket` applies to the bucket ARN itself. Mixing these up is one of the most common causes of Access Denied.
+
+Run the first scenarios: an identity policy allows the Glue role to read and write, and the bucket policy explicitly denies reading a PII prefix.
+
+```python
+glue_role = {
+    "principal": "arn:aws:sts::111122223333:assumed-role/glue-etl/job-run-42",
+    "role_arn": "arn:aws:iam::111122223333:role/glue-etl",
+    "account": "111122223333",
+}
+
+identity_policy = json.loads("""
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "ReadRawWriteCurated", "Effect": "Allow",
+     "Action": ["s3:GetObject", "s3:PutObject"],
+     "Resource": ["arn:aws:s3:::example-lake/raw/*", "arn:aws:s3:::example-lake/curated/*"]}
+  ]
+}
+""")
+
+bucket_policy = json.loads("""
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "NoOneReadsPiiRaw", "Effect": "Deny", "Principal": "*",
+     "Action": "s3:GetObject", "Resource": "arn:aws:s3:::example-lake/raw/pii/*"}
+  ]
+}
+""")
+
+def req(action, resource, who=glue_role, resource_account="111122223333"):
+    return {**who, "action": action, "resource": resource, "resource_account": resource_account}
+
+cases = [
+    ("read raw file", req("s3:GetObject", "arn:aws:s3:::example-lake/raw/sales/a.parquet")),
+    ("delete curated file", req("s3:DeleteObject", "arn:aws:s3:::example-lake/curated/a.parquet")),
+    ("read raw PII file", req("s3:GetObject", "arn:aws:s3:::example-lake/raw/pii/c.csv")),
+]
+for name, r in cases:
+    print(f"{name:<22} {evaluate(r, identity=[identity_policy], resource=bucket_policy)}")
+```
+
+```text
+read raw file          ALLOW
+delete curated file    DENY (implicit: nothing allows it)
+read raw PII file      DENY (explicit deny)
+```
+
+**Pitfalls.**
+
+- `s3:ListBucket` on `bucket/*` does nothing; it needs the bucket ARN.
+- Actions are case-insensitive but resource ARNs are case-sensitive.
+- Resource-based policies are not available on every service, so cross-account access to those services must go through a role in the owning account.
+
+**In interviews.** Explain both types and the key difference: a resource-based policy names a principal and can grant access to other accounts directly; an identity-based policy is attached to the caller.
+
+## Least privilege
+
+**What it is.** Grant only the actions, on only the resources, under only the conditions a workload needs, and nothing more. A compromised or buggy job can then do limited damage.
+
+**How it works in practice.**
+
+1. **One role per job or per pipeline**, not one shared "data-engineering" role.
+2. **Scope resources**: specific buckets and prefixes, specific Glue databases and tables, specific KMS keys.
+3. **Use conditions**: `aws:SourceVpce` to require a VPC endpoint, `aws:SecureTransport`, `s3:prefix`, resource tags with `aws:ResourceTag/...`.
+4. **Start from evidence**: IAM Access Analyzer can generate a policy from the actions a role actually used in CloudTrail, and "last accessed" information shows permissions nobody uses.
+5. **Review and remove** unused roles and permissions regularly.
+
+**Pitfalls.**
+
+- `"Action": "s3:*"` on `"Resource": "*"` because "it was easier". It also grants `s3:DeleteBucket` and `s3:PutBucketPolicy`.
+- Forgetting supporting permissions, which pushes people back to wildcards: a Glue job also needs Data Catalog actions (`glue:GetTable`, `glue:GetPartitions`), `logs:` actions for CloudWatch Logs, and `kms:Decrypt` for encrypted data.
+- Least privilege by hand-editing in the console, with no code review. Keep policies in infrastructure as code.
+
+**In interviews.** Give the concrete recipe above rather than the slogan, and mention Access Analyzer policy generation as the way to tighten a role that already works.
+
+## Assuming roles with STS
+
+**What it is.** AWS Security Token Service (STS) issues **temporary credentials**: an access key ID, a secret access key and a session token that expire. `AssumeRole` is the call that exchanges your current identity for a role's credentials.
+
+**How it works.** The caller needs permission to call `sts:AssumeRole` on the role, and the role's trust policy must trust the caller. STS returns credentials valid for the requested duration (one hour by default, up to the role's maximum session duration, which can be set as high as 12 hours). Calls made with them appear in CloudTrail as the role session, `arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION-NAME`, so give sessions meaningful names.
+
+{/* noexec */}
+```python
+import boto3
+
+sts = boto3.client("sts")
+resp = sts.assume_role(
+    RoleArn="arn:aws:iam::111122223333:role/lake-reader",
+    RoleSessionName="nightly-export",
+    DurationSeconds=3600,
+)
+creds = resp["Credentials"]
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=creds["AccessKeyId"],
+    aws_secret_access_key=creds["SecretAccessKey"],
+    aws_session_token=creds["SessionToken"],
+)
+```
+
+```bash
+aws sts get-caller-identity
+aws sts assume-role --role-arn arn:aws:iam::111122223333:role/lake-reader \
+  --role-session-name nightly-export
+```
+
+Most of the time you do not call STS yourself: AWS services assume their service roles, and the AWS CLI and SDKs assume roles from a profile with `role_arn` and `source_profile` set in `~/.aws/config`.
+
+**Pitfalls.**
+
+- **Role chaining** (using one role's credentials to assume another) limits the session to one hour.
+- Long jobs that outlive their credentials fail with `ExpiredToken`. SDK credential providers refresh automatically; hand-copied credentials do not.
+- A session policy passed to `AssumeRole` can only narrow permissions, never add to them.
+
+**In interviews.** Explain why temporary credentials are safer (they expire, they are tied to a session name in audit logs) and describe the two checks: the caller's permission to assume, and the role's trust policy.
+
+## Cross-account access
+
+**What it is.** Letting a principal in one AWS account use resources in another, for example analysts in the analytics account reading curated data in the data account.
+
+**How it works.** There are two patterns, and in both **each side must allow**:
+
+1. **Resource-based policy.** The data account's bucket policy (and KMS key policy, if SSE-KMS is used) names the analytics role. The analytics account's identity policy also allows `s3:GetObject` on that bucket.
+2. **Assume a role in the other account.** The data account creates a role whose trust policy trusts the analytics account (or a specific role in it). The analyst assumes it and then acts entirely inside the data account. This works for any service, including those without resource-based policies.
+
+The simulation shows that both sides must allow in the resource-policy pattern:
+
+```python
+analyst = {
+    "principal": "arn:aws:sts::444455556666:assumed-role/analyst/maria",
+    "role_arn": "arn:aws:iam::444455556666:role/analyst",
+    "account": "444455556666",
+}
+analyst_identity = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::example-lake/curated/*"}]}
+shared_bucket_policy = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::444455556666:role/analyst"},
+     "Action": "s3:GetObject", "Resource": "arn:aws:s3:::example-lake/curated/*"}]}
+
+r = req("s3:GetObject", "arn:aws:s3:::example-lake/curated/orders.parquet",
+        who=analyst, resource_account="111122223333")
+print("both sides allow    :", evaluate(r, identity=[analyst_identity], resource=shared_bucket_policy))
+print("no bucket policy    :", evaluate(r, identity=[analyst_identity]))
+print("no identity policy  :", evaluate(r, identity=[], resource=shared_bucket_policy))
+```
+
+```text
+both sides allow    : ALLOW
+no bucket policy    : DENY (cross-account: resource policy does not allow)
+no identity policy  : DENY (cross-account: caller's identity policy does not allow)
+```
+
+For a third party (a vendor ingesting into your bucket), the trust policy should require an **external ID**, which protects against the "confused deputy" problem, where the vendor is tricked into using your role on behalf of another customer:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::999988887777:role/vendor-ingest" },
+      "Action": "sts:AssumeRole",
+      "Condition": { "StringEquals": { "sts:ExternalId": "example-lake-ingest-7f3a" } }
+    }
+  ]
+}
+```
+
+**Pitfalls.**
+
+- Granting the bucket policy but forgetting the KMS key policy, so reads fail on encrypted objects.
+- Trusting a whole account root (`arn:aws:iam::444455556666:root`) when you meant one role. Root in a trust policy delegates to the other account's administrators, who can then let any of their principals in.
+- For data shared through the Glue Data Catalog and Lake Formation, use Lake Formation cross-account grants rather than bucket policies alone. The Lake Formation lesson covers this.
+
+**In interviews.** Draw both accounts and say "both sides must allow". Then compare the two patterns: resource policies keep the caller's identity (useful for auditing per analyst), while assuming a role works for every service and centralises permissions in the owning account.
+
+## Service-linked roles
+
+**What it is.** A service-linked role is a special role that an AWS service creates and owns in your account so it can act on your behalf for its own internal needs. Examples include `AWSServiceRoleForEMRCleanup` (EMR cleans up EC2 resources) and `AWSServiceRoleForLakeFormationDataAccess` (Lake Formation reaches registered S3 locations).
+
+**How it works.** Service-linked roles live under the path `/aws-service-role/`, have a trust policy and permissions predefined by the service, and you cannot edit their permissions. The service usually creates the role the first time you use a feature, which requires the caller to have `iam:CreateServiceLinkedRole`. You can delete one only after removing the resources that depend on it.
+
+| | Service role | Service-linked role |
+|---|---|---|
+| Who creates it | You | The service (or you, through the service) |
+| Who defines permissions | You | The service, fixed |
+| Example | `glue-etl` role your job runs as | `AWSServiceRoleForEMRCleanup` |
+| Use | Your workload's access to your data | The service's own housekeeping |
+
+**Pitfalls.** Setting up a service in a locked-down account fails because an SCP or a missing `iam:CreateServiceLinkedRole` permission blocks creation of the service-linked role. The fix is to allow that action for the specific service, not to grant broad IAM rights.
+
+**In interviews.** Distinguish service roles from service-linked roles in one sentence each, and say that service-linked role permissions cannot be changed.
+
+## Permissions boundaries
+
+**What it is.** A permissions boundary is a managed policy attached to a user or role that sets the **maximum** permissions its identity-based policies can grant. It grants nothing by itself. Effective permissions are the intersection of the identity policies and the boundary.
+
+**How it works.** The main use is **safe delegation**. A platform team lets data engineers create roles for their own Glue jobs, but only if every new role carries the team boundary, so nobody can create a role more powerful than the boundary allows:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateRolesOnlyWithBoundary",
+      "Effect": "Allow",
+      "Action": ["iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy"],
+      "Resource": "arn:aws:iam::111122223333:role/data-team/*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::111122223333:policy/data-team-boundary"
+        }
+      }
+    },
+    {
+      "Sid": "NoBoundaryTampering",
+      "Effect": "Deny",
+      "Action": ["iam:DeleteRolePermissionsBoundary", "iam:CreatePolicyVersion", "iam:DeletePolicy"],
+      "Resource": [
+        "arn:aws:iam::111122223333:role/data-team/*",
+        "arn:aws:iam::111122223333:policy/data-team-boundary"
+      ]
+    }
+  ]
+}
+```
+
+In the simulation, an identity policy allowing everything is capped by a read-only boundary, and an SCP's explicit deny blocks IAM user creation even for an admin-like role:
+
+```python
+admin_like = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "*", "Resource": "*"}]}
+read_only_boundary = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Action": ["s3:Get*", "s3:List*", "glue:Get*"], "Resource": "*"}]}
+scp = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Action": "*", "Resource": "*"},
+    {"Effect": "Deny", "Action": ["iam:CreateUser", "iam:CreateAccessKey"], "Resource": "*"}]}
+
+r1 = req("s3:PutObject", "arn:aws:s3:::example-lake/curated/x.parquet")
+r2 = req("s3:GetObject", "arn:aws:s3:::example-lake/curated/x.parquet")
+r3 = req("iam:CreateUser", "arn:aws:iam::111122223333:user/backdoor")
+print("boundary, put object :", evaluate(r1, identity=[admin_like], boundary=read_only_boundary))
+print("boundary, get object :", evaluate(r2, identity=[admin_like], boundary=read_only_boundary))
+print("SCP, create IAM user :", evaluate(r3, identity=[admin_like], scps=[scp]))
+```
+
+```text
+boundary, put object : DENY (outside permissions boundary)
+boundary, get object : ALLOW
+SCP, create IAM user : DENY (explicit deny)
+```
+
+**Pitfalls.**
+
+- Expecting a boundary to grant access. If the identity policy does not allow an action, the boundary cannot add it.
+- Forgetting to protect the boundary itself, so a delegated admin removes it or edits the boundary policy.
+- An implicit deny in a boundary does not limit a resource-based policy that names the user or role session directly (see the next section).
+
+**In interviews.** Define boundaries as a ceiling, compare them with SCPs (a ceiling for whole accounts) and give the delegation example with the `iam:PermissionsBoundary` condition.
+
+## Policy evaluation logic
+
+**What it is.** When a request arrives, AWS gathers every applicable policy and decides allow or deny in a fixed order. Knowing the order lets you debug Access Denied errors systematically.
+
+**How it works.** For a request within one account, the documented order is:
+
+1. **Default deny.** Everything is denied unless something allows it (the root user aside).
+2. **Explicit deny anywhere wins.** AWS checks identity policies, resource policies, permissions boundaries, session policies, SCPs and RCPs for a matching `Deny`. If one matches, the answer is Deny, whatever else allows it.
+3. **Organisation guardrails.** If the account is in AWS Organizations, resource control policies (RCPs) and service control policies (SCPs) must contain an `Allow` for the action. They never grant permissions themselves; they only limit.
+4. **Resource-based policy.** Within one account, an `Allow` in a resource-based policy is enough on its own when it names the user or role session directly. When it names the role ARN, the boundary and session policy still apply.
+5. **Identity-based policies.** Otherwise the caller's identity policies must allow the action. Identity and resource policy allows combine as a **union** in the same account.
+6. **Permissions boundary.** If one is set, it must also allow (intersection).
+7. **Session policy.** If one was passed, it must also allow (intersection).
+
+For **cross-account** requests the union becomes an intersection: the caller's account must allow (identity policy, within boundary and SCPs), **and** the resource's policy in the other account must allow.
+
+```text
+request ─► any explicit Deny? ── yes ─► DENY
+              │ no
+              ▼
+          RCPs / SCPs allow? ── no ─► DENY
+              │ yes
+              ▼
+          same account?
+        ┌─────┴──────────────┐
+       yes                   no
+        │                    │
+ resource policy names   resource policy allows AND
+ the caller? ─ yes ─► ALLOW  identity policy allows? ─ no ─► DENY
+        │ no                 │ yes
+ identity or resource        │
+ policy allows? ─ no ─► DENY │
+        │ yes                │
+        └──────┬─────────────┘
+               ▼
+   boundary (if any) allows? ─ no ─► DENY
+               ▼
+   session policy (if any) allows? ─ no ─► DENY
+               ▼
+             ALLOW
+```
+
+The last simulation shows the subtle step 4: a same-account bucket policy that names the role session allows the read with no identity policy at all, even though the boundary only allows Glue. When the bucket policy names the role ARN instead, the boundary caps it.
+
+```python
+same_account_reader = {
+    "principal": "arn:aws:sts::111122223333:assumed-role/reporting/etl-session",
+    "role_arn": "arn:aws:iam::111122223333:role/reporting",
+    "account": "111122223333",
+}
+policy_naming_session = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Principal": {"AWS": same_account_reader["principal"]},
+     "Action": "s3:GetObject", "Resource": "arn:aws:s3:::example-lake/curated/*"}]}
+policy_naming_role = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Principal": {"AWS": same_account_reader["role_arn"]},
+     "Action": "s3:GetObject", "Resource": "arn:aws:s3:::example-lake/curated/*"}]}
+tight_boundary = {"Version": "2012-10-17", "Statement": [
+    {"Effect": "Allow", "Action": "glue:*", "Resource": "*"}]}
+
+r = req("s3:GetObject", "arn:aws:s3:::example-lake/curated/kpis.parquet", who=same_account_reader)
+print("names session, no identity policy:", evaluate(r, resource=policy_naming_session, boundary=tight_boundary))
+print("names role, no identity policy   :", evaluate(r, resource=policy_naming_role))
+print("names role, boundary excludes s3 :", evaluate(r, resource=policy_naming_role, boundary=tight_boundary))
+```
+
+```text
+names session, no identity policy: ALLOW (resource-based policy names the caller)
+names role, no identity policy   : ALLOW
+names role, boundary excludes s3 : DENY (outside permissions boundary)
+```
+
+A debugging checklist for Access Denied, in evaluation order:
+
+1. Is there an explicit deny: bucket policy, SCP, RCP, VPC endpoint policy, KMS key policy?
+2. Do the organisation's SCPs allow the service and Region?
+3. Does the identity policy allow this exact action on this exact ARN (bucket ARN versus object ARN)?
+4. Does a permissions boundary or session policy cap it?
+5. Cross-account: does the resource policy (and the KMS key policy) allow this principal?
+6. Is the data encrypted with a key the caller cannot use?
+
+CloudTrail records the denied call, the IAM policy simulator tests policies against an action, and many services now say in the error message which policy type caused an explicit deny.
+
+**Pitfalls.**
+
+- Adding more `Allow` statements to fix an explicit deny. Nothing overrides an explicit deny; find and change the deny.
+- Forgetting that SCPs apply to every principal in member accounts, including administrators, but not to service-linked roles or the management account.
+- Ignoring VPC endpoint policies, which are another resource-side policy that can deny S3 access from inside a VPC.
+
+**In interviews.** Recite the order (explicit deny, guardrails, resource policy, identity policy, boundary, session policy) and the union versus intersection rule for same-account versus cross-account requests. Walking through a concrete Access Denied using the checklist is a strong answer.
+
+## Practice questions
+
+<details>
+<summary>A Glue job's role has s3:GetObject on arn:aws:s3:::lake/* but listing the raw prefix fails. Why?</summary>
+
+`s3:ListBucket` is a bucket-level action. It must be allowed on `arn:aws:s3:::lake` (optionally restricted with the `s3:prefix` condition), not on `arn:aws:s3:::lake/*`. Object actions use the object ARN; listing uses the bucket ARN.
+
+</details>
+
+<details>
+<summary>An identity policy allows s3:* and the bucket policy has no statements about this role. Is access allowed in the same account? In a different account?</summary>
+
+Same account: yes, because identity and resource policies combine as a union and there is no explicit deny (assuming no boundary, session policy or SCP limits it). Different account: no, because cross-account access needs both the caller's identity policy and the resource's policy to allow.
+
+</details>
+
+<details>
+<summary>What is the difference between a permissions boundary and an SCP?</summary>
+
+Both are ceilings that grant nothing on their own. A permissions boundary is attached to one user or role. An SCP applies to every principal in an account or organisational unit (except the management account and service-linked roles). Effective permissions are the intersection of identity policies, the boundary and SCPs, and an explicit deny in any of them wins.
+
+</details>
+
+<details>
+<summary>How would you let an analytics account read curated tables in your data account?</summary>
+
+Either grant through Lake Formation (cross-account grants or LF-Tags shared through AWS RAM) if the data is governed by Lake Formation, or allow the analytics role in the bucket policy and the KMS key policy while the analytics account grants its role `s3:GetObject` on that bucket. Alternatively, create a read-only role in the data account that trusts the analytics role, and have analysts assume it. Either way, both sides must allow.
+
+</details>
+
+<details>
+<summary>Why should a vendor's cross-account role require an external ID?</summary>
+
+To prevent the confused deputy problem. Without it, another customer of the vendor could give the vendor your role ARN and make the vendor's system act on your account. The external ID is a value only you and the vendor know, checked in the trust policy with `sts:ExternalId`.
+
+</details>
+
+<details>
+<summary>A role has AdministratorAccess but cannot create IAM users. Give three possible causes.</summary>
+
+An SCP in the organisation explicitly denies or does not allow `iam:CreateUser`; a permissions boundary on the role does not include it; or the role was assumed with a session policy that does not include it. An explicit deny in any policy also overrides the admin allow.
+
+</details>
+
+## Key takeaways
+
+- Pipelines and services should run as IAM roles with temporary STS credentials, never with long-term access keys.
+- Identity policies attach to the caller; resource policies attach to the resource and name principals, including other accounts.
+- Least privilege means one role per job, scoped resources, conditions and evidence from Access Analyzer.
+- Cross-account access needs an allow on both sides; external IDs protect roles used by third parties.
+- Permissions boundaries, SCPs and session policies are ceilings that never grant on their own.
+- An explicit deny always wins; same-account allows combine as a union, cross-account as an intersection.

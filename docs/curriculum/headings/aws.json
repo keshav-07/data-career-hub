@@ -38,5 +38,37 @@
  "Multipart upload": {
   "ref": "articles:aws/s3-for-data-engineers",
   "heading": "Multipart upload"
+ },
+ "IAM users/groups/roles": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Users, groups and roles"
+ },
+ "Policies (identity/resource)": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Identity-based and resource-based policies"
+ },
+ "Least privilege": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Least privilege"
+ },
+ "Assume role & STS": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Assuming roles with STS"
+ },
+ "Cross-account access": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Cross-account access"
+ },
+ "Service-linked roles": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Service-linked roles"
+ },
+ "Permission boundaries": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Permissions boundaries"
+ },
+ "Policy evaluation logic": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Policy evaluation logic"
  }
 }
