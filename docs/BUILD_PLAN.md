@@ -95,7 +95,7 @@ Never rewrite history to make the project appear more complete than it is.
 project: Data Career Hub
 status: IN PROGRESS
 current_phase: 7
-current_task: P7-02
+current_task: P7-11
 current_task_status: IN PROGRESS
 last_updated: 2026-10-04
 last_successful_validation: 2026-10-04 (npm run validate — check, lint, contrast, inventory, build, dist checks all pass)
@@ -103,7 +103,7 @@ open_blockers:
   - P0-03 / P8-03..P8-10: production domain and Cloudflare account not yet provided
 release_blockers:
   - P6-10 screen-reader smoke test and P6-13 cross-browser matrix need a human tester
-  - P7: 112 of 138 launch content items not yet drafted; 26 drafted items need human technical/editorial review
+  - P7: 136 of 138 items drafted or consolidated, 2 blocked (Visa, Akamai); all need human technical, editorial and SEO review (P7-11) before PUBLISHED
 notes:
   - Repository: github.com/keshav-07/data-career-hub (branch main)
   - Decisions and deviations are recorded in docs/DECISIONS.md
@@ -246,16 +246,16 @@ The coding agent must update this block at every phase transition and at the end
 
 ### Phase 7 — Initial Content Population
 
-- [ ] P7-01 Write and review 12 pillar pages — **IN PROGRESS** (0/12 (PILLAR-01 is served by the roadmap page))
-- [ ] P7-02 Write and review 30 technology guides — **IN PROGRESS** (10/30 drafted)
-- [ ] P7-03 Write and review 30 interview questions — **IN PROGRESS** (5/30 drafted)
-- [ ] P7-04 Write and review 12 company guides — **IN PROGRESS** (1/12 drafted)
-- [ ] P7-05 Write and review 8 roadmap/career resources — **IN PROGRESS** (2/8 drafted)
-- [ ] P7-06 Write and review 8 projects — **IN PROGRESS** (3/8 drafted)
-- [ ] P7-07 Write and review 8 system designs — **IN PROGRESS** (2/8 drafted)
-- [ ] P7-08 Write and review 10 cheat sheets — **IN PROGRESS** (2/10 drafted)
-- [ ] P7-09 Write and review 20 supporting guides — **IN PROGRESS** (1/20 drafted)
-- [ ] P7-10 Run complete content-link/reference validation — **IN PROGRESS** (link/reference validation passes for all current content)
+- [ ] P7-01 Write and review 12 pillar pages — **IN PROGRESS** (11/12 drafted; PILLAR-01 consolidated into /data-engineering/roadmap/ (D-016))
+- [ ] P7-02 Write and review 30 technology guides — **IN PROGRESS** (30/30 drafted)
+- [ ] P7-03 Write and review 30 interview questions — **IN PROGRESS** (30/30 drafted)
+- [ ] P7-04 Write and review 12 company guides — **IN PROGRESS** (10/12 drafted; COMPANY-09 Visa and COMPANY-12 Akamai BLOCKED: no attributable official interview sources)
+- [ ] P7-05 Write and review 8 roadmap/career resources — **IN PROGRESS** (8/8 drafted)
+- [ ] P7-06 Write and review 8 projects — **IN PROGRESS** (8/8 drafted)
+- [ ] P7-07 Write and review 8 system designs — **IN PROGRESS** (8/8 drafted)
+- [ ] P7-08 Write and review 10 cheat sheets — **IN PROGRESS** (10/10 drafted)
+- [ ] P7-09 Write and review 20 supporting guides — **IN PROGRESS** (13/20 drafted; 7 consolidated into existing pages (D-016))
+- [ ] P7-10 Run complete content-link/reference validation — **IN PROGRESS** (internal links, anchors and references validate for all 165 pages)
 - [ ] P7-11 Run content QA and evidence audit — **NOT STARTED**
 - [ ] P7-12 Launch content gate — **NOT STARTED**
 
@@ -347,12 +347,12 @@ Validation: largest initial JS 4.6 KB gz (target 75), CSS 6.4 KB gz (target 35);
 Pending: manual keyboard and screen-reader passes, Firefox/Safari/Edge/real devices
 
 ### Phase 7 — Content
-Status: IN PROGRESS — 26/138 drafted. Code examples were executed: SQL on SQLite 3.45, PySpark examples on PySpark 4.2 (local), the Airflow DAG parsed on Airflow 3.3, the Python tutorial with its pytest suite. Every item still needs human technical, editorial and SEO review before it may be marked PUBLISHED.
+Status: IN PROGRESS — 136/138 drafted or consolidated, 2 blocked (165 pages built). Code examples were executed: SQL on SQLite 3.45, PySpark examples on PySpark 4.2 (local), the Airflow DAG parsed on Airflow 3.3, the Python tutorial with its pytest suite. Every item still needs human technical, editorial and SEO review before it may be marked PUBLISHED.
 
 ### Phase 8 — Launch
 Status: BLOCKED — `dist/` builds and `wrangler deploy --dry-run` passes; domain, DNS, deployment, Search Console and analytics need the owner's accounts. Steps: `docs/DEPLOYMENT.md`.
 
-Next task: P7-02 (continue technology guides), then remaining P7 items in Appendix A order.
+Next task: P7-11 human technical/editorial/SEO review of drafted items; P8 launch once a domain and Cloudflare account are provided.
 
 ## 0.7 Per-task validation contract
 
@@ -407,6 +407,7 @@ Then perform the phase-specific acceptance checklist and inspect:
 - 2026-10-04 — P0–P5 — platform, design system, templates, content engine, SEO, search built — npm run validate ✅ — initial implementation
 - 2026-10-04 — P6 — contrast tokens, CLS fix on /search/, budgets measured — check:contrast ✅ check:dist ✅ — accessibility/performance hardening
 - 2026-10-04 — P7 — 26 inventory items drafted with executed examples — build validation ✅ — launch content started
+- 2026-10-05 — P7 — remaining inventory drafted (136 drafted/consolidated, 2 blocked); company guides limited to attributable official sources — npm run validate ✅ — launch content drafted
 ```
 
 The agent must not create a second project tracker elsewhere unless a project-management integration is explicitly introduced later.

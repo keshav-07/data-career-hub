@@ -8,7 +8,7 @@ inventoryId: "COMPANY-01"
 technology: ["data-engineering"]
 topic: ["company-preparation"]
 company: "Amazon"
-evidenceNote: "Amazon publishes its Leadership Principles, and they are cited below as verified information. We have not yet added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us; none is claimed to be an actual Amazon interview question. Interview processes vary by team and change over time."
+evidenceNote: "Amazon publishes its Leadership Principles, and they are cited below as verified information. We have not yet added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us; none is claimed to be an actual Amazon interview question. Interview processes vary by team and change over time. The source page could not be retrieved directly while drafting; a reviewer must check this summary against the live page before publication."
 verifiedSources: [{"label": "Amazon: Leadership Principles", "url": "https://www.amazon.jobs/content/en/our-workplace/leadership-principles"}]
 commonTopics: [{"topic": "Amazon publishes a set of Leadership Principles that describe how it expects employees to work, which makes them a sensible basis for preparing behavioural answers.", "basis": "verified-attributed", "source": {"label": "Amazon: Leadership Principles", "url": "https://www.amazon.jobs/content/en/our-workplace/leadership-principles"}}]
 reportedQuestions: []
