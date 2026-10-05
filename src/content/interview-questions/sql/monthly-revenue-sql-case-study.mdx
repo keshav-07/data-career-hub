@@ -28,9 +28,11 @@ versionContext: "Queries run on PostgreSQL 16.14 and the PIVOT example on DuckDB
 sources:
   - { label: "PostgreSQL 16 documentation: JSON functions and operators", url: "https://www.postgresql.org/docs/16/functions-json.html" }
   - { label: "PostgreSQL 16 documentation: WITH queries (SEARCH and CYCLE)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "Citus documentation: Creating and modifying distributed objects (DDL)", url: "https://docs.citusdata.com/en/v11.1/develop/reference_ddl.html" }
   - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
   - { label: "PostgreSQL 16 documentation: Aggregate functions", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
   - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "DuckDB documentation: PIVOT statement", url: "https://duckdb.org/docs/current/sql/statements/pivot" }
 ---
 
 "What was our revenue each month?" sounds like `SUM(amount) GROUP BY month`. In a real schema the money is spread over orders, order lines, refunds and currency rates, and the obvious join double counts. This case study defines monthly net revenue precisely, builds a small dataset with the traps an interviewer would plant, and then answers eight follow-ups, from JSON attributes and pivots to window tuning and sharded execution.
