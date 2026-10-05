@@ -1,0 +1,351 @@
+---
+title: "Two Pointers: Converging, Read-Write and Partitioning Templates"
+seoTitle: "Two Pointers Pattern for Coding Interviews"
+description: "Use two indices to replace nested loops: converging pointers on sorted data, read-write compaction, three-way partitioning, and the sort-merge join behind them."
+technology: ["dsa"]
+topic: ["two-pointers", "arrays"]
+difficulty: "Beginner"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Recognise problems where two indices can replace a nested loop"
+  - "Apply converging pointers to sorted arrays and prove why a pointer may move"
+  - "Compact and partition arrays in place with read-write and three-way pointers"
+  - "Relate two-pointer merging to sort-merge joins and merging sorted files"
+prerequisites: ["articles:dsa/arrays-and-hashing"]
+previous: "articles:dsa/strings"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
+  - { label: "Python documentation: heapq.merge", url: "https://docs.python.org/3/library/heapq.html#heapq.merge" }
+  - { label: "PostgreSQL documentation: Planner/optimizer (join strategies)", url: "https://www.postgresql.org/docs/current/planner-optimizer.html" }
+---
+
+The two pointers pattern keeps two indices into the data and moves them according to a rule, so one pass does the work of a nested loop. It turns many O(n²) pair searches into O(n), and it does in-place array work in O(1) extra space. For Data Engineers it is also the idea behind the sort-merge join and merging sorted files.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How two pointers work
+
+There are three shapes:
+
+| Shape | Pointers start | Typical use |
+|---|---|---|
+| **Converging** | One at each end, moving inwards | Pairs in a sorted array, palindromes, container and water problems |
+| **Read-write** (same direction) | Both at the start; one reads every element, one marks where to write | Removing, compacting or deduplicating in place |
+| **Partitioning** | Several boundaries that split the array into regions | Sorting a small number of categories in one pass |
+
+The key to converging pointers is a **reason why one pointer can move without missing the answer**. In a sorted array, if `a[left] + a[right]` is too small, then `a[left]` cannot pair with anything to make the target (every other partner is at most `a[right]`), so `left` can safely move right. Being able to say that sentence is what interviewers listen for.
+
+## Recognising the pattern
+
+- The input is **sorted**, or sorting it does not lose information you need.
+- You are looking for a **pair or triple** that meets a condition.
+- The problem says **in place** or **O(1) extra space**.
+- You compare **both ends** of a sequence (palindromes, widths, mirror positions).
+- You need to **merge** two sorted sequences.
+
+If the input is unsorted and you must return original indices, a hash map (arrays and hashing lesson) is usually better than sorting.
+
+## Core templates in Python
+
+### Converging pointers
+
+```python
+def is_palindrome_alnum(s):
+    left, right = 0, len(s) - 1
+    while left < right:
+        if not s[left].isalnum():
+            left += 1
+        elif not s[right].isalnum():
+            right -= 1
+        else:
+            if s[left].lower() != s[right].lower():
+                return False
+            left += 1
+            right -= 1
+    return True
+
+
+def two_sum_sorted(numbers, target):
+    left, right = 0, len(numbers) - 1
+    while left < right:
+        total = numbers[left] + numbers[right]
+        if total == target:
+            return [left + 1, right + 1]       # 1-based, as the classic problem asks
+        if total < target:
+            left += 1                          # numbers[left] is too small for any partner
+        else:
+            right -= 1                         # numbers[right] is too large for any partner
+    return []
+
+
+assert is_palindrome_alnum("A man, a plan, a canal: Panama") is True
+assert is_palindrome_alnum("race a car") is False
+assert is_palindrome_alnum(" ") is True
+assert two_sum_sorted([2, 7, 11, 15], 9) == [1, 2]
+assert two_sum_sorted([-1, 0], -1) == [1, 2]
+assert two_sum_sorted([1, 2, 3], 10) == []
+```
+
+### Fix one, converge on the rest: 3Sum
+
+Sort, fix the first element, run two-sum on the rest, and skip duplicates at every level.
+
+```python
+def three_sum(nums):
+    nums = sorted(nums)
+    result = []
+    for i in range(len(nums) - 2):
+        if nums[i] > 0:
+            break                                   # smallest is positive: no more zeros
+        if i > 0 and nums[i] == nums[i - 1]:
+            continue                                # same first value: same triples
+        left, right = i + 1, len(nums) - 1
+        while left < right:
+            total = nums[i] + nums[left] + nums[right]
+            if total < 0:
+                left += 1
+            elif total > 0:
+                right -= 1
+            else:
+                result.append([nums[i], nums[left], nums[right]])
+                left += 1
+                right -= 1
+                while left < right and nums[left] == nums[left - 1]:
+                    left += 1                       # skip duplicate second values
+    return result
+
+
+assert three_sum([-1, 0, 1, 2, -1, -4]) == [[-1, -1, 2], [-1, 0, 1]]
+assert three_sum([0, 1, 1]) == []
+assert three_sum([0, 0, 0, 0]) == [[0, 0, 0]]
+```
+
+### Greedy converging: width times height
+
+```python
+def max_area(heights):
+    left, right = 0, len(heights) - 1
+    best = 0
+    while left < right:
+        width = right - left
+        best = max(best, width * min(heights[left], heights[right]))
+        # The shorter wall limits every narrower container that keeps it, so drop it.
+        if heights[left] < heights[right]:
+            left += 1
+        else:
+            right -= 1
+    return best
+
+
+def trap_rain_water(heights):
+    left, right = 0, len(heights) - 1
+    left_max = right_max = 0
+    water = 0
+    while left < right:
+        if heights[left] < heights[right]:
+            # The right side has a wall at least this tall, so left_max decides the level.
+            left_max = max(left_max, heights[left])
+            water += left_max - heights[left]
+            left += 1
+        else:
+            right_max = max(right_max, heights[right])
+            water += right_max - heights[right]
+            right -= 1
+    return water
+
+
+assert max_area([1, 8, 6, 2, 5, 4, 8, 3, 7]) == 49
+assert max_area([1, 1]) == 1
+assert trap_rain_water([0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1]) == 6
+assert trap_rain_water([4, 2, 0, 3, 2, 5]) == 9
+assert trap_rain_water([]) == 0
+```
+
+Trapping Rain Water is often taught first with two prefix arrays (`max to the left`, `max to the right`, water = `min(...) - height`). The two-pointer version is the same idea with O(1) space.
+
+### Read-write compaction
+
+```python
+def move_zeroes(nums):
+    write = 0
+    for read in range(len(nums)):
+        if nums[read] != 0:
+            nums[write], nums[read] = nums[read], nums[write]
+            write += 1
+
+
+def dedupe_sorted(nums):
+    # Keep one copy of each value in a sorted list; return the new length.
+    if not nums:
+        return 0
+    write = 1
+    for read in range(1, len(nums)):
+        if nums[read] != nums[write - 1]:
+            nums[write] = nums[read]
+            write += 1
+    return write
+
+
+a = [0, 1, 0, 3, 12]
+move_zeroes(a)
+assert a == [1, 3, 12, 0, 0]
+b = [1, 1, 2, 3, 3, 3]
+k = dedupe_sorted(b)
+assert b[:k] == [1, 2, 3]
+```
+
+Swapping (rather than overwriting then filling zeros at the end) keeps the relative order of non-zero values and writes each element at most once.
+
+### Three-way partition: Dutch national flag
+
+```python
+def sort_colors(nums):
+    low, mid, high = 0, 0, len(nums) - 1
+    # [0, low) are 0s, [low, mid) are 1s, (high, end] are 2s, [mid, high] unknown
+    while mid <= high:
+        if nums[mid] == 0:
+            nums[low], nums[mid] = nums[mid], nums[low]
+            low += 1
+            mid += 1
+        elif nums[mid] == 1:
+            mid += 1
+        else:
+            nums[mid], nums[high] = nums[high], nums[mid]
+            high -= 1                    # do not advance mid: the swapped-in value is unchecked
+
+
+c = [2, 0, 2, 1, 1, 0]
+sort_colors(c)
+assert c == [0, 0, 1, 1, 2, 2]
+d = [2, 0, 1]
+sort_colors(d)
+assert d == [0, 1, 2]
+```
+
+Writing down the meaning of each region, as in the comment, is the best way to get the loop condition and the pointer updates right.
+
+## Complexity
+
+| Problem shape | Time | Extra space |
+|---|---|---|
+| Converging pair search on sorted input | O(n) | O(1) |
+| Same, if you must sort first | O(n log n) | O(1) to O(n) depending on the sort |
+| 3Sum | O(n²) | O(1) besides output (sorting aside) |
+| Container, trapping water | O(n) | O(1) |
+| Read-write compaction | O(n) | O(1) |
+| Dutch national flag | O(n), one pass | O(1) |
+| Merging two sorted lists of size m and n | O(m + n) | O(m + n) for the output |
+
+## Variations and common bugs
+
+- **`while left <= right` versus `<`:** for pairs you need two distinct elements, so use `<`. Partitioning uses `mid <= high` because the unknown region includes `high`.
+- **Forgetting to move a pointer** in some branch, which loops forever.
+- **Not skipping duplicates** in 3Sum (duplicate triples) or skipping them in the wrong place (missing valid triples such as `[-1, -1, 2]`).
+- **Advancing `mid` after swapping with `high`** in the Dutch flag problem; the swapped-in value has not been examined.
+- **Sorting when you need original indices.** Two Sum on unsorted input wants a hash map.
+- **Moving the taller wall** in Container With Most Water; only moving the shorter one can find a larger area.
+- **Variants:** 4Sum (fix two, converge on two), 3Sum Closest (track the best distance instead of equality), remove element, squares of a sorted array (fill the output from the end).
+
+## Two pointers in data-engineering work
+
+The most important connection is the **sort-merge join**. When both inputs are sorted by the join key, a database or Spark can join them by walking two pointers forward, never going back, which is why it scales to inputs far larger than memory. The same move merges sorted files (the final step of an external sort) and compares two sorted snapshots to find inserts, updates and deletes.
+
+```python
+def merge_join(left_rows, right_rows):
+    """Inner join two lists of (key, value) sorted by key. Handles duplicate keys."""
+    i = j = 0
+    out = []
+    while i < len(left_rows) and j < len(right_rows):
+        lk, rk = left_rows[i][0], right_rows[j][0]
+        if lk < rk:
+            i += 1
+        elif lk > rk:
+            j += 1
+        else:
+            # Find the run of equal keys on each side, emit their cross product.
+            i_end = i
+            while i_end < len(left_rows) and left_rows[i_end][0] == lk:
+                i_end += 1
+            j_end = j
+            while j_end < len(right_rows) and right_rows[j_end][0] == rk:
+                j_end += 1
+            for a in left_rows[i:i_end]:
+                for b in right_rows[j:j_end]:
+                    out.append((lk, a[1], b[1]))
+            i, j = i_end, j_end
+    return out
+
+
+customers = [(1, "Asha"), (2, "Ben"), (4, "Dee")]
+orders = [(1, 50), (1, 70), (3, 15), (4, 20)]
+assert merge_join(customers, orders) == [(1, "Asha", 50), (1, "Asha", 70), (4, "Dee", 20)]
+print(merge_join(customers, orders))
+```
+
+```text
+[(1, 'Asha', 50), (1, 'Asha', 70), (4, 'Dee', 20)]
+```
+
+The duplicate-key handling is where hand-written merge joins usually go wrong: a key that appears twice on both sides must produce four rows, just as in SQL.
+
+Other examples: `heapq.merge` lazily merges any number of sorted iterables (useful for sorted log files), and change data capture between two sorted extracts is a two-pointer walk that emits "only in old" (delete), "only in new" (insert) and "in both but different" (update).
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Valid Palindrome** (Easy): converge from both ends, skipping non-alphanumeric characters and ignoring case.
+2. **Move Zeroes** (Easy): read-write pointers; swap each non-zero into the write position.
+3. **Two Sum II Input Array Is Sorted** (Medium): converge; move the left pointer if the sum is too small, the right if too large.
+4. **Sort Colors** (Medium): Dutch national flag with low, mid and high boundaries.
+5. **3Sum** (Medium): sort, fix one element, converge on the rest, skip duplicates.
+6. **Container With Most Water** (Medium): start widest and always move the shorter wall.
+7. **Trapping Rain Water** (Hard): move the side with the lower wall; its running maximum sets the water level.
+
+## Practice questions
+
+<details>
+<summary>In Two Sum II, why is it safe to move the left pointer when the sum is too small?</summary>
+
+The array is sorted, so the largest partner available for `numbers[left]` is `numbers[right]`. If even that sum is too small, no remaining partner works for `numbers[left]`, so discarding it cannot lose a solution. The symmetric argument justifies moving `right` when the sum is too large.
+
+</details>
+
+<details>
+<summary>What is the complexity of 3Sum and why can't it easily be O(n)?</summary>
+
+Sorting is O(n log n) and, for each of n fixed elements, the converging scan is O(n), so O(n²) overall. The output itself can contain on the order of n² triples in the worst case, so an algorithm that lists them all cannot be linear in general.
+
+</details>
+
+<details>
+<summary>In the Dutch national flag algorithm, why do you not advance mid after swapping with high?</summary>
+
+The value swapped in from `high` has not been examined yet; it could be a 0, 1 or 2. Advancing `mid` would leave it in the wrong region. When swapping with `low`, the swapped-in value is known to be a 1 (it came from the 1s region), so advancing `mid` is safe.
+
+</details>
+
+<details>
+<summary>How does a sort-merge join work, and when does a database prefer it to a hash join?</summary>
+
+Both inputs are sorted by the join key, then two pointers walk forward together, emitting the cross product of each run of equal keys. It needs no hash table, works well when inputs are already sorted (for example by an index or a previous step) and spills gracefully when inputs are larger than memory. A hash join is usually faster when one side fits in memory and nothing is sorted.
+
+</details>
+
+<details>
+<summary>Compare two sorted daily extracts to find inserted, updated and deleted keys.</summary>
+
+Walk both lists with two pointers. If the old key is smaller, it was deleted; advance old. If the new key is smaller, it was inserted; advance new. If keys are equal, compare the values to detect an update, then advance both. Remaining old keys are deletes and remaining new keys are inserts. This is O(m + n) and needs only constant extra memory beyond the output.
+
+</details>
+
+## Key takeaways
+
+- Two pointers replace a nested loop when there is a reason one pointer can move without losing answers, usually sortedness.
+- Converging pointers handle pairs, palindromes and container problems; read-write pointers compact in place; three boundaries partition in one pass.
+- Write down what each region of the array means before coding a partition loop.
+- Skip duplicates carefully when the answer must contain unique combinations.
+- The sort-merge join and merging sorted files are two-pointer algorithms; handle duplicate keys as a cross product.
