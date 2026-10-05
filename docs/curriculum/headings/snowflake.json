@@ -226,5 +226,41 @@
  "Iceberg tables": {
   "ref": "articles:snowflake/table-types-semi-structured",
   "heading": "Iceberg tables"
+ },
+ "RBAC model": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "The RBAC model"
+ },
+ "Roles & role hierarchy": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Roles and the role hierarchy"
+ },
+ "Object ownership": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Object ownership"
+ },
+ "Column-level security / masking": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Column-level security with masking policies"
+ },
+ "Row access policies": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Row access policies"
+ },
+ "Secure views": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Secure views"
+ },
+ "Network policies": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Network policies"
+ },
+ "Data encryption": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "Data encryption"
+ },
+ "OAuth & SSO": {
+  "ref": "articles:snowflake/security-access-control",
+  "heading": "OAuth and SSO"
  }
 }
