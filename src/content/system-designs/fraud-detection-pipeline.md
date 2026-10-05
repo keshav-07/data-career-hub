@@ -70,6 +70,7 @@ related:
   - "system-designs:kafka-ingestion-system"
   - "system-designs:event-driven-architecture"
 previous: "system-designs:customer-360-platform"
+next: "system-designs:recommendation-data-pipeline"
 versionContext: "The velocity-counter example is plain Python run with Python 3 to illustrate windowed, deduplicated state; in production this state lives in Flink. Other components are described, not executed."
 sources:
   - { label: "Apache Flink 2.0.0 release announcement", url: "https://flink.apache.org/2025/03/24/apache-flink-2.0.0-a-new-era-of-real-time-data-processing/" }
