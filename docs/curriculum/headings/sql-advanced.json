@@ -1,0 +1,58 @@
+{
+  "Recursive CTEs": {
+    "ref": "articles:sql/recursive-ctes-hierarchies",
+    "heading": "Recursive CTEs"
+  },
+  "Hierarchical / org-chart queries": {
+    "ref": "articles:sql/recursive-ctes-hierarchies",
+    "heading": "Hierarchical and org-chart queries"
+  },
+  "Graph traversal in SQL": {
+    "ref": "articles:sql/recursive-ctes-hierarchies",
+    "heading": "Graph traversal in SQL"
+  },
+  "Gaps and Islands problem": {
+    "ref": "articles:sql/gaps-islands-sessionization",
+    "heading": "The gaps and islands problem"
+  },
+  "Detecting consecutive streaks": {
+    "ref": "articles:sql/gaps-islands-sessionization",
+    "heading": "Detecting consecutive streaks"
+  },
+  "Sessionization of events": {
+    "ref": "articles:sql/gaps-islands-sessionization",
+    "heading": "Sessionization of events"
+  },
+  "Retention analysis": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Retention analysis"
+  },
+  "Cohort analysis": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Cohort analysis"
+  },
+  "Funnel / conversion analysis": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Funnel and conversion analysis"
+  },
+  "First & last touch attribution": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "First and last touch attribution"
+  },
+  "Market basket / co-occurrence": {
+    "ref": "articles:sql/retention-cohort-funnel-analysis",
+    "heading": "Market basket and co-occurrence analysis"
+  },
+  "JSON parsing in SQL": {
+    "ref": "articles:sql/json-arrays-regex",
+    "heading": "JSON parsing in SQL"
+  },
+  "Array & nested data handling": {
+    "ref": "articles:sql/json-arrays-regex",
+    "heading": "Array and nested data handling"
+  },
+  "Regex matching in SQL": {
+    "ref": "articles:sql/json-arrays-regex",
+    "heading": "Regex matching in SQL"
+  }
+}
