@@ -62,5 +62,37 @@
   "JSON parsing in SQL → Monthly Revenue": {
     "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
     "heading": "Approach: JSON parsing for channel and coupon revenue"
+  },
+  "RIGHT JOIN & FULL OUTER JOIN → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: RIGHT JOIN and FULL OUTER JOIN to reconcile customers and orders"
+  },
+  "Materialized views → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: materialised views for a fast CLV table"
+  },
+  "First & last touch attribution → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: first-touch and last-touch attribution of CLV"
+  },
+  "RANK() vs DENSE_RANK() → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: RANK() vs DENSE_RANK() for tied customers"
+  },
+  "Index design (B-tree, composite) → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: index design for per-customer CLV lookups"
+  },
+  "Top-N per group → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: top-N customers per country"
+  },
+  "Common Table Expressions (CTEs) → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: common table expressions as a CLV pipeline"
+  },
+  "Spilling & memory management → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: spilling and memory management"
   }
 }

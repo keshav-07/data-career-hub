@@ -1,0 +1,631 @@
+---
+seoTitle: "Customer Lifetime Value SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Customer Lifetime Value: SQL Case Study with 8 Approaches"
+description: "Compute historical customer lifetime value in SQL, including zero-order customers and refunds, then rank, attribute, materialise, index and tune it at scale."
+technology: ["sql"]
+topic: ["case-study", "customer-analytics", "window-functions"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Historical CLV is each customer's net revenue to date: completed order amounts minus refunds, summed per customer. Start from the customer table and LEFT JOIN pre-aggregated orders so customers with no purchases count as 0, aggregate refunds to order level first to avoid fan-out, and decide how orphan orders without a customer record are handled. Rank with DENSE_RANK or RANK depending on how ties should be numbered, and materialise the result for dashboards."
+followUps:
+  - "Why must customers with no orders be included when you report average CLV?"
+  - "What is the difference between RANK and DENSE_RANK on tied CLV values?"
+  - "How do you return the top 2 customers per country when there are ties?"
+  - "How would you attribute CLV to the first and last marketing touch before signup?"
+  - "How would you keep a CLV table fresh without recomputing it on every dashboard load?"
+  - "Your CLV query spills to disk. What does that mean and what do you change?"
+prerequisites: ["articles:sql/joins", "articles:sql/window-functions"]
+related: ["interview-questions:sql/monthly-revenue-sql-case-study", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/monthly-revenue-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Materialized views", url: "https://www.postgresql.org/docs/16/rules-materializedviews.html" }
+  - { label: "PostgreSQL 16 documentation: Multicolumn indexes", url: "https://www.postgresql.org/docs/16/indexes-multicolumn.html" }
+  - { label: "PostgreSQL 16 documentation: Index-only scans and covering indexes", url: "https://www.postgresql.org/docs/16/indexes-index-only-scans.html" }
+  - { label: "PostgreSQL 16 documentation: Resource consumption (work_mem, hash_mem_multiplier)", url: "https://www.postgresql.org/docs/16/runtime-config-resource.html" }
+  - { label: "PostgreSQL 16 documentation: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+---
+
+Customer lifetime value (CLV or LTV) tells a business how much a customer is worth, and therefore how much it can afford to spend acquiring one. The SQL looks like a `SUM` per customer, but interviewers use it to test whether you keep customers who never bought, avoid double counting refunds, handle ties when ranking and know how to serve the result at scale. This case study works through all of that on one small dataset.
+
+## The business question
+
+**"How much net revenue has each customer generated since they signed up, and which customers and channels are most valuable?"** Marketing compares CLV with customer acquisition cost (CAC) per channel; customer success uses it to prioritise accounts; finance uses average CLV in forecasts.
+
+There are two families of CLV. **Historical CLV** is what a customer has actually spent so far. **Predictive CLV** estimates future value, for example average order value × purchase frequency × expected lifetime, or with a statistical model. Interviews almost always start with historical CLV, so define it precisely:
+
+- **Revenue** is the amount of `completed` orders. Cancelled orders count for nothing.
+- **Refunds** are subtracted from the order they belong to, whenever they happened.
+- **Every customer** appears, including those with no orders (CLV 0). Leaving them out inflates average CLV.
+- **Orphan orders** whose `customer_id` has no customer record (for example guest checkouts) are reported separately, not silently dropped.
+- **Ties** are expected; ranking rules must say how tied customers are numbered.
+- **Attribution**: only marketing touches on or before the signup date can take credit for a customer.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE customers (
+  customer_id INT PRIMARY KEY,
+  signup_date DATE NOT NULL,
+  country     TEXT                      -- NULL when unknown
+);
+
+CREATE TABLE orders (
+  order_id    INT PRIMARY KEY,
+  customer_id INT NOT NULL,             -- no foreign key: guest orders exist
+  order_date  DATE NOT NULL,
+  amount      NUMERIC(10,2) NOT NULL,
+  status      TEXT NOT NULL             -- completed | cancelled
+);
+
+CREATE TABLE refunds (order_id INT NOT NULL, amount NUMERIC(10,2) NOT NULL);
+
+CREATE TABLE marketing_touches (
+  customer_id INT NOT NULL,
+  channel     TEXT NOT NULL,
+  touch_ts    TIMESTAMP NOT NULL
+);
+
+INSERT INTO customers VALUES
+  (1, '2025-01-10', 'US'), (2, '2025-02-01', 'US'), (3, '2025-02-15', 'GB'),
+  (4, '2025-03-01', 'GB'), (5, '2025-03-05', NULL), (6, '2025-04-01', 'US'),
+  (7, '2025-04-02', 'GB');
+
+INSERT INTO orders VALUES
+  (1,  1, '2025-01-12', 120, 'completed'),
+  (2,  1, '2025-03-01',  80, 'completed'),
+  (3,  1, '2025-06-10', 200, 'completed'),
+  (4,  2, '2025-02-03', 150, 'completed'),
+  (5,  2, '2025-05-01',  50, 'cancelled'),
+  (6,  3, '2025-02-20', 300, 'completed'),
+  (7,  3, '2025-07-01', 100, 'completed'),
+  (8,  4, '2025-03-02', 400, 'completed'),
+  (9,  5, '2025-03-06', 250, 'completed'),
+  (10, 5, '2025-04-06', 150, 'completed'),
+  (11, 7, '2025-04-03', 250, 'completed'),
+  (12, 99,'2025-05-05',  60, 'completed');   -- guest order, no customer record
+
+INSERT INTO refunds VALUES (3, 30), (3, 20);   -- two partial refunds on one order
+
+INSERT INTO marketing_touches VALUES
+  (1, 'paid_search', '2025-01-05 09:00'), (1, 'email',  '2025-01-09 18:00'),
+  (1, 'email',       '2025-02-20 08:00'),                       -- after signup: ignored
+  (2, 'social',      '2025-01-25 12:00'), (2, 'paid_search', '2025-01-31 21:00'),
+  (3, 'organic',     '2025-02-10 10:00'),
+  (4, 'affiliate',   '2025-02-28 10:00'), (4, 'social', '2025-02-28 10:00'),   -- same second
+  (6, 'social',      '2025-03-25 14:00'),
+  (7, 'paid_search', '2025-03-30 11:00'), (7, 'email', '2025-04-01 07:00');
+```
+
+By hand: customer 1 is 120 + 80 + 200 − 50 = 350; customer 2 is 150 (the cancelled order is excluded); customers 3, 4 and 5 are each 400, a three-way tie; customer 7 is 250; customer 6 never ordered, so 0. Order 12 belongs to no known customer.
+
+## Core solution
+
+Aggregate refunds to the order, net them off, aggregate to the customer, then start from `customers` so nobody is lost.
+
+```sql
+SELECT c.customer_id,
+       c.country,
+       COUNT(o.order_id)                          AS orders,
+       COALESCE(SUM(o.amount - COALESCE(r.refunded, 0)), 0) AS clv
+FROM customers c
+LEFT JOIN orders o
+       ON o.customer_id = c.customer_id
+      AND o.status = 'completed'
+LEFT JOIN (SELECT order_id, SUM(amount) AS refunded
+           FROM refunds GROUP BY order_id) r
+       ON r.order_id = o.order_id
+GROUP BY c.customer_id, c.country
+ORDER BY clv DESC, c.customer_id;
+```
+
+| customer_id | country | orders | clv |
+|---|---|---|---|
+| 3 | GB | 2 | 400.00 |
+| 4 | GB | 1 | 400.00 |
+| 5 | NULL | 2 | 400.00 |
+| 1 | US | 3 | 350.00 |
+| 7 | GB | 1 | 250.00 |
+| 2 | US | 1 | 150.00 |
+| 6 | US | 0 | 0 |
+
+Two details carry the answer. The status filter sits in the `ON` clause: in `WHERE` it would remove customer 6, whose joined order columns are `NULL`. And refunds are summed per order in a subquery before the join, so the two refunds on order 3 do not duplicate it. Average CLV across all seven customers is 1,950 / 7 ≈ 278.57; dropping customer 6 would report 325.
+
+## Approach: common table expressions as a CLV pipeline
+
+**Why it matters.** Real CLV logic has several steps, and a CTE per step makes each one readable, testable and reusable. CTEs also let you add the predictive ingredients (average order value, purchase frequency, tenure) without one unreadable query.
+
+```sql
+WITH order_net AS (                -- step 1: one row per completed order, net of refunds
+  SELECT o.order_id, o.customer_id, o.order_date,
+         o.amount - COALESCE(SUM(r.amount), 0) AS net_amount
+  FROM orders o
+  LEFT JOIN refunds r ON r.order_id = o.order_id
+  WHERE o.status = 'completed'
+  GROUP BY o.order_id, o.customer_id, o.order_date, o.amount
+),
+customer_value AS (                -- step 2: one row per known customer
+  SELECT c.customer_id, c.signup_date,
+         COUNT(n.order_id)               AS orders,
+         COALESCE(SUM(n.net_amount), 0)  AS clv,
+         MAX(n.order_date)               AS last_order_date
+  FROM customers c
+  LEFT JOIN order_net n ON n.customer_id = c.customer_id
+  GROUP BY c.customer_id, c.signup_date
+),
+with_metrics AS (                  -- step 3: ingredients of a simple predictive CLV
+  SELECT customer_id, orders, clv,
+         ROUND(clv / NULLIF(orders, 0), 2)                         AS avg_order_value,
+         (DATE '2025-08-01' - signup_date)                         AS tenure_days,
+         ROUND(orders * 30.0 / (DATE '2025-08-01' - signup_date), 2) AS orders_per_30_days
+  FROM customer_value
+)
+SELECT *,
+       ROUND(avg_order_value * orders_per_30_days * 12, 2) AS next_year_estimate
+FROM with_metrics
+ORDER BY customer_id;
+```
+
+| customer_id | orders | clv | avg_order_value | tenure_days | orders_per_30_days | next_year_estimate |
+|---|---|---|---|---|---|---|
+| 1 | 3 | 350.00 | 116.67 | 203 | 0.44 | 616.02 |
+| 2 | 1 | 150.00 | 150.00 | 181 | 0.17 | 306.00 |
+| 3 | 2 | 400.00 | 200.00 | 167 | 0.36 | 864.00 |
+| 4 | 1 | 400.00 | 400.00 | 153 | 0.20 | 960.00 |
+| 5 | 2 | 400.00 | 200.00 | 149 | 0.40 | 960.00 |
+| 6 | 0 | 0 | NULL | 122 | 0.00 | NULL |
+| 7 | 1 | 250.00 | 250.00 | 121 | 0.25 | 750.00 |
+
+The report date is fixed at 1 August 2025 so the output is reproducible; in production use `CURRENT_DATE`. `next_year_estimate` is a deliberately naive formula (spend per order × orders per month × 12) that ignores churn. It is fine as an interview talking point, but real predictive CLV models probability of churn as well.
+
+**Pitfalls and interview notes.** A CTE is a named subquery, not a temporary table: PostgreSQL 12 and later inline a CTE referenced once, and materialise one referenced more than once unless told otherwise with `[NOT] MATERIALIZED`. Name CTEs after the grain they produce (`order_net`, `customer_value`), which makes fan-out bugs easy to spot in review.
+
+## Approach: RIGHT JOIN and FULL OUTER JOIN to reconcile customers and orders
+
+**Why it matters.** CLV is only trustworthy if every customer and every order is accounted for. Two kinds of rows go missing: customers with no orders, and orders with no customer record.
+
+A `RIGHT JOIN` keeps every row of the right-hand table. `orders RIGHT JOIN customers` is the same as `customers LEFT JOIN orders`, just written from the other side, which can read naturally when a query starts from the fact table:
+
+```sql
+SELECT c.customer_id, COUNT(o.order_id) AS completed_orders
+FROM orders o
+RIGHT JOIN customers c
+        ON c.customer_id = o.customer_id
+       AND o.status = 'completed'
+GROUP BY c.customer_id
+ORDER BY c.customer_id;
+```
+
+| customer_id | completed_orders |
+|---|---|
+| 1 | 3 |
+| 2 | 1 |
+| 3 | 2 |
+| 4 | 1 |
+| 5 | 2 |
+| 6 | 0 |
+| 7 | 1 |
+
+A `FULL OUTER JOIN` keeps unmatched rows from **both** sides, which makes it the reconciliation tool: one query finds customers without orders and orders without customers.
+
+```sql
+WITH order_totals AS (
+  SELECT customer_id, SUM(amount) AS completed_amount
+  FROM orders WHERE status = 'completed'
+  GROUP BY customer_id
+)
+SELECT COALESCE(c.customer_id, t.customer_id) AS customer_id,
+       c.customer_id IS NOT NULL               AS in_customers,
+       t.customer_id IS NOT NULL               AS has_orders,
+       COALESCE(t.completed_amount, 0)         AS completed_amount,
+       CASE WHEN c.customer_id IS NULL THEN 'orphan order: no customer record'
+            WHEN t.customer_id IS NULL THEN 'customer with no orders'
+            ELSE 'matched' END                 AS status
+FROM customers c
+FULL OUTER JOIN order_totals t ON t.customer_id = c.customer_id
+ORDER BY customer_id;
+```
+
+| customer_id | in_customers | has_orders | completed_amount | status |
+|---|---|---|---|---|
+| 1 | t | t | 400.00 | matched |
+| 2 | t | t | 150.00 | matched |
+| 3 | t | t | 400.00 | matched |
+| 4 | t | t | 400.00 | matched |
+| 5 | t | t | 400.00 | matched |
+| 6 | t | f | 0 | customer with no orders |
+| 7 | t | t | 250.00 | matched |
+| 99 | f | t | 60.00 | orphan order: no customer record |
+
+Customer 6 is a legitimate zero; customer 99 is 60 dollars of revenue that a `customers LEFT JOIN orders` report would never show. Whether guest orders belong in CLV is a business decision (often they are matched by email later), but the reconciliation should always be run.
+
+**Pitfalls.** `COALESCE` the join keys when you output them, because one side is `NULL` on unmatched rows. Filters on either table in `WHERE` turn a full join back into a left, right or inner join; filter inside CTEs or the `ON` clause instead. Most style guides prefer `LEFT JOIN` over `RIGHT JOIN` for readability; know that they are interchangeable.
+
+## Approach: RANK() vs DENSE_RANK() for tied customers
+
+**Why it matters.** Account managers get "the top 3 customers", and three customers are tied at 400. How the tie is numbered changes who appears in a "top N" list and what the next rank is.
+
+```sql
+WITH clv AS (
+  SELECT c.customer_id,
+         COALESCE(SUM(o.amount - COALESCE(r.refunded, 0)), 0) AS clv
+  FROM customers c
+  LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+  LEFT JOIN (SELECT order_id, SUM(amount) AS refunded FROM refunds GROUP BY order_id) r
+         ON r.order_id = o.order_id
+  GROUP BY c.customer_id
+)
+SELECT customer_id, clv,
+       ROW_NUMBER() OVER (ORDER BY clv DESC, customer_id) AS row_number,
+       RANK()       OVER (ORDER BY clv DESC)              AS rank,
+       DENSE_RANK() OVER (ORDER BY clv DESC)              AS dense_rank
+FROM clv
+ORDER BY clv DESC, customer_id;
+```
+
+| customer_id | clv | row_number | rank | dense_rank |
+|---|---|---|---|---|
+| 3 | 400.00 | 1 | 1 | 1 |
+| 4 | 400.00 | 2 | 1 | 1 |
+| 5 | 400.00 | 3 | 1 | 1 |
+| 1 | 350.00 | 4 | 4 | 2 |
+| 7 | 250.00 | 5 | 5 | 3 |
+| 2 | 150.00 | 6 | 6 | 4 |
+| 6 | 0 | 7 | 7 | 5 |
+
+- `RANK()` gives tied rows the same rank and **skips** the following numbers: 1, 1, 1, 4. It answers "how many customers are ahead of you, plus one", so customer 1 is fourth.
+- `DENSE_RANK()` gives tied rows the same rank **without gaps**: 1, 1, 1, 2. It answers "which distinct value level is this", so customer 1 has the second-highest CLV value.
+- `ROW_NUMBER()` breaks ties arbitrarily unless the `ORDER BY` has a tiebreaker; here `customer_id` makes it deterministic.
+
+"Top 3 customers" with `RANK() <= 3` returns the three tied customers; with `DENSE_RANK() <= 3` it returns five customers (the three tied at 400, then 350 and 250); with `ROW_NUMBER() <= 3` it returns exactly three but hides that the choice among ties was arbitrary. Ask which the business wants.
+
+## Approach: top-N customers per country
+
+**Why it matters.** Regional teams each want their own top customers. That is the classic top-N-per-group pattern: rank within a partition, then filter on the rank in an outer query (a window function cannot appear in `WHERE`).
+
+```sql
+WITH clv AS (
+  SELECT c.customer_id, COALESCE(c.country, 'unknown') AS country,
+         COALESCE(SUM(o.amount - COALESCE(r.refunded, 0)), 0) AS clv
+  FROM customers c
+  LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+  LEFT JOIN (SELECT order_id, SUM(amount) AS refunded FROM refunds GROUP BY order_id) r
+         ON r.order_id = o.order_id
+  GROUP BY c.customer_id, c.country
+),
+ranked AS (
+  SELECT clv.*,
+         ROW_NUMBER() OVER (PARTITION BY country ORDER BY clv DESC, customer_id) AS rn,
+         RANK()       OVER (PARTITION BY country ORDER BY clv DESC)              AS rnk
+  FROM clv
+)
+SELECT country, customer_id, clv, rn, rnk
+FROM ranked
+WHERE rnk <= 1
+ORDER BY country, rnk, customer_id;
+```
+
+| country | customer_id | clv | rn | rnk |
+|---|---|---|---|---|
+| GB | 3 | 400.00 | 1 | 1 |
+| GB | 4 | 400.00 | 2 | 1 |
+| US | 1 | 350.00 | 1 | 1 |
+| unknown | 5 | 400.00 | 1 | 1 |
+
+With `rnk <= 1`, Great Britain returns both tied customers; filtering on `rn <= 1` would return only customer 3. The `NULL` country is mapped to `'unknown'` before partitioning so it forms a visible group (`PARTITION BY` would group `NULL`s together anyway, but an unlabelled `NULL` row confuses readers).
+
+**Alternatives.** PostgreSQL's `DISTINCT ON (country) ... ORDER BY country, clv DESC` returns exactly one row per group and is concise. A `LATERAL` subquery with `ORDER BY clv DESC LIMIT 2` per country is efficient when an index supports it and the groups are few. Snowflake, BigQuery and DuckDB support `QUALIFY rn <= 2`, which filters on a window result without a subquery.
+
+## Approach: first-touch and last-touch attribution of CLV
+
+**Why it matters.** Marketing wants to know which channel brings valuable customers, not just many customers. Attribution assigns each customer to a channel: **first touch** credits the channel that introduced them, **last touch** the channel just before conversion (signup). Comparing CLV per channel with acquisition cost per channel drives budget decisions.
+
+Use only touches on or before the signup day, rank them in both directions, and give customers without a touch an explicit `direct` channel:
+
+```sql
+WITH clv AS (
+  SELECT c.customer_id, c.signup_date,
+         COALESCE(SUM(o.amount - COALESCE(r.refunded, 0)), 0) AS clv
+  FROM customers c
+  LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+  LEFT JOIN (SELECT order_id, SUM(amount) AS refunded FROM refunds GROUP BY order_id) r
+         ON r.order_id = o.order_id
+  GROUP BY c.customer_id, c.signup_date
+),
+eligible AS (
+  SELECT t.customer_id, t.channel,
+         ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.touch_ts ASC,  t.channel) AS first_rn,
+         ROW_NUMBER() OVER (PARTITION BY t.customer_id ORDER BY t.touch_ts DESC, t.channel) AS last_rn
+  FROM marketing_touches t
+  JOIN customers c ON c.customer_id = t.customer_id
+  WHERE t.touch_ts < c.signup_date + 1          -- on or before the signup day
+),
+attributed AS (
+  SELECT v.customer_id, v.clv,
+         COALESCE(MAX(e.channel) FILTER (WHERE e.first_rn = 1), 'direct') AS first_touch,
+         COALESCE(MAX(e.channel) FILTER (WHERE e.last_rn = 1),  'direct') AS last_touch
+  FROM clv v
+  LEFT JOIN eligible e ON e.customer_id = v.customer_id
+  GROUP BY v.customer_id, v.clv
+)
+SELECT 'first_touch' AS model, first_touch AS channel,
+       COUNT(*) AS customers, SUM(clv) AS total_clv, ROUND(AVG(clv), 2) AS avg_clv
+FROM attributed GROUP BY first_touch
+UNION ALL
+SELECT 'last_touch', last_touch, COUNT(*), SUM(clv), ROUND(AVG(clv), 2)
+FROM attributed GROUP BY last_touch
+ORDER BY model, total_clv DESC, channel;
+```
+
+| model | channel | customers | total_clv | avg_clv |
+|---|---|---|---|---|
+| first_touch | paid_search | 2 | 600.00 | 300.00 |
+| first_touch | affiliate | 1 | 400.00 | 400.00 |
+| first_touch | direct | 1 | 400.00 | 400.00 |
+| first_touch | organic | 1 | 400.00 | 400.00 |
+| first_touch | social | 2 | 150.00 | 75.00 |
+| last_touch | email | 2 | 600.00 | 300.00 |
+| last_touch | affiliate | 1 | 400.00 | 400.00 |
+| last_touch | direct | 1 | 400.00 | 400.00 |
+| last_touch | organic | 1 | 400.00 | 400.00 |
+| last_touch | paid_search | 1 | 150.00 | 150.00 |
+| last_touch | social | 1 | 0 | 0.00 |
+
+Paid search introduced customers 1 and 7 (600 of CLV) under first touch, but email gets that credit under last touch because both read an email just before signing up. Customer 4's two touches share a timestamp; the `channel` tiebreaker makes the result deterministic (alphabetically, `affiliate` wins both directions), and you should say that the rule is arbitrary and needs a business decision. Customer 1's email after signup is excluded, and customer 5 had no touch at all, so 400 of CLV goes to `direct`. Each model's totals add up to the overall 1,950, which is a useful check.
+
+**Pitfalls.** Without the date filter, post-signup emails steal last-touch credit. Ties in timestamps make `ROW_NUMBER` non-deterministic between runs unless you add a tiebreaker. Both models ignore the middle of the journey; linear or position-based (for example 40/20/40) multi-touch models split credit across all touches with fractional weights, which you can compute from the same ranked touches.
+
+## Approach: materialised views for a fast CLV table
+
+**Why it matters.** CLV is read far more often than it changes: every account page, segment and dashboard needs it. Recomputing it from all orders on every read wastes compute. A materialised view stores the query result like a table and is refreshed on a schedule.
+
+```sql
+CREATE MATERIALIZED VIEW customer_ltv AS
+SELECT c.customer_id,
+       COUNT(o.order_id) AS orders,
+       COALESCE(SUM(o.amount - COALESCE(r.refunded, 0)), 0) AS clv
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+LEFT JOIN (SELECT order_id, SUM(amount) AS refunded FROM refunds GROUP BY order_id) r
+       ON r.order_id = o.order_id
+GROUP BY c.customer_id;
+
+CREATE UNIQUE INDEX customer_ltv_pk ON customer_ltv (customer_id);
+```
+
+The stored result does not change when orders do. A new order for customer 6 is invisible until the next refresh:
+
+```sql
+INSERT INTO orders VALUES (13, 6, '2025-07-15', 90, 'completed');
+SELECT customer_id, orders, clv FROM customer_ltv WHERE customer_id = 6;
+```
+
+| customer_id | orders | clv |
+|---|---|---|
+| 6 | 0 | 0 |
+
+`REFRESH MATERIALIZED VIEW CONCURRENTLY` recomputes the query and applies the differences without blocking readers. It requires a unique index on the view, which is why one was created above:
+
+```sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY customer_ltv;
+SELECT customer_id, orders, clv FROM customer_ltv WHERE customer_id = 6;
+```
+
+| customer_id | orders | clv |
+|---|---|---|
+| 6 | 1 | 90.00 |
+
+**Trade-offs.** A PostgreSQL refresh always reruns the full query; it is not incremental. A plain `REFRESH` locks out readers for its duration, while `CONCURRENTLY` keeps the view readable but is slower and needs the unique index. Readers always see data as of the last refresh, so show a "last updated" time. For very large customer bases, an incrementally maintained summary table (upserting only customers with new orders or refunds since the last run) scales better. Snowflake and BigQuery materialised views are maintained automatically but restrict the SQL they accept (for example limits on joins), so check the vendor's documentation before relying on them.
+
+## Approach: index design for per-customer CLV lookups
+
+**Why it matters.** Account pages ask for one customer's CLV, often "as of" a date: `WHERE customer_id = ? AND order_date >= ?`. Without the right index, each lookup scans the orders table. A B-tree index is a sorted structure; a composite index is sorted by its first column, then by the second within it.
+
+Load a larger orders table to see real plans: 200,000 orders for 20,000 customers.
+
+```sql
+CREATE TABLE orders_big AS
+SELECT g AS order_id,
+       (g * 7) % 20000 + 1                         AS customer_id,
+       DATE '2024-01-01' + (g % 730)               AS order_date,
+       ((g * 13) % 50000) / 100.0                  AS amount,
+       CASE WHEN g % 20 = 0 THEN 'cancelled' ELSE 'completed' END AS status
+FROM generate_series(1, 200000) AS g;
+```
+
+**Column order matters.** Put the equality column first and the range column second. With `(order_date, customer_id)`, the customer's rows are scattered across the whole date range, so the index can only narrow by date:
+
+```sql
+CREATE INDEX orders_big_date_cust ON orders_big (order_date, customer_id);
+VACUUM ANALYZE orders_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT SUM(amount) FROM orders_big
+WHERE customer_id = 4242 AND order_date >= DATE '2025-06-01';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  Buffers: shared hit=4 read=162
+  ->  Index Scan using orders_big_date_cust on orders_big (actual rows=4 loops=1)
+        Index Cond: ((order_date >= '2025-06-01'::date) AND (customer_id = 4242))
+        Buffers: shared hit=4 read=162
+Planning:
+  Buffers: shared hit=29
+```
+
+The plan says `Index Scan`, which looks fine, but the `Buffers` line shows how many 8 kB pages it touched to find 4 rows: the index condition on `order_date` selects every entry from June 2025 onwards, and `customer_id = 4242` is checked inside that whole range.
+
+With `(customer_id, order_date)`, the index jumps straight to customer 4242 and reads only that customer's recent entries. Adding `INCLUDE (amount, status)` stores those columns in the index leaf pages (they are not part of the sort key), so the query never touches the table:
+
+```sql
+DROP INDEX orders_big_date_cust;
+CREATE INDEX orders_big_cust_date ON orders_big (customer_id, order_date) INCLUDE (amount, status);
+VACUUM ANALYZE orders_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT SUM(amount) FROM orders_big
+WHERE customer_id = 4242 AND order_date >= DATE '2025-06-01' AND status = 'completed';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  Buffers: shared hit=1 read=3
+  ->  Index Only Scan using orders_big_cust_date on orders_big (actual rows=4 loops=1)
+        Index Cond: ((customer_id = 4242) AND (order_date >= '2025-06-01'::date))
+        Filter: (status = 'completed'::text)
+        Heap Fetches: 0
+        Buffers: shared hit=1 read=3
+Planning:
+  Buffers: shared hit=42
+```
+
+Four pages instead of 166. `Heap Fetches: 0` confirms an index-only scan: every needed value came from the index, and the visibility map (set by `VACUUM`) showed that the table pages did not need checking.
+
+**Design rules.**
+
+- Equality columns first, then the range or sort column. The index on `(customer_id, order_date)` also serves `WHERE customer_id = ?` alone, but not `WHERE order_date >= ?` alone.
+- `INCLUDE` columns make an index covering without affecting its order; keep them small, because every index is written on every insert.
+- A partial index such as `WHERE status = 'completed'` is smaller when most queries use that filter.
+- A full-table CLV computation for all customers reads most of the table and should use a sequential scan; indexes help selective lookups, not whole-table aggregations.
+
+## Approach: spilling and memory management
+
+**Why it matters.** Computing CLV for every customer is a big `GROUP BY customer_id`. PostgreSQL usually builds a hash table with one entry per customer. When the hash table or a sort needs more memory than allowed, PostgreSQL writes partial work to temporary files on disk ("spills"), which is correct but much slower. In distributed engines the same thing appears as spilling to local or remote disk in the query profile.
+
+The memory budget for each hash or sort operation is `work_mem`; hash operations may use `work_mem × hash_mem_multiplier`. Both are per operation, and one query can run several operations at once, which is why they are not set huge server-wide. Start with a tiny budget:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT customer_id, SUM(amount) AS clv
+FROM orders_big
+WHERE status = 'completed'
+GROUP BY customer_id;
+```
+
+```text
+GroupAggregate (actual rows=19000 loops=1)
+  Group Key: customer_id
+  ->  Index Only Scan using orders_big_cust_date on orders_big (actual rows=190000 loops=1)
+        Filter: (status = 'completed'::text)
+        Rows Removed by Filter: 10000
+        Heap Fetches: 0
+```
+
+Nothing spills. The planner knew a hash table for 19,000 customers would not fit in 64 kB, so it read the covering index from the previous section, which already returns rows in `customer_id` order, and aggregated one customer at a time (`GroupAggregate`), which needs almost no memory. Sorted input is the cheapest memory-management strategy there is.
+
+Most warehouse tables have no such index. Disabling index scans for the session simulates that, and now the planner has to sort 190,000 rows in 64 kB:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+SET enable_indexscan = off;
+SET enable_indexonlyscan = off;
+SET enable_bitmapscan = off;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT customer_id, SUM(amount) AS clv
+FROM orders_big
+WHERE status = 'completed'
+GROUP BY customer_id;
+```
+
+```text
+GroupAggregate (actual rows=19000 loops=1)
+  Group Key: customer_id
+  ->  Sort (actual rows=190000 loops=1)
+        Sort Key: customer_id
+        Sort Method: external merge  Disk: 3960kB
+        ->  Seq Scan on orders_big (actual rows=190000 loops=1)
+              Filter: (status = 'completed'::text)
+              Rows Removed by Filter: 10000
+```
+
+`Sort Method: external merge  Disk: ...` means the sort wrote sorted runs to temporary files and merged them. Forcing a hash aggregate instead (by also disabling sorts) shows the hash version of a spill: `Batches` above 1 and a `Disk Usage` figure mean the hash table was split into partitions written to disk and processed one by one:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+SET enable_indexscan = off;
+SET enable_indexonlyscan = off;
+SET enable_bitmapscan = off;
+SET enable_sort = off;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT customer_id, SUM(amount) AS clv
+FROM orders_big
+WHERE status = 'completed'
+GROUP BY customer_id;
+```
+
+```text
+HashAggregate (actual rows=19000 loops=1)
+  Group Key: customer_id
+  Batches: 183  Memory Usage: 173kB  Disk Usage: 7376kB
+  ->  Seq Scan on orders_big (actual rows=190000 loops=1)
+        Filter: (status = 'completed'::text)
+        Rows Removed by Filter: 10000
+```
+
+With a realistic budget for this job, the same hash aggregate runs in memory in a single batch:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '16MB';
+SET enable_indexscan = off;
+SET enable_indexonlyscan = off;
+SET enable_bitmapscan = off;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT customer_id, SUM(amount) AS clv
+FROM orders_big
+WHERE status = 'completed'
+GROUP BY customer_id;
+```
+
+```text
+HashAggregate (actual rows=19000 loops=1)
+  Group Key: customer_id
+  Batches: 1  Memory Usage: 7953kB
+  ->  Seq Scan on orders_big (actual rows=190000 loops=1)
+        Filter: (status = 'completed'::text)
+        Rows Removed by Filter: 10000
+```
+
+The `enable_*` settings are planner switches for experiments like this one, not production tuning knobs.
+
+**What to do about spills.**
+
+- **Reduce the data first**: filter and project before aggregating, and aggregate to the customer before joining wide dimension tables.
+- **Raise memory for the one job, not the server**: `SET LOCAL work_mem = '256MB'` inside the batch job's transaction affects only that job.
+- **Change the shape**: pre-aggregate orders daily so CLV sums a few rows per customer; process customers in ranges for very large tables.
+- **In warehouses**, spilling is visible in the query profile (for example bytes spilled to local or remote storage); the fix is usually less data per operation or a larger warehouse for that job.
+
+**In interviews.** Say what spilling is (intermediate state no longer fits in the operation's memory budget), how you see it (`EXPLAIN ANALYZE` batches and disk usage, or the warehouse profile), and that the first fix is to process less data, not to buy more memory.
+
+## Interview tips
+
+**How it is asked.** "Calculate lifetime value per customer", "average CLV by signup month or channel", "top 3 customers per country", "which acquisition channel brings the most valuable customers", or "the CLV dashboard is slow".
+
+**What a strong answer includes.**
+
+1. A definition: historical versus predictive, which statuses count, how refunds and currency are treated.
+2. Start from the customer table with a `LEFT JOIN`, so customers with no orders count as 0.
+3. Aggregate child tables (refunds) to the right grain before joining.
+4. An explicit tie policy when ranking.
+5. A serving plan: materialised or incrementally maintained CLV table, indexed for lookups.
+
+**Mistakes candidates make.**
+
+- Starting from `orders` and losing customers with no purchases, which inflates average CLV.
+- Putting `o.status = 'completed'` in `WHERE` after a `LEFT JOIN`, which has the same effect.
+- Joining refunds at line level and double counting.
+- Using `ROW_NUMBER` for "top customers" and silently dropping tied customers.
+- Crediting post-conversion touches in attribution.
+- Proposing an index for a whole-table aggregation that will never use it.
