@@ -126,5 +126,29 @@
  "SCD Type 6 (hybrid 1+2+3)": {
   "ref": "articles:data-warehousing/slowly-changing-dimensions",
   "heading": "SCD Type 6: hybrid of Types 1, 2 and 3"
+ },
+ "Kimball dimensional modeling": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Kimball dimensional modelling"
+ },
+ "Inmon (3NF/CIF)": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Inmon and the Corporate Information Factory"
+ },
+ "Data Vault 2.0 (Hubs/Links/Satellites)": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Data Vault 2.0: hubs, links and satellites"
+ },
+ "Anchor Modeling": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Anchor modelling"
+ },
+ "Medallion architecture (bronze/silver/gold)": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Medallion architecture: bronze, silver and gold"
+ },
+ "Activity Schema / event modeling": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Activity Schema and event modelling"
  }
 }
