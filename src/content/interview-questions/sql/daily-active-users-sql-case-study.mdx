@@ -1,0 +1,550 @@
+---
+seoTitle: "Daily Active Users SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Daily Active Users: SQL Case Study with 8 Approaches"
+description: "Compute daily active users in SQL: a precise definition, tricky sample data, a core query, and eight techniques from recursive calendars to ROLLUP and isolation levels."
+technology: ["sql"]
+topic: ["case-study", "product-metrics", "aggregation"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "DAU for a day is the number of distinct real users who performed at least one qualifying action in that day, in an agreed reporting time zone. Filter out passive events, anonymous rows and test accounts, convert the timestamp to the reporting date, then COUNT(DISTINCT user_id) per date. Join to a generated calendar so days with no activity show 0, and remember that distinct counts are not additive: platform or country breakdowns cannot be summed back to the total."
+followUps:
+  - "Why does the sum of DAU by platform exceed total DAU?"
+  - "How would you show days with zero active users?"
+  - "How do you compute WAU or MAU without double counting?"
+  - "Which users were active yesterday but not today?"
+  - "How would you make this query fast on a billion-row events table?"
+  - "The DAU dashboard and the platform breakdown disagree. How could that happen?"
+prerequisites: ["articles:sql/aggregations-group-by-having"]
+related: ["articles:sql/aggregations-group-by-having", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+next: "interview-questions:sql/monthly-revenue-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from the engine. The two-session isolation timeline is shown as a non-executed example."
+sources:
+  - { label: "PostgreSQL 16 documentation: WITH queries (recursive CTEs)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: GROUPING SETS, CUBE and ROLLUP", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
+  - { label: "PostgreSQL 16 documentation: Transaction isolation", url: "https://www.postgresql.org/docs/16/transaction-iso.html" }
+  - { label: "PostgreSQL 16 documentation: Combining queries (UNION, INTERSECT, EXCEPT)", url: "https://www.postgresql.org/docs/16/queries-union.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+---
+
+Daily active users (DAU) is the first metric most product teams look at and one of the most common SQL interview questions. It looks like a one-line `COUNT(DISTINCT ...)`, but a correct answer depends on definitions: what counts as "active", which users are real, which time zone a day belongs to, and what to show on a day with no activity. This case study works through one small dataset with eight techniques an interviewer can ask you to apply.
+
+## The business question
+
+**"How many distinct people used the product each day?"** DAU measures reach and habit. Product managers watch the trend after launches, growth teams divide it by monthly active users (DAU/MAU, "stickiness"), and finance uses it as a driver for advertising and infrastructure forecasts. Because so many decisions hang on it, the definition must be written down before any SQL:
+
+- **Active** means the user performed at least one *deliberate* action. Here that is every event type except `push_received`, which the system generates without the user doing anything.
+- **User** means a known, non-test account. Rows with a `NULL` `user_id` (logged-out traffic) and accounts flagged `is_test` are excluded.
+- **Day** is the calendar date in **UTC**, the reporting time zone agreed with the business. An event at 23:50 UTC belongs to that date even though it is already the next morning in India.
+- **Distinct**: a user with ten events on a day counts once. Duplicate event rows from retries change nothing.
+- **Zero days**: every date in the reporting range appears, with 0 when nobody was active.
+- **Late events** are counted on the day they *happened* (`event_ts`), not the day they arrived (`ingested_at`), so yesterday's figure can still rise after the first daily run. Say so on the dashboard or re-run a few trailing days.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE users (
+  user_id    INT PRIMARY KEY,
+  country    TEXT NOT NULL,
+  is_test    BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE events (
+  event_id    BIGINT PRIMARY KEY,
+  user_id     INT REFERENCES users (user_id),   -- NULL for logged-out traffic
+  event_type  TEXT NOT NULL,
+  platform    TEXT NOT NULL,
+  event_ts    TIMESTAMPTZ NOT NULL,             -- when it happened
+  ingested_at TIMESTAMPTZ NOT NULL              -- when it reached the warehouse
+);
+
+INSERT INTO users VALUES
+  (1, 'IN', FALSE), (2, 'US', FALSE), (3, 'US', FALSE),
+  (4, 'GB', FALSE), (5, 'IN', TRUE),  (6, 'US', FALSE);
+
+INSERT INTO events VALUES
+  -- 1 March: user 1 twice, user 3 on two platforms, a test user, an anonymous row, a passive event
+  (101, 1,    'login',         'web',     '2026-03-01 08:00+00', '2026-03-01 08:00+00'),
+  (102, 1,    'view_feed',     'web',     '2026-03-01 08:05+00', '2026-03-01 08:05+00'),
+  (103, 2,    'view_feed',     'ios',     '2026-03-01 09:00+00', '2026-03-01 09:01+00'),
+  (104, 2,    'search',        'ios',     '2026-03-01 09:02+00', '2026-03-01 09:03+00'),
+  (105, 3,    'view_feed',     'android', '2026-03-01 10:00+00', '2026-03-01 10:00+00'),
+  (106, 3,    'send_message',  'web',     '2026-03-01 22:00+00', '2026-03-01 22:00+00'),
+  (107, 5,    'view_feed',     'web',     '2026-03-01 11:00+00', '2026-03-01 11:00+00'),
+  (108, NULL, 'view_feed',     'web',     '2026-03-01 12:00+00', '2026-03-01 12:00+00'),
+  (109, 4,    'push_received', 'ios',     '2026-03-01 13:00+00', '2026-03-01 13:00+00'),
+  -- 2 March: a duplicated retry (111/112) and an event 10 minutes before midnight UTC
+  (110, 1,    'view_feed',     'ios',     '2026-03-02 07:00+00', '2026-03-02 07:00+00'),
+  (111, 2,    'search',        'ios',     '2026-03-02 09:30+00', '2026-03-02 09:30+00'),
+  (112, 2,    'search',        'ios',     '2026-03-02 09:30+00', '2026-03-02 09:31+00'),
+  (113, 2,    'view_feed',     'ios',     '2026-03-02 09:35+00', '2026-03-02 09:35+00'),
+  (114, 6,    'view_feed',     'web',     '2026-03-02 23:50+00', '2026-03-02 23:51+00'),
+  (115, 4,    'send_message',  'android', '2026-03-02 12:00+00', '2026-03-02 12:00+00'),
+  (116, 4,    'view_feed',     'android', '2026-03-02 12:01+00', '2026-03-02 12:01+00'),
+  -- 3 March: only the test account is active
+  (117, 5,    'view_feed',     'web',     '2026-03-03 10:00+00', '2026-03-03 10:00+00'),
+  -- 4 March: a late event that arrived the next day
+  (118, 1,    'view_feed',     'web',     '2026-03-04 01:00+00', '2026-03-04 01:00+00'),
+  (119, 3,    'search',        'android', '2026-03-04 15:00+00', '2026-03-04 15:00+00'),
+  (120, 3,    'view_feed',     'android', '2026-03-04 15:01+00', '2026-03-04 15:01+00'),
+  (121, 2,    'view_feed',     'ios',     '2026-03-04 23:59+00', '2026-03-05 02:00+00');
+```
+
+Before running anything, work out the answer by hand: 1 March has users 1, 2 and 3 (user 5 is a test account, row 108 is anonymous, user 4 only received a push), so DAU is 3. 2 March has users 1, 2, 4 and 6, so 4. 3 March has nobody real, so 0. 4 March has users 1, 3 and 2 (the late event), so 3.
+
+## Core solution
+
+Filter first, convert the timestamp to the UTC date, then count distinct users per date.
+
+```sql
+SELECT (e.event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+       COUNT(DISTINCT e.user_id)             AS dau
+FROM events e
+JOIN users u ON u.user_id = e.user_id
+WHERE e.event_type <> 'push_received'
+  AND NOT u.is_test
+GROUP BY activity_date
+ORDER BY activity_date;
+```
+
+| activity_date | dau |
+|---|---|
+| 2026-03-01 | 3 |
+| 2026-03-02 | 4 |
+| 2026-03-04 | 3 |
+
+The inner join to `users` drops the anonymous row (a `NULL` key never matches) and lets you exclude test accounts. `AT TIME ZONE 'UTC'` makes the day boundary explicit instead of depending on the session's `TimeZone` setting; to report in another zone you change only that literal. Two things are still wrong for a dashboard: 3 March is missing because no group exists for it, and the query is not yet fast on a large table. The next sections fix both.
+
+## Approach: recursive CTE for a complete calendar
+
+**Why it matters.** `GROUP BY` can only return dates that have rows. A chart that skips 3 March draws a straight line from 4 to 3 and hides the outage. You need a row for every date in the range, then a `LEFT JOIN` to the activity.
+
+**How it works.** A recursive CTE has an anchor member (the first date) and a recursive member that adds one day until a stop condition. PostgreSQL evaluates it iteratively: each pass feeds only the rows produced by the previous pass back into the recursive member, and it stops when a pass produces no rows.
+
+```sql
+WITH RECURSIVE calendar AS (
+  SELECT DATE '2026-03-01' AS activity_date
+  UNION ALL
+  SELECT activity_date + 1
+  FROM calendar
+  WHERE activity_date < DATE '2026-03-04'
+),
+daily AS (
+  SELECT (e.event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+         COUNT(DISTINCT e.user_id)             AS dau
+  FROM events e
+  JOIN users u ON u.user_id = e.user_id
+  WHERE e.event_type <> 'push_received' AND NOT u.is_test
+  GROUP BY 1
+)
+SELECT c.activity_date, COALESCE(d.dau, 0) AS dau
+FROM calendar c
+LEFT JOIN daily d USING (activity_date)
+ORDER BY c.activity_date;
+```
+
+| activity_date | dau |
+|---|---|
+| 2026-03-01 | 3 |
+| 2026-03-02 | 4 |
+| 2026-03-03 | 0 |
+| 2026-03-04 | 3 |
+
+**Pitfalls.**
+
+- Forgetting the stop condition gives an infinite loop. Put the bound in the recursive member's `WHERE`, not in the outer query.
+- `COALESCE(d.dau, 0)` is needed: the `LEFT JOIN` produces `NULL` for missing dates, and `NULL` is not the same as zero on a chart or in an average.
+- In PostgreSQL, `generate_series(DATE '2026-03-01', DATE '2026-03-04', INTERVAL '1 day')` is shorter and is what you would use in production. A permanent calendar table is better still, because it can carry holidays and fiscal periods. The recursive form matters in interviews because it works on engines without `generate_series` (SQL Server, older MySQL) and shows you understand recursion.
+
+**In interviews.** "Some days have no data, make sure they show up" is the most common follow-up to DAU. Mention the calendar table first, then write the recursive CTE if asked to do it without one.
+
+## Approach: subqueries in WHERE to exclude accounts
+
+**Why it matters.** Real exclusion lists rarely live as a boolean on `users`. Fraud, internal staff and bots are often kept in a separate table maintained by another team, and the DAU query filters against it with a subquery.
+
+```sql
+CREATE TABLE excluded_accounts (user_id INT, reason TEXT);
+INSERT INTO excluded_accounts VALUES (5, 'test'), (6, 'bot'), (NULL, 'unknown bot fingerprint');
+```
+
+The natural first attempt is `NOT IN`:
+
+```sql
+SELECT (event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+       COUNT(DISTINCT user_id)             AS dau
+FROM events
+WHERE event_type <> 'push_received'
+  AND user_id NOT IN (SELECT user_id FROM excluded_accounts)
+GROUP BY 1
+ORDER BY 1;
+```
+
+| activity_date | dau |
+|---|---|
+
+It returns **no rows at all**. Because `excluded_accounts` contains a `NULL`, `user_id NOT IN (5, 6, NULL)` evaluates to `user_id <> 5 AND user_id <> 6 AND user_id <> NULL`, and the last comparison is unknown for every row, so nothing passes the filter. This is the single most common subquery bug in interviews. Use `NOT EXISTS`, which ignores the `NULL` row because it never matches:
+
+```sql
+SELECT (e.event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+       COUNT(DISTINCT e.user_id)             AS dau
+FROM events e
+WHERE e.event_type <> 'push_received'
+  AND e.user_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM excluded_accounts x WHERE x.user_id = e.user_id)
+GROUP BY 1
+ORDER BY 1;
+```
+
+| activity_date | dau |
+|---|---|
+| 2026-03-01 | 3 |
+| 2026-03-02 | 3 |
+| 2026-03-04 | 3 |
+
+User 6 (now flagged as a bot) disappears from 2 March and user 5 from 3 March. A positive `IN` subquery is safe with `NULL`s and reads well for inclusion filters, for example DAU for US users only:
+
+```sql
+SELECT (event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+       COUNT(DISTINCT user_id)             AS us_dau
+FROM events
+WHERE event_type <> 'push_received'
+  AND user_id IN (SELECT user_id FROM users WHERE country = 'US' AND NOT is_test)
+GROUP BY 1
+ORDER BY 1;
+```
+
+| activity_date | us_dau |
+|---|---|
+| 2026-03-01 | 2 |
+| 2026-03-02 | 2 |
+| 2026-03-04 | 2 |
+
+**In interviews.** Say out loud why you chose `NOT EXISTS` over `NOT IN`. If you must use `NOT IN`, add `WHERE user_id IS NOT NULL` inside the subquery. PostgreSQL also plans `NOT EXISTS` as an anti-join, while `NOT IN` cannot be turned into one because of the `NULL` semantics.
+
+## Approach: percent of total by platform
+
+**Why it matters.** "What share of our daily users are on iOS?" is the next question after DAU. The trap is the denominator.
+
+User 3 used both Android and web on 1 March, so the platform rows add up to 1 + 1 + 2 = 4 while total DAU is 3. Dividing each platform by the sum of platform rows (4) understates every share. The correct denominator is the distinct total for the day, and the shares then add up to more than 100% because the groups overlap.
+
+```sql
+WITH active AS (
+  SELECT DISTINCT (e.event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+         e.user_id, e.platform
+  FROM events e
+  JOIN users u ON u.user_id = e.user_id
+  WHERE e.event_type <> 'push_received' AND NOT u.is_test
+),
+by_platform AS (
+  SELECT activity_date, platform, COUNT(DISTINCT user_id) AS platform_dau
+  FROM active GROUP BY 1, 2
+),
+totals AS (
+  SELECT activity_date, COUNT(DISTINCT user_id) AS dau
+  FROM active GROUP BY 1
+)
+SELECT p.activity_date, p.platform, p.platform_dau, t.dau,
+       ROUND(100.0 * p.platform_dau / t.dau, 1) AS pct_of_dau,
+       ROUND(100.0 * p.platform_dau
+             / SUM(p.platform_dau) OVER (PARTITION BY p.activity_date), 1) AS wrong_pct_of_rows
+FROM by_platform p
+JOIN totals t USING (activity_date)
+ORDER BY p.activity_date, p.platform;
+```
+
+| activity_date | platform | platform_dau | dau | pct_of_dau | wrong_pct_of_rows |
+|---|---|---|---|---|---|
+| 2026-03-01 | android | 1 | 3 | 33.3 | 25.0 |
+| 2026-03-01 | ios | 1 | 3 | 33.3 | 25.0 |
+| 2026-03-01 | web | 2 | 3 | 66.7 | 50.0 |
+| 2026-03-02 | android | 1 | 4 | 25.0 | 25.0 |
+| 2026-03-02 | ios | 2 | 4 | 50.0 | 50.0 |
+| 2026-03-02 | web | 1 | 4 | 25.0 | 25.0 |
+| 2026-03-04 | android | 1 | 3 | 33.3 | 33.3 |
+| 2026-03-04 | ios | 1 | 3 | 33.3 | 33.3 |
+| 2026-03-04 | web | 1 | 3 | 33.3 | 33.3 |
+
+On 1 March the correct shares are 33.3%, 33.3% and 66.7% (two of the three users were on web). `wrong_pct_of_rows` is the common mistake: it uses `SUM() OVER (PARTITION BY ...)`, the textbook percent-of-total pattern, which is correct only when the groups do not overlap (revenue by platform, for example). For distinct-user metrics it silently produces shares that add to exactly 100% and look plausible. On 2 and 4 March nobody switched platform, so both columns agree, which is exactly why the bug survives testing on clean data.
+
+If the business wants shares that add to 100%, assign each user-day to one platform first (for example their most-used platform with `ROW_NUMBER()`), and label the chart "primary platform".
+
+**In interviews.** Ask "can a user be in more than one group?" before writing any percent-of-total query. Use `100.0` (or a cast) so integer division does not round every share to 0.
+
+## Approach: ROLLUP and CUBE for subtotals
+
+**Why it matters.** A dashboard often wants DAU by country, by platform, by both, and the grand total, in one result. Because distinct counts are not additive, you cannot build the subtotals by summing the detailed rows; each level has to be counted again. `ROLLUP` and `CUBE` do exactly that in one pass over the data.
+
+`ROLLUP (a, b)` produces the grouping sets `(a, b)`, `(a)` and `()`. `CUBE (a, b)` produces every combination: `(a, b)`, `(a)`, `(b)` and `()`. `GROUPING(col)` returns 1 when a column has been rolled up in that row, which distinguishes a subtotal from a genuine `NULL` value.
+
+```sql
+SELECT CASE WHEN GROUPING(u.country) = 1  THEN 'ALL' ELSE u.country  END AS country,
+       CASE WHEN GROUPING(e.platform) = 1 THEN 'ALL' ELSE e.platform END AS platform,
+       COUNT(DISTINCT e.user_id) AS dau
+FROM events e
+JOIN users u ON u.user_id = e.user_id
+WHERE e.event_type <> 'push_received' AND NOT u.is_test
+  AND e.event_ts >= TIMESTAMPTZ '2026-03-01 00:00+00'
+  AND e.event_ts <  TIMESTAMPTZ '2026-03-02 00:00+00'
+GROUP BY CUBE (u.country, e.platform)
+ORDER BY GROUPING(u.country), country, GROUPING(e.platform), platform;
+```
+
+| country | platform | dau |
+|---|---|---|
+| IN | web | 1 |
+| IN | ALL | 1 |
+| US | android | 1 |
+| US | ios | 1 |
+| US | web | 1 |
+| US | ALL | 2 |
+| ALL | android | 1 |
+| ALL | ios | 1 |
+| ALL | web | 2 |
+| ALL | ALL | 3 |
+
+Read the `US` rows: the US has 2 daily users (users 2 and 3), but its platform rows add up to 3 because user 3 appears under Android and web. The `ALL / web` row is 2 (users 1 and 3), and the grand total is 3, not the 5 you would get by summing platforms. With `ROLLUP (u.country, e.platform)` instead of `CUBE` you would get the same rows minus the `ALL / <platform>` ones, which suits a strict hierarchy such as country then city.
+
+**Pitfalls.** Without `GROUPING()`, a subtotal row and a real `NULL` country both show `NULL`. Sort explicitly: the order of grouping-set rows is not guaranteed. Precomputing a cube of distinct counts and re-aggregating it later is wrong for the same additivity reason; store the user-level rows or use a mergeable sketch such as HyperLogLog if you need roll-ups downstream.
+
+## Approach: EXCEPT and INTERSECT for day-over-day movement
+
+**Why it matters.** DAU moving from 3 to 4 hides how many users stayed, left and arrived. Set operations answer these directly, because each day's active users are a set.
+
+```sql
+CREATE VIEW daily_active AS
+SELECT DISTINCT (e.event_ts AT TIME ZONE 'UTC')::date AS activity_date, e.user_id
+FROM events e
+JOIN users u ON u.user_id = e.user_id
+WHERE e.event_type <> 'push_received' AND NOT u.is_test;
+```
+
+Users active on both 1 and 2 March (`INTERSECT`), active on the 1st but not the 2nd (`EXCEPT`), and new on the 2nd:
+
+```sql
+SELECT 'retained' AS movement, user_id FROM (
+  SELECT user_id FROM daily_active WHERE activity_date = DATE '2026-03-01'
+  INTERSECT
+  SELECT user_id FROM daily_active WHERE activity_date = DATE '2026-03-02') r
+UNION ALL
+SELECT 'lapsed', user_id FROM (
+  SELECT user_id FROM daily_active WHERE activity_date = DATE '2026-03-01'
+  EXCEPT
+  SELECT user_id FROM daily_active WHERE activity_date = DATE '2026-03-02') l
+UNION ALL
+SELECT 'arrived', user_id FROM (
+  SELECT user_id FROM daily_active WHERE activity_date = DATE '2026-03-02'
+  EXCEPT
+  SELECT user_id FROM daily_active WHERE activity_date = DATE '2026-03-01') a
+ORDER BY movement, user_id;
+```
+
+| movement | user_id |
+|---|---|
+| arrived | 4 |
+| arrived | 6 |
+| lapsed | 3 |
+| retained | 1 |
+| retained | 2 |
+
+Retained (1, 2) plus arrived (4, 6) gives the 4 users of 2 March; retained plus lapsed (3) gives the 3 users of 1 March. That identity is a good self-check to mention.
+
+**Pitfalls.** `INTERSECT` and `EXCEPT` remove duplicates by default; `INTERSECT ALL` and `EXCEPT ALL` keep multiplicities, which you rarely want for user sets. Set operations treat two `NULL`s as equal, unlike `=` in a join, so an anonymous `NULL` user would "match" itself; filter `NULL`s out first. Both sides must have the same number of columns with compatible types. For every day at once, a self-join or `LAG` over each user's activity dates scales better than one set operation per pair of days.
+
+## Approach: market basket co-occurrence of actions
+
+**Why it matters.** Once you know who is active, product teams ask *what they do together*: "Of the users who searched today, how many also viewed the feed?" This is market basket analysis with the user-day as the basket and event types as the items. It tells a team which features are used together, which helps when deciding what to put on the home screen.
+
+Build distinct baskets, self-join each basket to itself with `a.item < b.item` so every pair is counted once, and compare with the single-item counts:
+
+```sql
+WITH baskets AS (
+  SELECT DISTINCT (e.event_ts AT TIME ZONE 'UTC')::date AS activity_date,
+         e.user_id, e.event_type
+  FROM events e
+  JOIN users u ON u.user_id = e.user_id
+  WHERE e.event_type <> 'push_received' AND NOT u.is_test
+),
+n_baskets AS (SELECT COUNT(*) AS n FROM (SELECT DISTINCT activity_date, user_id FROM baskets) s),
+item_counts AS (SELECT event_type, COUNT(*) AS cnt FROM baskets GROUP BY event_type),
+pairs AS (
+  SELECT a.event_type AS item_a, b.event_type AS item_b, COUNT(*) AS together
+  FROM baskets a
+  JOIN baskets b
+    ON a.activity_date = b.activity_date
+   AND a.user_id = b.user_id
+   AND a.event_type < b.event_type
+  GROUP BY 1, 2
+)
+SELECT p.item_a, p.item_b, p.together,
+       ROUND(p.together::numeric / n.n, 2)   AS support,
+       ROUND(p.together::numeric / ia.cnt, 2) AS confidence_a_to_b,
+       ROUND(p.together::numeric / ib.cnt, 2) AS confidence_b_to_a,
+       ROUND(p.together::numeric * n.n / (ia.cnt * ib.cnt), 2) AS lift
+FROM pairs p
+CROSS JOIN n_baskets n
+JOIN item_counts ia ON ia.event_type = p.item_a
+JOIN item_counts ib ON ib.event_type = p.item_b
+ORDER BY p.together DESC, p.item_a, p.item_b;
+```
+
+| item_a | item_b | together | support | confidence_a_to_b | confidence_b_to_a | lift |
+|---|---|---|---|---|---|---|
+| search | view_feed | 3 | 0.30 | 1.00 | 0.30 | 1.00 |
+| send_message | view_feed | 2 | 0.20 | 1.00 | 0.20 | 1.00 |
+| login | view_feed | 1 | 0.10 | 1.00 | 0.10 | 1.00 |
+
+There are 10 user-day baskets, and `view_feed` is in every one of them. That is why every confidence towards `view_feed` is 1.00 and every lift is exactly 1.00: when an item appears in all baskets, "also viewed the feed" carries no information. The reverse direction is more useful: only 3 of the 10 feed viewers also searched (`confidence_b_to_a` 0.30). Lift is the ratio of how often a pair occurs to how often it would occur if the two actions were independent; values above 1 suggest association, values near 1 none. This is the point to make in an interview, together with the caveat that 10 baskets are far too few for any of these numbers to mean anything.
+
+**Pitfalls.** Without the `DISTINCT` in `baskets`, a user who searched three times would contribute three rows and inflate the pair count. The self-join is quadratic in basket size, so cap it to a known item list or sample when baskets are large.
+
+## Approach: query rewriting for performance
+
+**Why it matters.** On a production events table with billions of rows, the core query is correct but can be slow and expensive. Three rewrites matter most: make the date filter sargable, read only the columns you need, and deduplicate early.
+
+To see real plans, load a larger synthetic table: 200,000 events over 60 days for 5,000 users, plus an index on `(event_ts, user_id)`.
+
+```sql
+CREATE TABLE events_big AS
+SELECT g AS event_id,
+       (g * 7919) % 5000 + 1 AS user_id,
+       (ARRAY['login','view_feed','search','send_message','push_received'])[g % 5 + 1] AS event_type,
+       TIMESTAMPTZ '2026-01-01 00:00+00' + (g % 86400) * INTERVAL '1 minute' AS event_ts
+FROM generate_series(1, 200000) AS g;
+
+CREATE INDEX events_big_ts_user ON events_big (event_ts, user_id);
+VACUUM ANALYZE events_big;   -- statistics, plus the visibility map that index-only scans rely on
+```
+
+The slow version wraps the column in a cast, so PostgreSQL cannot use the index range on `event_ts` and must read every row:
+
+```sql
+SET max_parallel_workers_per_gather = 0;   -- keep the plan short for reading
+EXPLAIN (COSTS OFF)
+SELECT COUNT(DISTINCT user_id)
+FROM events_big
+WHERE event_ts::date = DATE '2026-02-10';
+```
+
+```text
+Aggregate
+  ->  Sort
+        Sort Key: user_id
+        ->  Seq Scan on events_big
+              Filter: ((event_ts)::date = '2026-02-10'::date)
+```
+
+The rewrite compares the raw column with a half-open range. That predicate is sargable (it can drive an index search), and because both filtered and selected columns are in the index, PostgreSQL answers from the index alone:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF)
+SELECT COUNT(DISTINCT user_id)
+FROM events_big
+WHERE event_ts >= TIMESTAMPTZ '2026-02-10 00:00+00'
+  AND event_ts <  TIMESTAMPTZ '2026-02-11 00:00+00';
+```
+
+```text
+Aggregate
+  ->  Sort
+        Sort Key: user_id
+        ->  Index Only Scan using events_big_ts_user on events_big
+              Index Cond: ((event_ts >= '2026-02-10 00:00:00+00'::timestamp with time zone) AND (event_ts < '2026-02-11 00:00:00+00'::timestamp with time zone))
+```
+
+Both return the same count, which you should always check after a rewrite:
+
+```sql
+SELECT (SELECT COUNT(DISTINCT user_id) FROM events_big
+        WHERE event_ts::date = DATE '2026-02-10') AS cast_version,
+       (SELECT COUNT(DISTINCT user_id) FROM events_big
+        WHERE event_ts >= TIMESTAMPTZ '2026-02-10 00:00+00'
+          AND event_ts <  TIMESTAMPTZ '2026-02-11 00:00+00') AS range_version;
+```
+
+| cast_version | range_version |
+|---|---|
+| 2840 | 2840 |
+
+Other rewrites worth naming:
+
+- **`BETWEEN` on timestamps** includes the upper bound, so `BETWEEN '2026-02-10' AND '2026-02-11'` counts midnight of the next day. Use `>=` and `<`.
+- **Pre-aggregate once.** For a 90-day chart, build a `daily_active` table of distinct `(activity_date, user_id)` incrementally and count from it, rather than re-scanning raw events. WAU and MAU then become distinct counts over that much smaller table.
+- **Avoid `COUNT(DISTINCT)` over windows.** PostgreSQL rejects `COUNT(DISTINCT ...) OVER (...)`. For a rolling 7-day active-user count, join the calendar to the distinct user-day table on a date range, then count distinct.
+- **Approximate when allowed.** Warehouses offer HyperLogLog functions (`APPROX_COUNT_DISTINCT` and similar) that trade a small, bounded error for far less memory.
+
+## Approach: isolation levels for a consistent DAU report
+
+**Why it matters.** DAU reports are usually computed while events are still being loaded. The core query is one statement, and in PostgreSQL every statement sees one consistent snapshot even at the default `READ COMMITTED` level, so the single number is safe. The problem appears when a report runs **several** statements, for example the total DAU, then the platform breakdown, then the percent of total. Under `READ COMMITTED` each statement takes a new snapshot, so a load that commits between them makes the breakdown disagree with the total.
+
+The timeline below needs two sessions, so it is shown rather than executed:
+
+{/* noexec */}
+```sql
+-- Session A: the report, default READ COMMITTED
+BEGIN;
+SELECT COUNT(DISTINCT user_id) FROM events WHERE ...;          -- DAU = 4
+
+        -- Session B: the loader commits a late batch for the same day
+        BEGIN; INSERT INTO events VALUES (...); COMMIT;
+
+SELECT platform, COUNT(DISTINCT user_id) FROM events WHERE ... GROUP BY platform;
+-- sees the new rows: platform figures no longer reconcile with DAU = 4
+COMMIT;
+```
+
+Run the report in one `REPEATABLE READ` transaction instead. Every statement then uses the snapshot taken at the first query, so the numbers agree with each other, as of one moment:
+
+```sql
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT current_setting('transaction_isolation') AS isolation,
+       COUNT(DISTINCT e.user_id) AS dau_2026_03_02
+FROM events e JOIN users u USING (user_id)
+WHERE e.event_type <> 'push_received' AND NOT u.is_test
+  AND e.event_ts >= TIMESTAMPTZ '2026-03-02 00:00+00'
+  AND e.event_ts <  TIMESTAMPTZ '2026-03-03 00:00+00';
+COMMIT;
+```
+
+| isolation | dau_2026_03_02 |
+|---|---|
+| repeatable read | 4 |
+
+What each level means for this report in PostgreSQL:
+
+| Level | What the report sees | Use for DAU |
+|---|---|---|
+| `READ UNCOMMITTED` | Treated as `READ COMMITTED` in PostgreSQL; never dirty reads | Same as below |
+| `READ COMMITTED` (default) | A fresh snapshot per statement | Fine for one statement; multi-statement reports can disagree |
+| `REPEATABLE READ` | One snapshot for the whole transaction | Consistent multi-query reports; read-only reports never fail |
+| `SERIALIZABLE` | Snapshot plus checks that the result matches some serial order | Rarely needed for reads; `SERIALIZABLE READ ONLY DEFERRABLE` waits for a safe snapshot and then cannot fail |
+
+**Pitfalls.** Isolation does not fix late data: a consistent snapshot taken at 01:00 still misses an event that arrives at 02:00. Handle that by re-computing trailing days or by cutting off on `ingested_at`. Long-running snapshot transactions also hold back vacuum cleanup of old row versions, so keep report transactions short. In warehouses such as Snowflake or BigQuery, each query already reads a consistent snapshot of the tables, and the multi-statement problem is usually solved by writing all report tables from one staged dataset.
+
+**In interviews.** Interviewers use this to check whether you know that isolation is about *concurrent* transactions. A strong answer: "A single `SELECT` is consistent; for several related queries I'd use one repeatable-read transaction, and late events are a separate, data-freshness problem."
+
+## Interview tips
+
+**How it is asked.** "Write a query for daily active users", "DAU for the last 30 days including days with zero", "DAU by platform and the share of each", "users active yesterday but not today", or "the DAU query takes 20 minutes, fix it". Some interviewers give only the events table and expect you to ask about test accounts and time zones.
+
+**What a strong answer includes.**
+
+1. A stated definition: active action, real users, reporting time zone, distinct per day.
+2. `COUNT(DISTINCT user_id)` on filtered rows, with the date conversion made explicit.
+3. A calendar join so empty days appear as 0.
+4. The non-additivity point: breakdowns cannot be summed back to the total, and percent of total needs the distinct total as denominator.
+5. A performance plan: sargable time filter, index or partition on event time, pre-aggregated user-day table.
+
+**Mistakes candidates make.**
+
+- `COUNT(user_id)` or `COUNT(*)` instead of `COUNT(DISTINCT user_id)`, counting events rather than people.
+- Grouping by `event_ts::date` without saying which time zone that uses.
+- `NOT IN` against an exclusion list that contains `NULL`.
+- Summing platform DAU to get total DAU, or summing DAU over a week to get WAU.
+- Dropping empty days, which makes averages over the period too high.
+- Filtering the right-hand table of a `LEFT JOIN` in `WHERE`, which turns it into an inner join and removes zero days again.

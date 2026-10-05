@@ -1,0 +1,98 @@
+{
+  "Recursive CTEs → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: recursive CTE for a complete calendar"
+  },
+  "Subqueries in WHERE → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: subqueries in WHERE to exclude accounts"
+  },
+  "Isolation levels (ACID) → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: isolation levels for a consistent DAU report"
+  },
+  "EXCEPT / INTERSECT set operations → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: EXCEPT and INTERSECT for day-over-day movement"
+  },
+  "Percent of total → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: percent of total by platform"
+  },
+  "Query rewriting for performance → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: query rewriting for performance"
+  },
+  "Market basket / co-occurrence → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: market basket co-occurrence of actions"
+  },
+  "ROLLUP and CUBE → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: ROLLUP and CUBE for subtotals"
+  },
+  "Query optimization & cost reduction → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: query optimisation and cost reduction"
+  },
+  "Funnel / conversion analysis → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: funnel from bookings to net revenue"
+  },
+  "PIVOT rows to columns → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: PIVOT rows to columns"
+  },
+  "Sharding & distributed SQL → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: sharding and distributed SQL"
+  },
+  "Graph traversal in SQL → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: graph traversal for referral revenue"
+  },
+  "Multi-table joins → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: multi-table joins without fan-out"
+  },
+  "Window function performance tuning → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: window function performance tuning"
+  },
+  "JSON parsing in SQL → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: JSON parsing for channel and coupon revenue"
+  },
+  "RIGHT JOIN & FULL OUTER JOIN → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: RIGHT JOIN and FULL OUTER JOIN to reconcile customers and orders"
+  },
+  "Materialized views → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: materialised views for a fast CLV table"
+  },
+  "First & last touch attribution → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: first-touch and last-touch attribution of CLV"
+  },
+  "RANK() vs DENSE_RANK() → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: RANK() vs DENSE_RANK() for tied customers"
+  },
+  "Index design (B-tree, composite) → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: index design for per-customer CLV lookups"
+  },
+  "Top-N per group → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: top-N customers per country"
+  },
+  "Common Table Expressions (CTEs) → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: common table expressions as a CLV pipeline"
+  },
+  "Spilling & memory management → Customer Lifetime Value": {
+    "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
+    "heading": "Approach: spilling and memory management"
+  }
+}
