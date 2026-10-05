@@ -1,7 +1,7 @@
 ---
 title: "SQL Functions: Strings, Dates, Type Casting and Arithmetic"
 seoTitle: "SQL Functions: Strings, Dates, CAST, Arithmetic"
-description: "Clean and convert data in SQL: string functions, date arithmetic, CAST and safe casting, integer division and rounding, with PostgreSQL, MySQL, SQL Server and Snowflake names."
+description: "Clean and convert data in SQL: string functions, date arithmetic, CAST and safe casting, integer division and rounding, with names for each major SQL dialect."
 technology: ["sql"]
 topic: ["functions", "strings", "dates", "casting", "data-cleaning"]
 difficulty: "Beginner"
@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/operators-nulls-case"]
 related: ["articles:sql/sql-fundamentals", "cheat-sheets:sql-data-engineering"]
 previous: "articles:sql/operators-nulls-case"
+next: "articles:sql/aggregations-group-by-having"
 sources:
   - { label: "PostgreSQL documentation: String functions and operators", url: "https://www.postgresql.org/docs/16/functions-string.html" }
   - { label: "PostgreSQL documentation: Date/time functions and operators", url: "https://www.postgresql.org/docs/16/functions-datetime.html" }

@@ -50,5 +50,25 @@
   "Arithmetic & rounding": {
     "ref": "articles:sql/functions-strings-dates-types",
     "heading": "Arithmetic and rounding"
+  },
+  "Aggregate functions (SUM, AVG, MIN, MAX)": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "Aggregate functions: SUM, AVG, MIN and MAX"
+  },
+  "COUNT vs COUNT(DISTINCT)": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "COUNT, COUNT(column) and COUNT(DISTINCT)"
+  },
+  "GROUP BY fundamentals": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "GROUP BY fundamentals"
+  },
+  "HAVING vs WHERE": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "HAVING versus WHERE"
+  },
+  "Conditional aggregation": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "Conditional aggregation"
   }
 }
