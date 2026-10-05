@@ -8,7 +8,7 @@ keyFacts: ["Most DE coding rounds are easy to medium: arrays, hashing, strings, 
 whatToLearnFirst: ["articles:dsa/dsa-for-data-engineers"]
 relatedTechnologies: ["python", "sql"]
 monogram: "DSA"
-lessons: ["articles:dsa/dsa-for-data-engineers", "articles:dsa/arrays-and-hashing", "articles:dsa/strings", "articles:dsa/two-pointers", "articles:dsa/sliding-window", "articles:dsa/stacks", "articles:dsa/queues", "articles:dsa/binary-search", "articles:dsa/linked-lists", "articles:dsa/binary-trees", "articles:dsa/binary-search-trees", "articles:dsa/heaps-priority-queues"]
+lessons: ["articles:dsa/dsa-for-data-engineers", "articles:dsa/arrays-and-hashing", "articles:dsa/strings", "articles:dsa/two-pointers", "articles:dsa/sliding-window", "articles:dsa/stacks", "articles:dsa/queues", "articles:dsa/binary-search", "articles:dsa/linked-lists", "articles:dsa/binary-trees", "articles:dsa/binary-search-trees", "articles:dsa/heaps-priority-queues", "articles:dsa/backtracking"]
 updatedDate: 2026-10-05
 ---
 
