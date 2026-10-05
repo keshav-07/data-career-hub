@@ -69,6 +69,7 @@ related:
   - "articles:etl-elt/data-quality-checks-contracts"
   - "interview-questions:data-engineering/data-quality-checks"
 previous: "system-designs:feature-store"
+next: "system-designs:elt-pipeline-with-dbt"
 versionContext: "The additivity example was run on PostgreSQL 16. Semantic-layer configuration is described, not executed."
 sources:
   - { label: "dbt Labs: open-source MetricFlow announcement", url: "https://www.getdbt.com/blog/open-source-metricflow-governed-metrics" }
