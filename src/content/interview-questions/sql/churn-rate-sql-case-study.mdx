@@ -1,0 +1,681 @@
+---
+seoTitle: "Churn Rate SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Churn Rate: SQL Case Study with 8 Approaches"
+description: "Calculate monthly churn rate in SQL with reactivations, account hierarchies and plan history, then use LATERAL, windows, CUME_DIST, indexes and MVCC in practice."
+technology: ["sql"]
+topic: ["case-study", "subscriptions", "window-functions"]
+difficulty: "Hard"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Monthly churn rate is the number of customers active at the start of a month who are no longer active at the start of the next month, divided by the customers active at the start of the month. Customers who join during the month are not in the denominator. Test 'active' at both boundaries rather than looking for any end date in the month, so a customer who cancels and resubscribes within the month is not counted as churned. Roll child accounts up to the paying customer when the business counts churn per customer."
+followUps:
+  - "Why are customers acquired during the month excluded from the denominator?"
+  - "A customer cancelled and resubscribed in the same month. Did they churn?"
+  - "How does churn change when you count enterprise customers instead of their sub-accounts?"
+  - "How do you report churn by the plan the customer was on at the time, not their current plan?"
+  - "What share of churned customers left within their first 90 days?"
+  - "The churn report runs while cancellations are being written. What does the database guarantee?"
+prerequisites: ["articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables"]
+related: ["interview-questions:sql/customer-lifetime-value-sql-case-study", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/customer-lifetime-value-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine. The two-session MVCC timeline is shown but not executed."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Table expressions (LATERAL subqueries)", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
+  - { label: "PostgreSQL 16 documentation: WITH queries (recursive)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: MVCC introduction", url: "https://www.postgresql.org/docs/16/mvcc-intro.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: Indexes", url: "https://www.postgresql.org/docs/16/indexes.html" }
+---
+
+Churn rate is the headline health metric of every subscription business, and a favourite interview question because the naive query is wrong in several quiet ways: it puts new customers in the denominator, counts a cancel-and-resubscribe as churn, and reports churn by today's plan instead of the plan the customer actually left. This case study fixes each of those on a small dataset, then covers eight techniques interviewers pair with churn.
+
+## The business question
+
+**"What percentage of our customers did we lose each month?"** Finance uses churn to project recurring revenue, product teams use it to judge pricing and onboarding changes, and investors compare it between companies. Churn compounds: losing a few percent of customers every month removes a large share of the base within a year, so small errors in the definition matter.
+
+The definition used here is **logo (customer-count) churn**, measured monthly:
+
+- A subscription row covers `[start_date, end_date)`. `end_date` is the first day *without* service, and `NULL` means still active.
+- A customer is **active on date d** if any of their subscriptions has `start_date <= d` and (`end_date IS NULL` or `end_date > d`).
+- **Denominator**: customers active on the first day of the month.
+- **Numerator**: those customers who are *not* active on the first day of the next month.
+- Customers who start during the month are not in the denominator, so a customer who joins and leaves within one month affects neither number (track them as "early churn" separately).
+- A customer who cancels and resubscribes within the month is active at both boundaries, so they did not churn.
+- **Customer level**: some customers are enterprises with several sub-accounts. The business counts churn per paying customer (the top of the account tree), which is only lost when all its sub-accounts are gone.
+
+Revenue churn (lost monthly recurring revenue divided by starting recurring revenue) uses the same boundaries with amounts instead of counts.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE accounts (
+  account_id        INT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  parent_account_id INT REFERENCES accounts   -- NULL for a top-level customer
+);
+
+CREATE TABLE subscriptions (
+  sub_id     INT PRIMARY KEY,
+  account_id INT NOT NULL REFERENCES accounts,
+  start_date DATE NOT NULL,
+  end_date   DATE                               -- exclusive; NULL = still active
+);
+
+CREATE TABLE account_plans (                    -- slowly changing dimension, type 2
+  account_id INT NOT NULL REFERENCES accounts,
+  plan       TEXT NOT NULL,
+  valid_from DATE NOT NULL,
+  valid_to   DATE                               -- exclusive; NULL = current row
+);
+
+INSERT INTO accounts VALUES
+  (1, 'Avo Bakery', NULL), (2, 'Bolt Bikes', NULL), (3, 'Cleo Cafe', NULL),
+  (4, 'Dune Design', NULL), (5, 'Echo Audio', NULL), (6, 'Fern Florist', NULL),
+  (7, 'Gala Gym', NULL),
+  (100, 'Acme Group', NULL), (101, 'Acme UK', 100), (102, 'Acme US', 100), (103, 'Acme US West', 102),
+  (200, 'Globex', NULL), (201, 'Globex EU', 200);
+
+INSERT INTO subscriptions VALUES
+  (1,  1,   '2025-10-01', '2026-01-15'),
+  (2,  2,   '2025-11-10', NULL),
+  (3,  3,   '2025-12-01', '2026-02-01'),   -- last day of service is 31 January
+  (4,  4,   '2026-01-20', '2026-01-28'),   -- joined and left within January
+  (5,  5,   '2025-09-01', '2026-02-10'),
+  (6,  5,   '2026-03-05', NULL),           -- Echo comes back in March
+  (7,  6,   '2025-12-15', '2026-03-20'),
+  (8,  7,   '2025-12-01', '2026-03-10'),
+  (9,  7,   '2026-03-25', NULL),           -- Gala pauses within March
+  (10, 101, '2025-06-01', '2026-02-15'),
+  (11, 102, '2025-06-01', NULL),
+  (12, 103, '2025-08-01', '2026-03-01'),
+  (13, 201, '2025-07-01', '2026-03-31');
+
+INSERT INTO account_plans VALUES
+  (1, 'basic', '2025-10-01', NULL),
+  (2, 'basic', '2025-11-10', '2026-02-01'), (2, 'pro', '2026-02-01', NULL),
+  (3, 'pro',   '2025-12-01', NULL),
+  (4, 'basic', '2026-01-20', NULL),
+  (5, 'pro',   '2025-09-01', NULL),
+  (6, 'pro',   '2025-12-15', '2026-03-01'), (6, 'basic', '2026-03-01', NULL),   -- downgraded, then left
+  (7, 'basic', '2025-12-01', NULL),
+  (101, 'enterprise', '2025-06-01', NULL), (102, 'enterprise', '2025-06-01', NULL),
+  (103, 'enterprise', '2025-08-01', NULL), (201, 'enterprise', '2025-07-01', NULL);
+```
+
+By hand, at account level: on 1 January ten accounts are active (Dune has not started yet); Avo and Cleo are gone by 1 February, so January churn is 2/10. February starts with 8; Echo, Acme UK and Acme US West are gone by 1 March: 3/8. March starts with 5; Fern and Globex EU leave, while Gala's pause does not count: 2/5. April starts with 4 and loses nobody.
+
+## Core solution
+
+Generate the month boundaries, test activity at both ends for each account, and count.
+
+```sql
+WITH months AS (
+  SELECT m::date AS month_start, (m + INTERVAL '1 month')::date AS next_month_start
+  FROM generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month') AS m
+),
+status AS (
+  SELECT mo.month_start, a.account_id,
+         bool_or(s.start_date <= mo.month_start
+                 AND (s.end_date IS NULL OR s.end_date > mo.month_start))      AS active_at_start,
+         bool_or(s.start_date <= mo.next_month_start
+                 AND (s.end_date IS NULL OR s.end_date > mo.next_month_start)) AS active_at_end
+  FROM months mo
+  CROSS JOIN accounts a
+  JOIN subscriptions s ON s.account_id = a.account_id
+  GROUP BY mo.month_start, a.account_id
+)
+SELECT month_start,
+       COUNT(*) FILTER (WHERE active_at_start)                      AS starting_customers,
+       COUNT(*) FILTER (WHERE active_at_start AND NOT active_at_end) AS churned,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE active_at_start AND NOT active_at_end)
+             / NULLIF(COUNT(*) FILTER (WHERE active_at_start), 0), 1) AS churn_pct
+FROM status
+GROUP BY month_start
+ORDER BY month_start;
+```
+
+| month_start | starting_customers | churned | churn_pct |
+|---|---|---|---|
+| 2026-01-01 | 10 | 2 | 20.0 |
+| 2026-02-01 | 8 | 3 | 37.5 |
+| 2026-03-01 | 5 | 2 | 40.0 |
+| 2026-04-01 | 4 | 0 | 0.0 |
+
+`bool_or` asks "is any of this account's subscriptions active at that date", which is what makes Echo's and Gala's second subscriptions work. Dune (joined and left in January) never appears in a denominator. `NULLIF` protects against a month with no starting customers.
+
+The naive alternative, "subscriptions with an `end_date` in the month divided by subscriptions at the start", counts Gala's March pause as churn and puts Dune in January's numerator. Ask about reactivations before writing anything.
+
+## Approach: subqueries in FROM (derived tables)
+
+**Why it matters.** The churn rate is a ratio of two counts with different populations. Computing each count in its own derived table (a subquery in `FROM` with an alias) keeps them independent, and you join the results on the month. It is also how you write the query on an engine or in a codebase that avoids CTEs.
+
+```sql
+SELECT base.month_start,
+       base.starting_customers,
+       COALESCE(lost.churned, 0) AS churned,
+       ROUND(100.0 * COALESCE(lost.churned, 0) / base.starting_customers, 1) AS churn_pct
+FROM (
+  SELECT m.month_start, COUNT(DISTINCT s.account_id) AS starting_customers
+  FROM (SELECT generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month')::date AS month_start) m
+  JOIN subscriptions s
+    ON s.start_date <= m.month_start AND (s.end_date IS NULL OR s.end_date > m.month_start)
+  GROUP BY m.month_start
+) AS base
+LEFT JOIN (
+  SELECT m.month_start, COUNT(DISTINCT s.account_id) AS churned
+  FROM (SELECT generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month')::date AS month_start) m
+  JOIN subscriptions s
+    ON s.start_date <= m.month_start AND (s.end_date IS NULL OR s.end_date > m.month_start)
+  WHERE NOT EXISTS (                           -- not active on the first day of next month
+    SELECT 1 FROM subscriptions s2
+    WHERE s2.account_id = s.account_id
+      AND s2.start_date <= (m.month_start + INTERVAL '1 month')::date
+      AND (s2.end_date IS NULL OR s2.end_date > (m.month_start + INTERVAL '1 month')::date))
+  GROUP BY m.month_start
+) AS lost ON lost.month_start = base.month_start
+ORDER BY base.month_start;
+```
+
+| month_start | starting_customers | churned | churn_pct |
+|---|---|---|---|
+| 2026-01-01 | 10 | 2 | 20.0 |
+| 2026-02-01 | 8 | 3 | 37.5 |
+| 2026-03-01 | 5 | 2 | 40.0 |
+| 2026-04-01 | 4 | 0 | 0.0 |
+
+The `LEFT JOIN` and `COALESCE` matter: April has no churned customers, so the `lost` derived table has no April row, and an inner join would drop the month. Every derived table needs an alias in PostgreSQL. A derived table cannot refer to other tables in the same `FROM` list unless it is marked `LATERAL`, which is the next section.
+
+**In interviews.** Derived tables and CTEs usually produce the same plan in PostgreSQL; the choice is readability. Say that you compute numerator and denominator separately because they come from different populations.
+
+## Approach: LATERAL joins for per-row lookups
+
+**Why it matters.** Some churn questions need "for each X, look up the matching Y", where the lookup depends on X: for each month, count that month's customers; for each churned customer, find the plan they were on when they left. A `LATERAL` subquery can reference columns of tables earlier in the `FROM` clause and is evaluated once per row. SQL Server spells the same idea `CROSS APPLY` (inner) and `OUTER APPLY` (keeps rows with no match, like `LEFT JOIN LATERAL ... ON true`).
+
+Churn per month with a `LATERAL` subquery per month row:
+
+```sql
+SELECT m.month_start, c.starting_customers, c.churned,
+       ROUND(100.0 * c.churned / NULLIF(c.starting_customers, 0), 1) AS churn_pct
+FROM generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month') AS g(m)
+CROSS JOIN LATERAL (SELECT g.m::date AS month_start, (g.m + INTERVAL '1 month')::date AS next_start) m
+CROSS JOIN LATERAL (
+  SELECT COUNT(*) FILTER (WHERE at_start)                   AS starting_customers,
+         COUNT(*) FILTER (WHERE at_start AND NOT at_end)    AS churned
+  FROM (
+    SELECT bool_or(s.start_date <= m.month_start AND (s.end_date IS NULL OR s.end_date > m.month_start)) AS at_start,
+           bool_or(s.start_date <= m.next_start  AND (s.end_date IS NULL OR s.end_date > m.next_start))  AS at_end
+    FROM subscriptions s
+    GROUP BY s.account_id
+  ) per_account
+) c
+ORDER BY m.month_start;
+```
+
+| month_start | starting_customers | churned | churn_pct |
+|---|---|---|---|
+| 2026-01-01 | 10 | 2 | 20.0 |
+| 2026-02-01 | 8 | 3 | 37.5 |
+| 2026-03-01 | 5 | 2 | 40.0 |
+| 2026-04-01 | 4 | 0 | 0.0 |
+
+The more typical use is a top-1 lookup per row. For each churned subscription, find the plan in force on the last day of service:
+
+```sql
+SELECT s.account_id, a.name, s.end_date, last_plan.plan AS plan_at_churn
+FROM subscriptions s
+JOIN accounts a ON a.account_id = s.account_id
+LEFT JOIN LATERAL (
+  SELECT p.plan
+  FROM account_plans p
+  WHERE p.account_id = s.account_id
+    AND p.valid_from < s.end_date
+  ORDER BY p.valid_from DESC
+  LIMIT 1
+) last_plan ON true
+WHERE s.end_date IS NOT NULL
+ORDER BY s.end_date, s.account_id;
+```
+
+| account_id | name | end_date | plan_at_churn |
+|---|---|---|---|
+| 1 | Avo Bakery | 2026-01-15 | basic |
+| 4 | Dune Design | 2026-01-28 | basic |
+| 3 | Cleo Cafe | 2026-02-01 | pro |
+| 5 | Echo Audio | 2026-02-10 | pro |
+| 101 | Acme UK | 2026-02-15 | enterprise |
+| 103 | Acme US West | 2026-03-01 | enterprise |
+| 7 | Gala Gym | 2026-03-10 | basic |
+| 6 | Fern Florist | 2026-03-20 | basic |
+| 201 | Globex EU | 2026-03-31 | enterprise |
+
+Fern Florist left on the basic plan after downgrading from pro on 1 March: a downgrade followed by cancellation is a classic churn signal that a "plan at the start of the month" report would hide. `LEFT JOIN LATERAL ... ON true` keeps a subscription even if no plan row exists. With an index on `account_plans (account_id, valid_from)`, each lookup is a short index probe, which makes `LATERAL ... LIMIT 1` one of the fastest ways to do top-1-per-row on PostgreSQL.
+
+## Approach: slowly changing dimension queries for churn by plan
+
+**Why it matters.** Product wants churn by plan. `account_plans` is a type 2 slowly changing dimension: when a customer changes plan, the old row is closed (`valid_to` set) and a new row opened, so history is preserved. The bug to avoid is joining to the *current* row, which assigns past churn to today's plan.
+
+The point-in-time join picks the row whose validity range contains the month start:
+
+```sql
+WITH months AS (
+  SELECT m::date AS month_start, (m + INTERVAL '1 month')::date AS next_start
+  FROM generate_series(DATE '2026-01-01', DATE '2026-03-01', INTERVAL '1 month') AS m
+),
+status AS (
+  SELECT mo.month_start, s.account_id,
+         bool_or(s.start_date <= mo.month_start AND (s.end_date IS NULL OR s.end_date > mo.month_start)) AS at_start,
+         bool_or(s.start_date <= mo.next_start  AND (s.end_date IS NULL OR s.end_date > mo.next_start))  AS at_end
+  FROM months mo CROSS JOIN subscriptions s
+  GROUP BY mo.month_start, s.account_id
+)
+SELECT st.month_start,
+       p.plan                                             AS plan_at_month_start,
+       COUNT(*)                                           AS starting_customers,
+       COUNT(*) FILTER (WHERE NOT st.at_end)              AS churned,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE NOT st.at_end) / COUNT(*), 1) AS churn_pct
+FROM status st
+JOIN account_plans p
+  ON p.account_id = st.account_id
+ AND p.valid_from <= st.month_start
+ AND (p.valid_to IS NULL OR p.valid_to > st.month_start)
+WHERE st.at_start
+GROUP BY st.month_start, p.plan
+ORDER BY st.month_start, p.plan;
+```
+
+| month_start | plan_at_month_start | starting_customers | churned | churn_pct |
+|---|---|---|---|---|
+| 2026-01-01 | basic | 3 | 1 | 33.3 |
+| 2026-01-01 | enterprise | 4 | 0 | 0.0 |
+| 2026-01-01 | pro | 3 | 1 | 33.3 |
+| 2026-02-01 | basic | 1 | 0 | 0.0 |
+| 2026-02-01 | enterprise | 4 | 2 | 50.0 |
+| 2026-02-01 | pro | 3 | 1 | 33.3 |
+| 2026-03-01 | basic | 2 | 1 | 50.0 |
+| 2026-03-01 | enterprise | 2 | 1 | 50.0 |
+| 2026-03-01 | pro | 1 | 0 | 0.0 |
+
+Bolt Bikes counts as basic in January and pro from February. Fern counts as basic in March, because her downgrade took effect on 1 March, so March's basic churn includes her. Compare with the wrong join to the current row:
+
+```sql
+SELECT p.plan AS current_plan, COUNT(*) AS churned_subscriptions
+FROM subscriptions s
+JOIN account_plans p ON p.account_id = s.account_id AND p.valid_to IS NULL
+WHERE s.end_date IS NOT NULL
+GROUP BY p.plan
+ORDER BY p.plan;
+```
+
+| current_plan | churned_subscriptions |
+|---|---|
+| basic | 4 |
+| enterprise | 3 |
+| pro | 2 |
+
+This version files every past subscription end under today's plan. Bolt's January period on basic disappears from basic, and it also counts subscription ends rather than churned customers, so Dune's same-month exit and Gala's pause are both in it. It looks plausible and is wrong on both axes.
+
+**Pitfalls.** Use one convention for range ends everywhere (here: `valid_from` inclusive, `valid_to` exclusive) or a customer on the change date matches two rows or none. Check for overlapping or gapped history with a self-join or `LEAD(valid_from)` before trusting point-in-time joins. Type 1 dimensions (overwrite in place) cannot answer "plan at the time" at all, which is the best argument for type 2 on attributes that drive segmentation.
+
+## Approach: hierarchical queries for customer-level churn
+
+**Why it matters.** Acme Group has three sub-accounts in a tree (Acme US West reports into Acme US, which reports into Acme Group). Account-level churn says Acme lost two accounts in February; finance says Acme is still a customer. To count churn per paying customer you walk each account up to its root, the same recursive pattern used for org charts.
+
+```sql
+WITH RECURSIVE tree AS (
+  SELECT account_id, account_id AS root_id, name AS root_name, 0 AS depth,
+         name::text AS path
+  FROM accounts
+  WHERE parent_account_id IS NULL
+  UNION ALL
+  SELECT a.account_id, t.root_id, t.root_name, t.depth + 1,
+         t.path || ' > ' || a.name
+  FROM accounts a
+  JOIN tree t ON a.parent_account_id = t.account_id
+)
+SELECT account_id, root_id, depth, path
+FROM tree
+WHERE root_id IN (100, 200)
+ORDER BY root_id, depth, account_id;
+```
+
+| account_id | root_id | depth | path |
+|---|---|---|---|
+| 100 | 100 | 0 | Acme Group |
+| 101 | 100 | 1 | Acme Group > Acme UK |
+| 102 | 100 | 1 | Acme Group > Acme US |
+| 103 | 100 | 2 | Acme Group > Acme US > Acme US West |
+| 200 | 200 | 0 | Globex |
+| 201 | 200 | 1 | Globex > Globex EU |
+
+With every account mapped to its root, the churn query is unchanged except that it groups by `root_id` instead of `account_id`:
+
+```sql
+WITH RECURSIVE tree AS (
+  SELECT account_id, account_id AS root_id FROM accounts WHERE parent_account_id IS NULL
+  UNION ALL
+  SELECT a.account_id, t.root_id FROM accounts a JOIN tree t ON a.parent_account_id = t.account_id
+),
+months AS (
+  SELECT m::date AS month_start, (m + INTERVAL '1 month')::date AS next_start
+  FROM generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month') AS m
+),
+status AS (
+  SELECT mo.month_start, t.root_id,
+         bool_or(s.start_date <= mo.month_start AND (s.end_date IS NULL OR s.end_date > mo.month_start)) AS at_start,
+         bool_or(s.start_date <= mo.next_start  AND (s.end_date IS NULL OR s.end_date > mo.next_start))  AS at_end
+  FROM months mo
+  CROSS JOIN subscriptions s
+  JOIN tree t ON t.account_id = s.account_id
+  GROUP BY mo.month_start, t.root_id
+)
+SELECT month_start,
+       COUNT(*) FILTER (WHERE at_start)                   AS starting_customers,
+       COUNT(*) FILTER (WHERE at_start AND NOT at_end)    AS churned,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE at_start AND NOT at_end)
+             / NULLIF(COUNT(*) FILTER (WHERE at_start), 0), 1) AS churn_pct
+FROM status
+GROUP BY month_start
+ORDER BY month_start;
+```
+
+| month_start | starting_customers | churned | churn_pct |
+|---|---|---|---|
+| 2026-01-01 | 8 | 2 | 25.0 |
+| 2026-02-01 | 6 | 1 | 16.7 |
+| 2026-03-01 | 5 | 2 | 40.0 |
+| 2026-04-01 | 4 | 0 | 0.0 |
+
+February churn drops from 37.5% at account level to 16.7% at customer level, because Acme's two lost sub-accounts are not a lost customer: only Echo churned out of six customers. In March, Globex's only sub-account left, so Globex itself churned, alongside Fern. January also differs (25.0% against 20.0%) because the four Acme and Globex accounts collapse into two customers in the denominator. Report both, labelled, and agree with finance which one is "churn".
+
+**Pitfalls.** A cycle in `parent_account_id` makes the recursion run forever; add `CYCLE account_id SET is_cycle USING path_ids` (PostgreSQL 14 and later) or a depth limit. An account whose parent is missing from `accounts` never joins the tree and silently disappears; reconcile tree members against all accounts. Hierarchies change over time (an acquisition moves a sub-account to a new parent), which makes the hierarchy itself a slowly changing dimension.
+
+## Approach: window function basics with OVER
+
+**Why it matters.** Once the monthly churn table exists, the follow-ups are window questions: the total over the period, each month's share of all churn, a smoothed 3-month churn rate. A window function computes over a set of rows related to the current row, defined by `OVER (...)`, without collapsing them as `GROUP BY` would.
+
+```sql
+CREATE VIEW monthly_churn AS
+WITH months AS (
+  SELECT m::date AS month_start, (m + INTERVAL '1 month')::date AS next_start
+  FROM generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month') AS m
+),
+status AS (
+  SELECT mo.month_start, s.account_id,
+         bool_or(s.start_date <= mo.month_start AND (s.end_date IS NULL OR s.end_date > mo.month_start)) AS at_start,
+         bool_or(s.start_date <= mo.next_start  AND (s.end_date IS NULL OR s.end_date > mo.next_start))  AS at_end
+  FROM months mo CROSS JOIN subscriptions s
+  GROUP BY mo.month_start, s.account_id
+)
+SELECT month_start,
+       COUNT(*) FILTER (WHERE at_start)                AS starting_customers,
+       COUNT(*) FILTER (WHERE at_start AND NOT at_end) AS churned
+FROM status
+GROUP BY month_start;
+```
+
+```sql
+SELECT month_start, starting_customers, churned,
+       SUM(churned) OVER ()                                         AS churned_in_period,
+       ROUND(100.0 * churned / SUM(churned) OVER (), 1)             AS pct_of_period_churn,
+       SUM(churned) OVER (ORDER BY month_start)                     AS cumulative_churned,
+       ROUND(100.0 * SUM(churned) OVER w3 / SUM(starting_customers) OVER w3, 1) AS churn_pct_3m
+FROM monthly_churn
+WINDOW w3 AS (ORDER BY month_start ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+ORDER BY month_start;
+```
+
+| month_start | starting_customers | churned | churned_in_period | pct_of_period_churn | cumulative_churned | churn_pct_3m |
+|---|---|---|---|---|---|---|
+| 2026-01-01 | 10 | 2 | 7 | 28.6 | 2 | 20.0 |
+| 2026-02-01 | 8 | 3 | 7 | 42.9 | 5 | 27.8 |
+| 2026-03-01 | 5 | 2 | 7 | 28.6 | 7 | 30.4 |
+| 2026-04-01 | 4 | 0 | 7 | 0.0 | 7 | 29.4 |
+
+The pieces of `OVER`:
+
+- `OVER ()` with nothing inside means "all rows of the result": every row sees the period total of 7.
+- `ORDER BY` inside `OVER` makes the default frame run from the first row to the current row (and its peers), giving the cumulative count.
+- A frame clause such as `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` sets an explicit sliding window. The 3-month churn rate divides 3 months of churned customers by 3 months of starting customers; averaging three monthly percentages would weight a small month the same as a large one.
+- `PARTITION BY` (not needed here) restarts the calculation for each group, for example per plan or region.
+
+Window functions run after `WHERE`, `GROUP BY` and `HAVING`, so you cannot filter on them in the same query level; wrap the query and filter outside. Per-row windows are also useful on the raw data, for example counting each account's subscriptions to find reactivations:
+
+```sql
+SELECT account_id, sub_id, start_date, end_date,
+       COUNT(*)     OVER (PARTITION BY account_id)                     AS subs_for_account,
+       ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY start_date) AS sub_number
+FROM subscriptions
+WHERE account_id IN (5, 7)
+ORDER BY account_id, start_date;
+```
+
+| account_id | sub_id | start_date | end_date | subs_for_account | sub_number |
+|---|---|---|---|---|---|
+| 5 | 5 | 2025-09-01 | 2026-02-10 | 2 | 1 |
+| 5 | 6 | 2026-03-05 | NULL | 2 | 2 |
+| 7 | 8 | 2025-12-01 | 2026-03-10 | 2 | 1 |
+| 7 | 9 | 2026-03-25 | NULL | 2 | 2 |
+
+## Approach: cumulative distribution of tenure at churn
+
+**Why it matters.** "When do customers churn?" decides where to invest: onboarding if most leave early, renewal campaigns if they leave at contract end. `CUME_DIST()` gives, for each value, the fraction of rows with a value less than or equal to it, so it reads directly as "x% of churned customers left within N days".
+
+```sql
+WITH churned AS (
+  SELECT a.name, s.end_date - s.start_date AS tenure_days
+  FROM subscriptions s
+  JOIN accounts a ON a.account_id = s.account_id
+  WHERE s.end_date IS NOT NULL
+)
+SELECT name, tenure_days,
+       ROUND(CUME_DIST()    OVER (ORDER BY tenure_days)::numeric, 3) AS cume_dist,
+       ROUND(PERCENT_RANK() OVER (ORDER BY tenure_days)::numeric, 3) AS percent_rank
+FROM churned
+ORDER BY tenure_days, name;
+```
+
+| name | tenure_days | cume_dist | percent_rank |
+|---|---|---|---|
+| Dune Design | 8 | 0.111 | 0.000 |
+| Cleo Cafe | 62 | 0.222 | 0.125 |
+| Fern Florist | 95 | 0.333 | 0.250 |
+| Gala Gym | 99 | 0.444 | 0.375 |
+| Avo Bakery | 106 | 0.556 | 0.500 |
+| Echo Audio | 162 | 0.667 | 0.625 |
+| Acme US West | 212 | 0.778 | 0.750 |
+| Acme UK | 259 | 0.889 | 0.875 |
+| Globex EU | 273 | 1.000 | 1.000 |
+
+Read the `cume_dist` column: 1 of the 9 ended subscriptions (11.1%) lasted 8 days or less, 2 of 9 (22.2%) lasted at most 62 days, and two thirds (0.667) ended within 162 days. The list contains every ended subscription, including Dune's first-month exit and Gala's pause; for a true churn-tenure distribution, filter to the churn events defined earlier. `PERCENT_RANK` is `(rank − 1) / (rows − 1)`, which starts at 0 and answers "what fraction of the others are below me", a subtly different question. For a summary table, count the cumulative share at fixed thresholds:
+
+```sql
+SELECT threshold_days,
+       COUNT(*) FILTER (WHERE s.end_date - s.start_date <= threshold_days) AS churned_within,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE s.end_date - s.start_date <= threshold_days)
+             / COUNT(*), 1)                                                AS pct_within
+FROM subscriptions s
+CROSS JOIN (VALUES (30), (90), (180), (365)) AS t(threshold_days)
+WHERE s.end_date IS NOT NULL
+GROUP BY threshold_days
+ORDER BY threshold_days;
+```
+
+| threshold_days | churned_within | pct_within |
+|---|---|---|
+| 30 | 1 | 11.1 |
+| 90 | 2 | 22.2 |
+| 180 | 6 | 66.7 |
+| 365 | 9 | 100.0 |
+
+**Pitfalls.** This distribution only covers customers who have already churned. Customers still active are *censored*: their final tenure is unknown, and leaving them out biases tenure downwards. For "probability a new customer is still here after 90 days", use a cohort retention table or survival analysis that includes active customers. Ties share a `CUME_DIST` value, because it counts all peers.
+
+## Approach: avoiding full table scans
+
+**Why it matters.** A subscriptions table with tens of millions of rows makes the churn job slow if every lookup reads the whole table. The skill is knowing which predicates *can* use an index, and when a full scan is actually the right plan.
+
+Load 300,000 synthetic subscriptions, about 10% still active:
+
+```sql
+CREATE TABLE subs_big AS
+SELECT g AS sub_id,
+       g % 60000 + 1 AS account_id,
+       DATE '2023-01-01' + (g % 1000)                         AS start_date,
+       CASE WHEN g % 10 = 0 THEN NULL
+            ELSE DATE '2023-01-01' + (g % 1000) + 30 + (g % 700) END AS end_date
+FROM generate_series(1, 300000) AS g;
+
+CREATE INDEX subs_big_end ON subs_big (end_date);
+VACUUM ANALYZE subs_big;
+```
+
+"Who churned in March 2025?" is selective. Written with a function on the column, PostgreSQL cannot use the index and scans every row:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM subs_big
+WHERE date_trunc('month', end_date) = DATE '2025-03-01';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Seq Scan on subs_big (actual rows=8400 loops=1)
+        Filter: (date_trunc('month'::text, (end_date)::timestamp with time zone) = '2025-03-01'::date)
+        Rows Removed by Filter: 291600
+```
+
+As a range on the raw column, it reads only the matching index entries:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM subs_big
+WHERE end_date >= DATE '2025-03-01' AND end_date < DATE '2025-04-01';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Index Only Scan using subs_big_end on subs_big (actual rows=8400 loops=1)
+        Index Cond: ((end_date >= '2025-03-01'::date) AND (end_date < '2025-04-01'::date))
+        Heap Fetches: 0
+```
+
+The "currently active" check `end_date IS NULL` can use a B-tree index too, and a **partial index** that contains only active rows is much smaller and serves the common "list active subscriptions for this account" lookup:
+
+```sql
+CREATE INDEX subs_big_active ON subs_big (account_id) WHERE end_date IS NULL;
+ANALYZE subs_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT sub_id FROM subs_big WHERE account_id = 4241 AND end_date IS NULL;
+```
+
+```text
+Index Scan using subs_big_active on subs_big (actual rows=5 loops=1)
+  Index Cond: (account_id = 4241)
+```
+
+But "active on 1 March 2025" matches a large share of the table, and then a sequential scan is the cheapest plan; forcing an index would be slower because it would visit most pages in random order:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(DISTINCT account_id) FROM subs_big
+WHERE start_date <= DATE '2025-03-01'
+  AND (end_date IS NULL OR end_date > DATE '2025-03-01');
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Sort (actual rows=126600 loops=1)
+        Sort Key: account_id
+        Sort Method: quicksort  Memory: 3073kB
+        ->  Seq Scan on subs_big (actual rows=126600 loops=1)
+              Filter: ((start_date <= '2025-03-01'::date) AND ((end_date IS NULL) OR (end_date > '2025-03-01'::date)))
+              Rows Removed by Filter: 173400
+```
+
+**What actually helps the monthly job.**
+
+- Make selective predicates sargable: compare the raw column with constants, no functions on it.
+- Use partial indexes for small hot subsets (active subscriptions).
+- Do not compute churn per month with one full scan per month. Scan once and evaluate every month boundary in the same pass, as the core query does with the month spine.
+- For very large tables, partition by `start_date` or keep a monthly snapshot table of active customers, so each month's churn compares two small snapshots.
+- An `OR` across different columns (`end_date IS NULL OR end_date > d`) is hard to index; a range column (`daterange(start_date, end_date)`) with a GiST index can answer "active on d" with the containment operator `@>` when the predicate is selective.
+
+## Approach: MVCC when cancellations update the table
+
+**Why it matters.** Cancellations usually arrive as `UPDATE subscriptions SET end_date = ...`. PostgreSQL implements this with multiversion concurrency control (MVCC): an update does not overwrite the row, it writes a **new version** and marks the old one as expired. Each transaction sees the versions that were committed in its snapshot. That has three consequences for churn reporting: readers never block the writer (and vice versa), a running report sees a stable picture, and old versions accumulate until `VACUUM` removes them.
+
+You can see the new version directly. `ctid` is the physical location of a row version, and `xmin` is the id of the transaction that created it:
+
+```sql
+CREATE TABLE subs_demo AS SELECT * FROM subscriptions WHERE sub_id IN (2, 11);
+CREATE TABLE before_update AS SELECT sub_id, ctid::text AS old_ctid, xmin::text AS old_xmin FROM subs_demo;
+
+UPDATE subs_demo SET end_date = DATE '2026-05-01' WHERE sub_id = 2;   -- Bolt Bikes cancels
+
+SELECT d.sub_id, b.old_ctid AS ctid_before, d.ctid::text AS ctid_after,
+       b.old_xmin <> d.xmin::text AS new_row_version, d.end_date
+FROM subs_demo d
+JOIN before_update b USING (sub_id)
+ORDER BY d.sub_id;
+```
+
+| sub_id | ctid_before | ctid_after | new_row_version | end_date |
+|---|---|---|---|---|
+| 2 | (0,1) | (0,3) | t | 2026-05-01 |
+| 11 | (0,2) | (0,2) | f | NULL |
+
+Subscription 2 moved from slot 1 to slot 3 of page 0 and has a new creating transaction: the old version is still on the page, now dead, until vacuum reclaims it. Subscription 11 was not touched.
+
+What a concurrent churn report sees (two sessions, so not executed here):
+
+{/* noexec */}
+```sql
+-- Session A: month-end churn report
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT COUNT(*) FROM subscriptions WHERE end_date IS NULL;      -- sees Bolt as active
+
+        -- Session B: cancellation, not blocked by A's reads
+        UPDATE subscriptions SET end_date = '2026-05-01' WHERE sub_id = 2;
+        COMMIT;
+
+SELECT COUNT(*) FROM subscriptions WHERE end_date IS NULL;      -- same answer: same snapshot
+COMMIT;
+SELECT COUNT(*) FROM subscriptions WHERE end_date IS NULL;      -- new transaction: one fewer
+```
+
+**Practical consequences.**
+
+- **Consistent reports**: run the numerator and denominator queries in one `REPEATABLE READ` transaction, or as one statement, so a cancellation between them cannot make the ratio inconsistent.
+- **Bloat**: a table with frequent status updates accumulates dead versions; autovacuum must keep up, and a long-running report transaction prevents vacuum from removing versions it might still need.
+- **History**: MVCC versions are not an audit log. Once vacuumed, the old `end_date` is gone. If churn analysis needs every status change, write an append-only subscription events table instead of updating in place.
+- **Warehouses** such as Snowflake, BigQuery and Delta Lake also keep old versions (as immutable files) and offer time travel to query a table as of a past time within a retention period, which is useful for re-running a month-end churn report exactly as it was.
+
+## Interview tips
+
+**How it is asked.** "Calculate monthly churn from a subscriptions table", "churn by plan", "churn including reactivations", "what's wrong with this churn query", or as part of a retention or revenue case study.
+
+**What a strong answer includes.**
+
+1. A stated definition: logo or revenue churn, the denominator (active at the start), and what "active" means with exclusive end dates.
+2. Activity tested at both month boundaries, so pauses within a month are not churn and new customers are not in the denominator.
+3. The level of analysis: account versus paying customer, with the hierarchy rolled up when needed.
+4. Point-in-time joins to plan history.
+5. A sensible performance plan: one pass with a month spine, sargable filters, snapshots for large tables.
+
+**Mistakes candidates make.**
+
+- Dividing by end-of-month or average customers without saying so; each gives a different rate.
+- Counting new customers who left in their first month in the denominator, or in the numerator.
+- Treating every `end_date` in the month as churn, which counts upgrades, pauses and plan switches.
+- Averaging monthly churn percentages instead of summing churned and starting customers.
+- Joining the current plan instead of the plan at the time.
+- Off-by-one errors with inclusive and exclusive end dates.

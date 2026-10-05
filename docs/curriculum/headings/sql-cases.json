@@ -94,5 +94,37 @@
   "Spilling & memory management → Customer Lifetime Value": {
     "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
     "heading": "Approach: spilling and memory management"
+  },
+  "Hierarchical / org-chart queries → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: hierarchical queries for customer-level churn"
+  },
+  "Subqueries in FROM (derived tables) → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: subqueries in FROM (derived tables)"
+  },
+  "MVCC concepts → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: MVCC when cancellations update the table"
+  },
+  "LATERAL / CROSS APPLY joins → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: LATERAL joins for per-row lookups"
+  },
+  "Cumulative distribution → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: cumulative distribution of tenure at churn"
+  },
+  "Avoiding full table scans → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: avoiding full table scans"
+  },
+  "Slowly changing dimension queries → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: slowly changing dimension queries for churn by plan"
+  },
+  "Window function basics (OVER) → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: window function basics with OVER"
   }
 }
