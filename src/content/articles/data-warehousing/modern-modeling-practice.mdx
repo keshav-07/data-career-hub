@@ -14,7 +14,7 @@ learningObjectives:
   - "Structure a dbt project into staging, intermediate and mart models with tests"
   - "Write incremental models that are idempotent, handle late data and survive reruns"
 prerequisites: ["articles:data-warehousing/fact-tables", "articles:data-warehousing/slowly-changing-dimensions", "articles:etl-elt/idempotency-in-data-pipelines"]
-related: ["articles:etl-elt/batch-vs-streaming", "articles:etl-elt/cdc-patterns-and-failure-modes", "articles:kafka/kafka-fundamentals", "cheat-sheets:dbt"]
+related: ["articles:etl-elt/batch-vs-streaming", "articles:etl-elt/cdc-patterns-and-failure-modes", "articles:kafka/kafka-real-time-data-engineering", "cheat-sheets:dbt"]
 previous: "articles:data-warehousing/modeling-methodologies"
 next: "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"
 versionContext: "All SQL examples executed on PostgreSQL 16.14. dbt model and YAML code follows the dbt documentation for dbt 1.9+ (microbatch, YAML snapshots) and the MetricFlow semantic model spec; it was not executed here because no dbt project or adapter is available in the verification environment."
@@ -197,7 +197,7 @@ SELECT (SELECT ROUND(SUM(net_amount) / COUNT(DISTINCT order_id), 2) FROM fct_ord
 
 | correct_aov | average_of_daily_aov |
 |---|---|
-| 4448.50 | 3132.83 |
+| 4448.50 | 3132.00 |
 
 A semantic layer defines AOV once as a ratio of two metrics, and always generates the first query, at whatever grain is requested.
 

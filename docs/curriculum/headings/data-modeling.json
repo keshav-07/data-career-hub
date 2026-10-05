@@ -150,5 +150,21 @@
  "Activity Schema / event modeling": {
   "ref": "articles:data-warehousing/modeling-methodologies",
   "heading": "Activity Schema and event modelling"
+ },
+ "Data modeling for streaming": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Data modelling for streaming"
+ },
+ "Semantic layer / metrics layer": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Semantic layer and metrics layer"
+ },
+ "Modeling in dbt": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Modelling in dbt"
+ },
+ "Idempotent incremental models": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Idempotent incremental models"
  }
 }
