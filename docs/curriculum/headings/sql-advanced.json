@@ -74,5 +74,21 @@
   "Anti-pattern detection": {
     "ref": "articles:sql/query-optimization-fundamentals",
     "heading": "Anti-pattern detection"
+  },
+  "Index design (B-tree, composite)": {
+    "ref": "articles:sql/indexes",
+    "heading": "B-tree and composite index design"
+  },
+  "Covering indexes": {
+    "ref": "articles:sql/indexes",
+    "heading": "Covering indexes"
+  },
+  "Index selectivity & cardinality": {
+    "ref": "articles:sql/indexes",
+    "heading": "Index selectivity and cardinality"
+  },
+  "Bitmap indexing": {
+    "ref": "articles:sql/indexes",
+    "heading": "Bitmap indexing"
   }
 }
