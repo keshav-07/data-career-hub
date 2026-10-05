@@ -1,7 +1,7 @@
 ---
 title: "Design a Real-Time Fraud Detection Pipeline"
 seoTitle: "Design a Fraud Detection Pipeline"
-description: "A system-design case study for fraud detection: a sub-100 ms scoring path, streaming velocity features, rules plus models, delayed labels, feedback loops and failure modes."
+description: "A system-design case study for fraud detection: a sub-100 ms scoring path, streaming velocity features, rules plus models, delayed labels and failure modes."
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["fraud-detection", "streaming", "architecture"]
 difficulty: "Advanced"
