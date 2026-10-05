@@ -1,0 +1,646 @@
+---
+seoTitle: "Average Order Value SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Average Order Value: SQL Case Study with 8 Approaches"
+description: "Compute average order value in SQL with outliers, test and refunded orders, then use medians, anti-joins, UNPIVOT, arrays, gaps and islands, EXPLAIN and skew fixes."
+technology: ["sql"]
+topic: ["case-study", "e-commerce", "aggregation"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Average order value is total order revenue divided by the number of orders, over the same set of orders. Agree the revenue basis (here merchandise value net of discounts, excluding shipping and tax), keep only completed, non-test, non-refunded orders, and compute SUM(value) / COUNT(*) for each period or segment rather than averaging daily averages. Because a few large orders pull the mean up, report the median with PERCENTILE_CONT(0.5) alongside it."
+followUps:
+  - "Why is the average of daily AOVs not the AOV for the week?"
+  - "One B2B order doubles the AOV. How do you report a representative figure?"
+  - "How do you compute AOV for first orders only?"
+  - "How do you break AOV down into subtotal, discount, shipping and tax?"
+  - "How would you find runs of consecutive days when AOV was above target?"
+  - "One channel holds most of the orders and the distributed job is slow. What do you do?"
+prerequisites: ["articles:sql/aggregations-group-by-having"]
+related: ["interview-questions:sql/monthly-revenue-sql-case-study", "articles:sql/aggregations-group-by-having", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/churn-rate-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 and the UNPIVOT example on DuckDB 1.5.6, with scripts/verify-examples.py; outputs and plans are copied from the engines."
+sources:
+  - { label: "PostgreSQL 16 documentation: Aggregate functions (percentile_cont)", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: WITH queries (MATERIALIZED)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "DuckDB documentation: UNPIVOT statement", url: "https://duckdb.org/docs/current/sql/statements/unpivot" }
+---
+
+Average order value (AOV) is how much a customer spends per order, and it moves with pricing, promotions, bundles and free-shipping thresholds. The formula is one division, but interviewers use it to check that numerator and denominator cover the same orders, that you notice outliers, and that you know why the average of averages is wrong. This case study answers eight follow-ups on one small dataset.
+
+## The business question
+
+**"How much do customers spend per order, and what moves it?"** Merchandising teams run "spend 60, get free shipping" offers to lift AOV; marketing compares AOV by channel; finance multiplies orders by AOV in forecasts. A data engineer pins down the definition first:
+
+- **Order value** is merchandise value net of discounts: `subtotal − discount`. Shipping and tax are excluded, because they are not revenue the business keeps. Some companies use the total charged instead; say which one you use.
+- **Orders counted**: `completed` orders from real customers. Cancelled orders, test accounts and fully refunded orders are excluded from **both** numerator and denominator.
+- **Zero-value orders** (100% discount) are real orders and are counted; they lower AOV, which is the truth about the promotion.
+- **AOV for a period** is total value divided by number of orders in that period, never the average of daily AOVs.
+- **Outliers**: a single large B2B order can dominate the mean, so report the median too.
+- **Day** is the UTC date of `order_ts`.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE customers (customer_id INT PRIMARY KEY, segment TEXT NOT NULL, is_test BOOLEAN NOT NULL);
+
+CREATE TABLE orders (
+  order_id    INT PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers,
+  order_ts    TIMESTAMPTZ NOT NULL,
+  status      TEXT NOT NULL,              -- completed | cancelled
+  channel     TEXT NOT NULL,              -- web | app | b2b
+  subtotal    NUMERIC(10,2) NOT NULL,
+  discount    NUMERIC(10,2) NOT NULL,
+  shipping    NUMERIC(10,2) NOT NULL,
+  tax         NUMERIC(10,2) NOT NULL,
+  tags        TEXT[] NOT NULL DEFAULT '{}',   -- free-form labels
+  skus        TEXT[] NOT NULL                 -- one entry per unit in the basket
+);
+
+CREATE TABLE refunds (order_id INT NOT NULL, amount NUMERIC(10,2) NOT NULL, full_refund BOOLEAN NOT NULL);
+
+INSERT INTO customers VALUES
+  (1,'consumer',FALSE), (2,'consumer',FALSE), (3,'consumer',FALSE), (4,'consumer',FALSE),
+  (5,'consumer',FALSE), (6,'business',FALSE), (7,'consumer',TRUE);
+
+INSERT INTO orders VALUES
+  (1,  1, '2026-05-01 10:00+00', 'completed', 'web',   40.00,  0.00, 5.00,   3.20, '{}',            '{A}'),
+  (2,  2, '2026-05-01 12:00+00', 'completed', 'app',   60.00, 10.00, 0.00,   4.00, '{promo}',       '{A,B}'),
+  (3,  3, '2026-05-01 18:00+00', 'cancelled', 'web',   80.00,  0.00, 5.00,   6.40, '{}',            '{C}'),
+  (4,  1, '2026-05-02 09:00+00', 'completed', 'web',   25.00,  0.00, 5.00,   2.00, '{}',            '{B}'),
+  (5,  4, '2026-05-02 11:00+00', 'completed', 'app',   55.00,  5.00, 0.00,   4.00, '{promo,gift}',  '{A,C}'),
+  (6,  7, '2026-05-02 12:00+00', 'completed', 'web',  999.00,  0.00, 0.00,   0.00, '{}',            '{Z}'),
+  (7,  5, '2026-05-03 08:00+00', 'completed', 'web',   30.00, 30.00, 5.00,   0.00, '{promo}',       '{B}'),
+  (8,  6, '2026-05-03 14:00+00', 'completed', 'b2b', 1500.00,  0.00, 0.00, 120.00, '{b2b}',         '{A,A,A,C}'),
+  (9,  2, '2026-05-03 20:00+00', 'completed', 'app',   45.00,  0.00, 0.00,   3.60, '{}',            '{C}'),
+  (10, 3, '2026-05-05 10:00+00', 'completed', 'web',   70.00,  0.00, 5.00,   5.60, '{gift}',        '{A,B,C}'),
+  (11, 4, '2026-05-05 15:00+00', 'completed', 'app',   50.00,  0.00, 0.00,   4.00, '{}',            '{B,C}'),
+  (12, 5, '2026-05-06 09:00+00', 'completed', 'web',   35.00,  0.00, 5.00,   2.80, '{}',            '{A}'),
+  (13, 1, '2026-05-07 11:00+00', 'completed', 'web',   65.00,  5.00, 0.00,   4.80, '{promo}',       '{C,B}'),
+  (14, 2, '2026-05-07 23:30+00', 'completed', 'app',   40.00,  0.00, 0.00,   3.20, '{}',            '{A}');
+
+INSERT INTO refunds VALUES (12, 35.00, TRUE), (13, 10.00, FALSE);
+```
+
+Order 3 is cancelled, order 6 belongs to a test account, order 12 was fully refunded, order 7 was free, order 8 is a large B2B order, and there were no orders at all on 4 May. That leaves 11 valid orders.
+
+## Core solution
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed'
+    AND NOT c.is_test
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT COUNT(*)                                AS orders,
+       SUM(order_value)                        AS revenue,
+       ROUND(SUM(order_value) / COUNT(*), 2)   AS aov,
+       ROUND(SUM(order_value) FILTER (WHERE channel <> 'b2b')
+             / COUNT(*) FILTER (WHERE channel <> 'b2b'), 2) AS aov_excluding_b2b
+FROM valid_orders;
+```
+
+| orders | revenue | aov | aov_excluding_b2b |
+|---|---|---|---|
+| 11 | 1930.00 | 175.45 | 43.00 |
+
+The single B2B order of 1,500 lifts AOV from 43 to about 175, which is why the next sections look at medians, segments and skew. The same query grouped by day gives daily AOV:
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT (order_ts AT TIME ZONE 'UTC')::date     AS order_date,
+       COUNT(*)                                AS orders,
+       SUM(order_value)                        AS revenue,
+       ROUND(SUM(order_value) / COUNT(*), 2)   AS aov
+FROM valid_orders
+GROUP BY 1
+ORDER BY 1;
+```
+
+| order_date | orders | revenue | aov |
+|---|---|---|---|
+| 2026-05-01 | 2 | 90.00 | 45.00 |
+| 2026-05-02 | 2 | 75.00 | 37.50 |
+| 2026-05-03 | 3 | 1545.00 | 515.00 |
+| 2026-05-05 | 2 | 120.00 | 60.00 |
+| 2026-05-07 | 2 | 100.00 | 50.00 |
+
+Averaging the five daily AOVs gives a different, wrong weekly figure, because each day counts equally regardless of how many orders it had:
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+),
+daily AS (
+  SELECT (order_ts AT TIME ZONE 'UTC')::date AS d, SUM(order_value) / COUNT(*) AS aov
+  FROM valid_orders GROUP BY 1
+)
+SELECT ROUND(AVG(aov), 2) AS average_of_daily_aov,
+       (SELECT ROUND(SUM(order_value) / COUNT(*), 2) FROM valid_orders) AS true_aov
+FROM daily;
+```
+
+| average_of_daily_aov | true_aov |
+|---|---|
+| 141.50 | 175.45 |
+
+## Approach: anti-joins to exclude orders and find first orders
+
+**Why it matters.** AOV depends on which orders you leave out, and "leave out" usually means "has no matching row elsewhere": no full refund, no fraud flag, no earlier order. That is an anti-join. The two standard forms are `NOT EXISTS` and `LEFT JOIN ... WHERE right.key IS NULL`.
+
+The core solution used `NOT EXISTS` for refunds. The `LEFT JOIN` form gives the same result, and you must put the refund condition in the `ON` clause, not in `WHERE`:
+
+```sql
+SELECT COUNT(*) AS orders, ROUND(AVG(o.subtotal - o.discount), 2) AS aov
+FROM orders o
+JOIN customers c ON c.customer_id = o.customer_id
+LEFT JOIN refunds r ON r.order_id = o.order_id AND r.full_refund
+WHERE o.status = 'completed' AND NOT c.is_test
+  AND r.order_id IS NULL;
+```
+
+| orders | aov |
+|---|---|
+| 11 | 175.45 |
+
+A common follow-up is **first-order AOV versus repeat AOV**: new customers often spend differently. A first order is a valid order with no earlier valid order from the same customer:
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT CASE WHEN NOT EXISTS (
+              SELECT 1 FROM valid_orders prev
+              WHERE prev.customer_id = v.customer_id
+                AND prev.order_ts < v.order_ts)
+            THEN 'first order' ELSE 'repeat order' END AS order_type,
+       COUNT(*)                               AS orders,
+       ROUND(SUM(order_value) / COUNT(*), 2)  AS aov,
+       string_agg(order_id::text, ',' ORDER BY order_id) AS order_ids
+FROM valid_orders v
+GROUP BY 1
+ORDER BY 1;
+```
+
+| order_type | orders | aov | order_ids |
+|---|---|---|---|
+| first order | 6 | 285.00 | 1,2,5,7,8,10 |
+| repeat order | 5 | 44.00 | 4,9,11,13,14 |
+
+Customer 3's cancelled order on 1 May does not count as an earlier order, so order 10 is their first. Whether a cancelled order should make the next one a "repeat" is a definition question worth raising.
+
+**Pitfalls.** `NOT IN (SELECT order_id FROM refunds ...)` returns no rows at all if the subquery yields a `NULL`, so prefer `NOT EXISTS`. In the `LEFT JOIN` form, test a column that cannot be `NULL` on a matched row (the join key), and remember that duplicates on the right side do not matter for the anti-join itself but do inflate counts if you also select from that table. PostgreSQL plans both forms as a `Hash Anti Join` or `Nested Loop Anti Join`, so choose the one that reads best.
+
+## Approach: median and percentiles with PERCENTILE_CONT
+
+**Why it matters.** The mean answers "revenue per order"; the median answers "what does a typical order look like". When order values are skewed, as they almost always are, the two diverge, and a promotion that changes typical baskets may barely move the mean.
+
+`PERCENTILE_CONT(f) WITHIN GROUP (ORDER BY x)` interpolates between the two nearest values; `PERCENTILE_DISC(f)` returns an actual value from the data (the first one whose cumulative position reaches `f`):
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT COALESCE(channel, 'all')                                                   AS channel,
+       COUNT(*)                                                                   AS orders,
+       ROUND(AVG(order_value), 2)                                                 AS mean_aov,
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY order_value)                   AS median_cont,
+       PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY order_value)                   AS median_disc,
+       PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY order_value)                   AS p90_cont,
+       PERCENTILE_DISC(0.9) WITHIN GROUP (ORDER BY order_value)                   AS p90_disc
+FROM valid_orders
+GROUP BY ROLLUP (channel)
+ORDER BY channel NULLS LAST;
+```
+
+| channel | orders | mean_aov | median_cont | median_disc | p90_cont | p90_disc |
+|---|---|---|---|---|---|---|
+| all | 11 | 175.45 | 50 | 50.00 | 70 | 70.00 |
+| app | 5 | 47.00 | 50 | 50.00 | 50 | 50.00 |
+| b2b | 1 | 1500.00 | 1500 | 1500.00 | 1500 | 1500.00 |
+| web | 5 | 39.00 | 40 | 40.00 | 66 | 70.00 |
+
+Across all 11 orders the mean is about 175 but the median is 50: the typical order did not change, one big order did. The difference between the two functions shows in the web channel's 90th percentile. The five web order values are 0, 25, 40, 60 and 70; the 90th percentile falls between the fourth and fifth values, so `PERCENTILE_CONT` interpolates to 66 while `PERCENTILE_DISC` returns the real order value 70. With an odd number of rows the medians agree; with an even number, `CONT` returns the midpoint of the two middle values and `DISC` the lower one. For the b2b channel with one order, every percentile is that order.
+
+**Pitfalls.** Percentiles are not additive: you cannot combine daily medians into a weekly median, so keep order-level data (or a mergeable sketch such as t-digest in engines that offer one) for any period you report. `PERCENTILE_CONT` returns `double precision` in PostgreSQL, so round it for display. Some warehouses offer `APPROX_PERCENTILE` / `APPROX_QUANTILES`, which are much cheaper on billions of rows and accurate enough for dashboards. `MEDIAN()` exists in Snowflake and DuckDB but not in PostgreSQL.
+
+**In interviews.** Mention the median unprompted when you see a heavy tail, and explain the interpolation difference between `CONT` and `DISC` with an even count.
+
+## Approach: UNPIVOT columns to rows for AOV composition
+
+**Why it matters.** "What is the average customer charge made of?" The order table stores subtotal, discount, shipping and tax as separate columns. To report each component per order as rows (for a stacked chart, or to treat components generically), turn columns into rows: unpivot.
+
+PostgreSQL has no `UNPIVOT` keyword. A `LATERAL VALUES` list produces one row per component for each order:
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test AND o.channel <> 'b2b'
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT u.component,
+       SUM(u.amount)                                  AS total,
+       ROUND(SUM(u.amount) / COUNT(DISTINCT v.order_id), 2) AS per_order
+FROM valid_orders v
+CROSS JOIN LATERAL (VALUES
+  (1, 'subtotal', v.subtotal),
+  (2, 'discount', -v.discount),
+  (3, 'shipping', v.shipping),
+  (4, 'tax',      v.tax)
+) AS u(sort_key, component, amount)
+GROUP BY u.sort_key, u.component
+ORDER BY u.sort_key;
+```
+
+| component | total | per_order |
+|---|---|---|
+| subtotal | 480.00 | 48.00 |
+| discount | -50.00 | -5.00 |
+| shipping | 20.00 | 2.00 |
+| tax | 34.40 | 3.44 |
+
+Subtotal minus discount per order (48.00 − 5.00) reproduces the consumer AOV of 43.00, and adding shipping and tax gives the average total charged. DuckDB, Snowflake, BigQuery and SQL Server have an `UNPIVOT` operator. In DuckDB, after loading the same component columns:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE order_components (order_id INT, subtotal DECIMAL(10,2), discount DECIMAL(10,2),
+                               shipping DECIMAL(10,2), tax DECIMAL(10,2));
+INSERT INTO order_components VALUES
+  (1, 40, 0, 5, 3.20), (2, 60, 10, 0, 4.00), (4, 25, 0, 5, 2.00), (5, 55, 5, 0, 4.00),
+  (7, 30, 30, 5, 0.00), (9, 45, 0, 0, 3.60), (10, 70, 0, 5, 5.60), (11, 50, 0, 0, 4.00),
+  (13, 65, 5, 0, 4.80), (14, 40, 0, 0, 3.20);
+
+SELECT component, SUM(amount) AS total, ROUND(AVG(amount), 2) AS per_order
+FROM (UNPIVOT order_components ON subtotal, discount, shipping, tax
+      INTO NAME component VALUE amount)
+GROUP BY component
+ORDER BY component;
+```
+
+| component | total | per_order |
+|---|---|---|
+| discount | 50.00 | 5.0 |
+| shipping | 20.00 | 2.0 |
+| subtotal | 480.00 | 48.0 |
+| tax | 34.40 | 3.44 |
+
+DuckDB's per-order discount here is positive because the source column is; the PostgreSQL version negated it so that the components add up. **Pitfalls:** standard `UNPIVOT` drops rows whose value is `NULL` unless you ask it to include them (`INCLUDE NULLS` in DuckDB and several warehouses), which silently changes averages; the `LATERAL VALUES` approach keeps them. All unpivoted columns must have compatible types.
+
+## Approach: arrays and nested data
+
+**Why it matters.** Orders often carry multi-valued attributes: tags such as `promo` or `gift`, and the list of items in the basket. Stored as arrays (or as JSON arrays from an API), they answer questions like "AOV of orders containing a promo tag" and "average units per order", but only if you unnest them carefully.
+
+Filter on array membership with `= ANY(...)` or the containment operator `@>`, and measure array length with `cardinality`:
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test AND o.channel <> 'b2b'
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT 'promo' = ANY (tags)                     AS has_promo,
+       COUNT(*)                                 AS orders,
+       ROUND(AVG(order_value), 2)               AS aov,
+       ROUND(AVG(cardinality(skus)), 2)         AS avg_units
+FROM valid_orders
+GROUP BY 1
+ORDER BY 1;
+```
+
+| has_promo | orders | aov | avg_units |
+|---|---|---|---|
+| f | 6 | 45.00 | 1.50 |
+| t | 4 | 40.00 | 1.75 |
+
+To break AOV down **per tag**, unnest the tags into rows. An order with two tags then appears in two groups, which is right for "AOV of orders with tag X" but means the groups overlap. Untagged orders vanish in a plain `unnest`, so a `LEFT JOIN LATERAL` with a default keeps them:
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+)
+SELECT COALESCE(t.tag, '(no tag)')     AS tag,
+       COUNT(*)                        AS orders,
+       ROUND(AVG(v.order_value), 2)    AS aov
+FROM valid_orders v
+LEFT JOIN LATERAL unnest(v.tags) AS t(tag) ON true
+GROUP BY 1
+ORDER BY 1;
+```
+
+| tag | orders | aov |
+|---|---|---|
+| (no tag) | 5 | 40.00 |
+| b2b | 1 | 1500.00 |
+| gift | 2 | 60.00 |
+| promo | 4 | 40.00 |
+
+Going the other way, `array_agg` rebuilds nested data, for example each customer's distinct SKUs bought, which is how a basket profile is produced for a recommendation feature:
+
+```sql
+SELECT o.customer_id,
+       array_agg(DISTINCT s.sku ORDER BY s.sku) AS distinct_skus,
+       COUNT(*)                                 AS units
+FROM orders o
+CROSS JOIN LATERAL unnest(o.skus) AS s(sku)
+WHERE o.status = 'completed' AND o.customer_id IN (1, 2, 6)
+GROUP BY o.customer_id
+ORDER BY o.customer_id;
+```
+
+| customer_id | distinct_skus | units |
+|---|---|---|
+| 1 | \{A,B,C\} | 4 |
+| 2 | \{A,B,C\} | 4 |
+| 6 | \{A,C\} | 4 |
+
+**Pitfalls.** Joining an unnested array back to order-level amounts and then summing multiplies each order's value by its number of elements (the array version of join fan-out); aggregate the value at order level, as above, or divide by `cardinality`. Arrays are 1-based in PostgreSQL. In warehouses the same patterns are `UNNEST` (BigQuery, DuckDB), `LATERAL FLATTEN` (Snowflake) and `explode` (Spark SQL).
+
+## Approach: gaps and islands for above-target AOV streaks
+
+**Why it matters.** Merchandising sets an AOV target, say 45, and asks: "During which stretches of consecutive trading days were we above target?" Consecutive runs are the **gaps and islands** problem. The standard trick: within the rows that qualify, `date − ROW_NUMBER()` is constant for consecutive dates, so it can be used as a group key.
+
+Days with no orders at all (4 May) also break a run, because a day without orders is not "above target":
+
+```sql
+WITH valid_orders AS (
+  SELECT o.*, o.subtotal - o.discount AS order_value
+  FROM orders o
+  JOIN customers c ON c.customer_id = o.customer_id
+  WHERE o.status = 'completed' AND NOT c.is_test AND o.channel <> 'b2b'
+    AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id AND r.full_refund)
+),
+calendar AS (
+  SELECT d::date AS order_date FROM generate_series(DATE '2026-05-01', DATE '2026-05-07', INTERVAL '1 day') AS d
+),
+daily AS (
+  SELECT c.order_date,
+         ROUND(SUM(v.order_value) / NULLIF(COUNT(v.order_id), 0), 2) AS aov
+  FROM calendar c
+  LEFT JOIN valid_orders v ON (v.order_ts AT TIME ZONE 'UTC')::date = c.order_date
+  GROUP BY c.order_date
+),
+flagged AS (
+  SELECT order_date, aov,
+         order_date - (ROW_NUMBER() OVER (ORDER BY order_date))::int AS island_key
+  FROM daily
+  WHERE aov >= 45
+)
+SELECT MIN(order_date) AS streak_start,
+       MAX(order_date) AS streak_end,
+       COUNT(*)        AS days,
+       MIN(aov)        AS lowest_aov_in_streak
+FROM flagged
+GROUP BY island_key
+ORDER BY streak_start;
+```
+
+| streak_start | streak_end | days | lowest_aov_in_streak |
+|---|---|---|---|
+| 2026-05-01 | 2026-05-01 | 1 | 45.00 |
+| 2026-05-05 | 2026-05-05 | 1 | 60.00 |
+| 2026-05-07 | 2026-05-07 | 1 | 50.00 |
+
+The daily consumer AOVs are 45 (1 May), 37.50 (2 May), 22.50 (3 May, pulled down by the free order), none on 4 May (no orders) and 6 May (the only order was refunded), 60 on 5 May and 50 on 7 May. So there are three one-day streaks. Without the calendar join, 5 May and 7 May would look consecutive in a list of trading days and merge into one two-day streak; whether a closed day should break a streak is, again, a definition to agree.
+
+**Pitfalls.** Apply the filter before numbering rows, as here, or the key shifts. Use the calendar, not the event table, as the row source when missing days matter. The alternative formulation, `LAG` to flag a break then a running `SUM` of breaks as the island id, handles more complex rules (for example "a gap of up to one day is allowed").
+
+## Approach: CTE materialisation trade-offs
+
+**Why it matters.** Every query above starts with a `valid_orders` CTE. Whether PostgreSQL computes that CTE once and stores it, or folds it into the outer query, changes performance a lot. Since PostgreSQL 12, a side-effect-free CTE referenced **once** is inlined (so outer filters can be pushed into it), and one referenced **more than once** is materialised (computed once, then scanned). `MATERIALIZED` and `NOT MATERIALIZED` override the default.
+
+Load 200,000 orders and index the customer column:
+
+```sql
+CREATE TABLE orders_big AS
+SELECT g AS order_id,
+       g % 20000 + 1                                  AS customer_id,
+       (ARRAY['web','app','b2b'])[g % 3 + 1]          AS channel,
+       ((g * 37) % 20000) / 100.0                     AS order_value,
+       CASE WHEN g % 25 = 0 THEN 'cancelled' ELSE 'completed' END AS status
+FROM generate_series(1, 200000) AS g;
+CREATE INDEX orders_big_customer ON orders_big (customer_id);
+VACUUM ANALYZE orders_big;
+```
+
+AOV for one customer, with the CTE referenced once: PostgreSQL inlines it, pushes `customer_id = 42` down, and uses the index:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+WITH valid AS (SELECT * FROM orders_big WHERE status = 'completed')
+SELECT AVG(order_value) FROM valid WHERE customer_id = 42;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Bitmap Heap Scan on orders_big (actual rows=10 loops=1)
+        Recheck Cond: (customer_id = 42)
+        Filter: (status = 'completed'::text)
+        Heap Blocks: exact=10
+        ->  Bitmap Index Scan on orders_big_customer (actual rows=10 loops=1)
+              Index Cond: (customer_id = 42)
+```
+
+Forcing `MATERIALIZED` computes the whole CTE first (192,000 rows) and filters afterwards:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+WITH valid AS MATERIALIZED (SELECT * FROM orders_big WHERE status = 'completed')
+SELECT AVG(order_value) FROM valid WHERE customer_id = 42;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  CTE valid
+    ->  Seq Scan on orders_big (actual rows=192000 loops=1)
+          Filter: (status = 'completed'::text)
+          Rows Removed by Filter: 8000
+  ->  CTE Scan on valid (actual rows=10 loops=1)
+        Filter: (customer_id = 42)
+        Rows Removed by Filter: 191990
+```
+
+Materialisation is the right choice when an expensive CTE is reused. Here a per-channel aggregate is referenced twice (each channel's AOV against the overall AOV), so PostgreSQL computes it once by default and scans the stored result twice:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF)
+WITH by_channel AS (
+  SELECT channel, SUM(order_value) AS revenue, COUNT(*) AS orders
+  FROM orders_big WHERE status = 'completed' GROUP BY channel
+)
+SELECT b.channel, b.revenue / b.orders AS aov,
+       (SELECT SUM(revenue) / SUM(orders) FROM by_channel) AS overall_aov
+FROM by_channel b;
+```
+
+```text
+CTE Scan on by_channel b
+  CTE by_channel
+    ->  HashAggregate
+          Group Key: orders_big.channel
+          ->  Seq Scan on orders_big
+                Filter: (status = 'completed'::text)
+  InitPlan 2 (returns $1)
+    ->  Aggregate
+          ->  CTE Scan on by_channel
+```
+
+**Rules of thumb.**
+
+| Situation | Better choice |
+|---|---|
+| CTE used once, outer query filters it | Inline (default) so the filter reaches the index |
+| Expensive CTE used several times | Materialise (default when referenced more than once) |
+| CTE used several times but each use filters to a small slice | `NOT MATERIALIZED` so each use gets its own pushed-down filter |
+| You need an optimisation fence (stop the planner reordering a volatile or costly expression) | `MATERIALIZED` |
+
+Recursive CTEs and CTEs with side effects (data-modifying statements) are always materialised. Other engines differ: many warehouses inline CTEs and may evaluate a reused CTE more than once, so check the plan rather than assuming.
+
+## Approach: reading EXPLAIN plans
+
+**Why it matters.** "The AOV dashboard is slow" is answered by the execution plan, not by guessing. A plan is a tree: each node produces rows for its parent. Read it from the most indented nodes (data access) up to the top (the final result). With `ANALYZE`, PostgreSQL runs the query and shows actual rows next to its estimates.
+
+AOV by customer segment, joining the large orders table to a customers table:
+
+```sql
+CREATE TABLE customers_big AS
+SELECT g AS customer_id, CASE WHEN g % 50 = 0 THEN 'business' ELSE 'consumer' END AS segment
+FROM generate_series(1, 20000) AS g;
+ALTER TABLE customers_big ADD PRIMARY KEY (customer_id);
+ANALYZE customers_big;
+
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS ON, TIMING OFF, SUMMARY OFF)
+SELECT c.segment, COUNT(*) AS orders, ROUND(AVG(o.order_value), 2) AS aov
+FROM orders_big o
+JOIN customers_big c ON c.customer_id = o.customer_id
+WHERE o.status = 'completed'
+GROUP BY c.segment;
+```
+
+```text
+HashAggregate  (cost=6495.12..6495.15 rows=2 width=49) (actual rows=2 loops=1)
+  Group Key: c.segment
+  Batches: 1  Memory Usage: 24kB
+  ->  Hash Join  (cost=578.00..5054.37 rows=192100 width=15) (actual rows=192000 loops=1)
+        Hash Cond: (o.customer_id = c.customer_id)
+        ->  Seq Scan on orders_big o  (cost=0.00..3972.00 rows=192100 width=10) (actual rows=192000 loops=1)
+              Filter: (status = 'completed'::text)
+              Rows Removed by Filter: 8000
+        ->  Hash  (cost=328.00..328.00 rows=20000 width=13) (actual rows=20000 loops=1)
+              Buckets: 32768  Batches: 1  Memory Usage: 1194kB
+              ->  Seq Scan on customers_big c  (cost=0.00..328.00 rows=20000 width=13) (actual rows=20000 loops=1)
+```
+
+How to read it, bottom up:
+
+1. **`Seq Scan on orders_big`** reads every row and applies `Filter: status = 'completed'`; `Rows Removed by Filter` shows the 8,000 cancelled orders thrown away. A full scan is correct here because the query needs 96% of the table.
+2. **`Seq Scan on customers_big`** feeds a **`Hash`** node: PostgreSQL builds an in-memory hash table on the smaller input. `Buckets`, `Batches: 1` and `Memory Usage` tell you it fitted in memory; more than one batch would mean it spilled to disk.
+3. **`Hash Join`** probes the hash table with each order row. Its `Hash Cond` is the join condition.
+4. **`HashAggregate`** groups by segment; two groups come out.
+5. On each line, `cost=startup..total` is the planner's estimate in arbitrary units, `rows=` its row estimate and `width=` the average row size in bytes; `(actual rows=... loops=...)` is what happened. Multiply actual rows by `loops` for the true total in nested loops.
+
+**What to look for.** A large gap between estimated and actual rows (often caused by stale statistics or correlated columns) leads to bad join choices; run `ANALYZE` or add extended statistics. A `Nested Loop` with a large outer input and no index on the inner side is the classic slow plan. `Sort Method: external merge` or hash `Batches` above 1 mean spilling. Add `BUFFERS` to see how many pages each node read. In warehouses, the query profile shows the same ideas: bytes scanned per table, partitions pruned, join type and spill.
+
+## Approach: handling skew in aggregations
+
+**Why it matters.** In a distributed engine (Spark, a warehouse, a sharded database), a `GROUP BY channel` sends every row for one channel to one worker. If one key holds most of the rows (here, a channel or a single huge B2B customer with millions of order lines), that worker does most of the work while the others wait. That is **data skew**, and it shows up as one task running far longer than the rest.
+
+The common fix is **salting**: add a random or hash-based salt to the hot key, aggregate by `(key, salt)` so the work spreads across workers, then aggregate again by key. AOV is safe to split this way only if you carry the sum and the count, never partial averages. On one PostgreSQL node, the two phases give the same answer as the direct query:
+
+```sql
+WITH phase1 AS (                                   -- spread each channel over 8 buckets
+  SELECT channel, order_id % 8 AS salt,
+         SUM(order_value) AS partial_revenue, COUNT(*) AS partial_orders
+  FROM orders_big
+  WHERE status = 'completed'
+  GROUP BY channel, order_id % 8
+),
+phase2 AS (                                        -- combine the buckets per channel
+  SELECT channel, SUM(partial_revenue) AS revenue, SUM(partial_orders) AS orders,
+         COUNT(*) AS buckets
+  FROM phase1 GROUP BY channel
+)
+SELECT p.channel, p.buckets, p.orders,
+       ROUND(p.revenue / p.orders, 4) AS aov_two_phase,
+       (SELECT ROUND(AVG(order_value), 4) FROM orders_big o
+        WHERE o.status = 'completed' AND o.channel = p.channel) AS aov_direct
+FROM phase2 p
+ORDER BY p.channel;
+```
+
+| channel | buckets | orders | aov_two_phase | aov_direct |
+|---|---|---|---|---|
+| app | 8 | 64000 | 100.0000 | 100.0000 |
+| b2b | 8 | 64000 | 100.0031 | 100.0031 |
+| web | 8 | 64000 | 99.9969 | 99.9969 |
+
+The same idea fixes the classic mistake of averaging the averages: averaging the eight partial AOVs per channel would weight buckets equally regardless of size.
+
+**Other skew fixes.**
+
+- **Partial (map-side) aggregation**: most engines already pre-aggregate on each worker before the shuffle, which removes skew for decomposable aggregates like `SUM` and `COUNT`. Skew hurts most for non-decomposable work: exact `COUNT(DISTINCT)`, percentiles, and joins.
+- **Isolate the hot key**: process the one huge B2B customer separately and `UNION ALL` the results.
+- **Skewed joins**: broadcast the small side, or let the engine split skewed partitions (Spark's adaptive query execution has a skew-join optimisation).
+- **Statistical skew** is a different problem with the same name: a long tail of large orders. That one is handled with medians, percentiles or capped (winsorised) means, not with salting.
+
+**In interviews.** Explain how you would detect skew (task durations or per-key row counts), then salting with sum and count, and the distinction between data skew and a skewed distribution.
+
+## Interview tips
+
+**How it is asked.** "Calculate AOV by month and channel", "AOV for first versus repeat orders", "why did AOV jump last Tuesday?" (an outlier), "AOV excluding refunded and test orders", or "the AOV job is slow on one channel".
+
+**What a strong answer includes.**
+
+1. A definition of order value (net of discounts? including shipping and tax?) and of which orders count.
+2. `SUM(value) / COUNT(*)` over one consistent set of orders, never the average of daily averages.
+3. The median beside the mean, with an explanation of outliers.
+4. Anti-joins written with `NOT EXISTS` or `LEFT JOIN ... IS NULL`.
+5. Performance reasoning from a real plan.
+
+**Mistakes candidates make.**
+
+- Excluding cancelled orders from revenue but not from the order count, or the reverse.
+- `AVG` over a joined order-lines table, which averages lines instead of orders.
+- Averaging daily or per-segment AOVs.
+- Reporting only the mean when one order dominates.
+- `NOT IN` against a list containing `NULL`.
+- Summing order values after unnesting arrays, which multiplies them.

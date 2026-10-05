@@ -126,5 +126,37 @@
   "Window function basics (OVER) → Churn Rate": {
     "ref": "interview-questions:sql/churn-rate-sql-case-study",
     "heading": "Approach: window function basics with OVER"
+  },
+  "Reading EXPLAIN / execution plans → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: reading EXPLAIN plans"
+  },
+  "Median & percentile (PERCENTILE_CONT) → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: median and percentiles with PERCENTILE_CONT"
+  },
+  "UNPIVOT columns to rows → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: UNPIVOT columns to rows for AOV composition"
+  },
+  "CTE materialization trade-offs → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: CTE materialisation trade-offs"
+  },
+  "Gaps and Islands problem → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: gaps and islands for above-target AOV streaks"
+  },
+  "Anti-join (NOT EXISTS / LEFT JOIN NULL) → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: anti-joins to exclude orders and find first orders"
+  },
+  "Handling skew in aggregations → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: handling skew in aggregations"
+  },
+  "Array & nested data handling → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: arrays and nested data"
   }
 }
