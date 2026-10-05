@@ -69,6 +69,7 @@ related:
   - "system-designs:change-data-capture-platform"
   - "system-designs:reporting-analytics-platform"
 previous: "system-designs:reporting-analytics-platform"
+next: "system-designs:fraud-detection-pipeline"
 versionContext: "The identity-resolution SQL was run on PostgreSQL 16 on a toy dataset; at scale the same connected-components step runs in Spark or the warehouse. Other components are described, not executed."
 sources:
   - { label: "PostgreSQL documentation: WITH queries (recursive CTEs)", url: "https://www.postgresql.org/docs/current/queries-with.html" }
