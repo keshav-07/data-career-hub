@@ -1,0 +1,26 @@
+{
+  "Topic fundamentals": {
+    "ref": "articles:kafka/topics-partitions-consumer-groups",
+    "heading": "Topic fundamentals"
+  },
+  "Partitions & parallelism": {
+    "ref": "articles:kafka/topics-partitions-consumer-groups",
+    "heading": "Partitions and parallelism"
+  },
+  "Partition keys & ordering": {
+    "ref": "articles:kafka/topics-partitions-consumer-groups",
+    "heading": "Partition keys and ordering"
+  },
+  "Replication factor": {
+    "ref": "articles:kafka/topics-partitions-consumer-groups",
+    "heading": "Replication factor"
+  },
+  "Partition assignment": {
+    "ref": "articles:kafka/topics-partitions-consumer-groups",
+    "heading": "Partition assignment"
+  },
+  "Consumer group basics": {
+    "ref": "articles:kafka/topics-partitions-consumer-groups",
+    "heading": "Consumer group basics"
+  }
+}

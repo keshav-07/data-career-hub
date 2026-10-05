@@ -69,7 +69,7 @@ Topic: page-views	TopicId: LG01aRfWQh-yqdLL3js4-Q	PartitionCount: 3	ReplicationF
 	Topic: page-views	Partition: 2	Leader: 1	Replicas: 1,2,3	Isr: 1,2,3	Elr: 	LastKnownElr:
 ```
 
-Each line describes one partition: which broker leads it, which brokers hold copies, and which copies are currently in sync (`Isr`). `Elr` is the eligible leader replica list, a newer safety mechanism covered in the [replication lesson](/kafka/replication-isr/).
+Each line describes one partition: which broker leads it, which brokers hold copies, and which copies are currently in sync (`Isr`). `Elr` is the eligible leader replica list, a newer safety mechanism covered in the replication lesson.
 
 ### Naming topics
 
@@ -233,7 +233,7 @@ Pick the **narrowest entity whose events must stay in order**. A key with few di
 ### Pitfalls
 
 - **Different clients, different hashes.** librdkafka-based clients (the Confluent Python, Go and .NET clients) default to a CRC32-based partitioner. On the same topic, the Confluent Python client's default agreed with the Java producer on only 7 of 30 test keys. Set `partitioner: murmur2_random` in those clients when Java and non-Java producers write the same keyed topic.
-- **Retries and reordering.** Ordering within a partition also depends on producer settings; the idempotent producer (on by default since Kafka 3.0) keeps order through retries. See the [producers lesson](/kafka/producers/).
+- **Retries and reordering.** Ordering within a partition also depends on producer settings; the idempotent producer (on by default since Kafka 3.0) keeps order through retries. See the producers lesson.
 - **Null keys** give no ordering. Do not rely on arrival order for unkeyed data.
 
 ### In interviews
@@ -270,7 +270,7 @@ Error while executing topic command : Unable to replicate the partition 4 time(s
 
 ### In interviews
 
-Be ready to connect RF, `acks` and `min.insync.replicas`: RF says how many copies exist, `min.insync.replicas` says how many must confirm a write, and `acks=all` makes the producer wait for them. The details are in the [replication lesson](/kafka/replication-isr/).
+Be ready to connect RF, `acks` and `min.insync.replicas`: RF says how many copies exist, `min.insync.replicas` says how many must confirm a write, and `acks=all` makes the producer wait for them. The details are in the replication lesson.
 
 ## Consumer group basics
 
@@ -291,7 +291,7 @@ analytics       analytics-1-bfe7d8f3-d3ec-4fd3-8edd-afa25f85f7e3 /127.0.0.1     
 analytics       analytics-3-17da9438-3082-4ba4-b2e2-6e2d7cd6c48b /127.0.0.1      analytics-3     2
 ```
 
-Without `--members`, the same command lists each partition with its committed offset, the log-end offset and the **lag** between them, which is the first number to check when a pipeline falls behind (covered in the [consumers lesson](/kafka/consumers-offsets/)).
+Without `--members`, the same command lists each partition with its committed offset, the log-end offset and the **lag** between them, which is the first number to check when a pipeline falls behind (covered in the consumers lesson).
 
 ### Rules worth memorising
 
@@ -303,7 +303,7 @@ Without `--members`, the same command lists each partition with its committed of
 | 6 | 1 | one consumer reads all 6 |
 
 - **Partitions cap a group's parallelism.** Idle consumers are still useful as hot standbys, but they add no throughput.
-- **Membership changes trigger a rebalance.** When a consumer joins, leaves or stops heartbeating, partitions are reassigned. Under the classic protocol this can briefly pause the group; the newer consumer protocol (generally available since Kafka 4.0) makes it incremental. See [consumer groups and rebalancing](/kafka/consumer-groups-rebalancing/).
+- **Membership changes trigger a rebalance.** When a consumer joins, leaves or stops heartbeating, partitions are reassigned. Under the classic protocol this can briefly pause the group; the newer consumer protocol (generally available since Kafka 4.0) makes it incremental. See consumer groups and rebalancing.
 - **Progress is stored per group.** Each group commits its own offsets to the internal `__consumer_offsets` topic, so a restarted consumer resumes where its group left off.
 - **Share groups are a different thing.** Kafka 4.2 made *share groups* (KIP-932, "queues for Kafka") production-ready: members of a share group can read the same partition and acknowledge records one by one, like a work queue. This lesson, and most pipelines, use ordinary consumer groups.
 
@@ -379,7 +379,7 @@ The last two lines show the classic weakness of range assignment: because it wor
 
 ### Replica placement is a different assignment
 
-Do not confuse consumer assignment with **replica placement**: when you create a topic, the controller spreads each partition's replicas and leaders across brokers (and across racks when `broker.rack` is set), as the rotated `Replicas` lists in the `describe` output show. Moving replicas later is done with `kafka-reassign-partitions.sh` or a tool such as Cruise Control (see [operating Kafka](/kafka/kafka-operations/)).
+Do not confuse consumer assignment with **replica placement**: when you create a topic, the controller spreads each partition's replicas and leaders across brokers (and across racks when `broker.rack` is set), as the rotated `Replicas` lists in the `describe` output show. Moving replicas later is done with `kafka-reassign-partitions.sh` or a tool such as Cruise Control (see operating Kafka).
 
 ### Pitfalls
 
@@ -442,4 +442,4 @@ The Java client hashes keys with murmur2, while librdkafka-based clients default
 - The replication factor is how many copies of each partition exist; RF 3 with `acks=all` is the usual durable choice, but it does not replace backups or DR.
 - A consumer group gives each partition to one member, so partitions cap the group's parallelism; separate groups read independently.
 - Assignors decide who reads what: range keeps topics aligned, round-robin balances counts, and sticky or cooperative strategies minimise movement.
-- Delivery guarantees depend on when offsets are committed relative to processing; see the [delivery semantics lesson](/kafka/delivery-semantics-exactly-once/).
+- Delivery guarantees depend on when offsets are committed relative to processing; see the delivery semantics lesson.
