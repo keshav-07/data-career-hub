@@ -1,0 +1,183 @@
+---
+title: "Binary Tree Level Order Traversal: BFS with a Queue, Level by Level"
+seoTitle: "Binary Tree Level Order Traversal (BFS)"
+description: "Group a binary tree's values by depth using breadth-first search with a queue, plus a depth-first alternative. Python code, walkthrough, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Use a queue starting with the root. While it is not empty, record its current length, pop exactly that many nodes, collect their values into one list for this level and enqueue their children. Fixing the level size before the inner loop keeps levels separate. Every node is enqueued and dequeued once: O(n) time and O(w) extra space for the widest level. A DFS that passes the depth and appends to result[depth] gives the same output."
+followUps: ["How would you return the levels bottom-up or in zigzag order?", "How would you compute the average of each level?", "Why is a deque better than a list for the queue in Python?", "How would you connect each node to its right neighbour on the same level?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/subtree-of-another-tree"
+next: "interview-questions:dsa/binary-tree-right-side-view"
+---
+
+## Problem
+
+Given the root of a binary tree, return its values grouped by level: a list whose first element is a list holding the root's value, whose second element holds the values at depth 1 from left to right, and so on. An empty tree gives an empty list.
+
+This is widely known as LeetCode 102 (Binary Tree Level Order Traversal). It is the template for every breadth-first tree question: right side view, zigzag order, level averages, minimum depth.
+
+Constraints for this version: 0 to 2,000 nodes.
+
+## Examples
+
+| Tree (level order) | Result |
+|---|---|
+| `[40, 20, 60, 10, None, 50, 70]` | `[[40], [20, 60], [10, 50, 70]]` |
+| `[1, None, 2, None, 3]` | `[[1], [2], [3]]` |
+| `[9]` | `[[9]]` |
+| `[]` | `[]` |
+
+## Approach 1: brute force
+
+Compute the height `h`, then for each depth `d` from 0 to `h - 1` run a fresh traversal that collects the nodes at exactly depth `d`.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def height(node):
+    return 0 if node is None else 1 + max(height(node.left), height(node.right))
+
+def level_order_by_depth(root):
+    def collect(node, depth, out):
+        if node is None:
+            return
+        if depth == 0:
+            out.append(node.val)
+            return
+        collect(node.left, depth - 1, out)
+        collect(node.right, depth - 1, out)
+
+    result = []
+    for d in range(height(root)):
+        level = []
+        collect(root, d, level)
+        result.append(level)
+    return result
+```
+
+Each pass walks the top of the tree again: O(n log n) for a balanced tree and O(n^2) for a skewed one.
+
+## Approach 2: optimal
+
+**Key insight.** A queue processes nodes in the order they were discovered, and the root's children are discovered before its grandchildren, so a queue naturally visits nodes level by level. To separate the levels, note the queue length at the start of each round: exactly that many nodes belong to the current level.
+
+**Walkthrough** for `[40, 20, 60, 10, None, 50, 70]`:
+
+| Round | Queue at start | Level size | Level values | Queue after |
+|---|---|---|---|---|
+| 1 | 40 | 1 | `[40]` | 20, 60 |
+| 2 | 20, 60 | 2 | `[20, 60]` | 10, 50, 70 |
+| 3 | 10, 50, 70 | 3 | `[10, 50, 70]` | empty |
+
+### Breadth-first (the expected answer)
+
+```python
+from collections import deque
+
+def level_order(root):
+    if root is None:
+        return []
+    result, queue = [], deque([root])
+    while queue:
+        level = []
+        for _ in range(len(queue)):     # size is fixed before the loop starts
+            node = queue.popleft()
+            level.append(node.val)
+            if node.left:
+                queue.append(node.left)
+            if node.right:
+                queue.append(node.right)
+        result.append(level)
+    return result
+```
+
+### Depth-first alternative
+
+Pass the depth down and append to the matching list. Visiting left before right keeps each level in left-to-right order.
+
+```python
+def level_order_dfs(root):
+    result = []
+
+    def visit(node, depth):
+        if node is None:
+            return
+        if depth == len(result):
+            result.append([])
+        result[depth].append(node.val)
+        visit(node.left, depth + 1)
+        visit(node.right, depth + 1)
+
+    visit(root, 0)
+    return result
+```
+
+**Complexity.** O(n) time for both. BFS uses O(w) memory for the widest level (up to about n/2 in a complete tree); DFS uses O(h) stack plus the output.
+
+## Tests
+
+```python
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([40, 20, 60, 10, None, 50, 70], [[40], [20, 60], [10, 50, 70]]),
+    ([1, None, 2, None, 3], [[1], [2], [3]]),
+    ([1, 2, None, 3], [[1], [2], [3]]),
+    ([9], [[9]]),
+    ([], []),
+    ([2, 2, 2, 2, None, None, 2], [[2], [2, 2], [2, 2]]),
+]
+for fn in (level_order_by_depth, level_order, level_order_dfs):
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+
+# a complete tree of 1,023 nodes: 10 levels, the last one with 512 values
+full = build_tree(list(range(1023)))
+levels = level_order(full)
+assert len(levels) == 10 and len(levels[-1]) == 512 and levels[1] == [1, 2]
+
+# variations built on the same loop
+zigzag = [lvl if i % 2 == 0 else lvl[::-1] for i, lvl in enumerate(level_order(build_tree([1, 2, 3, 4, 5, 6, 7])))]
+assert zigzag == [[1], [3, 2], [4, 5, 6, 7]]
+averages = [sum(l) / len(l) for l in level_order(build_tree([40, 20, 60, 10, None, 50, 70]))]
+assert averages == [40.0, 40.0, 130 / 3]
+print("all level order tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Recomputing `len(queue)` inside the loop.** The queue grows as you append children; capture the level size first (`range(len(queue))` evaluates it once).
+- **Using a Python list as the queue.** `list.pop(0)` is O(n), which makes the traversal O(n^2) on wide trees. Use `collections.deque`.
+- **Enqueuing `None` children** works if you skip them when popped, but it inflates the queue and complicates level sizes.
+- **Empty tree** must return `[]`, not `[[]]`.
+
+## Where this shows up in data engineering
+
+Level-by-level processing is how you walk hierarchies and dependency graphs in "waves": an org chart grouped by management level, or the tasks of a DAG grouped by how many upstream steps they have, which is the set you could run in parallel at each stage. In SQL the same thing is a recursive CTE that carries a `level` column.
