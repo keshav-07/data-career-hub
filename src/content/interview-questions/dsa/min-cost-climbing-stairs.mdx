@@ -14,6 +14,7 @@ interviewRelevance: "High"
 shortAnswer: "Let best(i) be the cheapest cost to stand on position i, where the top is one past the last step and you may start on step 0 or step 1 for free. Then best(i) = min(best(i - 1) + cost[i - 1], best(i - 2) + cost[i - 2]), with best(0) = best(1) = 0, and the answer is best at the top. Keeping only the last two values gives O(n) time and O(1) space."
 followUps: ["How would you also return which steps were used?", "What changes if you may jump up to k steps at a time?", "How does this relate to House Robber?"]
 previous: "interview-questions:dsa/climbing-stairs"
+next: "interview-questions:dsa/house-robber"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
