@@ -1,0 +1,112 @@
+---
+title: "Car Fleet: Count the Groups of Cars Arriving at a Destination"
+seoTitle: "Car Fleet: Sort by Position, Stack Arrival Times"
+description: "Cars on a one-lane road cannot overtake, so faster cars bunch behind slower ones. Count the fleets that arrive by sorting by position and comparing arrival times."
+technology: ["dsa"]
+topic: ["stack"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Compute each car's solo arrival time, (target - position) / speed, and process cars from closest to the target to farthest. A car whose time is no greater than the fleet ahead of it catches up and joins that fleet; a car whose time is greater can never catch up and starts a new fleet, which becomes the new one to compare against. Count the fleets. Sorting dominates: O(n log n) time, O(n) space."
+followUps: ["Why can you ignore where exactly a car catches up?", "How would you avoid floating-point comparisons of arrival times?", "How would you report the arrival time of each fleet?"]
+previous: "interview-questions:dsa/daily-temperatures"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+`n` cars drive along a single-lane road towards a destination at distance `target`. Car `i` starts at `position[i]` (all different, all below `target`) and drives at constant `speed[i]`. A car cannot overtake: if it catches up with a slower car ahead, it slows down and they continue together as one fleet. A car that catches up exactly at the destination also joins that fleet. Return the number of fleets that reach the destination. This is widely known as LeetCode 853, Car Fleet.
+
+## Examples
+
+```text
+target = 20, position = [14, 8, 0, 5], speed = [3, 4, 4, 1]   ->  3
+  solo arrival times: 2, 3, 5, 15
+  the car at 0 (t = 5) catches the slow car at 5 (t = 15), so they form one fleet;
+  the cars at 14 and 8 arrive on their own.
+
+target = 10, position = [4], speed = [2]                      ->  1
+target = 12, position = [0, 6], speed = [4, 2]                ->  1   (both reach 12 at t = 3)
+```
+
+## Approach 1: brute force
+
+A car leads its own fleet exactly when every car ahead of it would arrive strictly earlier on its own; otherwise it is held up by one of them. Check that for every car.
+
+```python
+def car_fleet_brute(target, position, speed):
+    times = [(target - p) / s for p, s in zip(position, speed)]
+    fleets = 0
+    for i in range(len(position)):
+        ahead = [times[j] for j in range(len(position)) if position[j] > position[i]]
+        if all(t < times[i] for t in ahead):
+            fleets += 1
+    return fleets
+```
+
+**Complexity:** O(n²) time, O(n) space.
+
+## Approach 2: optimal
+
+**Key insight:** process cars from the front of the road backwards. A car either merges into the fleet directly ahead (its solo time is not larger, so it would catch up by the destination) or it is slower and starts a new fleet. A merged car takes the fleet's arrival time, so only the most recent fleet's time is ever compared. That is a stack whose top is the only value that matters.
+
+Walkthrough on the first example, sorted by position descending:
+
+| Car (pos, speed) | Solo time | Fleet ahead's time | Action | Fleets |
+|---|---|---|---|---|
+| (14, 3) | 2 | none | new fleet | 1 |
+| (8, 4) | 3 | 2 | 3 > 2: new fleet | 2 |
+| (5, 1) | 15 | 3 | 15 > 3: new fleet | 3 |
+| (0, 4) | 5 | 15 | 5 ≤ 15: joins it | 3 |
+
+```python
+def car_fleet(target, position, speed):
+    cars = sorted(zip(position, speed), reverse=True)
+    stack = []                                 # arrival time of each fleet
+    for p, s in cars:
+        t = (target - p) / s
+        if not stack or t > stack[-1]:
+            stack.append(t)
+    return len(stack)
+```
+
+The stack only ever grows here, so a single `last_time` variable and a counter would do; the stack form makes the pattern explicit and lets you report each fleet's arrival time.
+
+**Complexity:** O(n log n) time for the sort, O(n) space.
+
+## Tests
+
+```python
+import random
+
+for f in (car_fleet, car_fleet_brute):
+    assert f(20, [14, 8, 0, 5], [3, 4, 4, 1]) == 3
+    assert f(10, [4], [2]) == 1                         # single car
+    assert f(12, [0, 6], [4, 2]) == 1                   # meet exactly at target
+    assert f(10, [], []) == 0                           # no cars
+    assert f(100, [0, 10, 20], [1, 1, 1]) == 3          # equal speeds never merge
+    assert f(100, [0, 10, 20], [30, 20, 10]) == 1       # each catches the one ahead
+    assert f(10**6, [0, 1], [10**6, 1]) == 1            # large values
+
+random.seed(37)
+for _ in range(400):
+    n = random.randint(0, 7)
+    target = random.randint(n + 1, 30)
+    pos = random.sample(range(target), n)
+    spd = [random.randint(1, 6) for _ in range(n)]
+    assert car_fleet(target, pos, spd) == car_fleet_brute(target, pos, spd)
+```
+
+## Edge cases and pitfalls
+
+- Sort by position descending (closest to the target first). Processing in input order gives wrong answers.
+- Use `>` to start a new fleet: a car with an equal arrival time meets the fleet at the destination and counts as part of it.
+- Arrival times are fractions. Floating-point division is fine for interview constraints; to be exact, compare `(target - p1) * s2` with `(target - p2) * s1` using integers.
+
+## Where this shows up in data engineering
+
+Rarely as such. The underlying move, sorting by one key and then sweeping while comparing each row only with the current group's summary, is the same as sessionising events: sort by time and start a new group whenever a row cannot join the current one.
