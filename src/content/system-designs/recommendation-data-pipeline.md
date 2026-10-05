@@ -69,6 +69,7 @@ related:
   - "system-designs:fraud-detection-pipeline"
   - "system-designs:customer-360-platform"
 previous: "system-designs:fraud-detection-pipeline"
+next: "system-designs:feature-store"
 versionContext: "The labelling SQL was run on PostgreSQL 16; at scale the same logic runs in Spark SQL. Other components are described, not executed."
 sources:
   - { label: "Feast: point-in-time joins", url: "https://docs.feast.dev/getting-started/concepts/point-in-time-joins" }
