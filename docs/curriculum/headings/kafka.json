@@ -22,5 +22,29 @@
   "Consumer group basics": {
     "ref": "articles:kafka/topics-partitions-consumer-groups",
     "heading": "Consumer group basics"
+  },
+  "Log segments": {
+    "ref": "articles:kafka/log-storage-retention-compaction",
+    "heading": "Log segments"
+  },
+  "Retention policies": {
+    "ref": "articles:kafka/log-storage-retention-compaction",
+    "heading": "Retention policies"
+  },
+  "Compaction (log cleanup)": {
+    "ref": "articles:kafka/log-storage-retention-compaction",
+    "heading": "Compaction (log cleanup)"
+  },
+  "Tombstones & log compaction": {
+    "ref": "articles:kafka/log-storage-retention-compaction",
+    "heading": "Tombstones and log compaction"
+  },
+  "Topic configuration": {
+    "ref": "articles:kafka/log-storage-retention-compaction",
+    "heading": "Topic configuration"
+  },
+  "Tiered storage": {
+    "ref": "articles:kafka/log-storage-retention-compaction",
+    "heading": "Tiered storage"
   }
 }

@@ -1,0 +1,494 @@
+---
+title: "Kafka Log Storage: Segments, Retention, Compaction and Topic Configuration"
+seoTitle: "Kafka Segments, Retention and Compaction"
+description: "How Kafka stores partitions as segment files, how time and size retention delete data, how compaction and tombstones keep the latest value per key, and tiered storage."
+technology: ["kafka"]
+topic: ["log-segments", "retention", "log-compaction", "tiered-storage", "topic-configuration"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Describe the files that make up a partition on disk and how segments roll"
+  - "Predict when time- and size-based retention will delete data, and why deletion happens per segment"
+  - "Explain how log compaction keeps the latest record per key and how tombstones delete keys"
+  - "Set, inspect and override topic configuration with kafka-configs.sh"
+  - "Explain what tiered storage changes and where its limits are"
+prerequisites: ["articles:kafka/topics-partitions-consumer-groups"]
+related: ["articles:kafka/kafka-vs-message-queues", "articles:etl-elt/cdc-patterns-and-failure-modes"]
+previous: "articles:kafka/topics-partitions-consumer-groups"
+sources:
+  - { label: "Apache Kafka documentation: Design (log compaction)", url: "https://kafka.apache.org/documentation/#design" }
+  - { label: "Apache Kafka documentation: Operations", url: "https://kafka.apache.org/39/operations/" }
+  - { label: "Apache Kafka documentation: Tiered storage", url: "https://kafka.apache.org/41/operations/tiered-storage/" }
+  - { label: "Apache Kafka 3.9.0 release announcement", url: "https://kafka.apache.org/blog/2024/11/06/apache-kafka-3.9.0-release-announcement/" }
+versionContext: "Segment listings, kafka-dump-log output, retention and compaction results were produced on Apache Kafka 4.3.1 (three-node KRaft cluster, Java 21); defaults were read from the 4.3.1 configuration reference. The Python retention and compaction simulations run on plain Python 3. Tiered storage was not executed: Kafka ships no production remote storage plugin, so its configuration is shown from the documentation only."
+---
+
+A Kafka partition is not a single file. It is a directory of **segment** files that Kafka appends to, rolls, and eventually deletes or compacts. Knowing how that works explains most storage questions you will meet as a Data Engineer: why data disappeared "early" or "late", why a compacted topic still shows duplicates, how deletes work for CDC tables, and why disks fill up. This lesson goes from the files on disk to the topic settings that control them.
+
+## Sample setup
+
+The outputs below come from a three-broker Kafka 4.3.1 cluster. To reproduce the segment examples, create a single-partition topic with deliberately tiny 1 MiB segments and write 5,000 records of 512 bytes with the bundled performance tool:
+
+```bash
+bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --topic clicks \
+  --partitions 1 --replication-factor 1 \
+  --config segment.bytes=1048576 --config retention.ms=600000
+bin/kafka-producer-perf-test.sh --topic clicks --num-records 5000 --record-size 512 \
+  --throughput -1 --command-property bootstrap.servers=localhost:19092
+```
+
+The Python simulations further down need nothing but Python 3.
+
+## Log segments
+
+**What it is.** Each partition replica is a directory named `<topic>-<partition>` inside the broker's `log.dirs`. Inside it, the log is split into **segments**. Only the newest segment, the **active segment**, receives writes. When it reaches a size or age limit, Kafka closes it and starts a new one. This is called **rolling** a segment.
+
+**Why it matters.** Segments are the unit of deletion, compaction and (with tiered storage) upload. Kafka never edits a closed segment in place: retention deletes whole segment files, and compaction writes cleaned copies.
+
+### The files on disk
+
+After the 5,000 writes above, the leader's directory for `clicks-0` held three segments:
+
+```text
+$ ls -la data2/clicks-0
+-rw-r--r-- 1 root root      504 00000000000000000000.index
+-rw-r--r-- 1 root root  1037598 00000000000000000000.log
+-rw-r--r-- 1 root root      708 00000000000000000000.timeindex
+-rw-r--r-- 1 root root      504 00000000000000001984.index
+-rw-r--r-- 1 root root  1037595 00000000000000001984.log
+-rw-r--r-- 1 root root       56 00000000000000001984.snapshot
+-rw-r--r-- 1 root root      504 00000000000000001984.timeindex
+-rw-r--r-- 1 root root 10485760 00000000000000003968.index
+-rw-r--r-- 1 root root   539746 00000000000000003968.log
+-rw-r--r-- 1 root root       56 00000000000000003968.snapshot
+-rw-r--r-- 1 root root 10485756 00000000000000003968.timeindex
+-rw-r--r-- 1 root root        8 leader-epoch-checkpoint
+-rw-r--r-- 1 root root       43 partition.metadata
+```
+
+| File | Contents |
+|------|----------|
+| `<base>.log` | The record batches themselves. The file name is the **base offset**: the first offset in that segment. |
+| `<base>.index` | Sparse map from offset to byte position in the `.log` file, so a fetch at offset *N* can seek instead of scanning. |
+| `<base>.timeindex` | Sparse map from timestamp to offset, used by time-based lookups such as `offsetsForTimes` and by retention. |
+| `<base>.snapshot` | Producer state (producer IDs and sequence numbers) used by idempotent and transactional producers after a restart. |
+| `leader-epoch-checkpoint` | Which leader epoch started at which offset; used to truncate followers safely after a leader change. |
+
+The active segment's index files are preallocated (`segment.index.bytes`, 10 MiB by default) and trimmed when the segment rolls, which is why the `3968` index looks large.
+
+### Looking inside a segment
+
+`kafka-dump-log.sh` decodes the files. The log holds **batches**, not individual records, and the index is sparse:
+
+```text
+$ bin/kafka-dump-log.sh --files data2/clicks-0/00000000000000001984.log | head -3
+Dumping data2/clicks-0/00000000000000001984.log
+Log starting offset: 1984
+baseOffset: 1984 lastOffset: 2014 count: 31 baseSequence: 1984 lastSequence: 2014 producerId: 1 producerEpoch: 0 partitionLeaderEpoch: 0 isTransactional: false isControl: false deleteHorizonMs: OptionalLong.empty position: 0 CreateTime: 1791184905839 size: 16212 magic: 2 compresscodec: none crc: 4265141228 isvalid: true
+
+$ bin/kafka-dump-log.sh --files data2/clicks-0/00000000000000001984.index | head -3
+Dumping data2/clicks-0/00000000000000001984.index
+offset: 2045 position: 16212
+offset: 2076 position: 32424
+```
+
+Each batch of 31 records is 16,212 bytes, and the index has an entry roughly every 4 KiB of log (`index.interval.bytes`, default 4096). The batch header also shows the producer ID and sequence numbers that the idempotent producer uses, which the producers lesson explains.
+
+### When a segment rolls
+
+A new segment starts when any of these is true:
+
+| Setting (topic / broker default) | Default | Rolls when |
+|---|---|---|
+| `segment.bytes` / `log.segment.bytes` | 1 GiB | the active segment would exceed this size |
+| `segment.ms` / `log.roll.ms` (or `log.roll.hours`) | 7 days | the active segment is older than this |
+| `segment.index.bytes` | 10 MiB | the offset or time index is full |
+
+### Pitfalls
+
+- **Low-volume topics keep data longer than you expect.** A topic writing a few MB a week never fills a 1 GiB segment, so data only becomes deletable once `segment.ms` rolls the segment. Lower `segment.ms` if you need retention to bite promptly.
+- **Tiny segments are expensive.** Every segment holds open file handles and index files; thousands of small segments per partition slow broker restarts and use memory. Keep small segments for demos and special cases.
+
+### In interviews
+
+If asked "how does Kafka store data?", describe the per-partition directory, append-only segments named by base offset, sparse offset and time indexes, and that only the active segment is written. Then link it to retention: deletion is per closed segment.
+
+## Retention policies
+
+**What it is.** With `cleanup.policy=delete` (the default), Kafka deletes old data based on **time** (`retention.ms`, default 7 days) and optionally **size** (`retention.bytes`, default -1, unlimited). Retention is independent of consumption: data is removed when it is old or big enough, whether or not anyone has read it.
+
+### How it works
+
+- A background task checks every `log.retention.check.interval.ms` (5 minutes by default).
+- **Time retention** deletes a segment once its *newest* record timestamp is older than `retention.ms`. One fresh record keeps the whole segment alive.
+- **Size retention** applies per partition: while deleting the oldest segment would still leave the partition at or above `retention.bytes`, that segment is deleted. A topic with 12 partitions and `retention.bytes=10GB` can hold about 120 GB per replica.
+- Deletion is **per segment**. When a segment is deleted, the partition's **log start offset** moves forward. A consumer asking for an older offset gets an out-of-range error and falls back to `auto.offset.reset`.
+- The active segment is never deleted directly; recent Kafka versions roll it first when it meets the retention condition.
+- Deleted segments are renamed with a `.deleted` suffix and removed after `file.delete.delay.ms` (1 minute).
+
+### Worked example: size retention on a real topic
+
+Setting `retention.bytes=1100000` on the `clicks` partition above (about 2.6 MB across three segments) deleted exactly one segment. The earliest available offset moved from 0 to 1984:
+
+```text
+$ bin/kafka-configs.sh --bootstrap-server localhost:19092 --alter --entity-type topics \
+    --entity-name clicks --add-config retention.bytes=1100000
+Completed updating config for topic clicks.
+
+$ bin/kafka-get-offsets.sh --bootstrap-server localhost:19092 --topic clicks --time -2
+clicks:0:1984
+```
+
+The simulation below applies the same rule to the real segment sizes, and shows why the second segment survived even though the partition is still over the limit.
+
+```python
+def apply_size_retention(segments, retention_bytes):
+    """segments: list of (base_offset, size_bytes), oldest first; the last one is active.
+    Deletes the oldest segments while the partition would still be >= retention_bytes without them."""
+    if retention_bytes < 0:
+        return segments
+    total = sum(size for _, size in segments)
+    excess = total - retention_bytes
+    kept = list(segments)
+    while len(kept) > 1 and kept[0][1] <= excess:
+        base, size = kept.pop(0)
+        excess -= size
+        print(f"delete segment {base:>5} ({size:,} bytes); still over by {excess:,}")
+    return kept
+
+clicks = [(0, 1_037_598), (1984, 1_037_595), (3968, 539_746)]
+remaining = apply_size_retention(clicks, 1_100_000)
+print("log start offset:", remaining[0][0], "| partition size:", f"{sum(s for _, s in remaining):,}")
+```
+
+```text
+delete segment     0 (1,037,598 bytes); still over by 477,341
+log start offset: 1984 | partition size: 1,577,341
+```
+
+Deleting segment 1984 as well would leave the partition below the limit, so Kafka keeps it. Size retention therefore keeps *at least* `retention.bytes`, overshooting by up to one segment.
+
+### Choosing retention
+
+| Need | Typical choice |
+|------|----------------|
+| Replay a day of data after a bad deploy | Time retention of several days, sized for peak throughput |
+| Bounded disk on a firehose topic | `retention.bytes` per partition as a safety net, plus time retention |
+| Keep data "forever" | `retention.ms=-1` with tiered storage, or a compacted topic if only the latest value per key matters |
+| Feed a data lake | Retain long enough to cover sink outages, then rely on the lake for history |
+
+### Pitfalls
+
+- **Clock and timestamp surprises.** Time retention uses record timestamps. A producer that sets timestamps far in the past can make data eligible for deletion immediately; one far in the future can keep a segment forever. Brokers reject timestamps outside `message.timestamp.before.max.ms` / `message.timestamp.after.max.ms` (the latter defaults to one hour).
+- **Retention shorter than consumer downtime.** If a consumer is down longer than retention, it loses data. Alert on consumer lag in time, not just records.
+- **`retention.bytes` is per partition**, not per topic.
+
+### In interviews
+
+"A consumer was offline for nine days; what happens?" With default seven-day retention, its committed offset is older than the log start offset, so it resets to `earliest` or `latest` according to `auto.offset.reset` and the gap is lost. Strong answers also mention retention being per segment and tied to record timestamps.
+
+## Compaction (log cleanup)
+
+**What it is.** With `cleanup.policy=compact`, Kafka keeps **at least the latest record for every key** and removes older records with the same key. The topic becomes a changelog that converges to "current value per key". Kafka's own `__consumer_offsets` topic, Kafka Connect's config and offset topics, and Kafka Streams changelog topics all use compaction.
+
+### How it works
+
+- A pool of **log cleaner** threads (`log.cleaner.threads`, default 1) builds a map of the latest offset for each key in the uncleaned part of the log, then recopies older segments, dropping records whose key appears later.
+- The log has a **cleaned tail** and a **dirty head**. A partition becomes a candidate when the dirty share exceeds `min.cleanable.dirty.ratio` (0.5 by default), or when a record has waited longer than `max.compaction.lag.ms` (unlimited by default).
+- `min.compaction.lag.ms` (0 by default) guarantees a minimum time before a record may be compacted, so fast consumers can still see every update.
+- The **active segment is never compacted**, so recent duplicates always remain until it rolls.
+- Offsets never change. Compaction leaves gaps: reading from a removed offset returns the next surviving record.
+- `cleanup.policy=compact,delete` combines both: compact by key, and also delete segments past retention.
+
+### Worked example: a compacted customer profile topic
+
+The topic below compacts aggressively for demonstration (tiny `segment.ms`, low dirty ratio):
+
+```bash
+bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --topic customer-profile \
+  --partitions 1 --replication-factor 3 \
+  --config cleanup.policy=compact --config segment.ms=1000 \
+  --config min.cleanable.dirty.ratio=0.01 --config delete.retention.ms=5000
+printf 'c1:{"tier":"bronze"}\nc2:{"tier":"silver"}\nc1:{"tier":"silver"}\nc3:{"tier":"bronze"}\nc1:{"tier":"gold"}\nc2:{"tier":"gold"}\n' | \
+  bin/kafka-console-producer.sh --bootstrap-server localhost:19092 --topic customer-profile \
+  --reader-property parse.key=true --reader-property key.separator=:
+```
+
+A seventh record (`c4`) was written two seconds later so that the first batch was no longer in the active segment. About 40 seconds later, reading from the beginning returned only the latest value per key, at their original offsets:
+
+```text
+Offset:3	c3	{"tier":"bronze"}
+Offset:4	c1	{"tier":"gold"}
+Offset:5	c2	{"tier":"gold"}
+Offset:6	c4	{"tier":"bronze"}
+```
+
+Offsets 0, 1 and 2 (older values of `c1` and `c2`) are gone; offsets 3 to 6 keep their numbers.
+
+### Pitfalls
+
+- **Compaction is not deduplication on read.** Consumers can still see several values for a key, because the head is uncleaned and the active segment is never compacted. Code consumers to treat the last value seen as current.
+- **Null keys are rejected.** A producer writing a record without a key to a compacted topic gets an error, because compaction needs a key.
+- **Do not lower `min.cleanable.dirty.ratio` and `segment.ms` like the demo in production.** The cleaner would recopy data constantly.
+- Compaction needs a correct key. If you key CDC events by something other than the primary key, compaction will drop real rows.
+
+### In interviews
+
+Expect "when would you use a compacted topic?" Good answers: changelogs and lookup tables (latest state per key), CDC topics that must be replayable from the start without keeping every historic change, and Kafka Streams state store backups. Mention that compaction keeps *at least* the last value, never removes the active segment, and preserves offsets.
+
+## Tombstones and log compaction
+
+**What it is.** A **tombstone** is a record with a key and a `null` value on a compacted topic. It means "this key is deleted". Compaction removes every earlier record for the key and, after a grace period, removes the tombstone itself.
+
+### How it works
+
+1. A producer writes `key=c3, value=null`.
+2. On the next cleaning, older records for `c3` are dropped; the tombstone stays.
+3. The tombstone stays for at least `delete.retention.ms` (24 hours by default) after its segment is cleaned, so consumers that are catching up still see the delete.
+4. A later cleaning pass removes the tombstone. From then on, a consumer reading from the beginning never hears about `c3` at all.
+
+### Worked example on the cluster
+
+Continuing the `customer-profile` topic, a tombstone for `c3` was produced (the console producer's `null.marker` turns the text `NULL` into a real null value), followed by `c5`:
+
+```bash
+printf 'c3:NULL\n' | bin/kafka-console-producer.sh --bootstrap-server localhost:19092 \
+  --topic customer-profile --reader-property parse.key=true --reader-property key.separator=: \
+  --reader-property null.marker=NULL
+```
+
+After the next clean, the old `c3` record (offset 3) was gone and the tombstone (offset 7) was still visible:
+
+```text
+Offset:4	c1	{"tier":"gold"}
+Offset:5	c2	{"tier":"gold"}
+Offset:6	c4	{"tier":"bronze"}
+Offset:7	c3	null
+Offset:8	c5	{"tier":"silver"}
+```
+
+Once `delete.retention.ms` (5 seconds in this demo) had passed and more cleaning ran, the tombstone itself disappeared:
+
+```text
+Offset:4	c1	{"tier":"gold"}
+Offset:5	c2	{"tier":"gold"}
+Offset:6	c4	{"tier":"bronze"}
+Offset:8	c5	{"tier":"silver"}
+Offset:9	c6	{"tier":"bronze"}
+Offset:10	c7	{"tier":"bronze"}
+```
+
+### Simulating compaction and tombstones
+
+This model reproduces the rules above: the active segment is untouched, the latest value per key survives, and tombstones survive one pass and are removed when their delete horizon has passed.
+
+```python
+def compact(log, active_from, now_ms, delete_retention_ms, tombstone_cleaned_at):
+    """log: list of dicts {offset, key, value, ts}, ordered by offset.
+    active_from: first offset of the active segment (never compacted).
+    tombstone_cleaned_at: dict offset -> time the tombstone was first seen by the cleaner."""
+    latest = {}
+    for rec in log:
+        latest[rec["key"]] = rec["offset"]
+    kept = []
+    for rec in log:
+        if rec["offset"] >= active_from:
+            kept.append(rec)                      # active segment: untouched
+        elif latest[rec["key"]] != rec["offset"]:
+            continue                              # superseded by a later record for this key
+        elif rec["value"] is None:
+            first_seen = tombstone_cleaned_at.setdefault(rec["offset"], now_ms)
+            if now_ms - first_seen < delete_retention_ms:
+                kept.append(rec)                  # tombstone still inside its grace period
+        else:
+            kept.append(rec)
+    return kept
+
+def show(label, log):
+    print(label, [(r["offset"], r["key"], r["value"]) for r in log])
+
+events = ["c1:bronze", "c2:silver", "c1:silver", "c3:bronze", "c1:gold", "c2:gold", "c4:bronze", "c3:", "c5:silver"]
+log = []
+for offset, e in enumerate(events):
+    key, value = e.split(":")
+    log.append({"offset": offset, "key": key, "value": value or None, "ts": offset * 1000})
+
+seen = {}
+log = compact(log, active_from=8, now_ms=10_000, delete_retention_ms=5_000, tombstone_cleaned_at=seen)
+show("after pass 1:", log)
+log = compact(log, active_from=8, now_ms=20_000, delete_retention_ms=5_000, tombstone_cleaned_at=seen)
+show("after pass 2:", log)
+```
+
+```text
+after pass 1: [(4, 'c1', 'gold'), (5, 'c2', 'gold'), (6, 'c4', 'bronze'), (7, 'c3', None), (8, 'c5', 'silver')]
+after pass 2: [(4, 'c1', 'gold'), (5, 'c2', 'gold'), (6, 'c4', 'bronze'), (8, 'c5', 'silver')]
+```
+
+The simulated passes match what the broker did.
+
+<Callout tone="warning" title="Slow consumers can miss deletes">
+
+A consumer that rebuilds state from a compacted topic must reach the head within `delete.retention.ms`. If it is slower, the tombstone can be removed before it is read, and the consumer keeps a row that was deleted upstream. Size `delete.retention.ms` for your slowest full rebuild.
+
+</Callout>
+
+### Pitfalls
+
+- **Tombstones on a delete-policy topic do nothing special.** A null value on a `cleanup.policy=delete` topic is just a record with no value.
+- **Serialisers that cannot write null.** Some serialisers turn `null` into an empty object or the string `"null"`. That is not a tombstone, and the key is never deleted.
+- **Debezium sends two records for a delete**: a delete event with the old row, then a tombstone, so that compaction can remove the key. Do not filter the tombstone out if the topic is compacted (see Kafka Connect and Debezium).
+
+### In interviews
+
+"How do you delete a key from a compacted topic?" Produce a tombstone, explain that earlier values go at the next clean, that the tombstone lives at least `delete.retention.ms`, and that slow rebuilders can miss it. GDPR-style erasure questions often lead here.
+
+## Topic configuration
+
+**What it is.** Most storage behaviour is set per topic. Each topic-level setting has a broker-level default, usually with a `log.` prefix (`retention.ms` overrides `log.retention.ms`). If you do not set a topic value, the broker default applies, and changing that default later changes every topic without an override.
+
+### Commonly tuned topic settings
+
+| Topic setting | Default (Kafka 4.3) | What it controls |
+|---|---|---|
+| `cleanup.policy` | `delete` | `delete`, `compact`, or both |
+| `retention.ms` | 604800000 (7 days) | time retention; `-1` means no limit |
+| `retention.bytes` | -1 | size retention per partition |
+| `segment.bytes` | 1073741824 (1 GiB) | segment size before rolling |
+| `segment.ms` | 604800000 (7 days) | segment age before rolling |
+| `min.insync.replicas` | 1 | replicas that must acknowledge an `acks=all` write |
+| `max.message.bytes` | 1048588 | largest record batch the topic accepts |
+| `compression.type` | `producer` | keep the producer's codec, or recompress to a fixed one |
+| `delete.retention.ms` | 86400000 (1 day) | how long tombstones survive on compacted topics |
+| `min.cleanable.dirty.ratio` | 0.5 | how dirty a log must be before compaction |
+| `message.timestamp.type` | `CreateTime` | use the producer's timestamp or the broker's append time |
+| `unclean.leader.election.enable` | false | allow out-of-sync replicas to become leader |
+
+### Setting and inspecting configuration
+
+Set configuration at creation time with `--config`, or change it later with `kafka-configs.sh`. Most topic settings are dynamic and take effect without a restart.
+
+```bash
+bin/kafka-configs.sh --bootstrap-server localhost:19092 --alter --entity-type topics \
+  --entity-name clicks --add-config 'cleanup.policy=[compact,delete]'
+bin/kafka-configs.sh --bootstrap-server localhost:19092 --alter --entity-type topics \
+  --entity-name clicks --delete-config retention.bytes
+bin/kafka-configs.sh --bootstrap-server localhost:19092 --describe --entity-type topics --entity-name clicks
+```
+
+```text
+Dynamic configs for topic clicks are:
+  cleanup.policy=compact,delete sensitive=false synonyms={DYNAMIC_TOPIC_CONFIG:cleanup.policy=compact,delete, DEFAULT_CONFIG:log.cleanup.policy=delete}
+  retention.ms=600000 sensitive=false synonyms={DYNAMIC_TOPIC_CONFIG:retention.ms=600000}
+  segment.bytes=1048576 sensitive=false synonyms={DYNAMIC_TOPIC_CONFIG:segment.bytes=1048576, DEFAULT_CONFIG:log.segment.bytes=1073741824}
+```
+
+The `synonyms` list shows where each value comes from: the topic override (`DYNAMIC_TOPIC_CONFIG`) or the broker default (`DEFAULT_CONFIG`). List values need square brackets on the command line. Add `--all` to see every effective setting, including ones you never set.
+
+### Pitfalls
+
+- **Configuration drift.** Changes made with `kafka-configs.sh` are not in source control. Manage topics as code (Terraform providers, Strimzi `KafkaTopic` resources, or a reviewed script) so environments match.
+- **Changing broker defaults** silently changes every topic that relies on them.
+- **`max.message.bytes` must line up end to end**: the producer's `max.request.size`, the topic's `max.message.bytes`, and the consumer's fetch sizes all need to allow the largest record.
+
+### In interviews
+
+Know the precedence (topic override, then broker default), that most topic settings are dynamic, and a handful of defaults: 7-day retention, 1 GiB segments, `cleanup.policy=delete`, `min.insync.replicas=1`.
+
+## Tiered storage
+
+**What it is.** Tiered storage (KIP-405) lets brokers move **closed segments** to a remote store such as object storage, keeping only recent data on local disk. Consumers read old offsets transparently: the broker fetches them from the remote tier. It arrived as early access in Kafka 3.6 and was declared production-ready in Kafka 3.9.
+
+**Why it matters.** Without it, retention is bounded by broker disk, and adding retention means adding brokers. With it, you can keep weeks or months of data cheaply, and brokers recover and rebalance faster because they hold less local data.
+
+### How it works
+
+- The broker enables the feature with `remote.log.storage.system.enable=true` and a **RemoteStorageManager** plugin (`remote.log.storage.manager.class.name`). Apache Kafka does not ship a production plugin for S3, GCS or Azure, so you use a vendor's or an open-source plugin. Remote segment metadata is kept in an internal topic by the default `TopicBasedRemoteLogMetadataManager`.
+- Each topic opts in with `remote.storage.enable=true`.
+- `retention.ms` / `retention.bytes` still mean **total** retention. `local.retention.ms` / `local.retention.bytes` set how much stays on local disk; the default `-2` means "same as total retention".
+- Only closed segments are copied; the active segment is always local.
+
+{/* noexec */}
+```bash
+# Broker (server.properties) - plugin class names depend on the plugin you install
+remote.log.storage.system.enable=true
+remote.log.storage.manager.class.name=<your RemoteStorageManager implementation>
+remote.log.storage.manager.class.path=/opt/kafka/plugins/tiered-storage/*
+
+# Topic: 30 days in total, only 1 day on local disk
+bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic events-archive \
+  --partitions 12 --replication-factor 3 \
+  --config remote.storage.enable=true \
+  --config retention.ms=2592000000 \
+  --config local.retention.ms=86400000
+```
+
+### Limits to know
+
+- **No compacted topics.** Tiered storage does not support `cleanup.policy=compact`.
+- **Disabling is a process.** Since 3.9 you can disable it per topic, either keeping remote data read-only (`remote.log.copy.disable=true`) or deleting it (`remote.log.delete.on.disable=true`). You must disable it on every topic before turning it off on the brokers.
+- **Remote reads are slower** than local page-cache reads, so a consumer replaying old data sees higher latency.
+
+### Pitfalls
+
+- Treating tiered storage as a backup. The remote copy belongs to the cluster; deleting the topic deletes it.
+- Forgetting that the active segment and local retention still need disk. Size local disks for `local.retention` plus headroom.
+
+### In interviews
+
+"How would you keep 90 days of events in Kafka without tripling the cluster?" A strong answer proposes tiered storage with short local retention, notes it is production-ready from 3.9, needs a remote storage plugin, and excludes compacted topics. Alternatives: sink to a data lake with Kafka Connect and keep Kafka retention short.
+
+## Practice questions
+
+<details>
+<summary>A low-traffic topic has retention.ms of one day, but data from last week is still readable. Why?</summary>
+
+Retention deletes whole closed segments, and a segment only becomes eligible when its newest record is older than `retention.ms`. On a low-traffic topic the active segment may not have rolled, because it never reached `segment.bytes` (1 GiB) and `segment.ms` defaults to 7 days. Lower `segment.ms` (for example to a few hours) so segments roll and become deletable.
+
+</details>
+
+<details>
+<summary>What is the difference between cleanup.policy=delete and cleanup.policy=compact?</summary>
+
+`delete` removes old segments by time or size regardless of keys. `compact` keeps at least the latest record per key and removes older values for the same key, so the topic converges to current state per key. `compact,delete` does both: compaction plus deletion of segments past retention.
+
+</details>
+
+<details>
+<summary>A consumer of a compacted topic still sees three values for the same key. Is compaction broken?</summary>
+
+No. Compaction only guarantees that at least the latest value survives. Records in the active segment and in the uncleaned head are not compacted yet, and cleaning only runs when the dirty ratio or `max.compaction.lag.ms` triggers it. Consumers must treat the latest value they see for a key as the current one.
+
+</details>
+
+<details>
+<summary>How do you delete a customer from a compacted topic, and what can go wrong?</summary>
+
+Produce a tombstone: the customer's key with a null value. Compaction removes earlier values and later removes the tombstone after `delete.retention.ms`. Risks: a serialiser that writes an empty object instead of a real null, a consumer that rebuilds state too slowly and misses the tombstone, and copies of the data elsewhere (sinks, mirrors, backups) that also need deleting.
+
+</details>
+
+<details>
+<summary>You set retention.bytes to 50 GB on a 10-partition topic with replication factor 3. How much disk can it use?</summary>
+
+`retention.bytes` is per partition, so each partition replica can hold about 50 GB (plus up to one segment of overshoot). Ten partitions times three replicas is roughly 1.5 TB across the cluster, not 50 GB.
+
+</details>
+
+<details>
+<summary>What does tiered storage change, and when can you not use it?</summary>
+
+Closed segments are copied to a remote store and deleted locally after `local.retention.ms`/`local.retention.bytes`, while total retention still follows `retention.ms`/`retention.bytes`. Consumers read old data transparently through the broker. It needs a RemoteStorageManager plugin, has been production-ready since Kafka 3.9, and does not support compacted topics.
+
+</details>
+
+## Key takeaways
+
+- A partition is a directory of segments named by base offset; only the active segment is written, and segments roll on size, age or full index.
+- Retention deletes whole closed segments by record timestamp or partition size, so data can live longer than `retention.ms` and `retention.bytes` is per partition.
+- Compaction keeps at least the latest value per key, never touches the active segment, and preserves offsets.
+- Tombstones (key plus null value) delete keys on compacted topics and survive at least `delete.retention.ms`.
+- Topic settings override broker defaults and are mostly dynamic; manage them as code.
+- Tiered storage, production-ready since 3.9, separates total retention from local retention but does not support compacted topics.
