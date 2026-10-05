@@ -262,5 +262,37 @@
  "OAuth & SSO": {
   "ref": "articles:snowflake/security-access-control",
   "heading": "OAuth and SSO"
+ },
+ "Credit consumption analysis": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Credit consumption analysis"
+ },
+ "Warehouse right-sizing": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Warehouse right-sizing"
+ },
+ "Auto-suspend tuning": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Auto-suspend tuning"
+ },
+ "Query result caching": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Query result caching"
+ },
+ "Avoiding spilling": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Avoiding spilling"
+ },
+ "Storage cost (time travel/fail-safe)": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Storage cost: Time Travel and Fail-safe"
+ },
+ "Resource monitors for cost": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Resource monitors for cost"
+ },
+ "Materialized view costs": {
+  "ref": "articles:snowflake/cost-optimization",
+  "heading": "Materialized view costs"
  }
 }

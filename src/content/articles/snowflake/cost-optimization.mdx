@@ -1,0 +1,504 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Cost Optimization: Credits, Right-Sizing and Storage Costs"
+seoTitle: "Snowflake Cost Optimization: Credits and Storage"
+description: "Find where Snowflake credits go with ACCOUNT_USAGE, right-size warehouses, tune auto-suspend, avoid spilling, and control storage and materialized view costs."
+technology: ["snowflake", "data-warehousing"]
+topic: ["cost", "performance", "finops"]
+difficulty: "Advanced"
+learningObjectives:
+  - "Break down credit consumption by service, warehouse and query with ACCOUNT_USAGE views"
+  - "Right-size a warehouse from evidence, using a repeatable playbook"
+  - "Tune auto-suspend by measuring idle credits"
+  - "Use the result cache deliberately and recognise what invalidates it"
+  - "Detect and fix spilling to local and remote storage"
+  - "Control storage, resource monitor and materialized view costs"
+prerequisites: ["articles:snowflake/virtual-warehouses-scaling", "articles:snowflake/micro-partitions-clustering-pruning"]
+related: ["articles:snowflake/time-travel-fail-safe-cloning", "articles:etl-elt/pipeline-observability"]
+previous: "articles:snowflake/security-access-control"
+sources:
+  - { label: "Snowflake documentation: Understanding compute cost", url: "https://docs.snowflake.com/en/user-guide/cost-understanding-compute" }
+  - { label: "Snowflake documentation: Exploring compute cost", url: "https://docs.snowflake.com/en/user-guide/cost-exploring-compute" }
+  - { label: "Snowflake documentation: QUERY_ATTRIBUTION_HISTORY view", url: "https://docs.snowflake.com/en/sql-reference/account-usage/query_attribution_history" }
+  - { label: "Snowflake documentation: Queries too large to fit in memory", url: "https://docs.snowflake.com/en/user-guide/performance-query-warehouse-memory" }
+  - { label: "Snowflake documentation: Storage costs for Time Travel and Fail-safe", url: "https://docs.snowflake.com/en/user-guide/data-cdp-storage-costs" }
+  - { label: "Snowflake documentation: Working with materialized views", url: "https://docs.snowflake.com/en/user-guide/views-materialized" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. The cost-analysis analogue runs on PostgreSQL 16 against small hand-made stand-ins for two ACCOUNT_USAGE views; its output is shown and the numbers are illustrative, not real account data. No prices are quoted because they depend on edition, region and contract."
+---
+
+Snowflake bills by consumption, so cost is a daily engineering concern rather than a yearly procurement one. Most savings come from a short list of causes: warehouses that are too big or idle too long, queries that read far more than they need, storage kept for Time Travel and Fail-safe that nobody uses, and background services (clustering, materialized views) running on tables that do not need them. This lesson shows how to find each one with the `SNOWFLAKE.ACCOUNT_USAGE` views and what to do about it.
+
+All Snowflake SQL is written from the documentation and was not executed. A small PostgreSQL analogue shows the logic of the cost-investigation queries on sample data. No credit prices are quoted: they depend on your edition, region and contract.
+
+## Credit consumption analysis
+
+Before optimising, find out where credits go. The `SNOWFLAKE.ACCOUNT_USAGE` schema has a year of history (with a lag of up to a few hours, depending on the view); access needs `ACCOUNTADMIN` or a role granted the relevant `SNOWFLAKE` database roles.
+
+| View | Answers |
+|------|---------|
+| `METERING_DAILY_HISTORY` | Credits per day by service type (warehouses, serverless features, cloud services), including the cloud services adjustment and credits billed |
+| `WAREHOUSE_METERING_HISTORY` | Credits per warehouse per hour, including `CREDITS_ATTRIBUTED_COMPUTE_QUERIES` (credits spent running queries, excluding idle time) |
+| `QUERY_ATTRIBUTION_HISTORY` | Credits attributed to each query (excluding idle time), with a parameterised hash to group repeated queries; latency up to about 8 hours |
+| `QUERY_HISTORY` | Per-query detail: elapsed time, bytes scanned, partitions scanned, spilling, queueing |
+| `TABLE_STORAGE_METRICS` / `STORAGE_USAGE` | Storage by table (active, Time Travel, Fail-safe, retained for clones) and by account |
+| `AUTOMATIC_CLUSTERING_HISTORY`, `MATERIALIZED_VIEW_REFRESH_HISTORY`, `SEARCH_OPTIMIZATION_HISTORY`, `PIPE_USAGE_HISTORY`, `SERVERLESS_TASK_HISTORY` | Credits used by each serverless feature |
+
+### Playbook: a cost investigation with ACCOUNT_USAGE
+
+**Step 1. Which services?**
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT service_type,
+       SUM(credits_used_compute)        AS compute_credits,
+       SUM(credits_used_cloud_services) AS cloud_services_credits,
+       SUM(credits_adjustment_cloud_services) AS cloud_services_adjustment,
+       SUM(credits_billed)              AS credits_billed
+FROM snowflake.account_usage.metering_daily_history
+WHERE usage_date >= DATEADD('day', -30, CURRENT_DATE())
+GROUP BY service_type
+ORDER BY credits_billed DESC;
+```
+
+**Step 2. Which warehouses, and how much is idle?**
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT warehouse_name,
+       SUM(credits_used_compute)                AS credits,
+       SUM(credits_attributed_compute_queries)  AS query_credits,
+       SUM(credits_used_compute) - SUM(credits_attributed_compute_queries) AS idle_credits
+FROM snowflake.account_usage.warehouse_metering_history
+WHERE start_time >= DATEADD('day', -30, CURRENT_TIMESTAMP())
+GROUP BY warehouse_name
+ORDER BY credits DESC;
+```
+
+**Step 3. Which queries?** Group by the parameterised hash so the same query with different literals counts as one pattern:
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT query_parameterized_hash,
+       ANY_VALUE(warehouse_name)       AS warehouse,
+       COUNT(*)                        AS runs,
+       SUM(credits_attributed_compute) AS credits
+FROM snowflake.account_usage.query_attribution_history
+WHERE start_time >= DATEADD('day', -30, CURRENT_TIMESTAMP())
+GROUP BY query_parameterized_hash
+ORDER BY credits DESC
+LIMIT 20;
+```
+
+Join the hashes to `QUERY_HISTORY` (on `query_id`) to see the text, user, partitions scanned and spilling for the top patterns.
+
+**Step 4. Which serverless features and storage?** Sum credits from the serverless history views by table or object, and list the largest tables in `TABLE_STORAGE_METRICS` (see the storage section).
+
+**Step 5. Act and re-measure.** For each top item, apply the matching fix from the sections below and compare the same queries a week later.
+
+### Runnable analogue: the idle-credit and top-pattern logic
+
+The following PostgreSQL script creates simplified stand-ins for two of these views with a few illustrative rows, then runs the same calculations. It shows how to read the numbers, not real usage.
+
+```sql
+-- PostgreSQL 16: simplified stand-ins for two ACCOUNT_USAGE views (sample data)
+CREATE TABLE warehouse_metering_history (
+  start_time                         TIMESTAMP,
+  warehouse_name                     TEXT,
+  credits_used_compute               NUMERIC(10,3),
+  credits_attributed_compute_queries NUMERIC(10,3)
+);
+
+INSERT INTO warehouse_metering_history VALUES
+ ('2026-10-01 08:00', 'BI_WH',        2.000, 0.600),
+ ('2026-10-01 09:00', 'BI_WH',        2.000, 1.500),
+ ('2026-10-01 10:00', 'BI_WH',        2.000, 0.300),
+ ('2026-10-01 02:00', 'TRANSFORM_WH', 8.000, 7.600),
+ ('2026-10-01 03:00', 'TRANSFORM_WH', 4.000, 3.700),
+ ('2026-10-01 11:00', 'ADHOC_WH',     4.000, 0.900),
+ ('2026-10-01 12:00', 'ADHOC_WH',     4.000, 0.400);
+
+-- Credits by warehouse, and how much of it was idle time
+SELECT warehouse_name,
+       SUM(credits_used_compute)                               AS credits,
+       SUM(credits_attributed_compute_queries)                 AS query_credits,
+       SUM(credits_used_compute - credits_attributed_compute_queries) AS idle_credits,
+       ROUND(100 * SUM(credits_used_compute - credits_attributed_compute_queries)
+                 / SUM(credits_used_compute), 0)               AS idle_pct
+FROM warehouse_metering_history
+GROUP BY warehouse_name
+ORDER BY credits DESC;
+```
+
+```text
+ warehouse_name | credits | query_credits | idle_credits | idle_pct
+----------------+---------+---------------+--------------+----------
+ TRANSFORM_WH   |  12.000 |        11.300 |        0.700 |        6
+ ADHOC_WH       |   8.000 |         1.300 |        6.700 |       84
+ BI_WH          |   6.000 |         2.400 |        3.600 |       60
+```
+
+`TRANSFORM_WH` is the biggest spender but is busy almost all the time it runs: look at its queries. `ADHOC_WH` spends 84% of its credits idle: look at its auto-suspend and size first.
+
+```sql
+CREATE TABLE query_attribution_history (
+  query_id                   TEXT,
+  warehouse_name             TEXT,
+  query_parameterized_hash   TEXT,
+  user_name                  TEXT,
+  credits_attributed_compute NUMERIC(10,3)
+);
+
+INSERT INTO query_attribution_history VALUES
+ ('q1', 'TRANSFORM_WH', 'h_merge_orders', 'ETL_SERVICE', 3.100),
+ ('q2', 'TRANSFORM_WH', 'h_merge_orders', 'ETL_SERVICE', 2.900),
+ ('q3', 'TRANSFORM_WH', 'h_build_marts',  'ETL_SERVICE', 2.800),
+ ('q4', 'ADHOC_WH',     'h_select_star',  'ASHA',        0.900),
+ ('q5', 'BI_WH',        'h_dashboard',    'BI_SERVICE',  0.050),
+ ('q6', 'BI_WH',        'h_dashboard',    'BI_SERVICE',  0.050),
+ ('q7', 'BI_WH',        'h_dashboard',    'BI_SERVICE',  0.040);
+
+-- The most expensive repeated query patterns
+SELECT query_parameterized_hash,
+       MIN(warehouse_name)              AS warehouse,
+       COUNT(*)                         AS runs,
+       SUM(credits_attributed_compute)  AS credits
+FROM query_attribution_history
+GROUP BY query_parameterized_hash
+ORDER BY credits DESC
+LIMIT 3;
+```
+
+```text
+ query_parameterized_hash |  warehouse   | runs | credits
+--------------------------+--------------+------+---------
+ h_merge_orders           | TRANSFORM_WH |    2 |   6.000
+ h_build_marts            | TRANSFORM_WH |    1 |   2.800
+ h_select_star            | ADHOC_WH     |    1 |   0.900
+```
+
+The `MERGE` pattern is where `TRANSFORM_WH`'s credits go, so that is the query to profile (pruning on the target, size of the change set, spilling).
+
+**Pitfalls**
+
+- Reading `QUERY_HISTORY.EXECUTION_TIME` as cost. Concurrent queries share a warehouse; attribution views split credits properly.
+- Forgetting serverless and cloud services, which never appear in warehouse metering.
+- Expecting today's numbers: ACCOUNT_USAGE views lag by up to hours.
+
+**In interviews**
+
+"How would you find out why the Snowflake bill doubled?" Walk through services, then warehouses (with idle versus query credits), then query patterns, then serverless and storage, naming the views.
+
+## Warehouse right-sizing
+
+Right-sizing means choosing the smallest size that meets the workload's deadline, because cost is size multiplied by running time.
+
+### Playbook: right-size a warehouse
+
+1. **Pick the workload and its target**: for example, the nightly ELT on `transform_wh` must finish by 06:00.
+2. **Collect a baseline** for a week: credits per day from `WAREHOUSE_METERING_HISTORY`, and per-query elapsed time, partitions scanned and bytes spilled from `QUERY_HISTORY`.
+3. **Fix the queries first**: queries scanning most partitions for few rows need better filters or clustering; that saves credits at every size.
+4. **Read the signals**:
+
+| Signal | Suggests |
+|--------|----------|
+| Remote spilling on important queries | Size up one step (or split the work) |
+| No spilling, queries already short, warehouse often idle | Size down one step |
+| Queueing (`QUEUED_OVERLOAD_TIME`) but fast queries | Scale out (multi-cluster), not up |
+| Doubling the size barely shortens runs | Size back down: the work is not parallel enough |
+
+5. **Change one step at a time** and compare credits and elapsed time over a similar period.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- Compare the same daily job across sizes (WAREHOUSE_SIZE is recorded per query)
+SELECT DATE_TRUNC('day', start_time) AS day,
+       warehouse_size,
+       COUNT(*)                                AS queries,
+       ROUND(SUM(total_elapsed_time) / 60000, 1) AS elapsed_min,
+       SUM(bytes_spilled_to_remote_storage)    AS remote_spill_bytes
+FROM snowflake.account_usage.query_history
+WHERE warehouse_name = 'TRANSFORM_WH'
+  AND start_time >= DATEADD('day', -14, CURRENT_TIMESTAMP())
+GROUP BY 1, 2
+ORDER BY 1;
+```
+
+Also consider the warehouse type: Snowpark-optimized warehouses for memory-heavy Python, and newer generations or offerings (Gen2, Adaptive Compute) where your region supports them. Their credit rates differ, so compare cost per job, not per hour.
+
+**Pitfalls**
+
+- Sizing for the one monthly backfill. Give it its own warehouse or resize around it.
+- Comparing a Monday with a Saturday. Compare like with like.
+
+**In interviews**
+
+Present the playbook: baseline, fix queries, read spilling/queueing/scaling signals, change one step, re-measure.
+
+## Auto-suspend tuning
+
+Idle credits are the gap between what a warehouse is billed and what its queries used. They come from `AUTO_SUSPEND` waiting time and from warehouses resumed for tiny queries (each resume bills at least 60 seconds).
+
+How to tune:
+
+1. Measure idle credits per warehouse (playbook step 2).
+2. For batch warehouses, set `AUTO_SUSPEND = 60` and have jobs run back to back; suspend explicitly at the end (`ALTER WAREHOUSE ... SUSPEND`) if the orchestrator knows the job is done.
+3. For BI warehouses, look at the gap between queries. If users click every minute or two, a suspend of a few minutes keeps the cache warm and avoids repeated resume minimums; if dashboards are opened a few times a day, suspend sooner.
+4. Hunt for "keep-alive" traffic: monitoring tools or schedulers that run a query every few minutes and keep a warehouse awake all day. Point them at the result cache, a metadata query, or an X-Small warehouse.
+5. Re-measure after a week.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER WAREHOUSE adhoc_wh SET AUTO_SUSPEND = 60;
+
+-- Who keeps the warehouse awake? Frequent small queries by user
+SELECT user_name, COUNT(*) AS queries, MEDIAN(total_elapsed_time) AS median_ms
+FROM snowflake.account_usage.query_history
+WHERE warehouse_name = 'ADHOC_WH'
+  AND start_time >= DATEADD('day', -7, CURRENT_TIMESTAMP())
+GROUP BY user_name
+ORDER BY queries DESC;
+```
+
+**Pitfalls**
+
+- Setting suspend below 60 seconds: more resumes, each billed at least a minute.
+- A warehouse with auto-suspend disabled (`NULL` or 0). Search for them: `SHOW WAREHOUSES` lists `auto_suspend`.
+
+**In interviews**
+
+Explain idle credits, the 600-second default, the 60-second minimum per resume and the BI cache trade-off.
+
+## Query result caching
+
+The result cache is free compute: a repeated query with unchanged data is answered by cloud services without a warehouse. To benefit:
+
+- Make repeated queries **textually identical**. BI tools that inject a timestamp comment or a changing literal defeat reuse.
+- Avoid functions evaluated at run time (such as `CURRENT_TIMESTAMP()`) in queries that should be cached; filter on a fixed date or a parameter instead.
+- Keep source tables **stable between refreshes**. A table that receives a trickle of inserts every minute invalidates cached results every minute. Batch loads into the tables behind dashboards (for example refresh the mart every 15 minutes) and the dashboards hit the cache in between.
+- Results are kept for 24 hours after last use, up to 31 days from first execution.
+
+What it does not cover: a different role without privileges on the tables, queries using excluded features listed in the documentation, and any table change.
+
+**Pitfalls**
+
+- Benchmarking with the cache on. Use `ALTER SESSION SET USE_CACHED_RESULT = FALSE` when measuring.
+- Assuming the cache helps one-off analytical queries. It only helps repetition.
+
+**In interviews**
+
+Describe the conditions for reuse and one practical change, such as batching mart refreshes so dashboards are served from cache.
+
+## Avoiding spilling
+
+**Spilling** happens when a query's working data (for joins, sorts, aggregations, window functions) does not fit in the warehouse's memory. It first spills to the nodes' **local disk**, then, if still too big, to **remote storage**, which is much slower. Spilling makes queries run longer, which costs more credits.
+
+Find it:
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT query_id, warehouse_name, warehouse_size, user_name,
+       ROUND(total_elapsed_time / 1000) AS elapsed_s,
+       bytes_spilled_to_local_storage,
+       bytes_spilled_to_remote_storage,
+       LEFT(query_text, 100) AS query_start
+FROM snowflake.account_usage.query_history
+WHERE start_time >= DATEADD('day', -7, CURRENT_TIMESTAMP())
+  AND (bytes_spilled_to_local_storage > 0 OR bytes_spilled_to_remote_storage > 0)
+ORDER BY bytes_spilled_to_remote_storage DESC, bytes_spilled_to_local_storage DESC
+LIMIT 20;
+```
+
+Fix it, in this order:
+
+1. **Process less data**: filter earlier, select fewer columns, prune better, aggregate before joining.
+2. **Fix the query shape**: avoid accidental row explosion from bad join keys; replace `ORDER BY` over huge results that nobody reads; deduplicate before, not after, a large join.
+3. **Split the work**: process a large backfill in date ranges.
+4. **Size up**: a larger warehouse has more memory and local disk. Snowflake's own guidance for spilling is a larger warehouse or smaller batches. Lowering `MAX_CONCURRENCY_LEVEL` on a dedicated warehouse also gives each query more memory.
+
+Use the query profile to find the operator that spills. Note that with the query acceleration service enabled, a small amount of remote "spill" can be reported for eligible queries even when nothing is wrong; the documentation explains this.
+
+**Pitfalls**
+
+- Treating local spilling as an emergency. A little local spilling is normal; remote spilling on a frequent query is the priority.
+
+**In interviews**
+
+Define local and remote spilling, how to find it (`QUERY_HISTORY` columns, query profile), and the fix order: less data, better query, smaller batches, then bigger warehouse.
+
+## Storage cost: Time Travel and Fail-safe
+
+Storage is billed on the average compressed bytes per month, including:
+
+- **active** data;
+- **Time Travel** bytes (replaced or deleted micro-partitions within retention);
+- **Fail-safe** bytes (7 days after Time Travel, permanent tables only);
+- bytes **retained for clones**;
+- internal stage files.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT table_catalog || '.' || table_schema || '.' || table_name AS table_full_name,
+       is_transient,
+       ROUND(active_bytes / POWER(1024, 3), 1)             AS active_gb,
+       ROUND(time_travel_bytes / POWER(1024, 3), 1)        AS time_travel_gb,
+       ROUND(failsafe_bytes / POWER(1024, 3), 1)           AS failsafe_gb,
+       ROUND(retained_for_clone_bytes / POWER(1024, 3), 1) AS clone_gb
+FROM snowflake.account_usage.table_storage_metrics
+WHERE deleted = FALSE
+ORDER BY time_travel_bytes + failsafe_bytes DESC
+LIMIT 20;
+```
+
+What to look for and do:
+
+| Finding | Action |
+|---------|--------|
+| Staging tables with large Fail-safe bytes | Recreate as transient (no Fail-safe, at most 1 day Time Travel) |
+| High-churn tables with long retention | Lower `DATA_RETENTION_TIME_IN_DAYS` to what recovery actually needs |
+| Tables rewritten completely each run (`CREATE OR REPLACE`, truncate and reload) | Load incrementally with `MERGE` so only changed micro-partitions are replaced |
+| Large `RETAINED_FOR_CLONE_BYTES` | Drop or refresh old clones |
+| Dropped tables still in Time Travel | Nothing to do but wait, or lower retention before dropping |
+| Old files in internal stages | `PURGE = TRUE` on load, or `REMOVE` |
+
+**Pitfalls**
+
+- Cutting retention on production tables to save storage, then needing Time Travel for an incident. Storage is usually cheap compared with compute; balance cost against recovery needs.
+
+**In interviews**
+
+Explain that Time Travel and Fail-safe are billed, how to see them per table, and why transient tables and incremental loads reduce them.
+
+## Resource monitors for cost
+
+Resource monitors put limits on warehouse credits per period, with notify, suspend and suspend-immediate actions. As a cost control:
+
+- Set an **account-level monitor** with notifications at, say, 50%, 75% and 90% of the monthly budget, so overspend is visible early.
+- Set **warehouse-level monitors** with suspension on non-critical warehouses (ad hoc, sandbox, reader accounts), where stopping is better than overspending.
+- Avoid hard suspension on production pipeline warehouses unless there is an on-call process: a suspended pipeline is an outage.
+- Remember the gaps: resource monitors do not cover serverless features, AI services, storage or cloud services billing. Use **budgets** for serverless spend, and alerts on `METERING_DAILY_HISTORY` for daily anomalies.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+USE ROLE ACCOUNTADMIN;
+CREATE RESOURCE MONITOR account_monthly
+  WITH CREDIT_QUOTA = 5000 FREQUENCY = MONTHLY START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS ON 50 PERCENT DO NOTIFY
+           ON 75 PERCENT DO NOTIFY
+           ON 90 PERCENT DO NOTIFY;
+ALTER ACCOUNT SET RESOURCE_MONITOR = account_monthly;
+
+CREATE RESOURCE MONITOR sandbox_monthly
+  WITH CREDIT_QUOTA = 100 FREQUENCY = MONTHLY START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS ON 80 PERCENT DO NOTIFY
+           ON 100 PERCENT DO SUSPEND
+           ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+ALTER WAREHOUSE sandbox_wh SET RESOURCE_MONITOR = sandbox_monthly;
+```
+
+(The quotas are examples; set them from your own budget.)
+
+**Pitfalls**
+
+- One account-level monitor with `SUSPEND`: at 100% every warehouse stops, production included.
+
+**In interviews**
+
+Describe a layered setup (notify at account level, suspend on non-critical warehouses), the serverless gap and budgets.
+
+## Materialized view costs
+
+A **materialized view** (Enterprise Edition or higher) stores the result of a query on a single table and keeps it current automatically. Its costs are easy to overlook:
+
+- **Background maintenance**: whenever the base table changes, a Snowflake-managed serverless service updates the view. Credits appear under a Snowflake-provided warehouse named `MATERIALIZED_VIEW_MAINTENANCE` and in `MATERIALIZED_VIEW_REFRESH_HISTORY`.
+- **Storage**: the materialized result is stored and billed, including its own Time Travel and Fail-safe.
+- **Clustering**: a clustered materialized view also incurs automatic clustering costs.
+
+They pay off when the base table changes **rarely** compared with how often the view is queried, and the view saves a lot of work per query (for example an aggregation over a large table, or a different clustering of the same data for a different filter). They are a poor fit for tables that change constantly.
+
+Limitations to remember: a materialized view reads a single table (no joins), cannot query other views or dynamic tables, and supports a restricted set of functions. For multi-table transformations, a dynamic table is usually the better choice, with cost controlled by its target lag.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT table_name AS materialized_view,
+       SUM(credits_used) AS credits
+FROM snowflake.account_usage.materialized_view_refresh_history
+WHERE start_time >= DATEADD('day', -30, CURRENT_TIMESTAMP())
+GROUP BY table_name
+ORDER BY credits DESC;
+
+-- Pause maintenance (queries then read the base table) or drop
+ALTER MATERIALIZED VIEW sales.mv_daily_totals SUSPEND;
+```
+
+**Pitfalls**
+
+- Creating materialized views on a table fed by Snowpipe every minute: maintenance runs constantly.
+- Forgetting a materialized view exists after the dashboard that needed it was retired.
+
+**In interviews**
+
+List the three cost sources (maintenance, storage, clustering), the condition for a good fit (high read-to-change ratio), the single-table limitation, and the dynamic table alternative.
+
+## Practice questions
+
+<details>
+<summary>The monthly bill rose 40% and warehouse credits are flat. Where do you look?</summary>
+
+Outside warehouses: `METERING_DAILY_HISTORY` by `SERVICE_TYPE` shows which serverless feature or cloud services grew. Then the matching history view: automatic clustering on newly clustered or high-churn tables, materialized view maintenance, search optimization, Snowpipe volume, serverless tasks, cloud services above the 10% allowance. Also check storage (`STORAGE_USAGE`, `TABLE_STORAGE_METRICS`) for Time Travel, Fail-safe and clone growth, and data transfer if replication was added.
+
+</details>
+
+<details>
+<summary>An ad hoc warehouse spends 80% of its credits idle. What do you change?</summary>
+
+Lower `AUTO_SUSPEND` (often to 60 seconds), check for tools or schedules running frequent small queries that keep it awake and move them elsewhere or to cached queries, and consider downsizing if queries are light. Re-measure idle credits (`credits_used_compute` minus `credits_attributed_compute_queries`) after a week.
+
+</details>
+
+<details>
+<summary>A query spills 300 GB to remote storage on a Medium warehouse. What are your options?</summary>
+
+First reduce the data: filter and project earlier, aggregate before joins, check join keys for row explosion, and use the profile to find the spilling operator. If it is a large backfill, process it in batches. If the query really needs the memory, run it on a larger warehouse (a dedicated one if it is occasional), which can cost less overall because it finishes much faster without remote spilling.
+
+</details>
+
+<details>
+<summary>Dashboards query a mart that receives inserts every minute. Why is the result cache never used, and what would you do?</summary>
+
+Any change to a table invalidates cached results for queries reading it, so per-minute inserts invalidate every minute. Refresh the mart in batches (every 15 minutes, or whatever freshness the business needs), for example with a dynamic table target lag or a scheduled task, so identical dashboard queries between refreshes are served from the result cache without a warehouse.
+
+</details>
+
+<details>
+<summary>A 3 TB staging table is truncated and reloaded nightly and its storage is several times its size. Why, and how do you fix it?</summary>
+
+Each reload replaces all micro-partitions; the old ones are kept for the Time Travel retention period and then 7 days of Fail-safe because the table is permanent. Make it transient (no Fail-safe, at most 1 day of Time Travel), set retention to 0 or 1, or load incrementally so fewer micro-partitions are replaced.
+
+</details>
+
+<details>
+<summary>When is a materialized view worth its cost?</summary>
+
+When the base table changes rarely relative to how often the view is queried, and each query saves substantial work (a heavy aggregation or a differently clustered copy of one large table). It also needs Enterprise Edition and fits only single-table queries. Measure maintenance credits in `MATERIALIZED_VIEW_REFRESH_HISTORY` against the query savings.
+
+</details>
+
+## Key takeaways
+
+- Start every cost investigation from data: services (`METERING_DAILY_HISTORY`), warehouses and idle time (`WAREHOUSE_METERING_HISTORY`), query patterns (`QUERY_ATTRIBUTION_HISTORY`), then serverless and storage views.
+- Right-size by evidence: fix pruning first, size up for remote spilling, size down when bigger does not halve runtime, scale out for queueing.
+- Idle credits come from long auto-suspend and keep-alive queries; batch warehouses suspend after 60 seconds, BI warehouses keep a short warm period.
+- Make repeated queries cacheable: identical text, no run-time functions, and source tables refreshed in batches.
+- Storage includes Time Travel, Fail-safe and clone-retained bytes; use transient tables and incremental loads for churny data.
+- Resource monitors cap warehouses only; use budgets for serverless, and weigh materialized view maintenance against its savings.
