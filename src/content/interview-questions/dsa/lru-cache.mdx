@@ -1,0 +1,234 @@
+---
+title: "LRU Cache: Hash Map Plus Doubly Linked List for O(1) Operations"
+seoTitle: "LRU Cache Design: O(1) Get and Put in Python"
+description: "Design a least-recently-used cache with O(1) get and put by pairing a dictionary with a doubly linked list. Python from scratch, OrderedDict version and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Medium"
+questionType: ["coding", "architecture"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "Keep a dictionary from key to node and a doubly linked list ordered by recency, with sentinel head and tail nodes. get looks up the node, moves it to the most-recent end and returns its value. put updates or inserts a node at the most-recent end and, if the cache is over capacity, removes the node at the least-recent end and deletes its key from the dictionary. Every operation is O(1); memory is O(capacity)."
+followUps: ["Why does the list need to be doubly linked?", "How would you make the cache thread-safe?", "How does LFU differ from LRU, and how would you implement it?", "How would you add time-based expiry to entries?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/find-the-duplicate-number"
+next: "interview-questions:dsa/merge-k-sorted-lists"
+---
+
+## Problem
+
+Implement a fixed-capacity cache with a **least recently used** eviction policy:
+
+- `LRUCache(capacity)` creates an empty cache holding at most `capacity` keys.
+- `get(key)` returns the stored value, or `-1` if the key is absent. A successful `get` counts as a use.
+- `put(key, value)` inserts or updates the key, which also counts as a use. If inserting a new key pushes the cache over capacity, first evict the key that was used longest ago.
+
+Both operations must run in O(1) average time. This is widely known as LeetCode 146 (LRU Cache), and it is one of the most frequently asked design-and-code questions.
+
+Constraints for this version: capacity from 1 to 3,000; keys and values are integers; up to 200,000 calls.
+
+## Examples
+
+```text
+cache = LRUCache(2)
+put(1, 100)              cache: 1
+put(2, 200)              cache: 1, 2        (most recent last)
+get(1)    -> 100         cache: 2, 1
+put(3, 300)              evicts 2 (least recent); cache: 1, 3
+get(2)    -> -1
+put(1, 111)              update; cache: 3, 1
+put(4, 400)              evicts 3; cache: 1, 4
+get(3)    -> -1
+get(1)    -> 111
+```
+
+## Approach 1: brute force
+
+Keep a dictionary for values and a Python list of keys ordered by recency. Moving a key to the end requires `list.remove`, which is O(n).
+
+```python
+class LRUCacheList:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.values = {}
+        self.order = []                 # least recent first
+
+    def _touch(self, key):
+        self.order.remove(key)          # O(n)
+        self.order.append(key)
+
+    def get(self, key):
+        if key not in self.values:
+            return -1
+        self._touch(key)
+        return self.values[key]
+
+    def put(self, key, value):
+        if key in self.values:
+            self.values[key] = value
+            self._touch(key)
+            return
+        if len(self.values) == self.capacity:
+            oldest = self.order.pop(0)  # O(n)
+            del self.values[oldest]
+        self.values[key] = value
+        self.order.append(key)
+```
+
+Correct, but every operation is O(capacity).
+
+## Approach 2: optimal
+
+**Key insight.** You need two things in O(1): find an entry by key (a hash map) and reorder or remove an entry from the middle of a sequence (a doubly linked list, given a reference to the node). Store list nodes as the dictionary's values and you get both.
+
+- **Doubly linked**, because removing a node needs its predecessor, and a singly linked list would need a walk to find it.
+- **Sentinel head and tail nodes** remove every "is the list empty?" and "is this the first node?" branch.
+- **Each node stores its key**, so that when you evict the oldest node you know which dictionary entry to delete.
+
+Layout: `head <-> least recent <-> ... <-> most recent <-> tail`.
+
+```python
+class Node:
+    __slots__ = ("key", "value", "prev", "next")
+
+    def __init__(self, key=0, value=0):
+        self.key, self.value = key, value
+        self.prev = self.next = None
+
+class LRUCache:
+    def __init__(self, capacity):
+        if capacity <= 0:
+            raise ValueError("capacity must be positive")
+        self.capacity = capacity
+        self.nodes = {}                          # key -> Node
+        self.head, self.tail = Node(), Node()    # sentinels
+        self.head.next, self.tail.prev = self.tail, self.head
+
+    def _unlink(self, node):
+        node.prev.next, node.next.prev = node.next, node.prev
+
+    def _append(self, node):                     # insert just before tail (most recent)
+        node.prev, node.next = self.tail.prev, self.tail
+        self.tail.prev.next = node
+        self.tail.prev = node
+
+    def get(self, key):
+        node = self.nodes.get(key)
+        if node is None:
+            return -1
+        self._unlink(node)
+        self._append(node)
+        return node.value
+
+    def put(self, key, value):
+        node = self.nodes.get(key)
+        if node is not None:
+            node.value = value
+            self._unlink(node)
+            self._append(node)
+            return
+        if len(self.nodes) == self.capacity:
+            oldest = self.head.next
+            self._unlink(oldest)
+            del self.nodes[oldest.key]
+        node = Node(key, value)
+        self.nodes[key] = node
+        self._append(node)
+```
+
+In everyday Python, `collections.OrderedDict` already combines a hash map with a doubly linked list, and `move_to_end` and `popitem(last=False)` are O(1). Say that you know it, but expect the interviewer to ask for the version above.
+
+```python
+from collections import OrderedDict
+
+class LRUCacheOrdered:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.data = OrderedDict()
+
+    def get(self, key):
+        if key not in self.data:
+            return -1
+        self.data.move_to_end(key)
+        return self.data[key]
+
+    def put(self, key, value):
+        if key in self.data:
+            self.data.move_to_end(key)
+        self.data[key] = value
+        if len(self.data) > self.capacity:
+            self.data.popitem(last=False)        # least recently used
+```
+
+**Complexity.** `get` and `put` are O(1) average (dictionary operations are average-case O(1)). Memory is O(capacity).
+
+### Design discussion
+
+- **Thread safety.** Even `get` mutates the recency list, so concurrent callers need a lock around each operation; sharding the cache into several independently locked LRUs reduces contention.
+- **Expiry.** Add a timestamp per node and treat expired entries as misses on read; a background sweep or a second structure ordered by expiry time removes them proactively.
+- **LFU instead of LRU** evicts the least frequently used key; the O(1) design keeps a dictionary of frequency to an ordered set of keys plus the current minimum frequency.
+
+## Tests
+
+```python
+def run_script(cls):
+    c = cls(2)
+    c.put(1, 100)
+    c.put(2, 200)
+    assert c.get(1) == 100
+    c.put(3, 300)                 # evicts 2
+    assert c.get(2) == -1
+    c.put(1, 111)                 # update moves 1 to most recent
+    c.put(4, 400)                 # evicts 3
+    assert c.get(3) == -1
+    assert c.get(1) == 111 and c.get(4) == 400
+
+    one = cls(1)                  # capacity 1
+    one.put(5, 50)
+    one.put(6, 60)
+    assert one.get(5) == -1 and one.get(6) == 60
+    one.put(6, 61)                # update without eviction
+    assert one.get(6) == 61
+
+    c = cls(3)                    # get on a missing key must not change order
+    for k in (1, 2, 3):
+        c.put(k, k)
+    assert c.get(99) == -1
+    c.put(4, 4)                   # evicts 1
+    assert c.get(1) == -1 and c.get(2) == 2
+
+def random_compare(trials=5000):
+    import random
+    rng = random.Random(5)
+    caps = [1, 2, 3, 7]
+    for cap in caps:
+        a, b, c = LRUCacheList(cap), LRUCache(cap), LRUCacheOrdered(cap)
+        for _ in range(trials):
+            key = rng.randint(0, 10)
+            if rng.random() < 0.5:
+                v = rng.randint(0, 1000)
+                a.put(key, v); b.put(key, v); c.put(key, v)
+            else:
+                assert a.get(key) == b.get(key) == c.get(key)
+        assert len(b.nodes) <= cap
+
+for cls in (LRUCacheList, LRUCache, LRUCacheOrdered):
+    run_script(cls)
+random_compare()
+print("all LRU cache tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Updating an existing key** must not evict anything, even when the cache is full. Check for the key before checking capacity.
+- **Forgetting to delete from the dictionary** when evicting leaves a stale node that `get` would still find.
+- **Not storing the key in the node** makes eviction impossible in O(1), because you cannot find the dictionary entry from the list end.
+- **`get` must refresh recency.** Many buggy versions only update order on `put`.
+- **Capacity 1** exercises every path at once; always test it.
+
+## Where this shows up in data engineering
+
+LRU caches are everywhere data engineers look: Python's `functools.lru_cache` for memoising expensive lookups in a UDF or API client, dimension lookup caches in streaming enrichment jobs, and buffer pools in databases, which keep hot pages in memory and evict cold ones with LRU or LRU-like policies. Spark's storage memory also evicts cached blocks when space runs out, which is why a cached DataFrame can be silently recomputed. Knowing the trade-off between hit rate and memory is the practical lesson.

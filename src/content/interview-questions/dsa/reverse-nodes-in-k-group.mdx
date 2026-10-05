@@ -1,0 +1,172 @@
+---
+title: "Reverse Nodes in k-Group: In-Place Group Reversal on a Linked List"
+seoTitle: "Reverse Nodes in k-Group: Linked List"
+description: "Reverse a linked list k nodes at a time, leaving a short final group alone, in O(1) extra space. Iterative and recursive Python solutions, walkthrough and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Use a dummy node and a pointer to the node before the current group. Check that k nodes remain; if not, stop. Otherwise reverse exactly those k nodes with the usual three-pointer loop, reconnect the node before the group to the new group head and the old group head (now the group tail) to the rest, then move the pointer to that tail. Each node is visited a constant number of times: O(n) time and O(1) extra space."
+followUps: ["How would you also reverse the final short group?", "How does this differ from reversing the sub-list between positions left and right?", "Why does the recursive version use O(n / k) stack space?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/merge-k-sorted-lists"
+---
+
+## Problem
+
+Given the head of a singly linked list and a positive integer `k`, reverse the nodes in consecutive groups of `k`. If the number of nodes is not a multiple of `k`, the last group, with fewer than `k` nodes, stays in its original order. Rearrange links only; do not change node values. Return the new head.
+
+This is widely known as LeetCode 25 (Reverse Nodes in k-Group). It is the hard extension of reversing a linked list, and it is mostly a test of careful pointer bookkeeping.
+
+Constraints for this version: 1 to 5,000 nodes and `1 <= k <= length`.
+
+## Examples
+
+| List | `k` | Result |
+|---|---|---|
+| `a -> b -> c -> d -> e -> f -> g` | `3` | `c -> b -> a -> f -> e -> d -> g` |
+| `a -> b -> c -> d -> e -> f -> g` | `2` | `b -> a -> d -> c -> f -> e -> g` |
+| `1 -> 2 -> 3` | `1` | `1 -> 2 -> 3` (unchanged) |
+| `1 -> 2 -> 3` | `3` | `3 -> 2 -> 1` |
+
+## Approach 1: brute force
+
+Copy the nodes into a Python list, reverse each full slice of `k`, then relink the nodes in their new order. It is O(n) time but O(n) extra space, and interviewers usually ask for constant space.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def reverse_k_group_array(head, k):
+    nodes = []
+    while head:
+        nodes.append(head)
+        head = head.next
+    for start in range(0, len(nodes) - k + 1, k):
+        nodes[start:start + k] = nodes[start:start + k][::-1]
+    for a, b in zip(nodes, nodes[1:]):
+        a.next = b
+    if nodes:
+        nodes[-1].next = None
+        return nodes[0]
+    return None
+```
+
+## Approach 2: optimal
+
+**Key insight.** Handle one group at a time with four references: `group_prev` (the node before the group, starting at a dummy), the group's first node, its `k`-th node, and the node after the group. Reverse the group in place, then stitch it back: `group_prev` points to the old `k`-th node (now first), and the old first node (now last) points to the node after the group. The old first node becomes `group_prev` for the next group.
+
+**Walkthrough** for `a -> b -> c -> d -> e -> f -> g`, `k = 3`:
+
+| Group | Before | After stitching |
+|---|---|---|
+| 1 | `dummy -> [a b c] -> d ...` | `dummy -> c -> b -> a -> d ...`, `group_prev = a` |
+| 2 | `a -> [d e f] -> g` | `a -> f -> e -> d -> g`, `group_prev = d` |
+| 3 | `d -> [g]` | only one node left, fewer than 3: stop |
+
+### Iterative
+
+```python
+def reverse_k_group(head, k):
+    dummy = ListNode(0, head)
+    group_prev = dummy
+    while True:
+        # find the k-th node of this group, or stop if the group is short
+        kth = group_prev
+        for _ in range(k):
+            kth = kth.next
+            if kth is None:
+                return dummy.next
+        group_next = kth.next
+
+        # reverse the group; start prev at group_next so the tail links onward
+        prev, curr = group_next, group_prev.next
+        while curr is not group_next:
+            nxt = curr.next
+            curr.next = prev
+            prev = curr
+            curr = nxt
+
+        first = group_prev.next          # old first node, now the group's tail
+        group_prev.next = kth            # kth is now the group's head
+        group_prev = first
+```
+
+Starting `prev` at `group_next` (instead of `None`) means the reversed group's tail already points to the rest of the list, which saves a separate reconnect step.
+
+### Recursive
+
+Reverse the first group, then let recursion handle the rest and attach it to the old head.
+
+```python
+def reverse_k_group_recursive(head, k):
+    node, count = head, 0
+    while node and count < k:            # are there k nodes?
+        node = node.next
+        count += 1
+    if count < k:
+        return head                      # short group stays as it is
+    prev, curr = None, head
+    for _ in range(k):
+        nxt = curr.next
+        curr.next = prev
+        prev = curr
+        curr = nxt
+    head.next = reverse_k_group_recursive(curr, k)   # old head is now the group tail
+    return prev
+```
+
+**Complexity.** Both are O(n) time: each node is counted once and reversed at most once. The iterative version uses O(1) extra space; the recursive one uses O(n / k) stack frames.
+
+## Tests
+
+```python
+def build_list(values):
+    dummy = tail = ListNode()
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head, limit=100_000):
+    out = []
+    while head and len(out) < limit:
+        out.append(head.val)
+        head = head.next
+    return out
+
+def expected(values, k):
+    out = []
+    for i in range(0, len(values), k):
+        chunk = values[i:i + k]
+        out.extend(chunk[::-1] if len(chunk) == k else chunk)
+    return out
+
+letters = list("abcdefg")
+for fn in (reverse_k_group_array, reverse_k_group, reverse_k_group_recursive):
+    assert "".join(to_list(fn(build_list(letters), 3))) == "cbafedg"
+    assert "".join(to_list(fn(build_list(letters), 2))) == "badcfeg"
+    for values in ([1], [1, 2], [1, 2, 3], list(range(10)), [4, 4, 4, 4, 4]):
+        for k in range(1, len(values) + 1):
+            assert to_list(fn(build_list(values), k)) == expected(values, k), (fn.__name__, values, k)
+    assert fn(None, 2) is None
+print("all k-group tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Check the group length before reversing.** Reversing first and undoing later is error-prone; count `k` nodes ahead, and stop if you hit `None`.
+- **`k = 1`** must return the list unchanged, and `k` equal to the length reverses everything.
+- **Losing the connection between groups.** After reversing, the node before the group must point to the new group head, and the new group tail must point to the next group. Trace a two-group example on paper.
+- **Advancing `group_prev`.** It must move to the old first node of the group (now its tail), not to `kth`.
+
+## Where this shows up in data engineering
+
+Not directly; you will not reverse linked groups in a pipeline. The useful habit is processing a sequence in fixed-size chunks while handling a short last chunk correctly, which is exactly what batching writes, paginating API calls or micro-batching a stream requires. The final partial batch is where most real chunking bugs live.
