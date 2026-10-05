@@ -1,0 +1,137 @@
+---
+title: "Trapping Rain Water: Total Water Held Between Elevation Bars"
+seoTitle: "Trapping Rain Water: Prefix Max and Two Pointers"
+description: "Compute how much rain an elevation map traps. Go from O(n²) to O(n) with prefix and suffix maxima, then to O(1) space with two pointers."
+technology: ["dsa"]
+topic: ["two-pointers"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Water above bar i is min(highest bar to its left, highest bar to its right) minus its own height, floored at zero. Precomputing left and right maxima gives O(n) time and O(n) space. The two-pointer version keeps running maxima from both ends and always processes the side with the smaller maximum, because that side's water level is already known; it is O(n) time and O(1) space."
+followUps: ["Why is it safe to settle the side with the smaller running maximum?", "How does the monotonic stack solution compute water layer by layer?", "How would you solve the 2D version on a height grid?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of non-negative integers describing an elevation profile: bar `i` has width 1 and height `heights[i]`. After rain, water settles in the dips between taller bars. Return the total units of water trapped. Water spills off both ends. This is widely known as LeetCode 42, Trapping Rain Water.
+
+## Examples
+
+```text
+heights = [3, 0, 1, 0, 4, 1, 2]   ->  9
+  bar:     3  0  1  0  4  1  2
+  water:   0  3  2  3  0  1  0
+
+heights = [5, 4, 3]               ->  0   (always downhill)
+heights = [2, 0, 2]               ->  2
+```
+
+## Approach 1: brute force
+
+For each bar, scan left and right for the tallest bars and add `min(left_max, right_max) - height`.
+
+```python
+def trap_brute(heights):
+    total = 0
+    for i, h in enumerate(heights):
+        left_max = max(heights[: i + 1])
+        right_max = max(heights[i:])
+        total += min(left_max, right_max) - h
+    return total
+```
+
+Including the bar itself in both maxima keeps the result non-negative. **Complexity:** O(n²) time, O(1) extra space (the slices allocate, but an index loop would not).
+
+## Approach 2: prefix and suffix maxima
+
+Precompute `left_max[i]` and `right_max[i]` in two passes, then sum in a third.
+
+```python
+def trap_prefix(heights):
+    n = len(heights)
+    if n == 0:
+        return 0
+    left_max, right_max = [0] * n, [0] * n
+    left_max[0] = heights[0]
+    for i in range(1, n):
+        left_max[i] = max(left_max[i - 1], heights[i])
+    right_max[-1] = heights[-1]
+    for i in range(n - 2, -1, -1):
+        right_max[i] = max(right_max[i + 1], heights[i])
+    return sum(min(left_max[i], right_max[i]) - heights[i] for i in range(n))
+```
+
+**Complexity:** O(n) time, O(n) space. This is the step most interviewers want to see first.
+
+## Approach 3: optimal (two pointers)
+
+**Key insight:** the water at a bar depends on the *smaller* of its two maxima. If the running maximum from the left is smaller than the running maximum from the right, then for the left pointer's bar the true right maximum is at least the right running maximum, so the left maximum is the limiting one and its water is known exactly. Settle that bar and move inward; otherwise do the same from the right.
+
+Walkthrough on `[3, 0, 1, 0, 4, 1, 2]`:
+
+| left | right | left_max | right_max | Settle | Water added | Total |
+|---|---|---|---|---|---|---|
+| 0 | 6 | 3 | 2 | right bar 6 (h 2) | 2 − 2 = 0 | 0 |
+| 0 | 5 | 3 | 2 | right bar 5 (h 1) | 2 − 1 = 1 | 1 |
+| 0 | 4 | 3 | 4 | left bar 0 (h 3) | 3 − 3 = 0 | 1 |
+| 1 | 4 | 3 | 4 | left bar 1 (h 0) | 3 | 4 |
+| 2 | 4 | 3 | 4 | left bar 2 (h 1) | 2 | 6 |
+| 3 | 4 | 3 | 4 | left bar 3 (h 0) | 3 | 9 |
+
+The pointers meet at bar 4, the tallest, which holds no water.
+
+```python
+def trap(heights):
+    left, right = 0, len(heights) - 1
+    left_max = right_max = 0
+    total = 0
+    while left <= right:
+        left_max = max(left_max, heights[left])
+        right_max = max(right_max, heights[right])
+        if left_max <= right_max:
+            total += left_max - heights[left]
+            left += 1
+        else:
+            total += right_max - heights[right]
+            right -= 1
+    return total
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (trap, trap_prefix, trap_brute):
+    assert f([3, 0, 1, 0, 4, 1, 2]) == 9
+    assert f([5, 4, 3]) == 0                    # monotonic
+    assert f([2, 0, 2]) == 2
+    assert f([]) == 0                           # empty
+    assert f([7]) == 0                          # single bar
+    assert f([0, 0, 0]) == 0                    # flat ground
+    assert f([4, 4, 1, 4, 4]) == 3              # equal walls
+    assert f([10**6, 0, 10**6]) == 10**6        # large values
+
+random.seed(23)
+for _ in range(400):
+    hs = [random.randint(0, 6) for _ in range(random.randint(0, 12))]
+    assert trap(hs) == trap_prefix(hs) == trap_brute(hs)
+```
+
+## Edge cases and pitfalls
+
+- Fewer than three bars can never hold water; make sure the code does not crash on `[]`.
+- In the brute force, forgetting to include the bar in its own maxima can give negative water.
+- The two-pointer comparison is on the running maxima, not the current heights. Comparing raw heights works too in a slightly different formulation, but mixing the two is a common source of wrong answers.
+- A monotonic stack solution (pop when a taller bar arrives and fill the basin between) is another accepted O(n) answer; know that it exists.
+
+## Where this shows up in data engineering
+
+The useful part for data work is the prefix-and-suffix maximum: a running max from each direction is a window function (`MAX(h) OVER (ORDER BY i ROWS UNBOUNDED PRECEDING)` and the mirror with `FOLLOWING`). Computing "high-water mark so far" over a time series, for example peak balance to date, is this exact scan.

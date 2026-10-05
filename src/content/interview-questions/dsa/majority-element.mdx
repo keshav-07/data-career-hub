@@ -1,0 +1,107 @@
+---
+title: "Majority Element: Find the Value That Fills More Than Half the Array"
+seoTitle: "Majority Element: Boyer–Moore Voting"
+description: "Return the value that occurs more than n/2 times. Compare counting with a hash map, sorting, and the Boyer–Moore voting algorithm in O(n) time and O(1) space."
+technology: ["dsa"]
+topic: ["arrays"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 6
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Counting with a hash map works in O(n) time and O(n) space. The expected optimal answer is Boyer–Moore voting: keep a candidate and a counter, increment when you see the candidate, decrement otherwise, and adopt the current value as the new candidate whenever the counter is zero. Each non-majority value can cancel at most one majority value, so the majority survives. This is O(n) time and O(1) space."
+followUps: ["How would you verify the candidate if a majority is not guaranteed?", "How would you find every value that appears more than n/3 times?", "Why does sorting and taking the middle element also work?"]
+previous: "interview-questions:dsa/subarray-sum-equals-k"
+next: "interview-questions:dsa/valid-palindrome"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a non-empty list of integers in which one value is guaranteed to occur more than `n / 2` times (strictly more than half), return that value. This is widely known as LeetCode 169, Majority Element.
+
+## Examples
+
+```text
+nums = [4, 1, 4]                ->  4
+nums = [9, 9, 2, 2, 9, 9, 2]    ->  9    (four of seven)
+nums = [-6]                     ->  -6
+```
+
+## Approach 1: brute force
+
+Count every value with a dictionary and return the one whose count exceeds half.
+
+```python
+def majority_count(nums):
+    counts = {}
+    for num in nums:
+        counts[num] = counts.get(num, 0) + 1
+        if counts[num] > len(nums) // 2:
+            return num
+```
+
+**Complexity:** O(n) time, O(n) space. (Counting each value with a nested loop would be O(n²); sorting and returning `sorted(nums)[n // 2]` is O(n log n), since the majority must cover the middle position.)
+
+## Approach 2: optimal (Boyer–Moore voting)
+
+**Key insight:** pair each occurrence of the majority with a different value and cancel the pair. Because the majority has more than half the elements, it cannot be fully cancelled, so it is the value left standing.
+
+Walkthrough on `[9, 9, 2, 2, 9, 9, 2]`:
+
+| num | candidate before | count before | action | candidate, count after |
+|---|---|---|---|---|
+| 9 | none | 0 | adopt 9 | 9, 1 |
+| 9 | 9 | 1 | same | 9, 2 |
+| 2 | 9 | 2 | different | 9, 1 |
+| 2 | 9 | 1 | different | 9, 0 |
+| 9 | 9 | 0 | adopt 9 | 9, 1 |
+| 9 | 9 | 1 | same | 9, 2 |
+| 2 | 9 | 2 | different | 9, 1 |
+
+```python
+def majority_element(nums):
+    candidate, count = None, 0
+    for num in nums:
+        if count == 0:
+            candidate = num
+        count += 1 if num == candidate else -1
+    return candidate
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (majority_element, majority_count):
+    assert f([4, 1, 4]) == 4
+    assert f([9, 9, 2, 2, 9, 9, 2]) == 9
+    assert f([-6]) == -6                               # single element, negative
+    assert f([3, 3]) == 3                              # all duplicates
+    assert f([1, 2, 7, 7, 7]) == 7                     # majority at the end
+    assert f([10**9, -1, 10**9]) == 10**9              # large values
+
+random.seed(18)
+for _ in range(300):
+    n = random.randint(1, 15)
+    maj = random.randint(-5, 5)
+    k = n // 2 + 1
+    arr = [maj] * k + [random.choice([v for v in range(-5, 6) if v != maj]) for _ in range(n - k)]
+    random.shuffle(arr)
+    assert majority_element(arr) == majority_count(arr) == maj
+```
+
+## Edge cases and pitfalls
+
+- Boyer–Moore always returns *some* candidate. If a majority is not guaranteed, do a second pass to count the candidate and check it exceeds `n // 2`.
+- "More than half" is strict: in `[1, 1, 2, 2]` there is no majority.
+- The generalisation to "more than n/k times" keeps k - 1 candidates and counters.
+
+## Where this shows up in data engineering
+
+The voting idea is the basis of streaming heavy-hitter algorithms such as Misra–Gries, which find frequent items in one pass with a fixed amount of memory. That matters when you need to spot a dominating key, for example the skewed key that makes one Spark task run far longer than the others, without holding a full count of every key.

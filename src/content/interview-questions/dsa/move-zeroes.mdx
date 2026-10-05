@@ -1,0 +1,109 @@
+---
+title: "Move Zeroes: Shift Zeros to the End While Keeping Order"
+seoTitle: "Move Zeroes: Stable In-Place Partition"
+description: "Move every zero to the end of an array in place while keeping the other values in order. A read pointer and a write pointer do it in one O(n) pass."
+technology: ["dsa"]
+topic: ["two-pointers"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Keep a write pointer at the next slot for a non-zero value. Scan with a read pointer; whenever it finds a non-zero, swap it into the write slot and advance the write pointer. Non-zeros keep their relative order and every zero ends up after them. This is O(n) time, O(1) extra space, and each element moves at most once."
+followUps: ["How would you minimise the number of writes?", "How would you move all values equal to some k, or all negatives, to the end instead?", "Is the order of the zeros themselves meaningful?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers, move all zeros to the end while keeping the non-zero values in their original relative order. Do it in place, without building a second list. This is widely known as LeetCode 283, Move Zeroes.
+
+## Examples
+
+```text
+[0, 7, 0, -2, 5]   ->  [7, -2, 5, 0, 0]
+[0, 0, 1]          ->  [1, 0, 0]
+[4, 8]             ->  [4, 8]
+```
+
+## Approach 1: brute force
+
+Each time a zero is found, remove it and append a zero at the end.
+
+```python
+def move_zeroes_brute(nums):
+    i, checked = 0, 0
+    while checked < len(nums):
+        if nums[i] == 0:
+            nums.pop(i)          # O(n) shift
+            nums.append(0)
+        else:
+            i += 1
+        checked += 1
+```
+
+**Complexity:** O(n²) time in the worst case, because each `pop(i)` shifts the rest of the list. O(1) extra space. (Building a new list of non-zeros and padding with zeros is O(n) but not in place.)
+
+## Approach 2: optimal
+
+**Key insight:** this is a stable partition. Everything left of the write pointer is the non-zero values seen so far, in order; everything between the write and read pointers is zeros.
+
+Walkthrough on `[0, 7, 0, -2, 5]`:
+
+| read | value | write before | Action | Array after |
+|---|---|---|---|---|
+| 0 | 0 | 0 | skip | [0, 7, 0, -2, 5] |
+| 1 | 7 | 0 | swap 0 and 1 | [7, 0, 0, -2, 5] |
+| 2 | 0 | 1 | skip | [7, 0, 0, -2, 5] |
+| 3 | -2 | 1 | swap 1 and 3 | [7, -2, 0, 0, 5] |
+| 4 | 5 | 2 | swap 2 and 4 | [7, -2, 5, 0, 0] |
+
+```python
+def move_zeroes(nums):
+    write = 0
+    for read in range(len(nums)):
+        if nums[read] != 0:
+            nums[write], nums[read] = nums[read], nums[write]
+            write += 1
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+def run(f, arr):
+    arr = list(arr)
+    assert f(arr) is None        # modifies in place
+    return arr
+
+for f in (move_zeroes, move_zeroes_brute):
+    assert run(f, [0, 7, 0, -2, 5]) == [7, -2, 5, 0, 0]
+    assert run(f, [0, 0, 1]) == [1, 0, 0]
+    assert run(f, [4, 8]) == [4, 8]                  # no zeros
+    assert run(f, []) == []                          # empty
+    assert run(f, [0]) == [0] and run(f, [3]) == [3] # single
+    assert run(f, [0, 0, 0]) == [0, 0, 0]            # all zeros
+    assert run(f, [2, 0, 2, 0]) == [2, 2, 0, 0]      # duplicates
+    assert run(f, [-10**9, 0, 10**9]) == [-10**9, 10**9, 0]   # large values
+
+random.seed(24)
+for _ in range(400):
+    arr = [random.choice([0, 0, 1, -1, 5]) for _ in range(random.randint(0, 10))]
+    expected = [v for v in arr if v != 0] + [0] * arr.count(0)
+    assert run(move_zeroes, arr) == run(move_zeroes_brute, arr) == expected
+```
+
+## Edge cases and pitfalls
+
+- The swap is needed to keep zeros in the tail. An alternative is to copy non-zeros forward and then fill the tail with zeros; it writes fewer times when there are few zeros.
+- Removing items from a list while iterating over it with `for x in nums` skips elements. The brute force above uses a separate counter for that reason.
+- Watch for `0.0` or `False` if the list is not purely integers: both compare equal to 0.
+
+## Where this shows up in data engineering
+
+Stable partitioning, moving rows that fail a check to the end (or to a reject output) while keeping the rest in arrival order, is a common transform step. Order stability matters when the downstream logic depends on ingestion order, such as "last value wins" deduplication.

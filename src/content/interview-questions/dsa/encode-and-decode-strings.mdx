@@ -1,0 +1,129 @@
+---
+title: "Encode and Decode Strings: Serialise a List of Strings Safely"
+seoTitle: "Encode and Decode Strings: Length Prefixes"
+description: "Turn a list of arbitrary strings into one string and back again. Learn why delimiters break and how length-prefix framing round-trips any content in O(n)."
+technology: ["dsa"]
+topic: ["arrays", "strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Prefix every string with its length and a separator, for example 5#hello, and concatenate. To decode, read digits up to the separator, then take exactly that many characters as the next string, and repeat. Because the length tells the decoder where each string ends, the content may contain any character, including the separator. Both directions are O(n) in the total length."
+followUps: ["Why does joining with a rare delimiter such as a comma or a control character fail?", "How would you make the encoding binary-safe, for example with fixed-width lengths?", "How do real wire formats such as Protocol Buffers or Kafka records frame variable-length fields?"]
+previous: "interview-questions:dsa/valid-sudoku"
+next: "interview-questions:dsa/longest-consecutive-sequence"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Design two functions. `encode(strings)` takes a list of strings and returns a single string. `decode(s)` takes that string and returns the original list exactly. The strings can contain any characters, including digits, `#`, commas and empty strings, so no character is safe to reserve as a delimiter. This is widely known as LeetCode 271, Encode and Decode Strings (a premium problem, also listed on NeetCode).
+
+## Examples
+
+```text
+["data", "eng"]       ->  encode  ->  "4#data3#eng"  ->  decode  ->  ["data", "eng"]
+["a#b", ""]           ->  encode  ->  "3#a#b0#"      ->  decode  ->  ["a#b", ""]
+[]                    ->  encode  ->  ""             ->  decode  ->  []
+```
+
+## Approach 1: brute force (delimiter with escaping)
+
+Join with a delimiter such as `,`, and escape any delimiter or escape character inside the strings: `\` becomes `\\` and `,` becomes `\,`. Decode by scanning and undoing the escapes.
+
+```python
+def encode_escaped(strings):
+    return "".join(s.replace("\\", "\\\\").replace(",", "\\,") + "," for s in strings)
+
+def decode_escaped(s):
+    out, cur, i = [], [], 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\":
+            cur.append(s[i + 1])
+            i += 2
+        elif ch == ",":
+            out.append("".join(cur))
+            cur = []
+            i += 1
+        else:
+            cur.append(ch)
+            i += 1
+    return out
+```
+
+Note the terminating comma after every string: it makes `[]` and `[""]` encode differently (`""` versus `","`). **Complexity:** O(n) time and space, but it is easy to get wrong, and a plain `",".join(...)` without escaping is simply incorrect.
+
+## Approach 2: optimal (length-prefix framing)
+
+**Key insight:** if the decoder knows how long the next string is, it never has to look inside it. Write `len(s)`, a `#`, then `s`.
+
+Walkthrough decoding `"3#a#b0#"`:
+
+1. At index 0, read digits until `#`: length 3. Take the next 3 characters, `"a#b"`. Move to index 5.
+2. At index 5, read digits until `#`: length 0. Take 0 characters, `""`. Move to index 7.
+3. Index 7 is the end. Result: `["a#b", ""]`.
+
+The `#` inside `"a#b"` is never examined as a separator, because the decoder jumps over the content.
+
+```python
+def encode(strings):
+    return "".join(f"{len(s)}#{s}" for s in strings)
+
+def decode(s):
+    out, i = [], 0
+    while i < len(s):
+        j = s.index("#", i)
+        length = int(s[i:j])
+        out.append(s[j + 1 : j + 1 + length])
+        i = j + 1 + length
+    return out
+```
+
+**Complexity:** O(n) time and space, where n is the total number of characters.
+
+## Tests
+
+```python
+import random
+
+cases = [
+    ["data", "eng"],
+    ["a#b", ""],
+    [],                              # empty list
+    [""],                            # one empty string
+    ["", "", ""],
+    ["12#34", "#", "##"],            # digits and separators inside content
+    ["x" * 10_000],                  # long string (multi-digit length)
+    ["héllo", "日本", "tab\tnewline\n"],
+    ["\\", ",", "\\,"],              # characters the escaping version must handle
+]
+for strings in cases:
+    assert decode(encode(strings)) == strings
+    assert decode_escaped(encode_escaped(strings)) == strings
+
+assert encode(["data", "eng"]) == "4#data3#eng"
+assert encode([]) == "" and encode([""]) == "0#"
+
+random.seed(8)
+alphabet = "ab#,\\0123"
+for _ in range(500):
+    strings = ["".join(random.choice(alphabet) for _ in range(random.randint(0, 5)))
+               for _ in range(random.randint(0, 5))]
+    assert decode(encode(strings)) == strings
+    assert decode_escaped(encode_escaped(strings)) == strings
+```
+
+## Edge cases and pitfalls
+
+- `[]` and `[""]` must encode differently. Length-prefixing gives `""` and `"0#"`.
+- Lengths can have several digits, so read up to the separator rather than a single character.
+- Splitting the encoded string on `#` is wrong: it ignores the length and breaks as soon as the content contains `#`.
+- If you use a fixed-width length (for example 4 bytes), say what the maximum string length is.
+
+## Where this shows up in data engineering
+
+This is message framing, and it is everywhere in data infrastructure. CSV is the delimiter-and-escaping approach, which is why unescaped commas and newlines corrupt loads. Binary formats such as Protocol Buffers, Avro and Kafka's record format prefix variable-length fields with their length so readers can skip content without parsing it.

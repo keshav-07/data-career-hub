@@ -1,0 +1,121 @@
+---
+title: "Contains Duplicate: Detect Whether Any Value Appears Twice"
+seoTitle: "Contains Duplicate: Detect Repeated Values"
+description: "Decide whether an integer array holds any repeated value. Compare the O(n²) pair check, sorting, and the O(n) hash-set scan interviewers expect."
+technology: ["dsa"]
+topic: ["arrays"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Walk the array once and keep a hash set of values already seen. The first value that is already in the set proves a duplicate, so return True; if the loop finishes, return False. This is O(n) time on average and O(n) extra space. If memory is tight, sort first and compare neighbours for O(n log n) time and O(1) extra space."
+followUps: ["How would you solve it with O(1) extra space, and what does that cost?", "What if a duplicate only counts when the two copies are at most k positions apart?", "How would you detect duplicates in a file too large to fit in memory?"]
+next: "interview-questions:dsa/valid-anagram"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You receive a list of integers. Return `True` if at least one value occurs two or more times, and `False` if every value is distinct. This is widely known as LeetCode 217, Contains Duplicate.
+
+Assume the list may be empty and may hold up to about 10^5 values, each a signed 32-bit integer.
+
+## Examples
+
+```text
+nums = [8, 3, 5, 3]   ->  True    (3 appears twice)
+nums = [4, -1, 9]     ->  False   (all distinct)
+nums = []             ->  False   (nothing to repeat)
+```
+
+## Approach 1: brute force
+
+Compare every pair `(i, j)` with `i < j` and return `True` on the first equal pair.
+
+```python
+def contains_duplicate_brute(nums):
+    n = len(nums)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if nums[i] == nums[j]:
+                return True
+    return False
+```
+
+**Complexity:** O(n²) time, O(1) extra space. Too slow for 10^5 values (about 5 × 10^9 comparisons).
+
+## Approach 2: optimal
+
+**Key insight:** you only need to know whether the current value has been seen before, and a hash set answers that question in O(1) on average.
+
+Walkthrough on `[8, 3, 5, 3]`:
+
+| Step | Value | Seen before? | Set after |
+|---|---|---|---|
+| 1 | 8 | no | `{8}` |
+| 2 | 3 | no | `{8, 3}` |
+| 3 | 5 | no | `{8, 3, 5}` |
+| 4 | 3 | **yes** | return `True` |
+
+```python
+def contains_duplicate(nums):
+    seen = set()
+    for x in nums:
+        if x in seen:
+            return True
+        seen.add(x)
+    return False
+```
+
+**Complexity:** O(n) time on average, O(n) extra space. It also stops early at the first repeat. The one-liner `len(set(nums)) != len(nums)` has the same complexity but always processes the whole list.
+
+## Approach 3: sort and compare neighbours
+
+When extra memory is the constraint, sort and check adjacent pairs: equal values end up next to each other.
+
+```python
+def contains_duplicate_sorted(nums):
+    nums = sorted(nums)  # use nums.sort() to sort in place if mutating the input is allowed
+    for i in range(1, len(nums)):
+        if nums[i] == nums[i - 1]:
+            return True
+    return False
+```
+
+**Complexity:** O(n log n) time. O(1) extra space only if you sort in place; `sorted` makes a copy.
+
+## Tests
+
+```python
+import random
+
+for f in (contains_duplicate, contains_duplicate_sorted, contains_duplicate_brute):
+    assert f([8, 3, 5, 3]) is True
+    assert f([4, -1, 9]) is False
+    assert f([]) is False                      # empty
+    assert f([7]) is False                     # single element
+    assert f([0, 0]) is True                   # smallest duplicate
+    assert f([-5, 5, -5]) is True              # negatives
+    assert f([2**31 - 1, -2**31, 2**31 - 1]) is True   # large values
+
+assert contains_duplicate(list(range(100_000))) is False   # large distinct input
+
+random.seed(1)
+for _ in range(300):
+    arr = [random.randint(-10, 10) for _ in range(random.randint(0, 12))]
+    assert contains_duplicate(arr) == contains_duplicate_brute(arr) == contains_duplicate_sorted(arr)
+```
+
+## Edge cases and pitfalls
+
+- An empty list or a single element has no duplicates.
+- Calling `nums.sort()` mutates the caller's list. Say so in an interview, or sort a copy.
+- Checking `x in some_list` instead of a set quietly turns the solution back into O(n²).
+- A hash set gives O(1) on average, not worst case; mention it if asked about adversarial inputs.
+
+## Where this shows up in data engineering
+
+This is a primary-key uniqueness check. A data quality test that fails a load when a key column has repeats does exactly this, either with a set in Python or `COUNT(*) <> COUNT(DISTINCT key)` in SQL. For data too large for one machine you hash-partition the keys so equal values land in the same partition, then check each partition on its own.

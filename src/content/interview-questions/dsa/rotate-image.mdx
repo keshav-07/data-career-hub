@@ -1,0 +1,136 @@
+---
+title: "Rotate Image: Turn a Square Matrix 90 Degrees Clockwise in Place"
+seoTitle: "Rotate Image: Rotate a Matrix 90° in Place"
+description: "Rotate an n×n matrix 90 degrees clockwise without a second matrix. Learn the transpose-then-reverse trick and the four-way cycle swap, both O(n²) time."
+technology: ["dsa"]
+topic: ["arrays", "matrix"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "A clockwise quarter turn sends the cell at (r, c) to (c, n - 1 - r). You can get that in place in two simple steps: transpose the matrix (swap (r, c) with (c, r) above the diagonal), then reverse every row. Each cell moves a constant number of times, so it is O(n²) time and O(1) extra space."
+followUps: ["How would you rotate counter-clockwise, or by 180 degrees?", "How does the four-way cycle swap work, layer by layer?", "What changes for a non-square matrix?"]
+previous: "interview-questions:dsa/non-overlapping-intervals"
+next: "interview-questions:dsa/spiral-matrix"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given an n×n matrix as a list of lists. Rotate it 90 degrees clockwise **in place**: modify the given lists rather than building and returning a new matrix. This is widely known as LeetCode 48, Rotate Image.
+
+## Examples
+
+```text
+[[1, 2],        [[3, 1],
+ [3, 4]]   ->    [4, 2]]
+
+[[1, 2, 3],      [[7, 4, 1],
+ [4, 5, 6],  ->   [8, 5, 2],
+ [7, 8, 9]]       [9, 6, 3]]
+```
+
+## Approach 1: brute force
+
+Build a rotated copy using the index mapping `new[c][n - 1 - r] = old[r][c]`, then copy it back into the original lists.
+
+```python
+def rotate_copy(matrix):
+    n = len(matrix)
+    rotated = [[0] * n for _ in range(n)]
+    for r in range(n):
+        for c in range(n):
+            rotated[c][n - 1 - r] = matrix[r][c]
+    for r in range(n):
+        matrix[r][:] = rotated[r]
+```
+
+**Complexity:** O(n²) time and O(n²) extra space. Correct, but the problem asks for O(1) extra space.
+
+## Approach 2: optimal
+
+**Key insight:** a clockwise rotation equals a transpose followed by a horizontal flip. Both steps are simple swaps that need no extra matrix.
+
+Walkthrough on the 3×3 example:
+
+```text
+original        transpose        reverse each row
+1 2 3           1 4 7            7 4 1
+4 5 6     ->    2 5 8      ->    8 5 2
+7 8 9           3 6 9            9 6 3
+```
+
+```python
+def rotate(matrix):
+    n = len(matrix)
+    for r in range(n):
+        for c in range(r + 1, n):
+            matrix[r][c], matrix[c][r] = matrix[c][r], matrix[r][c]
+    for row in matrix:
+        row.reverse()
+```
+
+**Complexity:** O(n²) time, O(1) extra space.
+
+## Approach 3: rotate four cells at a time
+
+Some interviewers want the direct version. Work layer by layer from the outside in; within a layer, each position belongs to a cycle of four cells (top, right, bottom, left) that move one step clockwise together.
+
+```python
+def rotate_layers(matrix):
+    n = len(matrix)
+    for layer in range(n // 2):
+        first, last = layer, n - 1 - layer
+        for i in range(first, last):
+            offset = i - first
+            top = matrix[first][i]
+            matrix[first][i] = matrix[last - offset][first]          # left -> top
+            matrix[last - offset][first] = matrix[last][last - offset]  # bottom -> left
+            matrix[last][last - offset] = matrix[i][last]            # right -> bottom
+            matrix[i][last] = top                                    # top -> right
+```
+
+**Complexity:** O(n²) time, O(1) extra space, and every cell is written exactly once.
+
+## Tests
+
+```python
+import copy, random
+
+def rotated(f, m):
+    m = copy.deepcopy(m)
+    assert f(m) is None            # in place: nothing returned
+    return m
+
+for f in (rotate, rotate_layers, rotate_copy):
+    assert rotated(f, [[1, 2], [3, 4]]) == [[3, 1], [4, 2]]
+    assert rotated(f, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == [[7, 4, 1], [8, 5, 2], [9, 6, 3]]
+    assert rotated(f, [[5]]) == [[5]]                         # 1×1
+    assert rotated(f, []) == []                               # 0×0
+    assert rotated(f, [[-1, -2], [-3, -4]]) == [[-3, -1], [-4, -2]]   # negatives
+    m = [[r * 4 + c for c in range(4)] for r in range(4)]
+    four = m
+    for _ in range(4):
+        four = rotated(f, four)
+    assert four == m                                          # four turns = identity
+
+random.seed(14)
+for _ in range(100):
+    n = random.randint(0, 7)
+    m = [[random.randint(-10**9, 10**9) for _ in range(n)] for _ in range(n)]
+    assert rotated(rotate, m) == rotated(rotate_layers, m) == rotated(rotate_copy, m)
+```
+
+## Edge cases and pitfalls
+
+- In the transpose, loop `c` from `r + 1`. Looping over the full matrix swaps each pair twice and undoes the transpose.
+- `matrix = rotated` inside the function only rebinds a local name; the caller still sees the old matrix. Assign into the rows (`matrix[r][:] = ...`) instead.
+- Counter-clockwise is transpose then reverse the order of the rows (or reverse each row first, then transpose).
+- For a non-square m×n matrix an in-place rotation is not possible with this method, because the shape changes to n×m.
+
+## Where this shows up in data engineering
+
+The transpose is the useful part: pivoting rows into columns and back is the PIVOT and UNPIVOT operation, and storage formats are themselves a transpose (row-oriented CSV versus column-oriented Parquet). The in-place rotation itself rarely appears outside image processing.

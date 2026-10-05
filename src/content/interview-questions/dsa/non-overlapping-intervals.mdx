@@ -1,0 +1,110 @@
+---
+title: "Non-overlapping Intervals: Fewest Removals to Eliminate Overlaps"
+seoTitle: "Non-overlapping Intervals: Greedy by End Time"
+description: "Find the fewest intervals to remove so the rest do not overlap. Learn why sorting by end time and keeping the earliest finisher is the optimal greedy choice."
+technology: ["dsa"]
+topic: ["arrays", "intervals", "greedy"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "This is interval scheduling in disguise: keep as many non-overlapping intervals as possible, and the answer is n minus that number. Sort by end time and greedily keep each interval that starts at or after the end of the last kept one. Picking the earliest end always leaves the most room for the rest. This is O(n log n) time and O(1) extra space after sorting."
+followUps: ["Why does sorting by start time with the same greedy rule give wrong answers?", "How would you return which intervals to remove?", "How does this relate to the minimum number of meeting rooms problem?"]
+previous: "interview-questions:dsa/insert-interval"
+next: "interview-questions:dsa/rotate-image"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of intervals `[start, end]` with `start < end`, return the minimum number of intervals you must remove so that no two of the remaining intervals overlap. Intervals that only touch, such as `[1, 3]` and `[3, 5]`, do not overlap. This is widely known as LeetCode 435, Non-overlapping Intervals.
+
+## Examples
+
+```text
+[[1, 4], [2, 3], [3, 6], [5, 7]]   ->  2    (keep [2, 3] and [5, 7])
+[[0, 2], [0, 2], [0, 2]]           ->  2    (keep one copy)
+[[1, 3], [3, 5]]                   ->  0    (touching is fine)
+```
+
+## Approach 1: brute force
+
+Try every subset, keep the largest one with no overlaps, and return n minus its size.
+
+```python
+from itertools import combinations
+
+def erase_overlap_brute(intervals):
+    n = len(intervals)
+    for size in range(n, -1, -1):
+        for subset in combinations(sorted(intervals), size):
+            if all(subset[i][1] <= subset[i + 1][0] for i in range(size - 1)):
+                return n - size
+    return n
+```
+
+**Complexity:** O(2^n · n) time. Only useful as a reference to test the greedy solution against.
+
+## Approach 2: optimal
+
+**Key insight:** to keep the most intervals, always keep the one that finishes first among those still compatible. Any optimal solution can swap its first interval for the earliest-finishing one without losing anything, because finishing earlier never blocks more later intervals.
+
+Walkthrough on `[[1, 4], [2, 3], [3, 6], [5, 7]]`, sorted by end: `[[2, 3], [1, 4], [3, 6], [5, 7]]`.
+
+| Interval | Last kept end | Starts ≥ last end? | Action | Removed |
+|---|---|---|---|---|
+| [2, 3] | none | | keep, end = 3 | 0 |
+| [1, 4] | 3 | 1 ≥ 3? no | remove | 1 |
+| [3, 6] | 3 | 3 ≥ 3? yes | keep, end = 6 | 1 |
+| [5, 7] | 6 | 5 ≥ 6? no | remove | 2 |
+
+```python
+def erase_overlap_intervals(intervals):
+    removed = 0
+    last_end = float("-inf")
+    for start, end in sorted(intervals, key=lambda iv: iv[1]):
+        if start >= last_end:
+            last_end = end
+        else:
+            removed += 1
+    return removed
+```
+
+**Complexity:** O(n log n) time for the sort, O(n) space for the sorted copy (O(1) extra if you sort in place).
+
+## Tests
+
+```python
+import random
+
+for f in (erase_overlap_intervals, erase_overlap_brute):
+    assert f([[1, 4], [2, 3], [3, 6], [5, 7]]) == 2
+    assert f([[0, 2], [0, 2], [0, 2]]) == 2           # duplicates
+    assert f([[1, 3], [3, 5]]) == 0                   # touching
+    assert f([]) == 0                                 # empty
+    assert f([[5, 9]]) == 0                           # single
+    assert f([[1, 100], [2, 3], [4, 5], [6, 7]]) == 1 # one long interval blocks many
+    assert f([[-10, -5], [-6, 0], [0, 2]]) == 1       # negatives
+    assert f([[0, 10**9], [1, 2]]) == 1               # large values
+
+random.seed(13)
+for _ in range(300):
+    ivs = []
+    for _ in range(random.randint(0, 8)):
+        a = random.randint(-5, 10)
+        ivs.append([a, a + random.randint(1, 5)])
+    assert erase_overlap_intervals(ivs) == erase_overlap_brute(ivs)
+```
+
+## Edge cases and pitfalls
+
+- Sorting by start and keeping the earlier one fails: `[[1, 100], [2, 3], [4, 5]]` keeps `[1, 100]` and removes two, when removing just `[1, 100]` is optimal. (Sorting by start does work if, on overlap, you keep the one with the smaller end.)
+- Touching intervals are compatible here, so the test is `start >= last_end`. Read the problem's definition carefully; some variants treat touching as overlapping.
+- Initialise `last_end` to negative infinity, not 0, or intervals with negative coordinates are wrongly removed.
+
+## Where this shows up in data engineering
+
+Choosing the largest set of non-conflicting jobs for one exclusive resource, such as maintenance windows on a single database or batch jobs on a single-slot queue, is interval scheduling. The greedy earliest-finish rule is a sensible first heuristic for such schedulers, though real ones also weigh priority and duration.

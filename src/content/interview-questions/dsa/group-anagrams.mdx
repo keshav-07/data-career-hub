@@ -1,0 +1,131 @@
+---
+title: "Group Anagrams: Bucket Words That Share the Same Letters"
+seoTitle: "Group Anagrams: Bucket Words by Letter Counts"
+description: "Group a list of words so anagrams share a bucket. Build a canonical key, either the sorted word or a 26-letter count tuple, and use a dictionary of lists."
+technology: ["dsa"]
+topic: ["hashing"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Give every word a canonical key that is identical for all its anagrams, then group with a dictionary from key to list of words. The sorted word works as a key in O(k log k) per word; a tuple of 26 letter counts works in O(k). Total time is O(n·k log k) or O(n·k) for n words of length up to k, with O(n·k) space for the output."
+followUps: ["Which key is faster in practice for short words, and why?", "How would you do this for billions of words across many machines?", "What changes if the input can contain uppercase letters or Unicode?"]
+previous: "interview-questions:dsa/two-sum"
+next: "interview-questions:dsa/top-k-frequent-elements"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of lowercase words. Put the words into groups where every word in a group is an anagram of every other word in it (same letters, same counts). Return the groups in any order; the order of words inside a group does not matter either. This is widely known as LeetCode 49, Group Anagrams.
+
+Assume up to 10^4 words of up to 100 lowercase English letters each. The empty string is a valid word.
+
+## Examples
+
+```text
+words = ["pots", "stop", "opts", "rat", "tar", "cat"]
+  ->  [["pots", "stop", "opts"], ["rat", "tar"], ["cat"]]
+
+words = [""]          ->  [[""]]
+words = ["ab", "ba", "ab"]  ->  [["ab", "ba", "ab"]]   (duplicates stay in the group)
+```
+
+## Approach 1: brute force
+
+Take each ungrouped word, start a new group, and compare it with every remaining ungrouped word using an anagram check.
+
+```python
+def group_anagrams_brute(words):
+    used = [False] * len(words)
+    groups = []
+    for i, w in enumerate(words):
+        if used[i]:
+            continue
+        group = [w]
+        used[i] = True
+        for j in range(i + 1, len(words)):
+            if not used[j] and sorted(words[j]) == sorted(w):
+                group.append(words[j])
+                used[j] = True
+        groups.append(group)
+    return groups
+```
+
+**Complexity:** O(n² · k log k) time, because every pair of words may be compared. Fine for tiny inputs, too slow for 10^4 words.
+
+## Approach 2: optimal
+
+**Key insight:** if you can compute a key that is the same for all anagrams and different otherwise, grouping becomes a single pass with a dictionary.
+
+Two common keys:
+
+- the sorted word: `"stop"` → `"opst"` (O(k log k));
+- a tuple of 26 letter counts (O(k)).
+
+Walkthrough with sorted keys on `["pots", "stop", "rat", "tar"]`:
+
+| Word | Key | Dictionary after |
+|---|---|---|
+| pots | opst | `{opst: [pots]}` |
+| stop | opst | `{opst: [pots, stop]}` |
+| rat | art | `{opst: [...], art: [rat]}` |
+| tar | art | `{opst: [...], art: [rat, tar]}` |
+
+```python
+from collections import defaultdict
+
+def group_anagrams(words):
+    groups = defaultdict(list)
+    for w in words:
+        counts = [0] * 26
+        for ch in w:
+            counts[ord(ch) - ord("a")] += 1
+        groups[tuple(counts)].append(w)
+    return list(groups.values())
+```
+
+The key must be a tuple (or string) because lists are not hashable. Using `"".join(sorted(w))` as the key is equally correct and often faster in Python for short words, since sorting runs in C.
+
+**Complexity:** O(n · k) time with count keys (O(n · k log k) with sorted keys), O(n · k) space.
+
+## Tests
+
+```python
+import random
+
+def normalise(groups):
+    return sorted(sorted(g) for g in groups)
+
+for f in (group_anagrams, group_anagrams_brute):
+    assert normalise(f(["pots", "stop", "opts", "rat", "tar", "cat"])) == \
+        normalise([["pots", "stop", "opts"], ["rat", "tar"], ["cat"]])
+    assert normalise(f([""])) == [[""]]                       # empty word
+    assert normalise(f(["", ""])) == [["", ""]]
+    assert normalise(f(["z"])) == [["z"]]                     # single word
+    assert normalise(f(["ab", "ba", "ab"])) == [["ab", "ab", "ba"]]   # duplicates kept
+    assert normalise(f(["aab", "abb"])) == [["aab"], ["abb"]]  # same letters, different counts
+    assert f([]) == []                                         # no words
+
+big = ["listen", "silent", "enlist"] * 3000
+assert len(group_anagrams(big)) == 1 and len(group_anagrams(big)[0]) == 9000
+
+random.seed(4)
+for _ in range(200):
+    ws = ["".join(random.choice("abc") for _ in range(random.randint(0, 3))) for _ in range(random.randint(0, 8))]
+    assert normalise(group_anagrams(ws)) == normalise(group_anagrams_brute(ws))
+```
+
+## Edge cases and pitfalls
+
+- A key built by concatenating counts without a separator is ambiguous: counts `[1, 11]` and `[11, 1]` both become `"111"`. Use a tuple or join with a delimiter.
+- Lists cannot be dictionary keys; convert to a tuple.
+- The 26-slot array assumes lowercase English letters. For other characters, use a sorted string or a `frozenset` of `Counter` items.
+- Duplicate words belong in the same group, not deduplicated, unless the interviewer says otherwise.
+
+## Where this shows up in data engineering
+
+This is a `GROUP BY` on a derived key. Normalising values to a canonical form and grouping on it is how entity resolution and deduplication pipelines cluster records (for example, normalised names or sorted address tokens). At scale, the canonical key becomes the shuffle key in Spark.

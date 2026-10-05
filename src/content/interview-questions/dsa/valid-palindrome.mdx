@@ -1,0 +1,109 @@
+---
+title: "Valid Palindrome: Check a Phrase While Ignoring Case and Punctuation"
+seoTitle: "Valid Palindrome: Two Pointers, Skip Symbols"
+description: "Decide whether a string reads the same both ways after dropping non-alphanumeric characters and ignoring case. Two pointers do it in O(n) time and O(1) space."
+technology: ["dsa"]
+topic: ["two-pointers"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Put one pointer at each end. Move each pointer inward past characters that are not letters or digits, then compare the two characters case-insensitively; a mismatch means it is not a palindrome. Continue until the pointers meet. This is O(n) time and O(1) extra space, versus O(n) space for building a cleaned copy and comparing it with its reverse."
+followUps: ["What if you may delete at most one character?", "How would you handle Unicode letters and accents?", "How would you find the longest palindromic substring?"]
+previous: "interview-questions:dsa/majority-element"
+next: "interview-questions:dsa/two-sum-ii-input-array-is-sorted"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string, decide whether it is a palindrome once you keep only letters and digits and treat uppercase and lowercase as equal. An empty result counts as a palindrome. This is widely known as LeetCode 125, Valid Palindrome.
+
+Assume printable ASCII input up to about 2 × 10^5 characters.
+
+## Examples
+
+```text
+"Step on no pets!"   ->  True     (cleaned: "steponnopets")
+"Data, a tad!"       ->  True     (cleaned: "dataatad")
+"Lazy data"          ->  False    (cleaned: "lazydata")
+"  ,."               ->  True     (nothing left)
+"0P"                 ->  False    (the digit 0 is not the letter p)
+```
+
+## Approach 1: brute force
+
+Build the cleaned, lowercased string and compare it with its reverse.
+
+```python
+def is_palindrome_copy(s):
+    cleaned = [ch.lower() for ch in s if ch.isalnum()]
+    return cleaned == cleaned[::-1]
+```
+
+**Complexity:** O(n) time and O(n) extra space for the cleaned copy and its reverse. This is already linear time; the follow-up is usually "do it without the extra memory".
+
+## Approach 2: optimal
+
+**Key insight:** a palindrome check only ever compares the i-th character from the left with the i-th from the right. Two pointers can skip ignored characters on the fly instead of building a cleaned copy.
+
+Walkthrough on `"Top spot"`:
+
+| left | right | Compare | Result |
+|---|---|---|---|
+| 0 `T` | 7 `t` | t = t | move in |
+| 1 `o` | 6 `o` | o = o | move in |
+| 2 `p` | 5 `p` | p = p | move in |
+| 3 space: skip to 4 `s` | 4 `s` | pointers meet | `True` |
+
+```python
+def is_palindrome(s):
+    left, right = 0, len(s) - 1
+    while left < right:
+        while left < right and not s[left].isalnum():
+            left += 1
+        while left < right and not s[right].isalnum():
+            right -= 1
+        if s[left].lower() != s[right].lower():
+            return False
+        left += 1
+        right -= 1
+    return True
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (is_palindrome, is_palindrome_copy):
+    assert f("Step on no pets!") is True
+    assert f("Data, a tad!") is True
+    assert f("Lazy data") is False
+    assert f("  ,.") is True                 # only punctuation
+    assert f("") is True                     # empty
+    assert f("x") is True                    # single character
+    assert f("0P") is False                  # digits are kept
+    assert f("A1b1a") is True
+    assert f("ab" * 100_000 + "a") is True   # long input
+
+random.seed(19)
+for _ in range(500):
+    s = "".join(random.choice("aAbB1 ,!") for _ in range(random.randint(0, 8)))
+    assert is_palindrome(s) == is_palindrome_copy(s)
+```
+
+## Edge cases and pitfalls
+
+- Keep the `left < right` guard inside the skipping loops, or a string of only punctuation runs a pointer off the end.
+- Digits are kept, not skipped. `isalpha` instead of `isalnum` is a common slip.
+- `str.isalnum` and `str.lower` accept Unicode letters too. If the interviewer restricts the problem to ASCII, say whether you rely on that.
+
+## Where this shows up in data engineering
+
+Normalising strings before comparing them, by lowercasing and stripping punctuation, is a standard cleansing step before joining on names or deduplicating free-text fields. The palindrome itself is rare; the "normalise, then compare" habit is not.

@@ -1,0 +1,136 @@
+---
+title: "Spiral Matrix: Read a Grid in Clockwise Spiral Order"
+seoTitle: "Spiral Matrix: Clockwise Traversal with Bounds"
+description: "Return every element of an m×n matrix in clockwise spiral order. Learn the four-boundary method, which avoids a visited grid, in O(m·n) time and O(1) space."
+technology: ["dsa"]
+topic: ["arrays", "matrix"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Keep four boundaries: top, bottom, left and right. Read the top row left to right and move top down; read the right column top to bottom and move right in; then, if rows and columns remain, read the bottom row right to left and the left column bottom to top, moving those boundaries in. Repeat until the boundaries cross. Each cell is read once: O(m·n) time and O(1) extra space besides the output."
+followUps: ["How would you generate an n×n matrix filled with 1 to n² in spiral order?", "How would you walk the spiral counter-clockwise or from the inside out?", "Why are the two extra boundary checks needed for non-square matrices?"]
+previous: "interview-questions:dsa/rotate-image"
+next: "interview-questions:dsa/set-matrix-zeroes"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a matrix with m rows and n columns, return all its elements in clockwise spiral order: along the top row, down the right side, back along the bottom row, up the left side, and then the same again on the inner part until every element has been listed once. This is widely known as LeetCode 54, Spiral Matrix.
+
+## Examples
+
+```text
+[[1, 2, 3],
+ [4, 5, 6],
+ [7, 8, 9]]           ->  [1, 2, 3, 6, 9, 8, 7, 4, 5]
+
+[[1, 2, 3, 4],
+ [5, 6, 7, 8]]        ->  [1, 2, 3, 4, 8, 7, 6, 5]
+
+[[1], [2], [3]]       ->  [1, 2, 3]
+```
+
+## Approach 1: brute force (simulation with a visited grid)
+
+Walk like a robot: move in the current direction, and turn right whenever the next cell is outside the grid or already visited.
+
+```python
+def spiral_visited(matrix):
+    if not matrix or not matrix[0]:
+        return []
+    m, n = len(matrix), len(matrix[0])
+    seen = [[False] * n for _ in range(m)]
+    dirs = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+    r = c = d = 0
+    out = []
+    for _ in range(m * n):
+        out.append(matrix[r][c])
+        seen[r][c] = True
+        nr, nc = r + dirs[d][0], c + dirs[d][1]
+        if not (0 <= nr < m and 0 <= nc < n) or seen[nr][nc]:
+            d = (d + 1) % 4
+            nr, nc = r + dirs[d][0], c + dirs[d][1]
+        r, c = nr, nc
+    return out
+```
+
+**Complexity:** O(m·n) time and O(m·n) extra space for the visited grid. Easy to reason about, and a fine answer, but it uses extra memory.
+
+## Approach 2: optimal (shrinking boundaries)
+
+**Key insight:** the unread part is always a rectangle. Track its four edges and shrink one edge after reading it, so no visited grid is needed.
+
+Walkthrough on the 2×4 example (top = 0, bottom = 1, left = 0, right = 3):
+
+1. Top row, columns 0 to 3: `1 2 3 4`. top becomes 1.
+2. Right column, rows 1 to 1: `8`. right becomes 2.
+3. top (1) ≤ bottom (1), so read the bottom row, columns 2 down to 0: `7 6 5`. bottom becomes 0.
+4. left (0) ≤ right (2), so read the left column from bottom to top, rows 0 down to 1: empty, since bottom is now above top. left becomes 1.
+5. top > bottom, so stop. Result `[1, 2, 3, 4, 8, 7, 6, 5]`.
+
+```python
+def spiral_order(matrix):
+    out = []
+    if not matrix or not matrix[0]:
+        return out
+    top, bottom = 0, len(matrix) - 1
+    left, right = 0, len(matrix[0]) - 1
+    while top <= bottom and left <= right:
+        for c in range(left, right + 1):
+            out.append(matrix[top][c])
+        top += 1
+        for r in range(top, bottom + 1):
+            out.append(matrix[r][right])
+        right -= 1
+        if top <= bottom:
+            for c in range(right, left - 1, -1):
+                out.append(matrix[bottom][c])
+            bottom -= 1
+        if left <= right:
+            for r in range(bottom, top - 1, -1):
+                out.append(matrix[r][left])
+            left += 1
+    return out
+```
+
+**Complexity:** O(m·n) time, O(1) extra space besides the output.
+
+## Tests
+
+```python
+import random
+
+for f in (spiral_order, spiral_visited):
+    assert f([[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == [1, 2, 3, 6, 9, 8, 7, 4, 5]
+    assert f([[1, 2, 3, 4], [5, 6, 7, 8]]) == [1, 2, 3, 4, 8, 7, 6, 5]   # wide
+    assert f([[1], [2], [3]]) == [1, 2, 3]                               # single column
+    assert f([[4, 5, 6]]) == [4, 5, 6]                                   # single row
+    assert f([[7]]) == [7]                                               # 1×1
+    assert f([]) == [] and f([[]]) == []                                 # empty
+    assert f([[-1, -1], [-1, -1]]) == [-1, -1, -1, -1]                   # duplicates, negatives
+    assert f([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]) == \
+        [1, 2, 3, 6, 9, 12, 11, 10, 7, 4, 5, 8]                         # tall
+
+random.seed(15)
+for _ in range(200):
+    m, n = random.randint(1, 6), random.randint(1, 6)
+    mat = [[random.randint(0, 10**9) for _ in range(n)] for _ in range(m)]
+    out = spiral_order(mat)
+    assert out == spiral_visited(mat)
+    assert sorted(out) == sorted(v for row in mat for v in row)          # every cell once
+```
+
+## Edge cases and pitfalls
+
+- The two `if` checks before the bottom row and left column are essential. Without them, a single remaining row or column is read twice (once forwards, once backwards).
+- Handle `[]` and `[[]]` before reading `matrix[0]`.
+- Off-by-one errors hide in the ranges; test a single row, a single column, and a tall and a wide rectangle.
+
+## Where this shows up in data engineering
+
+Rarely as such. It is mainly a test of careful index and boundary handling, the same discipline you need when writing chunked or paginated readers where an off-by-one silently drops or duplicates records.

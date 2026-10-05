@@ -1,0 +1,108 @@
+---
+title: "Two Sum II: Find a Pair With a Target Sum in a Sorted Array"
+seoTitle: "Two Sum II: Two Pointers on a Sorted Array"
+description: "Find two positions in a sorted array whose values add up to a target, using constant extra space. Learn why moving two pointers inward never misses the answer."
+technology: ["dsa"]
+topic: ["two-pointers"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Start one pointer at each end of the sorted array. If the pair sums to the target you are done; if the sum is too small, move the left pointer right to increase it; if too large, move the right pointer left. Each move discards a value that cannot be part of any solution, so the pair is never skipped. This is O(n) time and O(1) space, beating the hash map's O(n) space."
+followUps: ["Prove that moving the left pointer never skips the answer.", "How would you count all pairs with the target sum, including duplicates?", "How would you use binary search instead, and what does it cost?"]
+previous: "interview-questions:dsa/valid-palindrome"
+next: "interview-questions:dsa/3sum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You get a list of integers sorted in non-decreasing order and a target. Exactly one pair of different positions sums to the target. Return the two positions as **1-based** indices `[i, j]` with `i < j`, using only O(1) extra space. This is widely known as LeetCode 167, Two Sum II (Input Array Is Sorted).
+
+## Examples
+
+```text
+numbers = [1, 4, 6, 9, 13],  target = 15   ->  [3, 4]   (6 + 9)
+numbers = [-7, -2, 0, 5],    target = -9   ->  [1, 2]
+numbers = [3, 3, 8],         target = 6    ->  [1, 2]
+```
+
+## Approach 1: brute force
+
+Check every pair.
+
+```python
+def two_sum_sorted_brute(numbers, target):
+    for i in range(len(numbers)):
+        for j in range(i + 1, len(numbers)):
+            if numbers[i] + numbers[j] == target:
+                return [i + 1, j + 1]
+    return []
+```
+
+**Complexity:** O(n²) time, O(1) space. A hash map (as in the unsorted Two Sum) gives O(n) time but O(n) space, which this problem rules out. Binary searching for each partner gives O(n log n) time and O(1) space.
+
+## Approach 2: optimal
+
+**Key insight:** with the array sorted, the sum of the two ends tells you which end is useless. If `numbers[left] + numbers[right]` is too small, `numbers[left]` is too small even with the largest remaining value, so it can never be in the answer: drop it. Symmetrically, drop the right end when the sum is too large.
+
+Walkthrough on `[1, 4, 6, 9, 13]`, `target = 15`:
+
+| left | right | sum | Action |
+|---|---|---|---|
+| 0 (1) | 4 (13) | 14 | too small, left++ |
+| 1 (4) | 4 (13) | 17 | too large, right-- |
+| 1 (4) | 3 (9) | 13 | too small, left++ |
+| 2 (6) | 3 (9) | 15 | found → `[3, 4]` |
+
+```python
+def two_sum_sorted(numbers, target):
+    left, right = 0, len(numbers) - 1
+    while left < right:
+        s = numbers[left] + numbers[right]
+        if s == target:
+            return [left + 1, right + 1]
+        if s < target:
+            left += 1
+        else:
+            right -= 1
+    return []
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (two_sum_sorted, two_sum_sorted_brute):
+    assert f([1, 4, 6, 9, 13], 15) == [3, 4]
+    assert f([-7, -2, 0, 5], -9) == [1, 2]                  # negatives
+    assert f([3, 3, 8], 6) == [1, 2]                         # duplicates
+    assert f([2, 7], 9) == [1, 2]                            # two elements
+    assert f([0, 0, 1], 0) == [1, 2]                         # zeros
+    assert f([-10**9, 1, 10**9], 0) == [1, 3]                # large values
+    assert f([1, 2, 3], 100) == [] and f([5], 5) == []       # no pair (defensive)
+
+random.seed(20)
+for _ in range(300):
+    arr = sorted(random.randint(-20, 20) for _ in range(random.randint(2, 10)))
+    i, j = sorted(random.sample(range(len(arr)), 2))
+    t = arr[i] + arr[j]
+    a, b = two_sum_sorted(arr, t)
+    assert 1 <= a < b <= len(arr) and arr[a - 1] + arr[b - 1] == t
+```
+
+## Edge cases and pitfalls
+
+- Return 1-based indices if the problem asks for them. Off-by-one in the output is the most common lost point.
+- Use `left < right`, not `<=`: the same element may not be used twice.
+- This only works because the input is sorted. Sorting an unsorted array first loses the original indices.
+
+## Where this shows up in data engineering
+
+Walking two sorted sequences with two pointers is the heart of a sort-merge join, the default join strategy for two large tables in Spark: both sides are sorted on the key and the engine advances whichever side has the smaller key.
