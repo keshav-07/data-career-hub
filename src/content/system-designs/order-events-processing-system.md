@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design an Order-Events Processing System"
-description: "A system-design case study for order lifecycle events: transactional outbox, per-order ordering, state machines, stuck-order timers, current-state tables and analytics."
+description: "A system-design case study for order lifecycle events: transactional outbox, per-order ordering, state machines, stuck-order timers and current-state tables."
 technology: ["data-engineering", "kafka", "sql"]
 topic: ["streaming", "event-driven", "architecture"]
 tags: ["order-events", "outbox-pattern", "state-machine", "event-sourcing", "kafka", "sla-timers"]
