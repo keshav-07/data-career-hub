@@ -8,7 +8,7 @@ keyFacts: ["S3 is the storage layer almost every AWS data platform is built on",
 whatToLearnFirst: ["articles:aws/aws-for-data-engineers"]
 relatedTechnologies: ["spark", "kafka", "airflow", "snowflake"]
 monogram: "AWS"
-lessons: ["articles:aws/aws-for-data-engineers"]
+lessons: ["articles:aws/aws-for-data-engineers", "articles:aws/s3-for-data-engineers"]
 updatedDate: 2026-10-05
 ---
 

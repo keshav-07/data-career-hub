@@ -1,0 +1,42 @@
+{
+ "S3 buckets & objects": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Buckets and objects"
+ },
+ "Storage classes": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Storage classes"
+ },
+ "Lifecycle policies": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Lifecycle policies"
+ },
+ "Versioning": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Versioning"
+ },
+ "S3 partitioning for analytics": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Partitioning S3 data for analytics"
+ },
+ "S3 Select": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "S3 Select"
+ },
+ "Event notifications": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Event notifications"
+ },
+ "Encryption (SSE-S3/KMS)": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Encryption: SSE-S3 and SSE-KMS"
+ },
+ "Access points": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Access points"
+ },
+ "Multipart upload": {
+  "ref": "articles:aws/s3-for-data-engineers",
+  "heading": "Multipart upload"
+ }
+}
