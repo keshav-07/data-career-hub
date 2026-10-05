@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:sql/aggregations-group-by-having"]
 related: ["articles:sql/joins", "articles:sql/sql-fundamentals"]
 previous: "articles:sql/aggregations-group-by-having"
+next: "articles:sql/joins"
 sources:
   - { label: "PostgreSQL documentation: Combining queries (UNION, INTERSECT, EXCEPT)", url: "https://www.postgresql.org/docs/16/queries-union.html" }
   - { label: "MySQL documentation: Set operations with UNION, INTERSECT and EXCEPT", url: "https://dev.mysql.com/doc/refman/8.4/en/set-operations.html" }

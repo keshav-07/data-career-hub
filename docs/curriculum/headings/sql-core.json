@@ -78,5 +78,29 @@
   "EXCEPT / INTERSECT set operations": {
     "ref": "articles:sql/set-operations",
     "heading": "INTERSECT and EXCEPT"
+  },
+  "INNER JOIN basics": {
+    "ref": "articles:sql/joins",
+    "heading": "INNER JOIN basics"
+  },
+  "LEFT JOIN basics": {
+    "ref": "articles:sql/joins",
+    "heading": "LEFT JOIN basics"
+  },
+  "RIGHT JOIN & FULL OUTER JOIN": {
+    "ref": "articles:sql/joins",
+    "heading": "RIGHT JOIN and FULL OUTER JOIN"
+  },
+  "Self Join patterns": {
+    "ref": "articles:sql/joins",
+    "heading": "Self join patterns"
+  },
+  "Cross Join & cartesian products": {
+    "ref": "articles:sql/joins",
+    "heading": "Cross join and cartesian products"
+  },
+  "Multi-table joins": {
+    "ref": "articles:sql/joins",
+    "heading": "Multi-table joins"
   }
 }
