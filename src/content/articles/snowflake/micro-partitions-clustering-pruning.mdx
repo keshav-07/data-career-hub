@@ -1,85 +1,400 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "Snowflake Micro-Partitions, Clustering and Pruning"
-seoTitle: "Snowflake Micro-Partitions, Clustering, Pruning"
-description: "How Snowflake stores tables as micro-partitions with metadata, how pruning skips data, when clustering keys help, and how to tell whether a query pruned well."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Micro-Partitions, Clustering and Search Optimization"
+seoTitle: "Snowflake Micro-Partitions, Clustering, Search Opt"
+description: "How Snowflake micro-partitions and their metadata drive pruning, how to measure clustering depth, when clustering keys pay off, and when search optimization fits better."
 inventoryId: "TECH-28"
 technology: ["snowflake", "data-warehousing"]
-topic: ["micro-partitions", "clustering", "performance"]
+topic: ["micro-partitions", "clustering", "performance", "search-optimization"]
 difficulty: "Intermediate"
+learningObjectives:
+  - "Explain how micro-partition metadata lets Snowflake prune data before a warehouse reads it"
+  - "Recognise natural clustering and predict which filters will prune well"
+  - "Choose and define a clustering key, including expressions on high-cardinality columns"
+  - "Read SYSTEM$CLUSTERING_INFORMATION output and interpret clustering depth and overlaps"
+  - "Decide between doing nothing, a clustering key and the search optimization service"
 prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
-related: ["interview-questions:snowflake/micro-partitions-performance", "articles:data-warehousing/partitioning-clustering-data-layout"]
-previous: "articles:snowflake/architecture-virtual-warehouses"
-sources: [{"label": "Snowflake documentation: Micro-partitions and data clustering", "url": "https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions"}]
-versionContext: "Describes Snowflake behaviour as documented in 2026; SQL examples were not executed against a Snowflake account. Edition-specific features are noted"
+related: ["interview-questions:snowflake/micro-partitions-performance", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:sql/query-optimization-fundamentals"]
+previous: "articles:snowflake/virtual-warehouses-scaling"
+next: "articles:snowflake/streams-and-tasks"
+sources:
+  - { label: "Snowflake documentation: Micro-partitions and data clustering", url: "https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions" }
+  - { label: "Snowflake documentation: Clustering keys and clustered tables", url: "https://docs.snowflake.com/en/user-guide/tables-clustering-keys" }
+  - { label: "Snowflake documentation: Automatic Clustering", url: "https://docs.snowflake.com/en/user-guide/tables-auto-reclustering" }
+  - { label: "Snowflake documentation: SYSTEM$CLUSTERING_INFORMATION", url: "https://docs.snowflake.com/en/sql-reference/functions/system_clustering_information" }
+  - { label: "Snowflake documentation: Search optimization service", url: "https://docs.snowflake.com/en/user-guide/search-optimization-service" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. The Python pruning simulation was run with Python 3 and its output is shown. Snowflake began moving newly clustered tables to Optima Clustering in September 2026; check your account's documentation for how clustering is billed for your tables."
 ---
 
-Snowflake does not ask you to define partitions. It splits every table automatically into **micro-partitions** and records metadata about each one. Query speed depends largely on how many of those micro-partitions a query can skip.
+Snowflake never asks you to define partitions. It splits every table into **micro-partitions** and keeps statistics about each one, and most query performance comes down to a single question: how many of those micro-partitions can the query skip? This lesson explains micro-partitions in depth, how data ends up well or badly clustered, how to measure it, when a clustering key is worth paying for, and when the search optimization service is the better tool.
 
-## Micro-partitions
+The Snowflake SQL here is written from the documentation and was not executed. A small Python simulation, which was run, shows pruning and clustering depth with real numbers.
 
-- Each micro-partition holds a contiguous slice of rows, stored by column and compressed. Snowflake documents them as roughly 50 to 500 MB of uncompressed data each.
-- They are **immutable**: updates and deletes write new micro-partitions.
-- For each column in each micro-partition, Snowflake keeps metadata such as the **minimum and maximum value**.
+## Micro-partitions in depth
 
-## Pruning
+A micro-partition is Snowflake's unit of storage:
 
-When a query filters on a column, Snowflake compares the filter with each micro-partition's min/max range and skips those that cannot contain matching rows.
+- **Size**: roughly 50 MB to 500 MB of uncompressed data. Compressed on disk, it is much smaller. A large table has millions of them.
+- **Columnar and compressed**: inside a micro-partition, each column is stored and compressed separately, using whichever compression scheme suits that column. A query reads only the columns it references.
+- **Immutable**: DML writes new micro-partitions and retires old ones. Retired micro-partitions are kept for Time Travel and Fail-safe.
+- **Automatic**: rows are grouped into micro-partitions in the order they are inserted. You cannot choose boundaries.
+- **Small enough to prune finely**: because they are small, a selective filter can skip most of a table with fine granularity, and skew is less of a problem than with large, user-defined partitions.
 
-```sql
-SELECT SUM(amount)
-FROM sales
-WHERE sale_date = '2026-10-01';
+For every column of every micro-partition, the metadata in the cloud services layer records the **range of values (minimum and maximum)**, the **number of distinct values** and other properties used for optimisation, such as NULL counts.
+
+### How pruning works
+
+When a query has a filter such as `WHERE event_date = '2026-01-15'`, the optimiser compares the value with each micro-partition's min/max for `event_date`. A micro-partition whose range is, say, 2026-01-02 to 2026-01-04 cannot contain the value and is skipped without being read. Only the remaining micro-partitions are sent to the warehouse.
+
+Pruning also applies to joins in some cases (Snowflake can derive filters from the smaller side of a join) and to `LIMIT` and top-K queries, but the plain `WHERE` filter on a column is the case to understand first.
+
+You see the result in the **query profile**: the TableScan operator shows **Partitions scanned** and **Partitions total**. Scanning 40 of 120,000 partitions is excellent; scanning 118,000 of 120,000 for a query returning 10 rows means pruning failed.
+
+### A runnable analogue
+
+Snowflake cannot run here, so this Python script simulates the idea. It splits 12,000 event rows into 12 "micro-partitions" of 1,000 rows, records min/max per column, and counts how many partitions a filter must scan, once with rows loaded in date order and once with the same rows loaded in random order. It also computes a simplified clustering depth (how many partition ranges overlap at each boundary value).
+
+```python
+import random
+from datetime import date, timedelta
+
+random.seed(42)
+start = date(2026, 1, 1)
+# 30 days of events, 400 rows per day, loaded in arrival (date) order
+rows = [(start + timedelta(days=d), random.randint(1, 5000))
+        for d in range(30) for _ in range(400)]
+
+def micro_partitions(data, rows_per_part=1000):
+    """Split rows into fixed-size 'micro-partitions' and keep min/max metadata per column."""
+    parts = []
+    for i in range(0, len(data), rows_per_part):
+        chunk = data[i:i + rows_per_part]
+        parts.append({
+            "min_date": min(r[0] for r in chunk), "max_date": max(r[0] for r in chunk),
+            "min_cust": min(r[1] for r in chunk), "max_cust": max(r[1] for r in chunk),
+        })
+    return parts
+
+def scanned(parts, col, value):
+    """Pruning: only partitions whose [min, max] range can contain the value are scanned."""
+    return sum(1 for p in parts if p[f"min_{col}"] <= value <= p[f"max_{col}"])
+
+def avg_depth(parts, col):
+    """Simplified clustering depth: for each partition boundary value, how many ranges overlap it."""
+    points = sorted({p[f"min_{col}"] for p in parts} | {p[f"max_{col}"] for p in parts})
+    depths = [scanned(parts, col, v) for v in points]
+    return round(sum(depths) / len(depths), 1)
+
+loaded_in_order = micro_partitions(rows)
+shuffled = rows[:]
+random.shuffle(shuffled)
+loaded_randomly = micro_partitions(shuffled)
+
+day = date(2026, 1, 15)
+print("partitions total:", len(loaded_in_order))
+print("filter event_date = 2026-01-15")
+print("  loaded in date order -> scanned:", scanned(loaded_in_order, "date", day))
+print("  loaded randomly      -> scanned:", scanned(loaded_randomly, "date", day))
+print("filter customer_id = 1234")
+print("  loaded in date order -> scanned:", scanned(loaded_in_order, "cust", 1234))
+print("average depth on event_date: ordered", avg_depth(loaded_in_order, "date"),
+      "| random", avg_depth(loaded_randomly, "date"))
 ```
 
-If the table was loaded in date order, each micro-partition covers a narrow date range and almost all of them are skipped. If dates are scattered randomly across micro-partitions, every range overlaps the filter and nothing can be skipped.
+Output:
 
-The **query profile** shows "Partitions scanned" versus "Partitions total". A query that scans most partitions to return a few rows is a pruning problem.
+```text
+partitions total: 12
+filter event_date = 2026-01-15
+  loaded in date order -> scanned: 1
+  loaded randomly      -> scanned: 12
+filter customer_id = 1234
+  loaded in date order -> scanned: 12
+average depth on event_date: ordered 1.3 | random 12.0
+```
+
+The same data prunes perfectly or not at all depending on how it was loaded, and a table that prunes well on one column (date) can prune badly on another (customer). That is the whole story of clustering in miniature.
+
+**Pitfalls**
+
+- Wrapping the filtered column in a function or casting it can stop the optimiser using the min/max ranges. Filter on the stored column and convert the literal instead: `WHERE event_ts >= '2026-01-15' AND event_ts < '2026-01-16'` rather than `WHERE TO_CHAR(event_ts, 'YYYY-MM-DD') = '2026-01-15'`.
+- `SELECT *` on a wide table reads every column of every scanned micro-partition. Select only the columns you need.
+- Frequent small DML keeps rewriting micro-partitions and degrades clustering over time.
+
+**In interviews**
+
+Explain micro-partitions with the four properties (size range, columnar, immutable, automatic), then explain pruning using min/max metadata and point to "partitions scanned versus total" in the query profile as the evidence.
 
 ## Natural clustering
 
-Data loaded in time order (daily batches, event streams) is naturally well clustered on its time column. Filters on that column prune well without any extra work. Filters on other columns (customer, product) may not.
+**Clustering** describes how well rows with similar values of a column are stored together. A table is well clustered on a column when each micro-partition covers a narrow, non-overlapping range of that column.
+
+**Natural clustering** is the clustering a table gets for free from the order data arrives. Event, log and transaction tables loaded daily or continuously are naturally clustered on their time columns: each load creates micro-partitions containing only recent timestamps. Filters on those time columns prune well with no extra work, as the simulation showed.
+
+Natural clustering degrades when:
+
+- data arrives out of order (late events, backfills of old dates loaded today);
+- large `UPDATE` or `MERGE` operations rewrite rows from many dates into new micro-partitions;
+- the table is filtered mostly on a column unrelated to load order (customer, product, region).
+
+You can often improve clustering cheaply by controlling load order: sort a backfill by date before inserting it, or rebuild a small table with `INSERT OVERWRITE ... SELECT ... ORDER BY`. For tables that keep changing, sorting once does not last, which is when automatic clustering comes in.
+
+**Pitfalls**
+
+- Assuming a table is clustered because it "has a date column". Clustering depends on how the rows were written, not on the schema.
+
+**In interviews**
+
+Use the phrase "natural clustering on ingestion time" and explain why it usually makes date filters fast and other filters slow.
 
 ## Clustering keys
 
-For very large tables where common filters do not prune well, you can define a **clustering key**:
+A **clustering key** is one or more columns or expressions that you ask Snowflake to keep the table clustered on. Once defined, **Automatic Clustering** (a serverless service) reorganises micro-partitions in the background so rows with similar key values sit together.
 
+{/* noexec */}
 ```sql
-ALTER TABLE sales CLUSTER BY (sale_date, region);
+-- Snowflake SQL (not executed here)
+-- Define at creation
+CREATE TABLE events (
+  event_ts     TIMESTAMP_NTZ,
+  customer_id  NUMBER,
+  event_type   VARCHAR,
+  payload      VARIANT
+)
+CLUSTER BY (TO_DATE(event_ts), event_type);
+
+-- Add, change or remove later
+ALTER TABLE events CLUSTER BY (TO_DATE(event_ts), customer_id);
+ALTER TABLE events DROP CLUSTERING KEY;
 ```
 
-Snowflake's automatic clustering service then reorganises micro-partitions in the background so values of the key are co-located. It consumes credits, so use it when:
+### Choosing the key
 
-- the table is large (typically multi-terabyte);
-- queries filter on the key frequently;
-- the query profile shows poor pruning on that key.
+- **Use the columns most often used in selective filters** (and, secondarily, join keys). The key should match the queries, not the schema.
+- **Mind cardinality.** The column needs enough distinct values for pruning to be useful, but not so many that clustering is expensive. A timestamp with microsecond precision or a unique ID is too fine; use an expression that coarsens it, such as `TO_DATE(event_ts)` or `TRUNC(customer_id, -3)`. A boolean is too coarse to help.
+- **Keep it short.** The documentation suggests at most three or four columns or expressions; more adds cost with little benefit.
+- **Order from lower to higher cardinality** in a multi-column key, because clustering on the first column dominates.
+- **Long strings**: clustering may only use a prefix of a string key's value (the documentation describes this per clustering version), so keys whose values differ only after a long common prefix cluster poorly. Use an expression that extracts the distinguishing part.
 
-Check clustering quality with system functions such as `SYSTEM$CLUSTERING_INFORMATION('sales', '(sale_date)')`, which reports metrics such as clustering depth.
+**Pitfalls**
 
-## Writing prunable queries
+- Clustering a small table. Tables of a few gigabytes already have few micro-partitions; pruning gains are tiny and clustering still costs credits.
+- Clustering on a column that is never filtered "because it is the primary key".
 
-- Filter on the raw column; wrapping it in a function can prevent pruning in some cases.
-- Avoid `SELECT *` on wide tables: columnar storage reads only the columns you select.
-- Filter before joins and aggregations.
+**In interviews**
 
-<Callout tone="warning" title="Clustering is not free">
+Be ready to choose a key for a scenario: "a 20 TB events table queried by date and customer" leads to `CLUSTER BY (TO_DATE(event_ts), customer_id)` or similar, with an explanation of cardinality and order.
 
-Automatic clustering runs continuously on changed data and is billed. Frequent updates to a clustered table increase that cost. Measure the query savings against the clustering spend.
+## Clustering depth and clustering information
 
-</Callout>
+Snowflake measures clustering with two numbers, calculated for a chosen set of columns:
 
-## Common mistakes
+- **Overlap**: how many other micro-partitions have a value range that overlaps a given micro-partition's range.
+- **Depth**: for a given value, how many micro-partitions contain that value in their range. The **average depth** of a populated table is at least 1; lower is better. Depth tells you how many partitions a point lookup must scan.
 
-1. Adding clustering keys to small tables.
-2. Choosing a very high-cardinality key (such as a unique id) that cannot be clustered effectively.
-3. Scaling up the warehouse to compensate for poor pruning.
+The simulation above showed average depth 1.3 when loaded in date order and 12.0 (every partition) when loaded randomly.
 
-## Interview relevance
+Micro-partitions whose range is a single value (minimum equals maximum) for the clustering columns are called **constant**: they cannot be improved by reclustering.
 
-"How do micro-partitions affect performance?" and "When would you add a clustering key?" are common Snowflake questions. See the [interview answer](/interview/snowflake/micro-partitions-performance/).
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- For an existing clustering key
+SELECT SYSTEM$CLUSTERING_INFORMATION('events');
 
-## Key takeaway
+-- For a candidate key, before you define it
+SELECT SYSTEM$CLUSTERING_INFORMATION('events', '(TO_DATE(event_ts), customer_id)');
 
-Performance comes from skipping micro-partitions. Load data in a sensible order, write filters on raw columns, check the query profile, and add clustering keys only to large tables that need them.
+-- Depth only
+SELECT SYSTEM$CLUSTERING_DEPTH('events', '(customer_id)');
+```
+
+`SYSTEM$CLUSTERING_INFORMATION` returns a JSON document with fields including:
+
+| Field | Meaning |
+|-------|---------|
+| `cluster_by_keys` | The columns or expressions measured |
+| `total_partition_count` | Number of micro-partitions |
+| `total_constant_partition_count` | Micro-partitions that are constant on the key |
+| `average_overlaps` | Average number of overlapping micro-partitions per micro-partition |
+| `average_depth` | Average overlap depth; high means poorly clustered |
+| `partition_depth_histogram` | How many micro-partitions fall into each depth bucket |
+| `notes` | Advice, for example a warning that the key has very high cardinality |
+
+Some fields are not reported for tables on the newer Optima Clustering engine; the function's documentation lists which.
+
+**Pitfalls**
+
+- Judging clustering by one number on a tiny table. Depth is meaningful relative to the number of micro-partitions and to the queries you run.
+- Measuring a column you never filter on. Clustering information is useful only for keys that matter to your workload; the real test is partitions scanned in the query profile.
+
+**In interviews**
+
+Define depth and overlap in one sentence each, say that lower is better with a minimum of 1, and name `SYSTEM$CLUSTERING_INFORMATION` as the function you would call.
+
+## Reclustering
+
+**Reclustering** is the process of rewriting micro-partitions so that rows are grouped by the clustering key again. In Snowflake it is done by **Automatic Clustering**:
+
+- It runs on serverless compute managed by Snowflake, not on your warehouses, and is billed to your account.
+- It works incrementally, targeting the micro-partitions that most need it, and only when clustering has degraded enough to be worth it.
+- Reclustering writes new micro-partitions, so the replaced ones go into Time Travel and Fail-safe and add to storage for a while.
+- You can pause and resume it per table.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER TABLE events SUSPEND RECLUSTER;
+ALTER TABLE events RESUME RECLUSTER;
+
+-- Estimate the cost before adding a key
+SELECT SYSTEM$ESTIMATE_AUTOMATIC_CLUSTERING_COSTS('events', '(TO_DATE(event_ts))');
+
+-- Credits spent on reclustering, per table, last 30 days
+SELECT table_name, SUM(credits_used) AS credits
+FROM snowflake.account_usage.automatic_clustering_history
+WHERE start_time >= DATEADD('day', -30, CURRENT_TIMESTAMP())
+GROUP BY table_name
+ORDER BY credits DESC;
+```
+
+Manual reclustering (an old `ALTER TABLE ... RECLUSTER` command) is deprecated. You can still re-sort a table yourself with `INSERT OVERWRITE INTO t SELECT * FROM t ORDER BY ...` on a warehouse, which is sometimes the cheapest one-off fix for a table that rarely changes.
+
+**Billing change in 2026.** Snowflake's documentation describes **Optima Clustering**, a newer clustering engine billed by the volume of data ingested into the clustered table rather than by serverless compute hours. From 1 September 2026, newly clustered tables use it, while tables already clustered stay on "Clustering Classic". Check your account's documentation for which engine your tables use and how it is priced.
+
+**Pitfalls**
+
+- Clustering a table that receives continuous, scattered updates. Every change de-clusters part of the table and reclustering runs constantly.
+- Forgetting the storage side effect of reclustering on tables with long Time Travel retention.
+
+**In interviews**
+
+Say that reclustering is automatic and serverless, that it costs credits proportional to churn, that it can be suspended, and how you would track its cost (`AUTOMATIC_CLUSTERING_HISTORY`).
+
+## When to cluster
+
+A clustering key is worth it when **all** of these hold:
+
+1. The table is large: many micro-partitions (multi-terabyte tables are the usual case).
+2. Important queries filter (or join) selectively on the candidate columns, and run often.
+3. The query profile shows poor pruning on those columns today: many partitions scanned for few rows returned.
+4. The table is queried far more often than it is changed, so reclustering cost is outweighed by query savings.
+
+Decision guide:
+
+| Situation | Best option |
+|-----------|-------------|
+| Filters on load-time column, table naturally clustered | Nothing to do |
+| One-off backfill out of order | Sort the backfill before loading, or re-sort once |
+| Large table, frequent range or equality filters on a non-time column | Clustering key |
+| Very selective point lookups (one ID among billions) on several columns | Search optimization service |
+| Expensive aggregation repeated on one table | Materialized view or dynamic table |
+
+Test it: measure partitions scanned and elapsed time for the key queries, estimate clustering cost with `SYSTEM$ESTIMATE_AUTOMATIC_CLUSTERING_COSTS`, add the key, let it settle, measure again, and track `AUTOMATIC_CLUSTERING_HISTORY` for a few weeks.
+
+**Pitfalls**
+
+- Adding clustering to "speed up everything". It helps only the filters that use the key.
+- Using a bigger warehouse instead of fixing pruning. It costs more and helps less.
+
+**In interviews**
+
+List the conditions and finish with "measure before and after". Interviewers want to hear that clustering is a cost-benefit decision, not a default.
+
+## The search optimization service
+
+The **search optimization service** (Enterprise Edition or higher) builds and maintains a persistent **search access path**, a data structure that records which micro-partitions contain which values. It makes highly **selective lookups** fast even when the table is not clustered on the searched column.
+
+It suits queries such as:
+
+- equality and `IN` filters on high-cardinality columns: `WHERE order_id = 'A-981234'`;
+- substring and regular-expression searches: `WHERE message LIKE '%timeout%'`;
+- lookups inside semi-structured `VARIANT` fields;
+- geospatial predicates.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- Estimate first: build and maintenance can be expensive
+SELECT SYSTEM$ESTIMATE_SEARCH_OPTIMIZATION_COSTS('events', 'EQUALITY(customer_id)');
+
+-- Enable for specific columns and methods
+ALTER TABLE events ADD SEARCH OPTIMIZATION
+  ON EQUALITY(customer_id), SUBSTRING(event_type);
+
+-- Inspect and remove
+DESCRIBE SEARCH OPTIMIZATION ON events;
+ALTER TABLE events DROP SEARCH OPTIMIZATION ON SUBSTRING(event_type);
+```
+
+Costs: building and maintaining the search access path uses serverless compute, and the search access path itself takes storage. Both grow with the number of distinct values and the rate of change in the table.
+
+### Clustering versus search optimization
+
+| | Clustering key | Search optimization |
+|--|----------------|---------------------|
+| Best for | Range and equality filters returning many rows | Very selective lookups returning few rows |
+| Columns | One key (a few columns) per table | Many columns and methods per table |
+| How it works | Physically reorders micro-partitions | Builds a separate index-like access path |
+| Edition | All | Enterprise or higher |
+| Cost | Reclustering compute (plus temporary storage) | Build and maintenance compute plus storage for the access path |
+
+They can be combined: cluster on date for range queries, and add search optimization for ID lookups.
+
+**Pitfalls**
+
+- Enabling it on the whole table (`ADD SEARCH OPTIMIZATION` with no `ON` clause) without estimating. Be specific about columns and methods.
+- Expecting it to help non-selective queries. If a lookup returns a large fraction of the table, pruning cannot skip much anyway.
+
+**In interviews**
+
+The usual question is "clustering or search optimization?". Answer by selectivity: range scans and broad filters favour clustering; needle-in-a-haystack lookups favour search optimization. Mention the edition requirement and cost.
+
+## Practice questions
+
+<details><summary>A query on a 15 TB table returns 50 rows but the profile shows 980,000 of 1,000,000 partitions scanned. What do you do?</summary>
+
+It is a pruning problem, not a size problem. Check the filter: is the column wrapped in a function or cast, preventing min/max pruning? If the filter is clean, check clustering on that column with `SYSTEM$CLUSTERING_INFORMATION('t', '(col)')`. If depth is high and the query matters, consider a clustering key on that column (coarsened if high cardinality), or search optimization if the lookup is very selective (50 rows out of billions suggests it could be). Estimate the cost of each first and measure partitions scanned afterwards.
+
+</details>
+
+<details><summary>Why is an events table usually fast to filter by date and slow to filter by customer?</summary>
+
+Natural clustering. Events arrive roughly in time order, so each micro-partition covers a narrow range of dates and date filters skip most of them. Customer IDs are spread across all days, so every micro-partition's min/max for customer covers almost the whole range and nothing can be skipped.
+
+</details>
+
+<details><summary>What does an average clustering depth of 1 mean, and can it be lower?</summary>
+
+Each value of the clustering columns is found in about one micro-partition's range, so a point lookup scans roughly one micro-partition: the table is very well clustered for those columns. It cannot be lower than 1 for a populated table.
+
+</details>
+
+<details><summary>Why is CLUSTER BY (event_id) on a table with a unique event_id usually a bad idea, and what would you do instead?</summary>
+
+A unique ID has extremely high cardinality: keeping it clustered requires continual reorganisation for little benefit, because almost no query filters on a range of IDs. If ID lookups are important, use the search optimization service with `EQUALITY(event_id)`. If you must cluster on a high-cardinality column, cluster on an expression that coarsens it, and choose the key from the columns your queries actually filter on (often a date).
+
+</details>
+
+<details><summary>You added a clustering key two weeks ago. How do you decide whether to keep it?</summary>
+
+Compare the target queries' partitions scanned and elapsed time (and their warehouse credits) before and after, using `QUERY_HISTORY` or the profiles. Compare that saving with the reclustering credits in `AUTOMATIC_CLUSTERING_HISTORY` and the extra Time Travel storage. Keep it if the savings clearly exceed the cost; otherwise drop the key or suspend reclustering.
+
+</details>
+
+<details><summary>Why does a large UPDATE make a table worse clustered?</summary>
+
+Micro-partitions are immutable. The update writes the changed rows to new micro-partitions, which can contain rows from many different key ranges, so their min/max ranges overlap many others. The old micro-partitions are retired. Clustering depth rises until Automatic Clustering (if a key is defined) reorganises the affected data.
+
+</details>
+
+## Key takeaways
+
+- Micro-partitions are 50 to 500 MB (uncompressed), columnar, immutable and created automatically in load order, with min/max and distinct-count metadata per column.
+- Pruning compares filters with that metadata; the query profile's partitions scanned versus total is the evidence to check first.
+- Natural clustering on ingestion time is free; filters on other columns may need a clustering key.
+- Choose clustering keys from real filters, coarsen high-cardinality columns with expressions, keep keys short and order them from low to high cardinality.
+- Automatic Clustering is serverless and billed; measure with `SYSTEM$CLUSTERING_INFORMATION` and `AUTOMATIC_CLUSTERING_HISTORY`, and check which clustering engine and pricing your tables use.
+- Search optimization (Enterprise) is for selective lookups; clustering is for ranges and broad filters.

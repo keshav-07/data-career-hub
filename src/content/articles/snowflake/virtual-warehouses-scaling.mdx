@@ -1,0 +1,371 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Virtual Warehouses: Sizing, Scaling and Concurrency"
+seoTitle: "Snowflake Warehouses: Sizing, Scaling, Concurrency"
+description: "Size Snowflake virtual warehouses, choose between scaling up and out, configure multi-cluster warehouses and auto-suspend, read queueing and set resource monitors."
+technology: ["snowflake", "data-warehousing"]
+topic: ["compute", "virtual-warehouses", "concurrency", "cost"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Choose a starting warehouse size and adjust it from evidence in the query profile and history"
+  - "Decide between scaling up and scaling out for a given symptom"
+  - "Configure a multi-cluster warehouse with the right mode and scaling policy"
+  - "Tune auto-suspend and auto-resume for batch and BI workloads"
+  - "Diagnose queueing and design warehouses for workload isolation"
+  - "Create resource monitors that notify and suspend at credit thresholds"
+prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
+related: ["interview-questions:snowflake/virtual-warehouses", "articles:snowflake/cost-optimization"]
+previous: "articles:snowflake/architecture-virtual-warehouses"
+next: "articles:snowflake/micro-partitions-clustering-pruning"
+sources:
+  - { label: "Snowflake documentation: Overview of warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses-overview" }
+  - { label: "Snowflake documentation: Warehouse considerations", url: "https://docs.snowflake.com/en/user-guide/warehouses-considerations" }
+  - { label: "Snowflake documentation: Multi-cluster warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses-multicluster" }
+  - { label: "Snowflake documentation: CREATE WAREHOUSE", url: "https://docs.snowflake.com/en/sql-reference/sql/create-warehouse" }
+  - { label: "Snowflake documentation: Working with resource monitors", url: "https://docs.snowflake.com/en/user-guide/resource-monitors" }
+  - { label: "Snowflake documentation: Reducing queues", url: "https://docs.snowflake.com/en/user-guide/performance-query-warehouse-queue" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. Limits such as the maximum cluster count and the default warehouse generation have changed recently; confirm them in your account's documentation."
+---
+
+A virtual warehouse is the part of Snowflake you size, pay for and tune most often. Two settings decide most of its cost and performance: how big each cluster is, and how many clusters run at once. This lesson shows how to choose both, how auto-suspend and auto-resume behave, how to read queueing, how to isolate workloads and how to put a hard ceiling on spend with resource monitors.
+
+It builds on [Snowflake Architecture](/snowflake/architecture-virtual-warehouses/). All SQL here is Snowflake SQL written from the documentation and not executed.
+
+## Virtual warehouse sizing
+
+**Size** is the amount of compute in one cluster. Each step up (X-Small, Small, Medium, Large, X-Large, 2X-Large and beyond) doubles the compute resources and doubles the credits per hour. For first-generation standard warehouses that is 1, 2, 4, 8, 16, 32 credits per hour and so on; other warehouse types and generations have their own rates in Snowflake's Service Consumption Table.
+
+What a bigger size gives a query:
+
+- more CPU threads to scan and process micro-partitions in parallel;
+- more memory, so large joins, sorts and aggregations are less likely to **spill** to local or remote disk;
+- more local cache.
+
+What it does not do: make a query read less data. A query that scans every micro-partition because its filter cannot prune will scan them all at any size; it just does so with more threads.
+
+### Choosing a starting size
+
+There is no formula, so start small and use evidence:
+
+1. Start at X-Small or Small for ingestion and light transformation, Small to Medium for typical ELT models, and test larger only for big joins and backfills.
+2. Run a representative workload and open the query profile. Look at **bytes spilled to local/remote storage**, **partitions scanned versus total**, and the time spent in each operator.
+3. Step up one size and compare elapsed time and credits. If elapsed time roughly halves, the larger size costs about the same and finishes sooner. If it barely improves, the query is limited by something else (pruning, a single-threaded step, skew) and the larger size is waste.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER WAREHOUSE transform_wh SET WAREHOUSE_SIZE = 'LARGE';
+```
+
+Resizing a running warehouse does not interrupt queries: statements already running finish on the resources they started with, and new statements use the new size once it is provisioned.
+
+**Pitfalls**
+
+- Sizing for the worst query of the month. Run that one job on a separate, larger warehouse, or temporarily resize around it.
+- Ignoring remote spilling. Spilling to remote storage is a strong sign the warehouse is too small for that query (or the query should be broken into smaller batches).
+- Assuming more size helps loading. `COPY INTO` parallelises across files, so a larger warehouse only helps if there are enough files of a sensible size to keep its threads busy.
+
+**In interviews**
+
+"How do you choose a warehouse size?" Answer with the method: start small, measure spilling, pruning and elapsed time, step up while time keeps roughly halving, and stop when it does not. Mention that cost is size multiplied by running time.
+
+## Scaling up versus scaling out
+
+Snowflake gives you two different levers:
+
+| | Scale up (resize) | Scale out (more clusters) |
+|--|------------------|---------------------------|
+| What changes | Bigger nodes in one cluster | More clusters of the same size |
+| Fixes | Slow individual queries: big scans, joins, spilling | Many concurrent queries waiting in a queue |
+| Does not fix | Queueing caused by too many users | A single slow query (each query still runs on one cluster) |
+| How | `ALTER WAREHOUSE ... SET WAREHOUSE_SIZE` | Multi-cluster warehouse: `MIN_CLUSTER_COUNT`, `MAX_CLUSTER_COUNT` |
+| Edition | All | Enterprise or higher |
+
+Diagnose before choosing:
+
+- **Queries are slow even when run alone**, profiles show spilling or long processing: scale up (after checking pruning).
+- **Queries are fast alone but slow at 9 a.m.**, history shows queued time: scale out.
+- **Queries scan almost every partition**: neither. Fix the filter, the clustering or the data model.
+
+**Pitfalls**
+
+- Scaling up to fix concurrency. A bigger cluster can run more queries at once, but each step doubles the cost of every minute; adding clusters only when the queue forms is usually cheaper.
+- Scaling out to fix a slow ETL job. Each query still runs on one cluster.
+
+**In interviews**
+
+This is one of the most asked Snowflake questions. State the rule (up for complexity, out for concurrency), give the symptom for each, and mention that both are after checking pruning.
+
+## Multi-cluster warehouses
+
+A **multi-cluster warehouse** (Enterprise Edition or higher) can run several clusters, all of the same size, behind one warehouse name. Queries are routed to clusters automatically. You set:
+
+- `MIN_CLUSTER_COUNT` and `MAX_CLUSTER_COUNT`
+- `SCALING_POLICY`: `STANDARD` (the default) or `ECONOMY`
+
+### Modes
+
+| Mode | Setting | Behaviour |
+|------|---------|-----------|
+| **Maximized** | `MIN_CLUSTER_COUNT = MAX_CLUSTER_COUNT` (greater than 1) | All clusters start whenever the warehouse runs. For steady, predictable high concurrency |
+| **Auto-scale** | `MIN_CLUSTER_COUNT < MAX_CLUSTER_COUNT` | Snowflake starts and stops clusters between the two limits as load changes |
+
+### Scaling policies (auto-scale mode)
+
+| Policy | Starts a cluster when | Shuts a cluster down when | Use for |
+|--------|----------------------|---------------------------|---------|
+| **Standard** (default) | A query is queued, or Snowflake estimates the running clusters cannot keep up. With `MAX_CLUSTER_COUNT` of 10 or less it adds one cluster at a time; above 10 it can add several at once | Load checks over several consecutive minutes show the least-loaded cluster's work could be redistributed to the others | Interactive and BI workloads where queueing is visible to users |
+| **Economy** | Only when Snowflake estimates there is enough queued work to keep a new cluster busy for at least 6 minutes | The least-loaded cluster has less than about 6 minutes of work left | Batch and background work where some queueing is acceptable, to save credits |
+
+The maximum allowed `MAX_CLUSTER_COUNT` depends on the size. Since early 2025 it can be well above 10 for smaller sizes (the documentation lists up to 300 for X-Small to Medium, falling to 10 for 4X-Large and above), and values above 10 must be set with SQL rather than Snowsight. Check your account's documentation for the current limits.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE WAREHOUSE bi_wh
+  WAREHOUSE_SIZE = 'SMALL'
+  MIN_CLUSTER_COUNT = 1
+  MAX_CLUSTER_COUNT = 4
+  SCALING_POLICY = 'STANDARD'
+  AUTO_SUSPEND = 300
+  AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE;
+```
+
+Cost: each running cluster bills at the warehouse's size rate. Four Small clusters running for an hour cost the same as one Large cluster for an hour (4 × 2 = 8 credits), but they only run while there is demand.
+
+**Pitfalls**
+
+- Setting `MIN_CLUSTER_COUNT` above 1 "just in case". The minimum runs whenever the warehouse is on, so it multiplies baseline cost.
+- Expecting multi-cluster to speed up one query. It does not.
+- Creating a multi-cluster warehouse on Standard Edition: the settings are rejected.
+
+**In interviews**
+
+Explain maximized versus auto-scale and Standard versus Economy, and finish with a recommendation: auto-scale with Standard policy for BI, Economy (or a single cluster) for batch.
+
+## Auto-suspend and auto-resume
+
+- `AUTO_SUSPEND = n` suspends the warehouse after `n` seconds with no running queries. The default for warehouses created with SQL is 600 seconds (10 minutes). `NULL` (or 0) means never suspend automatically, which is rarely what you want.
+- `AUTO_RESUME = TRUE` (the default) starts the warehouse when a statement needs it. Resuming usually takes seconds, and the first query waits for it.
+
+Billing interaction: every resume starts a new **60-second minimum**. Suspending too eagerly on a warehouse that receives a query every 45 seconds can cost more than leaving it running, and empties the local cache each time.
+
+### Choosing a value
+
+| Workload | Starting point | Reason |
+|----------|----------------|--------|
+| Scheduled batch / ELT | 60 seconds | Work comes in bursts; idle time is pure waste |
+| Ingestion warehouse for `COPY` jobs | 60 seconds | Same |
+| BI dashboards | 300 to 600 seconds | Users click repeatedly; a warm cache and no resume delay improve experience |
+| Ad hoc analysis | 60 to 300 seconds | Bursty, human-paced |
+
+Measure, then adjust: compare `WAREHOUSE_METERING_HISTORY` credits with the time queries actually ran (`QUERY_ATTRIBUTION_HISTORY` reports credits attributed to query execution, excluding idle time). A large gap is idle cost.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER WAREHOUSE transform_wh SET AUTO_SUSPEND = 60 AUTO_RESUME = TRUE;
+
+-- Suspend immediately when a job finishes, rather than waiting
+ALTER WAREHOUSE transform_wh SUSPEND;
+```
+
+**Pitfalls**
+
+- Setting `AUTO_SUSPEND` below 60 seconds expecting savings: you still pay the minimum after each resume, and resumes become more frequent.
+- Disabling auto-resume on a warehouse used by scheduled jobs: the jobs fail with "warehouse suspended" errors.
+
+**In interviews**
+
+Say what the default is (600 seconds), why you usually lower it for batch work, and why BI is the exception (cache and resume latency). Mention the 60-second minimum.
+
+## Warehouse concurrency
+
+A single cluster can run several queries at the same time, sharing its CPU and memory. How many depends on query size, not a fixed count. The `MAX_CONCURRENCY_LEVEL` parameter (default 8) sets the limit on concurrent work a cluster accepts; when the limit is reached, new queries wait in a queue (or, on a multi-cluster warehouse, trigger another cluster).
+
+Lowering `MAX_CONCURRENCY_LEVEL` gives each running query a larger share of the cluster, which can help memory-hungry queries avoid spilling, at the price of more queueing. Raising it rarely helps; scaling out is the usual answer to more users.
+
+Related timeouts, settable on the warehouse, user or session:
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `STATEMENT_TIMEOUT_IN_SECONDS` | 172800 (2 days) | Cancel statements that run too long |
+| `STATEMENT_QUEUED_TIMEOUT_IN_SECONDS` | 0 (no limit) | Cancel statements that wait in the queue too long |
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER WAREHOUSE adhoc_wh SET
+  STATEMENT_TIMEOUT_IN_SECONDS = 3600          -- no ad hoc query may run over an hour
+  STATEMENT_QUEUED_TIMEOUT_IN_SECONDS = 600;   -- or queue for over 10 minutes
+```
+
+**Pitfalls**
+
+- Leaving the two-day statement timeout on an ad hoc warehouse. One runaway cross join can burn credits for hours.
+- Reading "8" as "8 queries". It is a concurrency level that Snowflake applies with query complexity in mind.
+
+**In interviews**
+
+Mention that concurrency per cluster is limited and that the queue is the signal to scale out, and that statement timeouts are a cheap guard rail.
+
+## Query queuing
+
+When a cluster cannot take more work, queries **queue**. Snowflake records queueing in two forms, which point to different fixes:
+
+| Metric (QUERY_HISTORY column) | Meaning | Fix |
+|-------------------------------|---------|-----|
+| `QUEUED_OVERLOAD_TIME` | Waiting because the warehouse was busy | Scale out (multi-cluster), spread schedules, separate workloads |
+| `QUEUED_PROVISIONING_TIME` | Waiting for compute to be provisioned (resume or resize) | Usually small; longer suspend for latency-sensitive warehouses |
+| `TRANSACTION_BLOCKED_TIME` | Waiting for a lock held by another transaction | Fix conflicting DML on the same table; not a warehouse problem |
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- Which warehouses made queries wait in the last 7 days?
+SELECT warehouse_name,
+       COUNT(*)                                    AS queries,
+       COUNT_IF(queued_overload_time > 0)          AS queued_queries,
+       ROUND(AVG(queued_overload_time) / 1000, 1)  AS avg_queued_s,
+       ROUND(MAX(queued_overload_time) / 1000, 1)  AS max_queued_s
+FROM snowflake.account_usage.query_history
+WHERE start_time >= DATEADD('day', -7, CURRENT_TIMESTAMP())
+  AND warehouse_name IS NOT NULL
+GROUP BY warehouse_name
+ORDER BY queued_queries DESC;
+```
+
+The ACCOUNT_USAGE views lag real time (typically by up to a few hours) and keep a year of history. `WAREHOUSE_LOAD_HISTORY` gives the average number of running and queued queries per interval, which is good for spotting the hours when queueing happens.
+
+**Pitfalls**
+
+- Treating lock waits as queueing and scaling out. More clusters do not release a lock.
+- Fixing queueing at 9 a.m. by permanently over-sizing. Auto-scale clusters or staggered schedules cost less.
+
+**In interviews**
+
+If asked "dashboards are slow every morning", walk through: check queued overload time, confirm queries are fast alone, then enable or increase multi-cluster on the BI warehouse (Standard policy), and consider moving the 9 a.m. batch jobs to their own warehouse.
+
+## Workload isolation
+
+Because warehouses are independent, the simplest and most effective tuning is to give each workload its own warehouse:
+
+| Warehouse | Users | Typical settings |
+|-----------|-------|------------------|
+| `ingest_wh` | Snowpipe is serverless; this one is for scheduled `COPY` jobs | X-Small/Small, `AUTO_SUSPEND = 60` |
+| `transform_wh` | dbt or SQL ELT | Sized to the heaviest models, `AUTO_SUSPEND = 60`, Economy policy if multi-cluster |
+| `bi_wh` | Dashboards and BI service accounts | Small, auto-scale multi-cluster with Standard policy, `AUTO_SUSPEND = 300` |
+| `adhoc_wh` | Analysts | Small, statement timeouts, resource monitor |
+| `backfill_wh` | Rare large reprocessing | Large or bigger, suspended except when used |
+
+Benefits: no job can starve another, each warehouse is sized for its own pattern, and credits are attributable per workload (warehouse metering is the simplest cost-allocation tool). Grant `USAGE` on each warehouse only to the roles that should use it.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+GRANT USAGE ON WAREHOUSE bi_wh TO ROLE reporting_role;
+GRANT USAGE, OPERATE ON WAREHOUSE transform_wh TO ROLE transformer_role;
+```
+
+**Pitfalls**
+
+- Too many tiny warehouses, each paying idle time and minimum charges. Isolate by workload pattern, not by person.
+- Isolation without access control: if every role can use every warehouse, people will pick the biggest one.
+
+**In interviews**
+
+A good design answer names the warehouses, why each exists, how each is sized and suspended, and how access to them is granted.
+
+## Resource monitors
+
+A **resource monitor** tracks credits used by warehouses over an interval and acts at thresholds. It is created by an account administrator (by default only `ACCOUNTADMIN` can create them).
+
+- `CREDIT_QUOTA`: credits allowed per interval.
+- `FREQUENCY`: `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY` or `NEVER`; with `START_TIMESTAMP` it defines when usage resets.
+- `TRIGGERS`: percentages of the quota and an action for each:
+  - `NOTIFY`: alert, no other effect;
+  - `SUSPEND`: suspend assigned warehouses after running statements finish;
+  - `SUSPEND_IMMEDIATE`: suspend and cancel running statements.
+
+A monitor can be set at account level (one per account) or assigned to one or more warehouses; each warehouse can have only one monitor.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+USE ROLE ACCOUNTADMIN;
+
+CREATE RESOURCE MONITOR adhoc_monthly
+  WITH CREDIT_QUOTA = 200
+       FREQUENCY = MONTHLY
+       START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS ON 75 PERCENT DO NOTIFY
+           ON 100 PERCENT DO SUSPEND
+           ON 110 PERCENT DO SUSPEND_IMMEDIATE;
+
+ALTER WAREHOUSE adhoc_wh SET RESOURCE_MONITOR = adhoc_monthly;
+```
+
+Important limits:
+
+- Resource monitors only cover **warehouses**. Serverless features (Snowpipe, serverless tasks, automatic clustering, materialized view maintenance, search optimization) and AI services are not controlled by them; use **budgets** to track those.
+- A `SUSPEND` at 100% can overshoot, because running statements finish first. That is why a `SUSPEND_IMMEDIATE` at a slightly higher threshold is common.
+- Suspended warehouses stay suspended until the interval resets, the quota is raised, or the monitor is changed. Scheduled jobs on those warehouses will fail meanwhile.
+
+**Pitfalls**
+
+- Putting a hard suspend on a production pipeline warehouse without an alerting plan. You have traded a cost incident for a data outage.
+- Believing the account monitor caps the whole bill. It does not include serverless or storage costs.
+
+**In interviews**
+
+Describe a monitor with notify, suspend and suspend-immediate thresholds, say that it covers warehouses only, and mention budgets for serverless spend.
+
+## Practice questions
+
+<details><summary>Dashboards are fast at 2 p.m. but slow at 9 a.m. Each query takes under 2 seconds when run alone. What do you check and change?</summary>
+
+Check `QUEUED_OVERLOAD_TIME` in `QUERY_HISTORY` (or `WAREHOUSE_LOAD_HISTORY`) for the BI warehouse around 9 a.m. If queries are queueing, it is a concurrency problem: make the warehouse multi-cluster in auto-scale mode (for example `MIN_CLUSTER_COUNT = 1`, `MAX_CLUSTER_COUNT = 3`, Standard policy), which needs Enterprise Edition. Also check whether batch jobs share the warehouse at that time, and move them to their own warehouse. Do not scale up; the individual queries are already fast.
+
+</details>
+
+<details><summary>A nightly MERGE takes 40 minutes on Medium. On Large it takes 35 minutes. Should you keep Large?</summary>
+
+No. Medium costs 4 × 40/60 ≈ 2.7 credits; Large costs 8 × 35/60 ≈ 4.7 credits for a 5-minute gain. The query is not limited by compute, so look elsewhere: pruning on the target table (does the `MERGE` condition let Snowflake skip micro-partitions?), skew, or the size of the change set. Go back to Medium unless the deadline requires the 5 minutes.
+
+</details>
+
+<details><summary>What is the difference between the Standard and Economy scaling policies?</summary>
+
+Both apply to multi-cluster warehouses in auto-scale mode. Standard (default) starts a cluster as soon as queries queue or Snowflake predicts they will, favouring performance, and shuts clusters down after several minutes of lower load. Economy only starts a cluster when it estimates enough work to keep it busy for at least about 6 minutes, and shuts down clusters with less than that left, favouring credits and accepting some queueing.
+
+</details>
+
+<details><summary>A warehouse has AUTO_SUSPEND = 30 and receives one small query every 40 seconds all day. What happens to cost?</summary>
+
+After each query it suspends 30 seconds later, then resumes 10 seconds after that for the next query. Each resume is billed at least 60 seconds, so every 40-second cycle pays about 60 seconds of credits, and every query starts with a cold cache and a resume delay. Leaving it running (or a longer `AUTO_SUSPEND`) would cost about 40 seconds per cycle and be faster. Better still, check whether the polling query is needed or could use the result cache.
+
+</details>
+
+<details><summary>Your account-level resource monitor shows 80% used, but the invoice is much higher than the monitor suggests. Why?</summary>
+
+Resource monitors only count warehouse credits. Serverless features (Snowpipe, serverless tasks, automatic clustering, materialized views, search optimization and others), cloud services above the 10% allowance, storage and data transfer are not included. Use budgets and `METERING_DAILY_HISTORY` to see total credits by service type.
+
+</details>
+
+<details><summary>A query shows 20 minutes of TRANSACTION_BLOCKED_TIME. Will adding clusters help?</summary>
+
+No. The query was waiting for a lock held by another transaction on the same table, typically two DML statements (`MERGE`, `UPDATE`, `DELETE`) on one table. Fix the scheduling or design so conflicting DML does not overlap, or batch it into one statement. Warehouse size and cluster count do not affect lock waits.
+
+</details>
+
+## Key takeaways
+
+- Each size step doubles compute and credits per hour; cost is size times running time, so a larger size is free only if it halves the time.
+- Scale up for slow, heavy queries (spilling); scale out with multi-cluster warehouses (Enterprise) for queueing; fix pruning before either.
+- Use auto-scale mode with the Standard policy for BI and Economy or single clusters for batch; keep `MIN_CLUSTER_COUNT` at 1 unless load is steady.
+- Lower `AUTO_SUSPEND` from the 600-second default for batch work, keep a few minutes for BI, and remember the 60-second minimum per resume.
+- Separate warehouses per workload, control who can use them, and set statement timeouts on ad hoc warehouses.
+- Resource monitors notify and suspend warehouses at credit thresholds but do not cover serverless features; use budgets for those.

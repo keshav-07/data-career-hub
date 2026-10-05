@@ -1,80 +1,404 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "Snowflake Architecture and Virtual Warehouses"
-seoTitle: "Snowflake Architecture and Virtual Warehouses"
-description: "Understand Snowflake's storage, compute and cloud-services layers, how virtual warehouses are sized, suspended and scaled, and how that drives performance and cost."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Architecture: Storage, Compute and Cloud Services"
+seoTitle: "Snowflake Architecture: Storage, Compute, Services"
+description: "How Snowflake's storage, compute and cloud services layers fit together: micro-partitions, virtual warehouses, metadata, editions, credits and the three caches."
 inventoryId: "TECH-27"
 technology: ["snowflake", "data-warehousing"]
-topic: ["architecture", "compute", "cost"]
+topic: ["architecture", "compute", "cost", "caching"]
 difficulty: "Beginner"
-related: ["interview-questions:snowflake/virtual-warehouses", "articles:snowflake/micro-partitions-clustering-pruning"]
-next: "articles:snowflake/micro-partitions-clustering-pruning"
-sources: [{"label": "Snowflake documentation: Key concepts and architecture", "url": "https://docs.snowflake.com/en/user-guide/intro-key-concepts"}, {"label": "Snowflake documentation: Virtual warehouses", "url": "https://docs.snowflake.com/en/user-guide/warehouses"}]
-versionContext: "Describes Snowflake behaviour as documented in 2026; SQL examples were not executed against a Snowflake account. Edition-specific features are noted"
+learningObjectives:
+  - "Describe the storage, compute and cloud services layers and what each one is responsible for"
+  - "Explain why separating storage from compute lets many warehouses share one copy of the data"
+  - "Compare the Standard, Enterprise, Business Critical and VPS editions on the features that matter to Data Engineers"
+  - "Explain how credits are consumed by warehouses, serverless features and cloud services"
+  - "Tell the result cache, the warehouse cache and the metadata cache apart and predict when each is used"
+related: ["interview-questions:snowflake/virtual-warehouses", "articles:snowflake/micro-partitions-clustering-pruning", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "cheat-sheets:snowflake"]
+next: "articles:snowflake/virtual-warehouses-scaling"
+sources:
+  - { label: "Snowflake documentation: Key concepts and architecture", url: "https://docs.snowflake.com/en/user-guide/intro-key-concepts" }
+  - { label: "Snowflake documentation: Overview of warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses-overview" }
+  - { label: "Snowflake documentation: Snowflake editions", url: "https://docs.snowflake.com/en/user-guide/intro-editions" }
+  - { label: "Snowflake documentation: Understanding compute cost", url: "https://docs.snowflake.com/en/user-guide/cost-understanding-compute" }
+  - { label: "Snowflake documentation: Using persisted query results", url: "https://docs.snowflake.com/en/user-guide/querying-persisted-results" }
+  - { label: "Snowflake documentation: Micro-partitions and data clustering", url: "https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. Edition features, credit rates and warehouse generations change; confirm them in your account's documentation."
 ---
 
-Snowflake separates **where data lives** from **what processes it**. That one design choice explains most of its behaviour, pricing and tuning.
+Snowflake is a managed data platform whose design starts from one decision: **data is stored once, centrally, and any number of independent compute clusters can query it**. That decision explains how Snowflake scales, how it bills you, why Time Travel and cloning are cheap, and most of the questions you will be asked about it in interviews.
 
-## Three layers
+This lesson walks through the three layers, the metadata that ties them together, the editions, the credit-based pricing model and the three caches. The next lesson goes deeper into sizing and scaling warehouses.
 
-| Layer | What it does |
-|-------|--------------|
-| **Storage** | Holds table data in cloud object storage as compressed, columnar **micro-partitions**. You pay for the data stored. |
-| **Compute** | **Virtual warehouses**: independent clusters that run queries. You pay for the time they run. |
-| **Cloud services** | Metadata, query parsing and optimisation, access control, transactions. Coordinates everything. |
+<Callout tone="info" title="About the examples">
 
-Because storage is shared, many warehouses can read the same tables at once without copying data and without competing for each other's compute.
-
-## Virtual warehouses
-
-A virtual warehouse is a named compute cluster. You choose a **size** (X-Small, Small, Medium and up); each step up roughly doubles the compute resources and the credits consumed per hour.
-
-```sql
-CREATE WAREHOUSE transform_wh
-  WAREHOUSE_SIZE = 'SMALL'
-  AUTO_SUSPEND = 60        -- seconds of inactivity before suspending
-  AUTO_RESUME = TRUE;
-```
-
-- **Auto-suspend** stops billing when the warehouse is idle; **auto-resume** starts it when a query arrives.
-- Billing is per second while running, with a minimum charge each time a warehouse starts. Very aggressive suspend settings on a warehouse that restarts constantly can therefore cost more, not less.
-
-## Scaling up versus scaling out
-
-- **Scale up** (bigger size) when individual queries are slow because they process a lot of data.
-- **Scale out** (multi-cluster warehouses, an Enterprise edition feature) when many users run queries at the same time and queries are **queueing**. Extra clusters start and stop with demand.
-
-A larger warehouse does not fix a query that scans far more data than it needs; pruning does (see [micro-partitions and pruning](/snowflake/micro-partitions-clustering-pruning/)).
-
-## Separate warehouses by workload
-
-A common pattern is one warehouse per workload: ingestion, transformation, BI dashboards, ad-hoc analysis. Each can be sized and scheduled independently, heavy transformations never slow down dashboards, and cost is attributable per team.
-
-## Caching
-
-- **Result cache**: if an identical query runs again and the underlying data has not changed, Snowflake can return the stored result without using a warehouse.
-- **Warehouse cache**: a running warehouse keeps recently read data on local storage, which is lost when it suspends.
-- **Metadata**: some queries (for example `COUNT(*)` on a table, or `MIN`/`MAX` of a column) can be answered from metadata alone.
-
-<Callout tone="info" title="Time Travel and cloning">
-
-Storage is immutable micro-partitions, so Snowflake can offer **Time Travel** (query or restore data as of an earlier point, within a retention period) and **zero-copy cloning** (a clone shares storage until either side changes). Both are useful for safe backfills and testing.
+Snowflake cannot be run in this environment, so the SQL in this lesson is written from the official documentation and has not been executed. Each Snowflake block is marked as such. Output shown is described, not copied from a live account.
 
 </Callout>
 
-## Common mistakes
+## The three-layer architecture
 
-1. One shared warehouse for every workload, so a heavy job slows dashboards.
-2. Scaling up to fix concurrency (scale out instead) or to fix poor pruning (fix the query instead).
-3. Leaving warehouses running without auto-suspend.
-4. Ignoring query queueing in monitoring.
+Snowflake is built from three layers that scale independently:
 
-## Interview relevance
+| Layer | What it holds or does | What you pay for |
+|-------|----------------------|------------------|
+| **Database storage** | Table data as compressed, columnar, immutable **micro-partitions** in cloud object storage (S3, Azure Blob or GCS, depending on where your account lives) | Average compressed bytes stored per month, including Time Travel and Fail-safe copies |
+| **Compute (query processing)** | **Virtual warehouses**: clusters of compute nodes that execute queries and DML, plus Snowflake-managed serverless compute for features such as Snowpipe and automatic clustering | Credits, per second while a warehouse runs, or per use for serverless features |
+| **Cloud services** | The "brain": authentication, access control, query parsing and optimisation, metadata, transactions, infrastructure management | Credits, but only the part that exceeds 10% of that day's warehouse usage |
 
-Common prompts: "What is a virtual warehouse?", "Scale up or out?", "How would you control Snowflake costs?". See the [interview answer](/interview/snowflake/virtual-warehouses/).
+A query moves through the layers like this:
 
-## Key takeaway
+1. You connect and authenticate. Cloud services checks your role and privileges.
+2. Cloud services parses and optimises the SQL, using table metadata to decide which micro-partitions the query needs (pruning).
+3. The optimised plan is sent to the virtual warehouse you are using. Its nodes fetch the required micro-partitions from storage (or from their local cache) and execute the plan.
+4. The result is returned to you and stored in the result cache.
 
-Storage is shared; compute is many independent warehouses. Size each warehouse for its workload, suspend it when idle, scale out for concurrency and fix pruning before scaling up.
+Snowflake describes this as a hybrid of the two classic database designs. Like a **shared-disk** system, all data lives in one central store every compute cluster can see. Like a **shared-nothing** system, each warehouse processes its share of the data on its own nodes, with local memory and disk, in a massively parallel way.
+
+**Pitfalls**
+
+- Treating Snowflake as "just a database server". There is no single server: the layer that runs your query (a warehouse) can be stopped while the data and metadata stay available.
+- Assuming cloud services are free. Most accounts pay nothing for them, but workloads with huge numbers of tiny queries, heavy metadata operations or very complex compilation can exceed the 10% allowance.
+
+**In interviews**
+
+"Describe Snowflake's architecture" is a standard opener. A strong answer names the three layers, says what each does and what it costs, then gives one consequence: for example, "because storage is shared, I can give the BI team and the ELT jobs separate warehouses on the same tables, and neither slows the other down."
+
+## The storage layer and micro-partitions
+
+When you load data into a standard Snowflake table, Snowflake reorganises it into its own internal columnar format and splits it into **micro-partitions**. You never define them; every table is partitioned automatically, in the order the data arrives.
+
+What you need to know about micro-partitions:
+
+- Each holds between roughly 50 MB and 500 MB of uncompressed data (much less once compressed).
+- Inside a micro-partition, data is stored **column by column** and each column is compressed independently. A query that reads three columns of a 200-column table only reads those three columns.
+- Micro-partitions are **immutable**. An `UPDATE`, `DELETE` or `MERGE` never edits one in place: Snowflake writes new micro-partitions containing the changed rows and marks the old ones as no longer current.
+- The storage files are not directly accessible to you. You reach the data only through SQL (Iceberg tables, covered in a later lesson, are the exception: they live in your own storage in an open format).
+
+Immutability is what makes several features cheap. Old micro-partitions are kept for the Time Travel retention period, so querying "the table as it was an hour ago" just means reading the older set. A zero-copy clone is a new table whose metadata points at the same micro-partitions.
+
+**Pitfalls**
+
+- Frequent single-row updates on a large table rewrite whole micro-partitions each time, which is slow and inflates Time Travel storage. Batch changes and use `MERGE`.
+- Storage bills include Time Travel and Fail-safe bytes, not only the current data. A table that is fully rewritten every day can cost several times its visible size.
+
+**In interviews**
+
+Expect "what is a micro-partition?" and "what happens physically when you update a row?". Mention the size range, columnar storage, per-column metadata and immutability, and connect immutability to Time Travel and cloning. Micro-partitions, pruning and clustering are covered in depth in [Micro-Partitions, Clustering and Search Optimization](/snowflake/micro-partitions-clustering-pruning/).
+
+## The compute layer and virtual warehouses
+
+A **virtual warehouse** is a named cluster of compute resources that runs your queries, loads and DML. You choose its size, and Snowflake provisions the nodes. A warehouse can be running or suspended; it only consumes credits while running.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE WAREHOUSE transform_wh
+  WAREHOUSE_SIZE = 'SMALL'
+  AUTO_SUSPEND = 60          -- seconds idle before suspending
+  AUTO_RESUME = TRUE         -- start automatically when a query arrives
+  INITIALLY_SUSPENDED = TRUE;
+
+USE WAREHOUSE transform_wh;
+```
+
+Key behaviours:
+
+- **Sizes** run from X-Small upwards, and each size step doubles the compute and the credits per hour. Sizing, scaling up versus out, multi-cluster warehouses and queueing are covered in [Virtual Warehouses: Sizing, Scaling and Concurrency](/snowflake/virtual-warehouses-scaling/).
+- **Warehouses are independent.** Two warehouses never share compute, so a heavy job on one cannot slow queries on another.
+- **Not every statement needs a warehouse.** DDL, `SHOW` commands and queries answered from metadata or the result cache are handled by cloud services.
+- There are several **warehouse types and generations**: standard warehouses (and, in many regions, a newer "Gen2" generation with its own credit rates), Snowpark-optimized warehouses with much more memory per node, and newer offerings such as Adaptive Compute. Which ones are available, and which is the default for new warehouses, depends on your region and account; check your account's documentation.
+
+Snowflake also runs **serverless compute** that you do not size yourself: Snowpipe, serverless tasks, automatic clustering, materialized view maintenance, search optimization and others. It is billed to your account but does not appear as one of your warehouses.
+
+**Pitfalls**
+
+- Using one shared warehouse for everything. Workload isolation is the main benefit of the design; use it.
+- Forgetting `AUTO_SUSPEND`. A warehouse left running bills for every second it is up, even with no queries.
+
+**In interviews**
+
+"What is a virtual warehouse?" A strong answer: an independent compute cluster, sized in T-shirt sizes that double in power and cost per step, billed per second while running, suspended when idle, and separate from storage so many warehouses can work on the same data.
+
+## The cloud services layer
+
+Cloud services is a collection of always-on services that coordinate everything else. It runs on compute that Snowflake manages, across availability zones. Its responsibilities:
+
+| Service | What it does |
+|---------|--------------|
+| Authentication and access control | Logins, MFA, SSO, OAuth, key pairs; checking role privileges on every object |
+| Query compilation and optimisation | Parsing, planning, pruning micro-partitions using metadata |
+| Metadata management | Table structure, micro-partition statistics, Time Travel versions, load history |
+| Transaction management | ACID transactions and concurrency control across warehouses |
+| Infrastructure management | Starting, resizing and suspending warehouses; storage management |
+
+Because cloud services is separate from your warehouses, you can run `SHOW TABLES`, create objects or query the result cache while every warehouse is suspended.
+
+**Pitfalls**
+
+- A high `CREDITS_USED_CLOUD_SERVICES` figure usually points to patterns such as very frequent small queries, heavy `SHOW`/`INFORMATION_SCHEMA` polling by tools, or extremely complex queries that take a long time to compile. Look at those before blaming warehouses.
+
+**In interviews**
+
+Know the 10% rule: cloud services usage is billed only for the portion that exceeds 10% of the day's warehouse credits. Explaining that compilation and pruning happen in cloud services (before a warehouse is involved) also shows you understand where pruning decisions are made.
+
+## Separation of storage and compute
+
+Separating storage from compute means each can grow or shrink without touching the other.
+
+| Consequence | Why it follows |
+|-------------|----------------|
+| Scale compute in seconds | Resizing or adding a warehouse does not move any data |
+| Pay for compute only when you use it | Suspended warehouses cost nothing; the data stays in storage |
+| Isolate workloads | Each team or job gets its own warehouse on the same tables |
+| Store a lot of data cheaply | Storage is billed at a flat rate per compressed terabyte, independent of compute |
+| Cheap clones and Time Travel | They are metadata operations over shared, immutable micro-partitions |
+
+A traditional on-premises warehouse couples the two: to get more CPU you buy nodes that also come with disks, and data is redistributed across them.
+
+**Pitfalls**
+
+- Separation does not make queries free of I/O: a warehouse still has to read micro-partitions from storage (or its cache). Poor pruning is still slow, whatever the size.
+
+**In interviews**
+
+Interviewers often ask "what does separation of storage and compute buy you?". List independent scaling, per-second compute billing with auto-suspend, workload isolation and cheap cloning, and add one honest trade-off: remote storage reads are slower than local disk, which is why the warehouse cache matters.
+
+## Metadata management
+
+Snowflake keeps rich metadata, managed by cloud services, about every table and every micro-partition:
+
+- **Per micro-partition, per column**: the minimum and maximum value, the number of distinct values, and NULL counts, plus other properties used for optimisation.
+- **Per table**: row counts, byte sizes, the list of current micro-partitions, and older versions retained for Time Travel.
+- **Load metadata**: which files have already been loaded by `COPY INTO` (kept for 64 days) and by Snowpipe (kept for 14 days), so files are not loaded twice.
+
+This metadata drives:
+
+1. **Pruning**: comparing a `WHERE` filter with each micro-partition's min/max range and skipping those that cannot match.
+2. **Metadata-only answers**: queries such as `SELECT COUNT(*) FROM t` or `MIN`/`MAX` of some column types can be answered without starting a warehouse.
+3. **Time Travel and cloning**: a point in time is a set of micro-partitions recorded in metadata.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- Answered from metadata: no warehouse is needed
+SELECT COUNT(*) FROM sales;
+
+-- Needs a warehouse: the filter must be evaluated row by row
+SELECT COUNT(*) FROM sales WHERE amount > 100;
+```
+
+**Pitfalls**
+
+- Metadata-only answers apply to specific aggregate patterns. Adding almost any filter or expression means a warehouse runs. Do not design around metadata shortcuts.
+
+**In interviews**
+
+Link metadata to pruning: "the optimiser reads the min/max of each micro-partition for the filtered column and only sends the warehouse the micro-partitions that could contain matches." That one sentence answers many performance questions.
+
+## Multi-cluster shared data
+
+**Multi-cluster shared data** is Snowflake's name for the overall architecture: many compute clusters, one shared copy of the data. Do not confuse it with **multi-cluster warehouses**, which are a single warehouse that can run several clusters for concurrency (an Enterprise Edition feature, covered in the next lesson).
+
+What it means in practice:
+
+- Several warehouses read and write the same tables concurrently. Transactions are coordinated by cloud services, so readers see consistent snapshots.
+- Data sharing builds on the same idea: another Snowflake account can be granted access to your micro-partitions without copying them, and queries them with its own warehouse.
+- Compute can be added for a new team or workload in minutes, without a data migration.
+
+A typical layout for a Data Engineering team:
+
+| Warehouse | Workload | Size and settings |
+|-----------|----------|-------------------|
+| `load_wh` | `COPY INTO` and ingestion jobs | Small, short auto-suspend |
+| `transform_wh` | dbt or SQL transformations | Medium to Large, sized to the heaviest models |
+| `bi_wh` | Dashboards | Small, multi-cluster for many concurrent users |
+| `adhoc_wh` | Analysts' exploration | Small, with timeouts and a resource monitor |
+
+**Pitfalls**
+
+- Concurrent writes to the same table from several warehouses are possible, but DML on one table takes locks; two big `MERGE` statements on the same table will wait for each other, regardless of which warehouses run them.
+
+**In interviews**
+
+If asked "multi-cluster shared data versus multi-cluster warehouse", explain that the first is the architecture (many warehouses, shared storage) and the second is a warehouse setting that adds clusters to absorb concurrency.
+
+## Snowflake editions
+
+Snowflake is sold in editions. Each higher edition includes everything in the editions below it. The table lists the differences that matter most to Data Engineers; the full matrix is in the documentation.
+
+| Capability | Standard | Enterprise | Business Critical | Virtual Private Snowflake (VPS) |
+|-----------|:-------:|:---------:|:----------------:|:------------------------------:|
+| Core SQL, warehouses, Snowpipe, streams, tasks, data sharing | Yes | Yes | Yes | Yes |
+| Time Travel retention | Up to 1 day | Up to 90 days (permanent objects) | Up to 90 days | Up to 90 days |
+| Multi-cluster warehouses | No | Yes | Yes | Yes |
+| Materialized views, search optimization | No | Yes | Yes | Yes |
+| Column masking and row access policies | No | Yes | Yes | Yes |
+| Periodic rekeying of encrypted data | No | Yes | Yes | Yes |
+| Tri-Secret Secure (customer-managed key), private connectivity, support for regulated data such as HIPAA/PCI | No | No | Yes | Yes |
+| Separate, isolated Snowflake environment | No | No | No | Yes |
+
+All editions encrypt all data, support MFA and federated SSO, and include role-based access control and resource monitors.
+
+**Pitfalls**
+
+- Writing a design that depends on masking policies, 90-day Time Travel or multi-cluster warehouses without checking the edition. These fail with an error on Standard.
+- Credit prices differ by edition (and region and contract), so the same workload costs more on a higher edition.
+
+**In interviews**
+
+You will rarely be asked to recite the matrix, but you may be asked "what would you need Enterprise for?". Good answers: multi-cluster warehouses for BI concurrency, Time Travel beyond one day, masking and row access policies for PII, materialized views and search optimization.
+
+## The pricing model and credits
+
+Snowflake bills three main things:
+
+1. **Compute**, measured in **credits**.
+2. **Storage**, at a flat rate per terabyte per month (average compressed bytes, including Time Travel and Fail-safe).
+3. **Data transfer** out of a region or cloud (for example replication to another region or unloading to storage in another cloud). Loading data in is not charged for transfer by Snowflake.
+
+The dollar price of a credit depends on edition, cloud region and whether you buy on demand or through a capacity contract. This lesson does not quote prices: check your contract or Snowflake's pricing page.
+
+### What consumes credits
+
+| Consumer | How it is billed |
+|----------|------------------|
+| Virtual warehouses | Credits per hour by size, charged per second while running, with a 60-second minimum each time the warehouse starts or resumes |
+| Serverless features (Snowpipe, serverless tasks, automatic clustering, materialized views, search optimization, dynamic table refreshes on serverless compute and others) | Each has its own rate in Snowflake's Service Consumption Table; some are per compute-hour, some per GB processed |
+| Cloud services | Only usage above 10% of the day's warehouse credits |
+
+### How warehouse credits scale with size
+
+For standard (first-generation) warehouses, the documented rates double with each size:
+
+| Size | Credits per hour |
+|------|------------------|
+| X-Small | 1 |
+| Small | 2 |
+| Medium | 4 |
+| Large | 8 |
+| X-Large | 16 |
+| 2X-Large | 32 |
+| 3X-Large | 64 |
+| 4X-Large | 128 |
+| 5X-Large | 256 |
+| 6X-Large | 512 |
+
+Gen2 standard warehouses, Snowpark-optimized warehouses and other types have different rates, listed in the Service Consumption Table. The largest sizes are not available in every region.
+
+### A worked example
+
+A Medium standard warehouse (4 credits per hour) resumes, runs queries for 3 minutes 30 seconds, then sits idle until `AUTO_SUSPEND = 60` suspends it.
+
+- Running time billed: 210 seconds of work plus 60 seconds idle before suspending = 270 seconds.
+- Credits: 4 × 270 / 3600 = **0.3 credits**.
+
+If it had resumed for a 5-second query, the 60-second minimum applies: 4 × 60 / 3600 ≈ 0.067 credits, rather than 4 × 5 / 3600.
+
+Doubling the size halves the time only if the query parallelises well. A query that finishes in 10 minutes on Medium and 5 minutes on Large costs the same credits (4 × 10 = 8 × 5 credit-minutes) but returns sooner. If Large only cuts it to 8 minutes, it costs more.
+
+**Pitfalls**
+
+- Forgetting the idle time between the last query and auto-suspend. With `AUTO_SUSPEND = 600` (the default for warehouses created with SQL), every burst of work pays for up to 10 idle minutes.
+- Thinking resource monitors cap serverless spend. They only control warehouses; serverless features are tracked with budgets.
+
+**In interviews**
+
+Be able to compute credits for a scenario like the one above, and to explain that cost equals size × running time, so "bigger and shorter" can cost the same. The [cost optimisation lesson](/snowflake/cost-optimization/) turns this into a playbook.
+
+## The caching layers
+
+Snowflake has three caches. Knowing which one served a query explains many "why was it so fast the second time?" questions.
+
+| Cache | Where it lives | What it stores | Needs a running warehouse? | Lifetime |
+|-------|----------------|----------------|----------------------------|----------|
+| **Result cache** (persisted query results) | Cloud services | The full result of each query | No | 24 hours, reset each time it is reused, up to 31 days from first run |
+| **Warehouse (local disk) cache** | SSD and memory on the warehouse's nodes | Micro-partition data the warehouse has read | Yes | Until the warehouse suspends (or is resized) |
+| **Metadata cache** | Cloud services | Micro-partition statistics, row counts, object definitions | No | Always maintained |
+
+### Result cache
+
+If you run a query whose result is still in the cache, Snowflake returns the stored result without running the query. Reuse requires, among other conditions:
+
+- the new query **matches** the earlier one (the documentation describes the matching rules; in practice, write the same text);
+- the underlying table data has **not changed** since (a change in the micro-partitions invalidates the result);
+- the query does not use functions evaluated at run time, such as `CURRENT_TIMESTAMP()`, or other features listed as excluded (for example external functions);
+- your role has the privileges needed to read the tables.
+
+The result cache is shared across users and warehouses in the account, as long as privileges allow. It is controlled by the `USE_CACHED_RESULT` parameter, enabled by default; turn it off in a session when you benchmark queries.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;   -- benchmark honestly
+
+-- Reuse the previous result set as a table, without re-running the query
+SELECT * FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+```
+
+### Warehouse cache
+
+While a warehouse runs, its nodes keep micro-partition data they have read on local SSD and in memory. A later query on the same warehouse that needs the same data reads it locally instead of from remote storage. The query profile reports "Percentage scanned from cache".
+
+The cache is lost when the warehouse suspends. That is the trade-off behind `AUTO_SUSPEND`: a very short value saves idle credits, but each resume starts with a cold cache. For a BI warehouse serving repeated dashboard queries, a few minutes of idle time is often worth paying for; for a nightly batch warehouse, suspend quickly.
+
+### Metadata cache
+
+Cloud services always holds micro-partition metadata, so some operations need no warehouse: `COUNT(*)` on a table without filters, `MIN`/`MAX` on some column types, `SHOW` and `DESCRIBE` commands, and the pruning step of every query.
+
+**Pitfalls**
+
+- Benchmarking with the result cache on, then wondering why production is slower.
+- Expecting the result cache to survive a table change: any DML on a table invalidates cached results that read it, even if the change does not touch the rows in the result.
+- Assuming the warehouse cache helps a different warehouse. It belongs to the warehouse (and the cluster) that read the data.
+
+**In interviews**
+
+"Name Snowflake's caches" is very common. Give all three, say where each lives, whether a warehouse is needed and when each is invalidated, then connect the warehouse cache to auto-suspend tuning.
+
+## Practice questions
+
+<details><summary>Explain Snowflake's architecture in under a minute.</summary>
+
+Three layers. Storage holds tables as compressed, columnar, immutable micro-partitions in cloud object storage, billed per compressed TB per month. Compute is virtual warehouses: independent clusters billed in credits per second while running, which suspend when idle. Cloud services handles authentication, access control, metadata, optimisation and transactions, and is billed only above 10% of daily warehouse credits. Because storage is shared and separate, many warehouses can work on the same data without competing, and features like Time Travel and cloning are metadata operations.
+
+</details>
+
+<details><summary>A Large standard warehouse runs for 90 seconds and then auto-suspends after 60 seconds idle. How many credits does it use?</summary>
+
+Large is 8 credits per hour. Running time billed is 90 + 60 = 150 seconds, which is above the 60-second minimum. Credits = 8 × 150 / 3600 ≈ 0.33 credits. If it had only been up for 30 seconds in total, the 60-second minimum would apply: 8 × 60 / 3600 ≈ 0.13 credits.
+
+</details>
+
+<details><summary>A dashboard query takes 8 seconds the first time and 50 milliseconds the second time. A minute later, after a small INSERT into the table, it takes 3 seconds. Explain.</summary>
+
+The second run was served from the result cache: identical query, unchanged data, so cloud services returned the stored result without a warehouse. The `INSERT` changed the table's micro-partitions, invalidating the cached result, so the third run executed again. It was faster than the first because the warehouse was still running and most micro-partitions were in its local disk cache.
+
+</details>
+
+<details><summary>What is the difference between multi-cluster shared data and a multi-cluster warehouse?</summary>
+
+Multi-cluster shared data is the overall architecture: many independent compute clusters (warehouses) over one shared copy of the data. A multi-cluster warehouse is one warehouse configured with a minimum and maximum number of clusters, so Snowflake can add clusters of the same size when many queries run at once. Multi-cluster warehouses require Enterprise Edition or higher.
+
+</details>
+
+<details><summary>Your company is on Standard Edition and wants to mask email addresses for analysts and keep 30 days of Time Travel. What do you tell them?</summary>
+
+Both need Enterprise Edition or higher: masking policies (column-level security) are an Enterprise feature, and Standard Edition limits Time Travel to 1 day. On Standard you could expose masked data through views that only selected roles can bypass, and keep longer history with your own snapshot or backup tables, but the native features require an upgrade. Credit prices are higher on Enterprise, so weigh the cost.
+
+</details>
+
+<details><summary>Why can `SELECT COUNT(*) FROM orders` return instantly even when every warehouse is suspended?</summary>
+
+Snowflake keeps row counts and other statistics in the metadata managed by the cloud services layer. An unfiltered `COUNT(*)` can be answered from that metadata, so no warehouse needs to start. Adding a `WHERE` clause usually forces a warehouse to evaluate the filter.
+
+</details>
+
+## Key takeaways
+
+- Snowflake has three independent layers: storage (micro-partitions), compute (virtual warehouses and serverless compute) and cloud services (metadata, optimisation, security).
+- Storage is shared and immutable, which enables many warehouses on one dataset, workload isolation, Time Travel and zero-copy cloning.
+- Warehouse credits double with each size step and are billed per second with a 60-second minimum per start; cloud services are billed only above 10% of daily warehouse use.
+- Editions matter: multi-cluster warehouses, 90-day Time Travel, masking and row access policies need Enterprise; Tri-Secret Secure and private connectivity need Business Critical.
+- Three caches: the result cache (no warehouse, invalidated by data changes), the warehouse cache (lost on suspend) and the metadata cache (powers pruning and some instant answers).
