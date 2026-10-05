@@ -19,6 +19,7 @@ learningObjectives:
 prerequisites: ["articles:sql/aggregations-group-by-having", "articles:sql/ctes-subqueries-temp-tables"]
 related: ["articles:pyspark/window-functions", "interview-questions:sql/window-functions-vs-group-by", "interview-questions:sql/second-highest-salary"]
 previous: "articles:sql/pivot-unpivot-grouping-sets"
+next: "articles:sql/window-frames-running-totals"
 sources:
   - { label: "PostgreSQL documentation: Window functions tutorial", url: "https://www.postgresql.org/docs/16/tutorial-window.html" }
   - { label: "PostgreSQL documentation: Window functions reference", url: "https://www.postgresql.org/docs/16/functions-window.html" }
@@ -322,7 +323,7 @@ ORDER BY spend DESC, customer_id;
 
 - With 5 rows and 2 buckets, the sizes are 3 and 2: when rows do not divide evenly, the **first** buckets get one extra row each.
 - `NTILE` assigns buckets by **position**, not by value. Tied values can land in different buckets, and with fewer rows than buckets some buckets are empty.
-- It answers "split into equal-sized groups", not "which values are above the 75th percentile". For value-based cut-offs use `PERCENT_RANK`, `CUME_DIST` or `PERCENTILE_CONT`, covered in the next lesson on window frames, or `WIDTH_BUCKET` for fixed value ranges.
+- It answers "split into equal-sized groups", not "which values are above the 75th percentile". For value-based cut-offs use `PERCENT_RANK`, `CUME_DIST` or `PERCENTILE_CONT`, covered in the [window frames lesson](/sql/window-frames-running-totals/), or `WIDTH_BUCKET` for fixed value ranges.
 
 ### Pitfalls
 
@@ -443,7 +444,7 @@ ORDER BY customer_id;
 | 4 | 150.00 |
 | 5 | 45.00 |
 
-Frames are covered properly in the next lesson, on window frames.
+Frames are covered properly in the [window frames lesson](/sql/window-frames-running-totals/).
 
 ### Other details
 

@@ -186,5 +186,29 @@
   "FIRST_VALUE / LAST_VALUE": {
     "ref": "articles:sql/window-functions",
     "heading": "FIRST_VALUE and LAST_VALUE"
+  },
+  "Running totals with SUM OVER": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Running totals with SUM OVER"
+  },
+  "Moving average with frame clause": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Moving average with a frame clause"
+  },
+  "Conditional window frames": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Conditional window frames"
+  },
+  "Percent of total": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Percent of total"
+  },
+  "Cumulative distribution": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Cumulative distribution: CUME_DIST and PERCENT_RANK"
+  },
+  "Median & percentile (PERCENTILE_CONT)": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Median and percentiles with PERCENTILE_CONT"
   }
 }
