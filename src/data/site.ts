@@ -96,4 +96,6 @@ export const TECH_GROUP_LABELS: Record<string, string> = {
   processing: "Distributed processing",
   platforms: "Data platforms",
   streaming: "Streaming & orchestration",
+  cloud: "Cloud",
+  foundations: "Interview foundations",
 };

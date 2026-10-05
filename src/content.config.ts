@@ -175,7 +175,7 @@ const technologies = defineCollection({
     title: z.string(),
     shortName: z.string(),
     description: z.string().min(80).max(200),
-    group: z.enum(["languages", "processing", "platforms", "streaming"]),
+    group: z.enum(["languages", "processing", "platforms", "streaming", "cloud", "foundations"]),
     order: z.number().int(),
     keyFacts: z.array(z.string()).min(1),
     whatToLearnFirst: z.array(ref).default([]),
