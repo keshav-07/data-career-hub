@@ -1,0 +1,79 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "SQL for Data Engineers: Complete Fundamentals"
+seoTitle: "SQL for Data Engineers: Complete Fundamentals"
+description: "Everything a Data Engineer needs from SQL in one guide: joins, aggregation, window functions, query structure, deduplication, upserts and performance, with links to go deeper."
+inventoryId: "PILLAR-02"
+technology: ["sql"]
+topic: ["fundamentals"]
+difficulty: "Beginner"
+pillar: true
+featured: false
+related: ["articles:sql/joins", "articles:sql/window-functions", "articles:sql/query-optimization-fundamentals", "cheat-sheets:sql-data-engineering"]
+sources: [{"label": "PostgreSQL documentation: SQL language", "url": "https://www.postgresql.org/docs/current/sql.html"}]
+versionContext: "Standard SQL; detailed examples are verified in the linked guides"
+---
+
+SQL is the language of data work. Warehouses, lakehouses, Spark SQL and transformation tools all speak it, so it is worth learning thoroughly before anything else. This guide covers the fundamentals in the order you should learn them and links to a full guide for each.
+
+## 1. Joins: predict the row count
+
+A join combines rows from two tables. The essential skill is predicting how many rows come out. `INNER JOIN` keeps matches only; `LEFT JOIN` keeps every left row with `NULL`s where nothing matches; a join on a non-unique key **multiplies** rows. The most common bug is filtering the right table of a left join in `WHERE`, which silently turns it into an inner join.
+
+Read: [SQL joins explained](/sql/joins/) · Practise: [INNER vs LEFT JOIN](/interview/sql/inner-vs-left-join/)
+
+## 2. Aggregation: choose the grain
+
+`GROUP BY` collapses rows to one per group; `COUNT`, `SUM` and `AVG` summarise them. Know that `COUNT(column)` and `AVG` skip `NULL`s, that `WHERE` filters rows before grouping while `HAVING` filters groups after, and that conditional aggregation (`SUM(CASE WHEN ...)`) builds several metrics in one pass.
+
+Read: [Aggregations, GROUP BY and HAVING](/sql/aggregations-group-by-having/)
+
+## 3. Window functions: keep the rows
+
+Window functions compute rankings, running totals and previous-row comparisons **without collapsing rows**. Learn `ROW_NUMBER`, `RANK` and `DENSE_RANK` (and how they treat ties), `LAG` and `LEAD`, and frames (`ROWS` vs `RANGE`). Window functions solve "top N per group", "latest row per key" and "change versus previous period".
+
+Read: [SQL window functions](/sql/window-functions/) · Practise: [Window functions vs GROUP BY](/interview/sql/window-functions-vs-group-by/), [Second-highest salary](/interview/sql/second-highest-salary/)
+
+## 4. Structure: CTEs, subqueries and temporary tables
+
+Name your steps with CTEs so multi-step logic reads top to bottom. Use subqueries for small single values and temporary tables when an expensive intermediate result is reused or needs inspection. Do not assume a CTE is computed only once; that depends on the engine.
+
+Read: [CTEs vs subqueries vs temporary tables](/sql/ctes-subqueries-temp-tables/)
+
+## 5. Pipeline patterns: deduplicate and upsert
+
+Two patterns appear in almost every pipeline:
+
+- **Keep the latest row per key** with `ROW_NUMBER() OVER (PARTITION BY key ORDER BY updated_at DESC)` and `rn = 1`.
+- **Write idempotently**: replace a partition (delete-then-insert in a transaction) or `MERGE` on a unique key, so reruns do not duplicate data.
+
+Read: [Remove duplicates safely](/interview/sql/remove-duplicate-records/) · [Idempotent batch pipelines](/interview/data-engineering/idempotent-batch-pipeline/)
+
+## 6. Performance: read less data
+
+Read the plan, select only needed columns, filter on raw (sargable) columns that allow pruning, fix join fan-out and verify the faster query returns the same answer. In columnar warehouses, partitioning and clustering matter more than indexes.
+
+Read: [Query optimisation fundamentals](/sql/query-optimization-fundamentals/) · [Partitioning and clustering](/data-warehousing/partitioning-clustering-data-layout/)
+
+## 7. Modelling: SQL serves a schema
+
+SQL is easiest on a well-modelled warehouse: facts at a stated grain and descriptive dimensions in a star schema, with slowly changing dimensions where history matters.
+
+Read: [Star schema](/data-warehousing/star-schema/) · [Slowly changing dimensions](/data-warehousing/slowly-changing-dimensions/)
+
+## Learning order and checkpoints
+
+| Step | You are ready to move on when you can… |
+|------|-----------------------------------------|
+| Joins | Predict the row count of any two-table join |
+| Aggregation | Explain how `NULL`s affect `COUNT` and `AVG` |
+| Window functions | Solve top-N-per-group and latest-row-per-key without help |
+| Structure | Rewrite a nested query as readable CTEs |
+| Patterns | Write a rerunnable load with `MERGE` or partition overwrite |
+| Performance | Explain from a plan why a query is slow |
+
+## Keep the reference handy
+
+The [SQL cheat sheet](/resources/cheat-sheets/sql-data-engineering/) summarises syntax and row-count traps for revision.

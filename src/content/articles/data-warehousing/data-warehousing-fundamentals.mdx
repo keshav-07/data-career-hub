@@ -1,0 +1,70 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Warehousing for Data Engineers"
+seoTitle: "Data Warehousing for Data Engineers"
+description: "A complete introduction to data warehousing: dimensional modelling, grain, facts and dimensions, slowly changing dimensions, data layout, ELT and serving trustworthy reports."
+inventoryId: "PILLAR-06"
+technology: ["data-warehousing", "sql"]
+topic: ["fundamentals"]
+difficulty: "Beginner"
+pillar: true
+featured: false
+related: ["articles:data-warehousing/star-schema", "articles:data-warehousing/slowly-changing-dimensions", "articles:data-warehousing/partitioning-clustering-data-layout", "system-designs:cloud-data-warehouse-platform"]
+sources: [{"label": "Kimball Group: Dimensional Modeling Techniques", "url": "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/"}]
+versionContext: "Concepts are platform-neutral; examples in the linked guides were verified on SQLite 3.45"
+---
+
+A data warehouse organises data for **answering questions**, not for running transactions. Its value comes from good modelling, reliable loading and trustworthy definitions more than from any particular product.
+
+## 1. Dimensional modelling
+
+Separate **facts** (measurements of events, at a stated grain) from **dimensions** (the descriptive context you filter and group by). Arranged as a star schema, every query follows the same simple pattern: join the fact to a few dimensions, group and aggregate.
+
+Read: [Facts, dimensions and the star schema](/data-warehousing/star-schema/)
+
+## 2. Grain first
+
+The **grain** is what one fact row means: one order line, one account per day. Decide it before designing columns. Mixed grains cause double counting.
+
+## 3. History: slowly changing dimensions
+
+When attributes change, overwrite (Type 1) or version (Type 2) them. Type 2 needs surrogate keys, validity ranges and a rerunnable load.
+
+Read: [Slowly changing dimensions](/data-warehousing/slowly-changing-dimensions/)
+
+## 4. Loading: ELT and idempotency
+
+Most modern warehouses load raw data first and transform with SQL in layers (raw, staging, marts). Every load must be safe to rerun.
+
+Read: [ETL vs ELT](/etl-elt/etl-vs-elt/) · [Idempotency in pipelines](/etl-elt/idempotency-in-data-pipelines/)
+
+## 5. Physical layout
+
+Partition large tables by their main filter (usually date), cluster by the next most common filters, and keep files large.
+
+Read: [Partitioning, clustering and data layout](/data-warehousing/partitioning-clustering-data-layout/)
+
+## 6. Platforms
+
+Cloud warehouses separate storage from compute; lakehouses add warehouse guarantees to lake storage. Learn one platform well.
+
+Read: [Lake vs warehouse vs lakehouse](/data-warehousing/lake-vs-warehouse-vs-lakehouse/) · [Snowflake architecture](/snowflake/architecture-virtual-warehouses/)
+
+## 7. Trust
+
+Tests on keys and relationships, reconciliation with sources, certified metric definitions and visible freshness are what make people believe the numbers.
+
+Read: [Data quality checks and contracts](/etl-elt/data-quality-checks-contracts/) · Case study: [Reporting and analytics platform](/data-engineering/system-design/reporting-analytics-platform/)
+
+## Checkpoints
+
+| Skill | Checkpoint |
+|-------|------------|
+| Modelling | Design a star schema for a business process and state its grain |
+| History | Write a Type 2 load that is safe to rerun |
+| Loading | Explain your layers and how each is tested |
+| Layout | Choose partition and clustering keys from query patterns |
+
+Practise with the [e-commerce analytics platform project](/projects/ecommerce-analytics-platform/).

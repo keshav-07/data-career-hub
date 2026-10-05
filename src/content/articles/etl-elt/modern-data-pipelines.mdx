@@ -1,0 +1,81 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "ETL vs ELT and Modern Data Pipelines"
+seoTitle: "ETL, ELT and Modern Data Pipelines: Guide"
+description: "How modern data pipelines are built: ETL vs ELT, batch vs streaming, layered models, orchestration, idempotency, data quality, observability and recovery."
+inventoryId: "PILLAR-08"
+technology: ["etl-elt", "data-engineering"]
+topic: ["fundamentals"]
+difficulty: "Beginner"
+pillar: true
+featured: false
+related: ["articles:etl-elt/etl-vs-elt", "articles:etl-elt/batch-vs-streaming", "articles:etl-elt/idempotency-in-data-pipelines", "system-designs:scalable-batch-pipeline"]
+sources: []
+versionContext: "Tool-neutral overview; details and verified examples are in the linked guides"
+---
+
+A data pipeline moves data from where it is produced to where it is useful, changing it along the way. Modern pipelines share a set of design choices and a set of reliability practices; this guide covers both.
+
+## Design choices
+
+### Where transformation happens: ETL or ELT
+
+ETL transforms before loading; ELT loads raw data and transforms inside the warehouse or lakehouse. ELT dominates where compute is elastic, but compliance or format constraints can still require ETL steps.
+
+Read: [ETL vs ELT](/etl-elt/etl-vs-elt/) · Practise: [Deciding factors](/interview/data-engineering/etl-vs-elt-factors/)
+
+### When it runs: batch or streaming
+
+Choose by required freshness. Batch is simpler and cheaper; streaming is justified when decisions depend on near-real-time data and brings event time, state and duplicates to handle.
+
+Read: [Batch vs streaming](/etl-elt/batch-vs-streaming/)
+
+### How it is organised: layers
+
+Raw (as received), staging or silver (typed, cleaned, deduplicated), marts or gold (business models). Each layer is rebuildable from the previous one.
+
+Read: [Star schema](/data-warehousing/star-schema/) · [Data lakes and the lakehouse](/delta-lake/data-lakes-lakehouse-delta/)
+
+## Reliability practices
+
+### Orchestration
+
+An orchestrator runs tasks in dependency order, on schedule, with retries and alerts, driving each run from its data interval.
+
+Read: [Airflow DAGs, scheduling and retries](/airflow/dags-scheduling-retries/)
+
+### Idempotency
+
+Every step must be safe to rerun: deterministic input slice, overwrite or merge, atomic publish and guarded side effects.
+
+Read: [Idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/)
+
+### Data quality
+
+Check freshness, volume, schema, keys and validity at ingestion, after transformation and before publishing; block on critical failures.
+
+Read: [Checks, contracts and failure handling](/etl-elt/data-quality-checks-contracts/)
+
+### Observability
+
+Record status, duration, volume, freshness and quality per run; alert first on freshness.
+
+Read: [Pipeline observability](/etl-elt/pipeline-observability/)
+
+### Failure handling and recovery
+
+Retry transient failures with backoff, quarantine bad data, fail fast on systemic errors, and plan backfills.
+
+Read: [Reliability and retry design](/etl-elt/pipeline-reliability-and-retries/)
+
+### Change data capture
+
+Replicate databases from their change logs with ordered, idempotent merges.
+
+Read: [CDC patterns and failure modes](/etl-elt/cdc-patterns-and-failure-modes/)
+
+## Put it together
+
+Work through the [scalable batch pipeline case study](/data-engineering/system-design/scalable-batch-pipeline/) and build the [CSV to warehouse project](/projects/csv-to-warehouse-pipeline/).

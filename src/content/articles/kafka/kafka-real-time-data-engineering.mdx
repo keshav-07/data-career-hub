@@ -1,0 +1,65 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Kafka and Real-Time Data Engineering"
+seoTitle: "Kafka and Real-Time Data Engineering Guide"
+description: "Real-time data engineering with Kafka: logs, partitions and consumer groups, delivery semantics, schemas, stream processing, CDC and operating streaming pipelines."
+inventoryId: "PILLAR-11"
+technology: ["kafka", "spark"]
+topic: ["fundamentals"]
+difficulty: "Intermediate"
+pillar: true
+featured: false
+related: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/kafka-vs-message-queues", "system-designs:kafka-ingestion-system", "cheat-sheets:kafka"]
+sources: []
+versionContext: "Concepts apply to Apache Kafka 3.x and later"
+---
+
+Real-time data engineering means processing events continuously instead of in scheduled batches. Kafka is the most common backbone; this guide connects the concepts from transport to processing to operations.
+
+## 1. Kafka's model
+
+A topic is a partitioned, replicated, append-only log. Partitions provide ordering and parallelism; keys route related events to the same partition; consumer groups divide partitions among consumers.
+
+Read: [Topics, partitions and consumer groups](/kafka/topics-partitions-consumer-groups/) · Practise: [Partitions and consumer groups](/interview/kafka/partitions-and-consumer-groups/)
+
+## 2. Log or queue?
+
+Logs retain events for replay by many consumers; queues distribute units of work. Most data pipelines want the log model.
+
+Read: [Kafka vs message queues](/kafka/kafka-vs-message-queues/)
+
+## 3. Delivery semantics
+
+At-least-once is the practical default; make processing and sinks idempotent. Kafka's exactly-once covers read-process-write within Kafka.
+
+Practise: [At-least-once delivery](/interview/kafka/at-least-once-delivery/)
+
+## 4. Schemas and contracts
+
+Use a schema registry with compatibility rules so producers cannot break consumers.
+
+Read: [Schema evolution patterns](/delta-lake/schema-evolution-patterns/)
+
+## 5. Stream processing
+
+Aggregate by event time, use watermarks for late data, deduplicate by event id, checkpoint state and offsets.
+
+Read: [Batch vs streaming](/etl-elt/batch-vs-streaming/) · Case study: [Real-time analytics pipeline](/data-engineering/system-design/real-time-analytics-pipeline/)
+
+## 6. Change data capture
+
+Stream database changes from the transaction log through Kafka and apply them with ordered, idempotent merges.
+
+Read: [CDC patterns and failure modes](/etl-elt/cdc-patterns-and-failure-modes/) · Case study: [CDC platform](/data-engineering/system-design/change-data-capture-platform/)
+
+## 7. Operations
+
+Monitor consumer lag, under-replicated partitions and end-to-end latency; size partitions for peak throughput and consumer parallelism; set retention longer than your longest outage.
+
+Read: [Kafka ingestion system design](/data-engineering/system-design/kafka-ingestion-system/)
+
+## Build it
+
+Start with the [Kafka → Spark → Delta streaming project](/projects/kafka-spark-delta-streaming/), then the [real-time analytics project](/projects/real-time-analytics-pipeline/). Revise with the [Kafka cheat sheet](/resources/cheat-sheets/kafka/).

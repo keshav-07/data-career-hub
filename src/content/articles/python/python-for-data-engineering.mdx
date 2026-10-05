@@ -1,0 +1,70 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Python for Data Engineering"
+seoTitle: "Python for Data Engineering: Complete Guide"
+description: "The Python a Data Engineer actually uses: structuring pipeline code, data structures, generators and batching, error handling, idempotent loads, testing and orchestration."
+inventoryId: "PILLAR-03"
+technology: ["python"]
+topic: ["fundamentals"]
+difficulty: "Beginner"
+pillar: true
+featured: false
+related: ["articles:python/functions-modules-reusable-code", "articles:python/iterators-generators", "articles:python/idempotent-csv-loader", "cheat-sheets:python-for-data-engineers"]
+sources: [{"label": "Python documentation", "url": "https://docs.python.org/3/"}]
+versionContext: "Examples in the linked guides run on Python 3.12"
+---
+
+Data Engineers use Python less for algorithms and more for **reliable plumbing**: reading from sources, validating, transforming, loading, and calling tools such as Spark and orchestrators. This guide covers the skills in the order they pay off.
+
+## 1. Structure code for reuse and testing
+
+Keep transformations as pure functions, push file and database access to the edges, pass configuration in instead of reading globals, and give each job a thin entry point. That structure is what makes pipeline code testable and reusable.
+
+Read: [Functions, modules and reusable pipeline code](/python/functions-modules-reusable-code/)
+
+## 2. Choose the right data structure
+
+Sets for membership and deduplication, dicts for lookup, grouping and counting, deques for queues and sliding windows, tuples for fixed records and composite keys. These choices turn quadratic loops into linear ones.
+
+Read: [Python data structures for interviews](/python/data-structures-for-interviews/) · Practise: [List vs tuple vs set](/interview/python/list-tuple-set/), [Shallow vs deep copy](/interview/python/shallow-vs-deep-copy/)
+
+## 3. Stream data with iterators and generators
+
+Generators produce one item at a time, so you can process files, cursors and paginated APIs of any size with flat memory. Chain them into pipelines and write in batches.
+
+Read: [Iterators and generators](/python/iterators-generators/) · Practise: [Generators for large datasets](/interview/python/generators-large-datasets/)
+
+## 4. Handle errors like production code
+
+Classify failures: retry transient ones with backoff, quarantine and count bad records, fail fast on systemic errors. Catch specific exceptions, log with context and never swallow errors.
+
+Practise: [Exceptions in production pipelines](/interview/python/exceptions-in-pipelines/) · Read: [Reliability and retry design](/etl-elt/pipeline-reliability-and-retries/)
+
+## 5. Make loads idempotent
+
+A load that can run twice without changing the result is safe to retry and backfill. Use a natural key, an upsert and a single transaction, and prove it with a run-twice test.
+
+Build: [Idempotent CSV loader tutorial](/python/idempotent-csv-loader/) · Read: [Idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/)
+
+## 6. Test what matters
+
+Unit-test transformation functions with small inputs, test idempotency by running a step twice, and test edge cases: empty files, duplicates, malformed rows, time zones.
+
+## 7. Work with the rest of the stack
+
+- **PySpark** for data too large for one machine: [PySpark fundamentals](/pyspark/pyspark-fundamentals/).
+- **Airflow** to schedule and retry Python tasks: [Airflow DAGs and retries](/airflow/dags-scheduling-retries/).
+
+## Learning order and checkpoints
+
+| Step | You are ready to move on when you can… |
+|------|-----------------------------------------|
+| Structure | Test a transformation without touching files or databases |
+| Data structures | Pick a structure and state its time complexity |
+| Generators | Process a file larger than memory |
+| Errors | Explain which failures you retry and which you fail on |
+| Idempotency | Show a test that proves a rerun changes nothing |
+
+Revise with the [Python cheat sheet](/resources/cheat-sheets/python-for-data-engineers/).

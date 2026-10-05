@@ -1,0 +1,60 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Databricks for Data Engineers"
+seoTitle: "Databricks for Data Engineers: Complete Guide"
+description: "What a Data Engineer needs to know about Databricks: Spark and Delta Lake underneath, workspaces, compute, jobs, medallion pipelines, Unity Catalog and cost control."
+inventoryId: "PILLAR-09"
+technology: ["databricks", "delta-lake", "spark"]
+topic: ["fundamentals"]
+difficulty: "Intermediate"
+pillar: true
+featured: false
+related: ["articles:databricks/workspace-jobs-lakehouse", "articles:databricks/unity-catalog-governance", "cheat-sheets:databricks", "articles:snowflake/snowflake-vs-databricks"]
+sources: []
+versionContext: "Describes Databricks as documented in 2026; product names change frequently"
+---
+
+Databricks is a managed lakehouse platform. Most of what you do there is Spark and SQL on Delta tables, so the fundamentals transfer directly; the platform adds managed compute, jobs, governance and collaboration.
+
+## 1. What runs underneath
+
+- **Spark** executes your PySpark and SQL: [Spark architecture](/spark/apache-spark-architecture/), [PySpark fundamentals](/pyspark/pyspark-fundamentals/).
+- **Delta Lake** stores tables with transactions, schema enforcement and time travel: [Delta Lake guide](/delta-lake/transactions-schema-evolution/).
+
+## 2. Workspace and code
+
+Notebooks for exploration, Git folders for version-controlled production code, and code review before anything runs on a schedule.
+
+Read: [Workspace, jobs and lakehouse concepts](/databricks/workspace-jobs-lakehouse/)
+
+## 3. Compute
+
+Interactive compute for development, job compute or serverless for production, SQL warehouses for BI. Production pipelines should never depend on a shared interactive cluster.
+
+## 4. Jobs and pipelines
+
+Jobs run tasks on schedules with dependencies, parameters, retries and alerts. Make each task idempotent and parameterised by the processing date.
+
+Read: [Idempotency in pipelines](/etl-elt/idempotency-in-data-pipelines/)
+
+## 5. Medallion architecture
+
+Bronze, silver and gold Delta tables, each rebuildable from the previous layer, with quality checks before gold.
+
+## 6. Governance with Unity Catalog
+
+Three-level names, SQL grants to groups, row filters and column masks, lineage and audit logs. Production jobs run as service principals.
+
+Read: [Unity Catalog and governance](/databricks/unity-catalog-governance/) · Practise: [What is Unity Catalog used for?](/interview/databricks/unity-catalog/)
+
+## 7. Cost
+
+Use job compute for production, auto-termination for interactive clusters, right-sized clusters, compaction for small files, and tags for chargeback.
+
+## Choosing a platform
+
+If you are comparing platforms, use a workload-based framework: [Snowflake vs Databricks](/snowflake/snowflake-vs-databricks/).
+
+Revise with the [Databricks cheat sheet](/resources/cheat-sheets/databricks/).

@@ -1,0 +1,73 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "PySpark Fundamentals for Data Engineers"
+seoTitle: "PySpark Fundamentals for Data Engineers"
+description: "The PySpark fundamentals in one guide: DataFrames and schemas, lazy evaluation, joins, window functions, UDF alternatives, partitions, shuffles and how to debug performance."
+inventoryId: "PILLAR-04"
+technology: ["pyspark", "spark"]
+topic: ["fundamentals"]
+difficulty: "Beginner"
+pillar: true
+featured: false
+related: ["articles:pyspark/dataframes-and-schemas", "articles:pyspark/transformations-vs-actions", "articles:pyspark/joins-and-join-strategy", "cheat-sheets:pyspark"]
+sources: [{"label": "PySpark documentation", "url": "https://spark.apache.org/docs/latest/api/python/index.html"}]
+versionContext: "Examples in the linked guides run on PySpark 4.2"
+---
+
+PySpark lets you write distributed data processing in Python. The API looks like SQL or pandas, but code runs lazily across a cluster, so correctness and performance depend on understanding a few core ideas.
+
+## 1. DataFrames and schemas
+
+A DataFrame is a distributed table with a schema. Define schemas explicitly in pipelines, choose a parse mode for malformed records deliberately, and remember that Spark 4 enables ANSI mode by default, so invalid casts raise errors.
+
+Read: [DataFrames and schemas](/pyspark/dataframes-and-schemas/)
+
+## 2. Lazy evaluation
+
+Transformations build a plan; actions run it. Spark optimises the whole chain before executing. Narrow transformations stay within a partition; wide ones shuffle data and start a new stage.
+
+Read: [Transformations vs actions](/pyspark/transformations-vs-actions/) · Practise: [Transformation vs action](/interview/spark/transformation-vs-action/), [What causes a shuffle](/interview/spark/what-causes-a-shuffle/)
+
+## 3. Joins
+
+Join on column names to avoid ambiguous columns, use `left_anti` and `left_semi` for existence checks, verify key uniqueness, and let small tables be broadcast.
+
+Read: [Joins and join strategy](/pyspark/joins-and-join-strategy/) · Practise: [Broadcast joins](/interview/pyspark/broadcast-join/)
+
+## 4. Window functions
+
+Ranking, previous-row comparisons and running totals work as in SQL. Always `partitionBy`, or Spark moves all data to one partition.
+
+Read: [PySpark window functions](/pyspark/window-functions/)
+
+## 5. Built-ins before UDFs
+
+Built-in functions run inside Spark's engine and are optimised; Python UDFs add serialisation and hide logic from the optimiser. Prefer built-ins, then pandas UDFs.
+
+Read: [UDFs and safer alternatives](/pyspark/udfs-and-safer-alternatives/) · Practise: [When to avoid Python UDFs](/interview/pyspark/avoid-python-udfs/)
+
+## 6. Partitions, shuffles and skew
+
+Partitions decide parallelism; shuffles are the main cost; skew makes a few tasks run far longer than the rest. Adaptive Query Execution helps with partition sizes, join strategy and skewed joins.
+
+Read: [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) · [Adaptive Query Execution](/spark/adaptive-query-execution/)
+
+## 7. Debugging with the Spark UI
+
+Find the slow stage, compare median and maximum task times, check shuffle sizes and spills, and read the executed plan.
+
+Read: [Jobs, stages and tasks](/spark/execution-model-jobs-stages-tasks/)
+
+## Learning order and checkpoints
+
+| Step | You are ready to move on when you can… |
+|------|-----------------------------------------|
+| DataFrames | Read a file with an explicit schema and explain the parse mode |
+| Laziness | Point to where the shuffles are in a job |
+| Joins | Choose between broadcast and sort-merge and explain why |
+| Windows | Write top-N-per-group in PySpark |
+| Performance | Diagnose skew from the Spark UI |
+
+Practise end to end with the [large-scale batch processing project](/projects/large-scale-batch-processing/) and revise with the [PySpark cheat sheet](/resources/cheat-sheets/pyspark/).

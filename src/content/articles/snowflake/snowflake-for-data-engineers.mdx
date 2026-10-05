@@ -1,0 +1,59 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Snowflake for Data Engineers"
+seoTitle: "Snowflake for Data Engineers: Complete Guide"
+description: "Snowflake for Data Engineers in one guide: architecture, virtual warehouses, loading data, ELT modelling, micro-partitions and pruning, governance, Time Travel and cost."
+inventoryId: "PILLAR-10"
+technology: ["snowflake", "data-warehousing"]
+topic: ["fundamentals"]
+difficulty: "Intermediate"
+pillar: true
+featured: false
+related: ["articles:snowflake/architecture-virtual-warehouses", "articles:snowflake/micro-partitions-clustering-pruning", "cheat-sheets:snowflake", "system-designs:cloud-data-warehouse-platform"]
+sources: []
+versionContext: "Describes Snowflake as documented in 2026; examples were not executed against a Snowflake account"
+---
+
+Snowflake is a managed cloud data warehouse. As a Data Engineer you will load data into it, model it with SQL, keep queries fast and keep compute costs under control.
+
+## 1. Architecture
+
+Storage, compute and cloud services are separate layers. Data is stored once; many independent virtual warehouses query it.
+
+Read: [Architecture and virtual warehouses](/snowflake/architecture-virtual-warehouses/) · Practise: [Virtual warehouses](/interview/snowflake/virtual-warehouses/)
+
+## 2. Loading data
+
+Stage files in object storage and load with `COPY INTO` (which skips already loaded files), or use managed connectors and CDC for databases and SaaS sources. Keep raw schemas unchanged so you can rebuild.
+
+## 3. Modelling with ELT
+
+Transform with SQL in layers (staging, intermediate, marts), often managed by a tool such as dbt, with tests on every model.
+
+Read: [ETL vs ELT](/etl-elt/etl-vs-elt/) · [dbt cheat sheet](/resources/cheat-sheets/dbt/) · [Star schema](/data-warehousing/star-schema/)
+
+## 4. Performance
+
+Queries are fast when they prune micro-partitions. Filter on raw columns, select only needed columns, load data in a sensible order, and add clustering keys only to large tables that need them.
+
+Read: [Micro-partitions, clustering and pruning](/snowflake/micro-partitions-clustering-pruning/) · Practise: [Micro-partitions and performance](/interview/snowflake/micro-partitions-performance/)
+
+## 5. Safety nets
+
+Time Travel to query or restore earlier data, and zero-copy cloning for safe testing and backfills.
+
+## 6. Governance
+
+Role-based access control, masking policies for sensitive columns, and separate roles for loading, transforming and reading.
+
+## 7. Cost
+
+Auto-suspend on every warehouse, a warehouse per workload, scale out for concurrency and fix pruning before scaling up, resource monitors and regular review of expensive queries.
+
+## Choosing a platform
+
+Compare against your workloads: [Snowflake vs Databricks](/snowflake/snowflake-vs-databricks/).
+
+Design a full platform in the [cloud data warehouse case study](/data-engineering/system-design/cloud-data-warehouse-platform/) and revise with the [Snowflake cheat sheet](/resources/cheat-sheets/snowflake/).

@@ -1,0 +1,71 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Apache Spark Architecture and Execution Model"
+seoTitle: "Apache Spark Architecture and Execution Model"
+description: "How Apache Spark works end to end: driver and executors, cluster managers, the Catalyst optimiser, jobs, stages and tasks, shuffles, memory and adaptive execution."
+inventoryId: "PILLAR-05"
+technology: ["spark", "pyspark"]
+topic: ["fundamentals"]
+difficulty: "Intermediate"
+pillar: true
+featured: false
+related: ["articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew", "articles:spark/adaptive-query-execution", "cheat-sheets:spark-interview"]
+sources: [{"label": "Spark documentation: Cluster mode overview", "url": "https://spark.apache.org/docs/latest/cluster-overview.html"}]
+versionContext: "Defaults and plans in the linked guides were checked on Spark 4.2"
+---
+
+Understanding Spark's architecture explains almost every performance behaviour you will see. This guide walks from the processes that make up an application to how a query becomes tasks.
+
+## The processes
+
+- **Driver**: runs your program, builds and optimises the plan, schedules tasks and collects results.
+- **Executors**: processes on worker machines that run tasks, cache data and store shuffle files. Each has a number of cores; each core runs one task at a time.
+- **Cluster manager**: allocates resources for executors (for example Kubernetes, YARN, standalone, or a managed platform's own scheduler).
+
+Parallelism is roughly the number of executors times cores per executor.
+
+## From code to a plan
+
+DataFrame and SQL code produce a **logical plan**. Spark's optimiser (Catalyst) rewrites it: pushing filters toward the data source, pruning unused columns, reordering joins and choosing physical operators. The result is a **physical plan** that you can inspect with `explain()`.
+
+Read: [Transformations vs actions](/pyspark/transformations-vs-actions/)
+
+## From plan to tasks
+
+An **action** submits work as one or more **jobs**. Each job is split into **stages** at **shuffle boundaries**, and each stage runs one **task per partition**.
+
+Read: [Jobs, stages and tasks](/spark/execution-model-jobs-stages-tasks/) · Practise: [Explain jobs, stages and tasks](/interview/spark/jobs-stages-tasks/)
+
+## Shuffles
+
+A shuffle redistributes data so rows with the same key meet on the same executor: map tasks write partitioned shuffle files, reduce tasks fetch them over the network. Shuffles are the most expensive part of most jobs and the place where skew appears.
+
+Read: [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) · Practise: [Data skew](/interview/spark/data-skew/), [Partition count](/interview/spark/partition-count-performance/)
+
+## Joins
+
+Spark chooses a physical join strategy: broadcast hash join when one side is small, sort-merge join for two large sides, and others in specific cases. The choice often dominates job cost.
+
+Read: [Joins and join strategy](/pyspark/joins-and-join-strategy/)
+
+## Memory
+
+Executor memory is shared between execution (joins, aggregations, sorts) and storage (cached data). When execution memory runs out, Spark **spills** to disk, which is slower but keeps the job alive; very large partitions or skewed keys are the usual cause.
+
+## Adaptive Query Execution
+
+At each shuffle boundary, AQE re-plans the rest of the query using real statistics: coalescing small partitions, switching to broadcast joins and splitting skewed join partitions. It is on by default in modern Spark.
+
+Read: [Adaptive Query Execution](/spark/adaptive-query-execution/)
+
+## Where Spark runs
+
+Spark runs on many platforms, including managed services such as [Databricks](/databricks/databricks-for-data-engineers/). The architecture is the same; the platform manages clusters, storage integration and scheduling.
+
+## Checkpoints
+
+You understand Spark's architecture when you can explain, for a given job, how many stages it has and why, which join strategy was used, where the shuffles are, and what the Spark UI would show if one key were skewed.
+
+Revise with the [Spark interview cheat sheet](/resources/cheat-sheets/spark-interview/).

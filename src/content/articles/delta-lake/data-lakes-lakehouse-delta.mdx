@@ -1,0 +1,65 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Lakes, Lakehouse Architecture and Delta Lake"
+seoTitle: "Data Lakes, Lakehouse Architecture and Delta Lake"
+description: "From data lakes to the lakehouse: file formats, table formats, Delta Lake transactions, schema evolution, medallion layers, maintenance and governance in one guide."
+inventoryId: "PILLAR-07"
+technology: ["delta-lake", "spark"]
+topic: ["fundamentals"]
+difficulty: "Intermediate"
+pillar: true
+featured: false
+related: ["articles:delta-lake/transactions-schema-evolution", "articles:delta-lake/delta-vs-traditional-lake-tables", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "system-designs:scalable-lakehouse"]
+sources: [{"label": "Delta Lake documentation", "url": "https://docs.delta.io/"}]
+versionContext: "Describes Delta Lake 3.x; comparable capabilities exist in Apache Iceberg and Apache Hudi"
+---
+
+A data lake stores files cheaply in object storage. A lakehouse adds the reliability of a warehouse on top of those files through an open **table format** such as Delta Lake. This guide connects the pieces.
+
+## 1. Lakes, warehouses and lakehouses
+
+Lakes are flexible and cheap but lack transactions and enforced schemas; warehouses are reliable but keep data in their own storage; lakehouses keep data in open formats on object storage while adding transactions and governance.
+
+Read: [Lake vs warehouse vs lakehouse](/data-warehousing/lake-vs-warehouse-vs-lakehouse/) · Practise: [When to choose each](/interview/data-engineering/lake-warehouse-lakehouse/)
+
+## 2. File formats
+
+Use columnar Parquet for analytical data, row-based Avro for messages, and treat JSON and CSV as landing formats only.
+
+Read: [Parquet vs Avro vs ORC](/delta-lake/parquet-vs-avro-vs-orc/) · [JSON vs Parquet](/delta-lake/json-vs-parquet/)
+
+## 3. Table formats and the transaction log
+
+Delta Lake writes Parquet data files plus a `_delta_log` of commits. That log provides atomic writes, consistent snapshots, optimistic concurrency, time travel and row-level `MERGE`, `UPDATE` and `DELETE`.
+
+Read: [Delta Lake transactions, schema evolution and time travel](/delta-lake/transactions-schema-evolution/) · [Delta vs plain Parquet tables](/delta-lake/delta-vs-traditional-lake-tables/) · Practise: [What Delta Lake solves](/interview/delta-lake/what-delta-lake-solves/)
+
+## 4. Schema enforcement and evolution
+
+Reject mismatched writes by default; evolve schemas deliberately, preferring additive changes and expand-and-contract migrations for breaking ones.
+
+Read: [Schema evolution patterns](/delta-lake/schema-evolution-patterns/) · Practise: [When schema evolution is safe](/interview/delta-lake/schema-evolution-safety/)
+
+## 5. Medallion layers
+
+Organise tables into bronze (raw), silver (cleaned and conformed) and gold (business models). Each layer reads only the previous one and can be rebuilt.
+
+Read: [Databricks workspace, jobs and lakehouse](/databricks/workspace-jobs-lakehouse/)
+
+## 6. Maintenance
+
+Compact small files, cluster by common filters, and `VACUUM` old files with a retention period that respects time travel and long readers.
+
+Read: [Partitioning, clustering and data layout](/data-warehousing/partitioning-clustering-data-layout/)
+
+## 7. Governance
+
+A catalog provides names, permissions, masking and lineage across engines.
+
+Read: [Unity Catalog and governance](/databricks/unity-catalog-governance/)
+
+## Design it
+
+Put it together in the [scalable lakehouse case study](/data-engineering/system-design/scalable-lakehouse/), then build the [Kafka → Spark → Delta streaming project](/projects/kafka-spark-delta-streaming/).
