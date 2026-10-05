@@ -1,0 +1,34 @@
+{
+  "Recursive CTEs → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: recursive CTE for a complete calendar"
+  },
+  "Subqueries in WHERE → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: subqueries in WHERE to exclude accounts"
+  },
+  "Isolation levels (ACID) → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: isolation levels for a consistent DAU report"
+  },
+  "EXCEPT / INTERSECT set operations → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: EXCEPT and INTERSECT for day-over-day movement"
+  },
+  "Percent of total → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: percent of total by platform"
+  },
+  "Query rewriting for performance → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: query rewriting for performance"
+  },
+  "Market basket / co-occurrence → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: market basket co-occurrence of actions"
+  },
+  "ROLLUP and CUBE → Daily Active Users": {
+    "ref": "interview-questions:sql/daily-active-users-sql-case-study",
+    "heading": "Approach: ROLLUP and CUBE for subtotals"
+  }
+}
