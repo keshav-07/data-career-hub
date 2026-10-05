@@ -1,0 +1,67 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Data Lake vs Data Warehouse vs Lakehouse"
+description: "Compare data lakes, data warehouses and lakehouses by storage, schema, transactions, cost and users, and learn which questions decide the right architecture."
+inventoryId: "TECH-21"
+technology: ["data-warehousing", "delta-lake"]
+topic: ["architecture", "lakehouse"]
+difficulty: "Beginner"
+related: ["interview-questions:data-engineering/lake-warehouse-lakehouse", "articles:delta-lake/transactions-schema-evolution", "articles:etl-elt/etl-vs-elt"]
+sources: [{"label": "Delta Lake documentation: Introduction", "url": "https://docs.delta.io/latest/delta-intro.html"}]
+versionContext: "Conceptual; product capabilities change quickly, so verify specifics against vendor documentation"
+---
+
+These three terms describe where analytical data lives and what guarantees it has.
+
+| | Data lake | Data warehouse | Lakehouse |
+|--|-----------|----------------|-----------|
+| Storage | Files in object storage (Parquet, JSON, CSV) | Managed storage inside the warehouse | Files in object storage plus a table format (Delta Lake, Apache Iceberg, Apache Hudi) |
+| Schema | Applied when reading | Enforced when writing | Enforced when writing, with controlled evolution |
+| Transactions | None by default | Yes | Yes, through the table format's log |
+| Data types | Anything, including unstructured | Mostly structured | Structured and semi-structured; files of any type alongside |
+| Compute | Any engine that reads files | The warehouse's engine | Multiple engines over the same tables |
+| Typical users | Data engineers, data scientists | Analysts, BI tools | Both |
+
+## Data lake
+
+Cheap, durable object storage holding raw and processed files. It is flexible: store anything, process it with any engine. The weakness is reliability: without transactions, concurrent writes and failed jobs can leave inconsistent data, and without enforced schemas the lake can drift into a "swamp" no one trusts.
+
+## Data warehouse
+
+A database optimised for analytical SQL. It enforces schemas, provides transactions, and is easy for analysts. Cloud warehouses separate storage from compute so each scales independently. The trade-offs: data must be loaded into the warehouse's storage, and machine-learning workloads that want raw files are less natural.
+
+## Lakehouse
+
+A lakehouse adds warehouse-like guarantees to lake storage through an **open table format**: a transaction log on top of Parquet files that provides ACID commits, schema enforcement, time travel and efficient metadata. Many engines (Spark, SQL engines, warehouses with external table support) can read the same tables.
+
+## How to choose
+
+1. **Who uses the data?** Mostly SQL analysts and dashboards favour a warehouse. Mixed BI, ML and engineering workloads favour a lakehouse.
+2. **What data?** Large volumes of semi-structured or unstructured data push toward lake storage.
+3. **Openness.** Open table formats reduce lock-in and let several engines share one copy.
+4. **Team skills and operations.** A managed warehouse has fewer moving parts.
+5. **Cost profile.** Compare storage, compute and data movement for your workload rather than relying on general claims.
+
+Many organisations combine them: raw data in a lake, curated tables in a lakehouse format, and a warehouse or SQL endpoint for BI.
+
+<Callout tone="info" title="The line is blurring">
+
+Warehouses increasingly read open table formats, and lakehouse platforms increasingly offer warehouse-style SQL. Focus on the properties you need (transactions, schema enforcement, openness, performance) rather than the label.
+
+</Callout>
+
+## Common mistakes
+
+1. Treating a lake as a dumping ground with no layers, schemas or ownership.
+2. Choosing a lakehouse "because it is modern" when the team only needs BI on structured data.
+3. Copying the same data into a lake and a warehouse without a clear source of truth.
+
+## Interview relevance
+
+See the [interview answer](/interview/data-engineering/lake-warehouse-lakehouse/). Strong answers name the deciding properties rather than reciting definitions.
+
+## Key takeaway
+
+A lake is flexible storage, a warehouse is reliable SQL, and a lakehouse adds reliability to lake storage through an open table format. Choose by users, data types, openness and operations.

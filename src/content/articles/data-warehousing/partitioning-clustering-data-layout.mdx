@@ -1,0 +1,81 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Partitioning, Clustering and Data Layout"
+description: "How partitioning and clustering let warehouses and lakehouses skip data, how to choose keys, and why too many small partitions or files make queries slower."
+inventoryId: "TECH-20"
+technology: ["data-warehousing", "delta-lake"]
+topic: ["partitioning", "clustering", "performance"]
+difficulty: "Intermediate"
+prerequisites: ["articles:sql/query-optimization-fundamentals"]
+related: ["articles:spark/partitions-shuffles-skew", "articles:delta-lake/transactions-schema-evolution"]
+previous: "articles:data-warehousing/slowly-changing-dimensions"
+sources: [{"label": "Delta Lake documentation: Optimizations", "url": "https://docs.delta.io/latest/optimizations-oss.html"}, {"label": "Snowflake documentation: Micro-partitions and data clustering", "url": "https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions"}]
+versionContext: "Conceptual; feature names and limits vary by platform, so check your engine's documentation"
+---
+
+Analytical queries are fast when the engine can **skip** most of the data. Partitioning and clustering are two ways to arrange data so that skipping is possible.
+
+## Partitioning
+
+Partitioning splits a table into separate groups by the value of one column, typically a date:
+
+```text
+events/
+  event_date=2026-10-01/ part-0001.parquet ...
+  event_date=2026-10-02/ part-0001.parquet ...
+```
+
+A query with `WHERE event_date = '2026-10-02'` reads only that folder. This is **partition pruning**. Partitioning also makes maintenance simple: reprocessing a day means overwriting one partition.
+
+### Choosing a partition column
+
+- It appears in most filters (usually a date).
+- It has **low to moderate cardinality**: hundreds or a few thousand values, not millions.
+- Each partition holds a substantial amount of data. Partitioning a small table by a high-cardinality column produces thousands of tiny files, which is slower than no partitioning at all.
+
+## Clustering and file statistics
+
+Within (or instead of) partitions, engines keep **statistics per file or block**, such as the minimum and maximum of each column. If data with similar values is stored together, many files can be skipped for a filter like `customer_id = 42`, because 42 falls outside their min/max range.
+
+**Clustering** reorganises data so related values sit in the same files:
+
+- Snowflake stores tables in **micro-partitions** with metadata and supports clustering keys for large tables.
+- Delta Lake supports **Z-ordering** and, in newer versions, **liquid clustering**.
+- BigQuery supports partitioned and clustered tables.
+
+The names differ; the idea is the same: improve the min/max ranges so pruning works on columns other than the partition column.
+
+## The small-files problem
+
+Every file has overhead: opening it, reading its footer, scheduling a task. Thousands of small files (from frequent appends, streaming micro-batches or over-partitioning) can make reads slower than one large file. Compact regularly (for example `OPTIMIZE` in Delta Lake) and aim for files in the hundreds of megabytes for large tables.
+
+## How it fits together
+
+| Technique | Skips data by | Best for |
+|-----------|---------------|----------|
+| Partitioning | Folder or partition value | One dominant, low-cardinality filter (date) |
+| Clustering / Z-order | File min/max statistics | Additional high-cardinality filters (customer, product) |
+| Compaction | Fewer, larger files | Tables written in small increments |
+
+<Callout tone="warning" title="Do not partition by everything">
+
+Partitioning by date *and* customer *and* country multiplies partitions and produces tiny files. Partition by the main filter, cluster by the next ones.
+
+</Callout>
+
+## Common mistakes
+
+1. Partitioning by a high-cardinality column (user id, timestamp to the second).
+2. Filtering on an expression of the partition column, which can prevent pruning in some engines.
+3. Never compacting a streaming table.
+4. Choosing keys without looking at actual query patterns.
+
+## Interview relevance
+
+Expect "How would you lay out a large events table?" and "What is partition pruning?". Discuss the filter pattern, cardinality, file sizes and compaction.
+
+## Key takeaway
+
+Partition by the most common low-cardinality filter, cluster by the next most common filters, and keep files large enough to read efficiently.

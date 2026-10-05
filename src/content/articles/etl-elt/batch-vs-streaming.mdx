@@ -1,0 +1,77 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Batch vs Streaming Data Pipelines"
+description: "When to process data in batches and when to stream it: latency needs, complexity, correctness with late data, cost, and the micro-batch middle ground."
+inventoryId: "TECH-22"
+technology: ["etl-elt", "kafka", "spark"]
+topic: ["batch", "streaming", "architecture"]
+difficulty: "Intermediate"
+prerequisites: ["articles:etl-elt/etl-vs-elt"]
+related: ["articles:kafka/topics-partitions-consumer-groups", "system-designs:scalable-batch-pipeline", "projects:kafka-spark-delta-streaming"]
+sources: [{"label": "Spark documentation: Structured Streaming programming guide", "url": "https://spark.apache.org/docs/latest/streaming/index.html"}]
+versionContext: "Conceptual; applies to Spark Structured Streaming, Flink, Kafka Streams and warehouse streaming features"
+---
+
+**Batch** pipelines process a bounded set of data on a schedule (every night, every hour). **Streaming** pipelines process an unbounded flow of events continuously, with results updated within seconds or minutes.
+
+## Compare them on what matters
+
+| | Batch | Streaming |
+|--|-------|-----------|
+| Latency | Minutes to hours | Seconds to minutes |
+| Complexity | Lower: bounded input, simple reruns | Higher: state, late data, ordering, checkpoints |
+| Correctness with late data | Rerun the affected period | Watermarks and update logic required |
+| Reprocessing history | Natural (rerun a date range) | Possible, but needs replayable sources and care |
+| Cost | Compute runs only during the window | Compute runs continuously |
+| Debugging | Easier: inspect a fixed input | Harder: input keeps changing |
+
+## Start from the latency requirement
+
+Ask: **what decision depends on this data, and how fresh must it be?**
+
+- A daily finance report needs correct numbers by morning: **batch**.
+- Fraud detection must react before a payment completes: **streaming**.
+- A dashboard "refreshed every 15 minutes" is often well served by **frequent batch or micro-batch**, which keeps batch's simplicity.
+
+Streaming is not automatically "better". It trades simplicity and cost for latency, so it should be justified by a real requirement.
+
+## Streaming concepts you must handle
+
+- **Event time vs processing time.** Events arrive late or out of order; aggregate by when they happened, not when they arrived.
+- **Watermarks** bound how late data may be and let the engine discard old state.
+- **State and checkpoints** let a job restart without losing or double-counting data.
+- **Delivery semantics.** Most systems are at-least-once end to end; make sinks idempotent.
+
+## The micro-batch middle ground
+
+Engines such as Spark Structured Streaming process a stream as a sequence of small batches. You get continuous ingestion with batch-style processing, and you can tune the trigger interval from seconds to hours to trade latency for cost.
+
+## Lambda and kappa (briefly)
+
+- **Lambda architecture** runs a batch layer and a streaming layer in parallel and merges them. It is powerful but means maintaining logic twice.
+- **Kappa architecture** uses a single streaming pipeline and replays the log to reprocess. It is simpler if the log retains enough history.
+
+Most modern designs prefer one code path where possible.
+
+<Callout tone="info" title="A practical pattern">
+
+Ingest events continuously into a lakehouse table (streaming), then build curated aggregates on a schedule (batch). Fresh raw data is available quickly, and the complex business logic runs in simpler batch jobs.
+
+</Callout>
+
+## Common mistakes
+
+1. Choosing streaming without a latency requirement that justifies it.
+2. Aggregating by processing time and getting wrong counts when events arrive late.
+3. Ignoring replay: if the source cannot be replayed, recovery from a bug is hard.
+4. Running a streaming job with no monitoring of lag.
+
+## Interview relevance
+
+"Batch or streaming for this use case?" appears in most system-design rounds. Start from the freshness requirement, then discuss late data, state and cost.
+
+## Key takeaway
+
+Choose by freshness need. Batch is simpler and cheaper; streaming is justified when decisions depend on near-real-time data, and it requires deliberate handling of time, state and duplicates.

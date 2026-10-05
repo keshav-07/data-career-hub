@@ -1,0 +1,119 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Slowly Changing Dimensions: Type 1 vs Type 2"
+seoTitle: "Slowly Changing Dimensions: Type 1 vs Type 2"
+description: "Keep or overwrite history when dimension attributes change: SCD Type 1 and Type 2 explained with a working, rerunnable Type 2 load and point-in-time joins."
+inventoryId: "TECH-19"
+technology: ["data-warehousing", "sql"]
+topic: ["scd", "modelling"]
+difficulty: "Intermediate"
+prerequisites: ["articles:data-warehousing/star-schema"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:data-warehousing/partitioning-clustering-data-layout"]
+previous: "articles:data-warehousing/star-schema"
+next: "articles:data-warehousing/partitioning-clustering-data-layout"
+sources: [{"label": "Kimball Group: Dimensional Modeling Techniques", "url": "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/"}]
+versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45; MERGE-based variants differ by engine"
+---
+
+Dimension attributes change: a customer moves city, a product changes category. A **slowly changing dimension (SCD)** strategy decides whether the warehouse forgets the old value or keeps it.
+
+## Type 1: overwrite
+
+Replace the old value. History is lost, and every fact, past or present, now reports the new value.
+
+```sql
+UPDATE dim_customer SET city = 'Bengaluru' WHERE customer_id = 'C1';
+```
+
+Use Type 1 for corrections (a typo in a name) or attributes where history has no analytical value.
+
+## Type 2: add a new version
+
+Keep the old row, close its validity period, and insert a new row with a new surrogate key. Facts recorded while the old version was current keep pointing to it.
+
+```sql
+CREATE TABLE dim_customer (
+  customer_key INTEGER PRIMARY KEY AUTOINCREMENT,  -- surrogate key, one per version
+  customer_id  TEXT,                               -- business key
+  city         TEXT,
+  valid_from   TEXT,
+  valid_to     TEXT,                               -- '9999-12-31' for the current row
+  is_current   INT
+);
+INSERT INTO dim_customer (customer_id, city, valid_from, valid_to, is_current) VALUES
+  ('C1', 'Pune',  '2026-01-01', '9999-12-31', 1),
+  ('C2', 'Delhi', '2026-01-01', '9999-12-31', 1);
+
+CREATE TABLE stg_customer (customer_id TEXT, city TEXT);
+INSERT INTO stg_customer VALUES ('C1', 'Bengaluru'), ('C2', 'Delhi'), ('C3', 'Mumbai');
+```
+
+C1 moved city, C2 is unchanged and C3 is new. The load for 2026-10-01 runs in two steps:
+
+```sql
+-- 1. Close current rows whose tracked attribute changed
+UPDATE dim_customer
+SET valid_to = '2026-10-01', is_current = 0
+WHERE is_current = 1
+  AND EXISTS (SELECT 1 FROM stg_customer s
+              WHERE s.customer_id = dim_customer.customer_id
+                AND s.city <> dim_customer.city);
+
+-- 2. Insert a current row for every key that has none (changed or new)
+INSERT INTO dim_customer (customer_id, city, valid_from, valid_to, is_current)
+SELECT s.customer_id, s.city, '2026-10-01', '9999-12-31', 1
+FROM stg_customer s
+LEFT JOIN dim_customer d ON d.customer_id = s.customer_id AND d.is_current = 1
+WHERE d.customer_id IS NULL;
+```
+
+| customer_key | customer_id | city | valid_from | valid_to | is_current |
+|---|---|---|---|---|---|
+| 1 | C1 | Pune | 2026-01-01 | 2026-10-01 | 0 |
+| 3 | C1 | Bengaluru | 2026-10-01 | 9999-12-31 | 1 |
+| 2 | C2 | Delhi | 2026-01-01 | 9999-12-31 | 1 |
+| 4 | C3 | Mumbai | 2026-10-01 | 9999-12-31 | 1 |
+
+Running both steps a second time changes nothing (still four rows), because step 1 finds no remaining differences and step 2 finds no keys without a current row. That makes the load safe to retry. Wrap both steps in one transaction so a failure between them cannot leave a key with no current row.
+
+## Point-in-time joins
+
+To report each fact with the attribute **as it was** at the time, join on the validity range:
+
+```sql
+SELECT f.order_id, f.order_date, d.city
+FROM fact_orders f
+JOIN dim_customer d
+  ON d.customer_id = f.customer_id
+ AND f.order_date >= d.valid_from
+ AND f.order_date <  d.valid_to;
+```
+
+A March order reports Pune; an October order reports Bengaluru. Alternatively, store the surrogate key on the fact row at load time and join on it directly, which is simpler and faster for queries.
+
+## Which attributes to track
+
+Decide per column. Track (Type 2) the attributes analysts segment history by, such as region or customer tier. Overwrite (Type 1) corrections and attributes with no historical meaning. Many dimensions mix both.
+
+<Callout tone="info" title="Use a half-open validity range">
+
+Using `valid_from <= date < valid_to`, with the next version's `valid_from` equal to the previous `valid_to`, guarantees each date matches exactly one version, with no gaps and no overlaps.
+
+</Callout>
+
+## Common mistakes
+
+1. Joining facts to all versions of a Type 2 dimension (instead of the current one or the valid one), multiplying rows.
+2. Closed ranges (`BETWEEN valid_from AND valid_to`) that match two versions on the change date.
+3. Tracking every column as Type 2, creating a new version on irrelevant changes.
+4. Non-idempotent loads that create duplicate current rows when rerun.
+
+## Interview relevance
+
+"How would you handle a customer changing address?" is the classic prompt. Explain Type 1 versus Type 2, surrogate keys, validity ranges and how the load stays idempotent.
+
+## Key takeaway
+
+Type 1 overwrites; Type 2 versions. For Type 2, use surrogate keys, half-open validity ranges and a rerunnable two-step load.
