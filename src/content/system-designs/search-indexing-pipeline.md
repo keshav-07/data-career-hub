@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Search Indexing Pipeline"
-description: "A system-design case study for keeping a search index in sync with a product database: CDC, denormalisation, versioned upserts, bulk writes and zero-downtime reindexing."
+description: "A system-design case study for keeping a search index in sync with a product database: CDC, denormalisation, versioned upserts and zero-downtime reindexing."
 technology: ["data-engineering", "kafka"]
 topic: ["streaming", "search", "architecture"]
 tags: ["search", "opensearch", "elasticsearch", "cdc", "reindexing", "index-alias"]
