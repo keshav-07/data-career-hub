@@ -1,0 +1,221 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Number of Islands: Count Connected Land Cells with BFS, DFS or Union-Find"
+seoTitle: "Number of Islands: BFS, DFS and Union-Find"
+description: "Count groups of connected land cells in a grid with a flood-fill BFS or DFS and with union-find, including the templates, complexity and edge-case tests."
+technology: ["dsa"]
+topic: ["graphs"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Treat each land cell as a graph node connected to its land neighbours up, down, left and right. Scan the grid; whenever you meet unvisited land, increase the count and flood-fill the whole island with BFS or DFS, marking every cell visited so it is never counted again. Each cell is visited a constant number of times, so the time is O(R * C); a BFS queue or visited set needs O(R * C) space in the worst case. Union-find gives the same count and also works when land arrives incrementally."
+followUps: ["How would you handle cells that turn into land one at a time (Number of Islands II)?", "What breaks if you use recursive DFS on a 1000 by 1000 grid of land?", "How would you count islands that include diagonal neighbours?", "How would you count distinct island shapes?"]
+previous: "interview-questions:dsa/n-queens"
+next: "interview-questions:dsa/clone-graph"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a grid where `"1"` is land and `"0"` is water. An island is a group of land cells joined horizontally or
+vertically (not diagonally). Count the islands. Everything outside the grid counts as water.
+
+This is widely known as LeetCode 200, "Number of Islands". It is the canonical "count connected components in an
+implicit graph" question; [Max Area of Island](/interview/dsa/max-area-of-island/) and
+[Number of Connected Components](/interview/dsa/number-of-connected-components/) are close relatives.
+
+Assume up to 300 by 300 cells.
+
+## Examples
+
+```text
+1 1 0 0 1
+1 0 0 1 1
+0 0 1 0 0
+1 0 0 0 1
+-> 5 islands: top-left group of three, top-right group of three, and three single cells
+
+0 0
+0 0
+-> 0
+
+1 0 1
+0 1 0
+1 0 1
+-> 5 (diagonal cells do not connect)
+```
+
+## Approach 1: DFS flood fill with a visited set
+
+For every unvisited land cell, count one island and recursively visit all land reachable from it.
+
+```python
+def num_islands_dfs(grid):
+    if not grid or not grid[0]:
+        return 0
+    rows, cols = len(grid), len(grid[0])
+    seen = set()
+
+    def dfs(r, c):
+        if r < 0 or r >= rows or c < 0 or c >= cols:
+            return
+        if grid[r][c] != "1" or (r, c) in seen:
+            return
+        seen.add((r, c))
+        dfs(r + 1, c); dfs(r - 1, c); dfs(r, c + 1); dfs(r, c - 1)
+
+    count = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] == "1" and (r, c) not in seen:
+                count += 1
+                dfs(r, c)
+    return count
+```
+
+This is already O(R * C), but recursion depth can reach R * C on a grid that is all land, which overflows Python's
+default recursion limit (about 1000) on large inputs.
+
+## Approach 2: optimal, iterative BFS (and union-find)
+
+### BFS template for grids
+
+```text
+for each cell s:
+    if s is land and not visited:
+        count += 1
+        mark s visited; queue = [s]
+        while queue:
+            cell = queue.popleft()
+            for each of the 4 neighbours nb:
+                if nb is inside, land and not visited:
+                    mark nb visited; queue.append(nb)     # mark when enqueuing, not when popping
+```
+
+### Python solution
+
+```python
+from collections import deque
+
+DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+
+def num_islands(grid):
+    if not grid or not grid[0]:
+        return 0
+    rows, cols = len(grid), len(grid[0])
+    seen = [[False] * cols for _ in range(rows)]
+    count = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] != "1" or seen[r][c]:
+                continue
+            count += 1
+            seen[r][c] = True
+            queue = deque([(r, c)])
+            while queue:
+                cr, cc = queue.popleft()
+                for dr, dc in DIRS:
+                    nr, nc = cr + dr, cc + dc
+                    if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == "1" and not seen[nr][nc]:
+                        seen[nr][nc] = True
+                        queue.append((nr, nc))
+    return count
+```
+
+### Union-find variant
+
+Start with one component per land cell and union each land cell with its right and lower land neighbours. Every
+successful union merges two islands, so the answer is land cells minus successful unions.
+
+```python
+def num_islands_union_find(grid):
+    if not grid or not grid[0]:
+        return 0
+    rows, cols = len(grid), len(grid[0])
+    parent = list(range(rows * cols))
+    rank = [0] * (rows * cols)
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]      # path halving
+            a = parent[a]
+        return a
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return False
+        if rank[ra] < rank[rb]:
+            ra, rb = rb, ra
+        parent[rb] = ra
+        if rank[ra] == rank[rb]:
+            rank[ra] += 1
+        return True
+
+    count = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] != "1":
+                continue
+            count += 1
+            for nr, nc in ((r + 1, c), (r, c + 1)):
+                if nr < rows and nc < cols and grid[nr][nc] == "1" and union(r * cols + c, nr * cols + nc):
+                    count -= 1
+    return count
+```
+
+### Complexity
+
+- BFS/DFS: O(R * C) time, since every cell is enqueued at most once and checks 4 neighbours. O(R * C) space for the
+  visited grid and, in the worst case, the queue.
+- Union-find: O(R * C * α(R * C)) time, where α is the inverse Ackermann function (effectively constant), and
+  O(R * C) space.
+
+## Tests
+
+```python
+def to_grid(rows):
+    return [list(r) for r in rows]
+
+g1 = to_grid(["11001", "10011", "00100", "10001"])
+g2 = to_grid(["00", "00"])
+g3 = to_grid(["101", "010", "101"])
+
+for fn in (num_islands, num_islands_dfs, num_islands_union_find):
+    assert fn(g1) == 5
+    assert fn(g2) == 0                         # no land
+    assert fn(g3) == 5                         # diagonals do not join
+    assert fn([]) == 0 and fn([[]]) == 0       # empty input
+    assert fn([["1"]]) == 1                    # single land cell
+    assert fn([["0"]]) == 0
+    assert fn(to_grid(["111", "101", "111"])) == 1   # ring with a lake inside
+
+# Large all-land grid: the BFS version has no recursion-depth problem
+big = [["1"] * 120 for _ in range(120)]
+assert num_islands(big) == 1
+assert num_islands_union_find(big) == 1
+
+# Input is not modified
+before = [row[:] for row in g1]
+num_islands(g1)
+assert g1 == before
+```
+
+## Edge cases and pitfalls
+
+- **Marking visited when popping instead of when pushing.** A cell can then be enqueued several times, which is
+  still correct but can blow up the queue.
+- **Recursion limit** with DFS on big grids. Use BFS or an explicit stack.
+- **Mutating the input** (overwriting `1` with `0`) is a common trick that saves memory; mention that it destroys the
+  caller's data.
+- **Strings versus integers.** The grid holds `"1"`, not `1`; comparing with the wrong type counts zero islands.
+- **Diagonals** never connect unless the interviewer says so.
+
+## Where this shows up in data engineering
+
+Connected components are how entity resolution groups records: if record A matches B and B matches C, all three are
+one customer. At scale this is the same union-find or iterative label propagation (Spark GraphFrames has a
+connected-components algorithm), and the "mark visited once" rule is what keeps it linear.

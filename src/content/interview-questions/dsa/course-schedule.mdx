@@ -1,0 +1,186 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Course Schedule: Detect a Cycle in a Prerequisite Graph with Kahn's Algorithm"
+seoTitle: "Course Schedule: DAG Cycle Detection"
+description: "Decide whether all courses can be finished by detecting cycles in the prerequisite graph with Kahn's topological sort or three-colour DFS, with tests."
+technology: ["dsa"]
+topic: ["graphs", "topological-sort"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Model courses as nodes and each prerequisite pair as a directed edge from the prerequisite to the course. All courses can be finished exactly when this graph has no cycle. Kahn's algorithm counts in-degrees, repeatedly removes nodes with in-degree zero and lowers their neighbours' in-degrees; if every node gets removed there is no cycle. A three-colour DFS that finds an edge back to a node still on the stack is the alternative. Both run in O(V + E) time and space."
+followUps: ["How would you return a valid order rather than true or false?", "How would you report the courses that form the cycle?", "How do Airflow or dbt use the same check when they parse a DAG?", "What if some prerequisites are optional (either A or B)?"]
+previous: "interview-questions:dsa/rotting-oranges"
+next: "interview-questions:dsa/course-schedule-ii"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+There are `num_courses` courses labelled 0 to `num_courses - 1`, and a list of pairs `[course, prereq]` meaning you
+must finish `prereq` before `course`. Decide whether it is possible to finish every course.
+
+This is widely known as LeetCode 207, "Course Schedule". In graph terms: is the directed graph acyclic (a DAG)?
+[Course Schedule II](/interview/dsa/course-schedule-ii/) asks for an actual order.
+
+Assume up to 2,000 courses and 5,000 pairs.
+
+## Examples
+
+```text
+4 courses, pairs [[1,0],[2,1],[3,1]]
+0 -> 1 -> 2
+       \-> 3
+-> True  (take 0, 1, then 2 and 3)
+
+3 courses, pairs [[0,1],[1,2],[2,0]]
+1 -> 0 -> 2 -> 1     a cycle
+-> False
+
+2 courses, no pairs -> True
+1 course, pair [[0,0]] (a course that requires itself) -> False
+```
+
+## Approach 1: DFS from every node with a path set
+
+For each course, explore its prerequisites depth-first while tracking the courses on the current path; reaching a
+course already on the path means a cycle.
+
+```python
+def can_finish_naive(num_courses, prerequisites):
+    graph = [[] for _ in range(num_courses)]
+    for course, prereq in prerequisites:
+        graph[prereq].append(course)
+
+    def has_cycle(node, on_path):
+        if node in on_path:
+            return True
+        on_path.add(node)
+        found = any(has_cycle(nxt, on_path) for nxt in graph[node])
+        on_path.remove(node)
+        return found
+
+    return not any(has_cycle(c, set()) for c in range(num_courses))
+```
+
+Without remembering which nodes are already proven safe, the same subgraphs are explored again and again; in a
+layered graph this becomes exponential.
+
+## Approach 2: optimal, topological sort
+
+### Kahn's algorithm (BFS) template
+
+```text
+build adjacency list and indegree[] (number of prerequisites per node)
+queue = all nodes with indegree 0
+removed = 0
+while queue:
+    node = queue.popleft(); removed += 1
+    for nxt in adj[node]:
+        indegree[nxt] -= 1
+        if indegree[nxt] == 0: queue.append(nxt)
+acyclic = (removed == number of nodes)
+```
+
+Nodes in a cycle never reach in-degree zero, because each waits for another node in the same cycle.
+
+### Python solution (Kahn)
+
+```python
+from collections import deque
+
+def can_finish(num_courses, prerequisites):
+    graph = [[] for _ in range(num_courses)]
+    indegree = [0] * num_courses
+    for course, prereq in prerequisites:
+        graph[prereq].append(course)
+        indegree[course] += 1
+
+    queue = deque(c for c in range(num_courses) if indegree[c] == 0)
+    taken = 0
+    while queue:
+        node = queue.popleft()
+        taken += 1
+        for nxt in graph[node]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    return taken == num_courses
+```
+
+### Three-colour DFS template
+
+Colour 0 = unvisited, 1 = on the current DFS path, 2 = finished and proven cycle-free. An edge into a colour-1 node is
+a back edge, which means a cycle. Colour 2 is the memo that makes it linear.
+
+```python
+def can_finish_dfs(num_courses, prerequisites):
+    graph = [[] for _ in range(num_courses)]
+    for course, prereq in prerequisites:
+        graph[prereq].append(course)
+    colour = [0] * num_courses
+
+    for start in range(num_courses):
+        if colour[start]:
+            continue
+        stack = [(start, iter(graph[start]))]       # iterative to avoid recursion limits
+        colour[start] = 1
+        while stack:
+            node, children = stack[-1]
+            nxt = next(children, None)
+            if nxt is None:
+                colour[node] = 2
+                stack.pop()
+            elif colour[nxt] == 1:
+                return False                         # back edge: cycle
+            elif colour[nxt] == 0:
+                colour[nxt] = 1
+                stack.append((nxt, iter(graph[nxt])))
+    return True
+```
+
+### Complexity
+
+Both versions: O(V + E) time, because each node is dequeued or finished once and each edge is examined once, and
+O(V + E) space for the adjacency list plus O(V) for the queue or stack.
+
+## Tests
+
+```python
+for fn in (can_finish, can_finish_dfs, can_finish_naive):
+    assert fn(4, [[1, 0], [2, 1], [3, 1]])
+    assert not fn(3, [[0, 1], [1, 2], [2, 0]])         # 3-cycle
+    assert fn(2, [])                                    # no edges
+    assert not fn(1, [[0, 0]])                          # self-loop
+    assert fn(0, [])                                    # no courses
+    assert not fn(2, [[0, 1], [1, 0]])                  # 2-cycle
+    # Disconnected: one part fine, another part cyclic
+    assert not fn(5, [[1, 0], [3, 2], [4, 3], [2, 4]])
+    assert fn(5, [[1, 0], [3, 2], [4, 3]])
+    assert fn(3, [[1, 0], [1, 0], [2, 1]])              # duplicate pair
+
+# A long chain: iterative versions handle depth easily
+chain = [[i + 1, i] for i in range(1999)]
+assert can_finish(2000, chain) and can_finish_dfs(2000, chain)
+assert not can_finish(2000, chain + [[0, 1999]])
+```
+
+## Edge cases and pitfalls
+
+- **Edge direction.** `[course, prereq]` is an edge from `prereq` to `course`. Reversing every edge gives the same
+  yes/no answer here, but the wrong order in Course Schedule II.
+- **Two colours instead of three.** Marking nodes simply as "visited" cannot tell a cycle from a node reached twice
+  through different paths (a diamond), so it reports false cycles.
+- **Disconnected graphs.** Start from every unvisited node, not only from node 0.
+- **Self-loops and duplicate pairs.** A self-loop is a cycle; duplicate pairs are fine in Kahn's algorithm as long as
+  you count in-degree once per stored edge.
+- **Recursion limit** for long chains with recursive DFS.
+
+## Where this shows up in data engineering
+
+This is exactly DAG validation. Airflow refuses to load a DAG whose task dependencies contain a cycle, dbt does the
+same for model references, and both then run tasks in a topological order: a task becomes ready when all its upstream
+tasks have succeeded, which is Kahn's in-degree counting with "succeeded" in place of "removed".

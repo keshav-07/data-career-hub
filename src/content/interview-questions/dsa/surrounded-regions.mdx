@@ -1,0 +1,168 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Surrounded Regions: Capture Enclosed Cells by Flood-Filling from the Border"
+seoTitle: "Surrounded Regions: Border Flood Fill"
+description: "Flip every O region that cannot reach the grid border by first marking border-connected cells with BFS, then sweeping the grid once, with tests."
+technology: ["dsa"]
+topic: ["graphs"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+shortAnswer: "A region of O cells survives exactly when it touches the border. So flood-fill (BFS or DFS) from every O on the border and mark those cells as safe. Then sweep the grid once: any O that is not marked is enclosed and becomes X, and marked cells go back to O. Each cell is processed a constant number of times, so the time is O(R * C) and the extra space is O(R * C) in the worst case for the queue."
+followUps: ["Why is starting from the border easier than starting from each region?", "How would union-find with a virtual border node solve it?", "How would you do it without modifying the grid in place?"]
+previous: "interview-questions:dsa/pacific-atlantic-water-flow"
+next: "interview-questions:dsa/rotting-oranges"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You have a board of `X` and `O` characters. A group of `O` cells connected up, down, left or right is captured when
+none of its cells lies on the edge of the board; capturing turns all its cells into `X`. Modify the board in place so
+that every captured group becomes `X`, leaving groups that reach the edge unchanged.
+
+This is widely known as LeetCode 130, "Surrounded Regions".
+
+Assume up to 200 by 200 cells.
+
+## Examples
+
+```text
+before          after
+X X X X X       X X X X X
+X O O X X       X X X X X      the O group in the middle touches no edge: captured
+X X O X X       X X X X X
+X X X X O       X X X X O      this O is on the edge: kept
+O O X X X       O O X X X      this group reaches the edge: kept
+
+O O             O O            all on the edge: nothing changes
+O O             O O
+```
+
+## Approach 1: search each region and check whether it escapes
+
+For every unvisited `O`, collect its region with BFS and note whether any cell is on the border. If not, flip the
+whole region.
+
+```python
+from collections import deque
+
+def solve_by_region(board):
+    if not board or not board[0]:
+        return
+    rows, cols = len(board), len(board[0])
+    seen = set()
+    for r in range(rows):
+        for c in range(cols):
+            if board[r][c] != "O" or (r, c) in seen:
+                continue
+            region, touches_edge = [], False
+            seen.add((r, c))
+            queue = deque([(r, c)])
+            while queue:
+                cr, cc = queue.popleft()
+                region.append((cr, cc))
+                if cr in (0, rows - 1) or cc in (0, cols - 1):
+                    touches_edge = True
+                for nr, nc in ((cr + 1, cc), (cr - 1, cc), (cr, cc + 1), (cr, cc - 1)):
+                    if 0 <= nr < rows and 0 <= nc < cols and board[nr][nc] == "O" and (nr, nc) not in seen:
+                        seen.add((nr, nc))
+                        queue.append((nr, nc))
+            if not touches_edge:
+                for cr, cc in region:
+                    board[cr][cc] = "X"
+```
+
+This is also O(R * C), but it stores every region's cells and has to finish a region before it knows what to do. The
+border-first version is shorter and harder to get wrong.
+
+## Approach 2: optimal, flood fill from the border
+
+### Idea
+
+Invert the question: instead of finding enclosed regions, find the safe ones. Every `O` reachable from a border `O`
+is safe. Everything else is captured.
+
+### Template
+
+```text
+queue = all border cells that are O; mark them "S" (safe)
+BFS: from each safe cell, mark neighbouring O cells "S" and enqueue them
+sweep: O -> X (captured), S -> O (restore)
+```
+
+### Python solution
+
+```python
+def solve(board):
+    if not board or not board[0]:
+        return
+    rows, cols = len(board), len(board[0])
+    queue = deque()
+    for r in range(rows):
+        for c in range(cols):
+            on_edge = r in (0, rows - 1) or c in (0, cols - 1)
+            if on_edge and board[r][c] == "O":
+                board[r][c] = "S"
+                queue.append((r, c))
+    while queue:
+        r, c = queue.popleft()
+        for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+            if 0 <= nr < rows and 0 <= nc < cols and board[nr][nc] == "O":
+                board[nr][nc] = "S"
+                queue.append((nr, nc))
+    for r in range(rows):
+        for c in range(cols):
+            if board[r][c] == "O":
+                board[r][c] = "X"
+            elif board[r][c] == "S":
+                board[r][c] = "O"
+```
+
+### Complexity
+
+- Time: O(R * C): one pass to seed, one BFS that touches each cell once, one sweep.
+- Space: O(R * C) for the queue in the worst case (a board full of `O`). The marks are stored in the board itself.
+
+## Tests
+
+```python
+def run(fn, rows):
+    board = [list(r) for r in rows]
+    fn(board)
+    return ["".join(r) for r in board]
+
+case = ["XXXXX", "XOOXX", "XXOXX", "XXXXO", "OOXXX"]
+expect = ["XXXXX", "XXXXX", "XXXXX", "XXXXO", "OOXXX"]
+
+for fn in (solve, solve_by_region):
+    assert run(fn, case) == expect
+    assert run(fn, ["OO", "OO"]) == ["OO", "OO"]                 # all on the edge
+    assert run(fn, ["X"]) == ["X"] and run(fn, ["O"]) == ["O"]   # single cell
+    assert run(fn, ["XXX", "XOX", "XXX"]) == ["XXX", "XXX", "XXX"]
+    # An inner O connected to the edge through a corridor survives
+    assert run(fn, ["XXXX", "XOOO", "XXXX"]) == ["XXXX", "XOOO", "XXXX"]
+    # Two inner regions, only one escapes
+    assert run(fn, ["XXXXXX", "XOXOOX", "XXXXOX", "XXXXOX"]) == ["XXXXXX", "XXXOOX", "XXXXOX", "XXXXOX"]
+
+b = []
+solve(b)
+assert b == []                                                    # empty board
+```
+
+## Edge cases and pitfalls
+
+- **Diagonal escape** does not count: only up, down, left and right connections link cells.
+- **Forgetting to restore the temporary mark.** The final sweep must turn `S` back into `O`.
+- **Seeding only the four corners** or only one edge. Every border cell is a possible escape.
+- **Small boards.** With one or two rows or columns, every cell is on the border and nothing is captured.
+- **Recursive DFS from the border** can hit the recursion limit on a large board full of `O`.
+
+## Where this shows up in data engineering
+
+"Find what is reachable from a known set, then treat everything else as orphaned" is how garbage collection of
+unreferenced files works in table formats: Delta Lake's `VACUUM` and Iceberg's orphan-file removal keep files
+reachable from retained table versions and remove the rest. The border plays the role of the live snapshots.
