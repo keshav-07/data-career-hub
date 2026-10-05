@@ -1,0 +1,113 @@
+---
+title: "Product of Array Except Self: Prefix and Suffix Products Without Division"
+seoTitle: "Product of Array Except Self: Prefix and Suffix"
+description: "For each position, return the product of every other element without using division. Learn the prefix and suffix product pass in O(n) time and O(1) extra space."
+technology: ["dsa"]
+topic: ["arrays"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "The answer at position i is (product of everything to the left of i) times (product of everything to the right of i). Fill the output with running prefix products in a left-to-right pass, then multiply in running suffix products in a right-to-left pass. That is O(n) time and O(1) extra space besides the output, and it handles zeros without any special cases because it never divides."
+followUps: ["Why is dividing the total product by nums[i] not acceptable?", "How would you handle exactly one zero, or two zeros, if division were allowed?", "Could the products overflow in a language with fixed-width integers?"]
+previous: "interview-questions:dsa/top-k-frequent-elements"
+next: "interview-questions:dsa/valid-sudoku"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers `nums`, build a list `out` of the same length where `out[i]` is the product of all elements of `nums` except the one at position `i`. You may not use the division operator, and the target is linear time. This is widely known as LeetCode 238, Product of Array Except Self.
+
+The list has at least two elements. Values can be negative or zero.
+
+## Examples
+
+```text
+nums = [2, 3, 5, 4]    ->  [60, 40, 24, 30]
+nums = [-1, 2, 0, 3]   ->  [0, 0, -6, 0]
+nums = [0, 0, 7]       ->  [0, 0, 0]
+```
+
+## Approach 1: brute force
+
+For each index, multiply all other elements.
+
+```python
+def product_except_self_brute(nums):
+    out = []
+    for i in range(len(nums)):
+        p = 1
+        for j, v in enumerate(nums):
+            if j != i:
+                p *= v
+        out.append(p)
+    return out
+```
+
+**Complexity:** O(n²) time, O(1) extra space besides the output.
+
+## Approach 2: optimal
+
+**Key insight:** "everything except i" splits into "everything left of i" and "everything right of i". Both are running products you can build in one pass each.
+
+Walkthrough on `[2, 3, 5, 4]`:
+
+| i | prefix product (left of i) | suffix product (right of i) | out[i] |
+|---|---|---|---|
+| 0 | 1 | 3·5·4 = 60 | 60 |
+| 1 | 2 | 5·4 = 20 | 40 |
+| 2 | 2·3 = 6 | 4 | 24 |
+| 3 | 2·3·5 = 30 | 1 | 30 |
+
+Store the prefix column in `out` on the first pass, then sweep from the right with a single running `suffix` variable.
+
+```python
+def product_except_self(nums):
+    n = len(nums)
+    out = [1] * n
+    prefix = 1
+    for i in range(n):
+        out[i] = prefix
+        prefix *= nums[i]
+    suffix = 1
+    for i in range(n - 1, -1, -1):
+        out[i] *= suffix
+        suffix *= nums[i]
+    return out
+```
+
+**Complexity:** O(n) time. O(1) extra space if the output list does not count (the usual convention), otherwise O(n).
+
+## Tests
+
+```python
+import random
+
+for f in (product_except_self, product_except_self_brute):
+    assert f([2, 3, 5, 4]) == [60, 40, 24, 30]
+    assert f([-1, 2, 0, 3]) == [0, 0, -6, 0]           # one zero
+    assert f([0, 0, 7]) == [0, 0, 0]                   # two zeros
+    assert f([5, 9]) == [9, 5]                         # minimum length
+    assert f([-2, -3, -4]) == [12, 8, 6]               # negatives
+    assert f([1, 1, 1, 1]) == [1, 1, 1, 1]             # duplicates
+    assert f([10**6, 10**6, 10**6]) == [10**12] * 3    # large values
+
+random.seed(6)
+for _ in range(300):
+    arr = [random.randint(-4, 4) for _ in range(random.randint(2, 9))]
+    assert product_except_self(arr) == product_except_self_brute(arr)
+```
+
+## Edge cases and pitfalls
+
+- Dividing the total by `nums[i]` fails on zeros (division by zero, or wrong results with two zeros), and the problem forbids it anyway.
+- Do not multiply `nums[i]` into the running product before writing `out[i]`; the order of those two lines is the whole trick.
+- Python integers do not overflow, but in Java or C++ the products can exceed 64 bits on large inputs. Mention it.
+
+## Where this shows up in data engineering
+
+The same left-and-right running aggregate idea appears in window functions: `SUM(x) OVER (ORDER BY t ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)` is a prefix aggregate that excludes the current row. "Total of all other rows" calculations in reports are often written this way to avoid a self-join.

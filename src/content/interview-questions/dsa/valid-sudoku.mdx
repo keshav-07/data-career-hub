@@ -1,0 +1,133 @@
+---
+title: "Valid Sudoku: Check Rows, Columns and Boxes for Repeated Digits"
+seoTitle: "Valid Sudoku: Rows, Columns and 3×3 Boxes"
+description: "Check whether a partly filled 9×9 Sudoku grid breaks any rule. Use one pass with sets for each row, column and 3×3 box, keyed by (r // 3, c // 3)."
+technology: ["dsa"]
+topic: ["arrays"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Scan the grid once. For each filled cell, check its digit against three sets: one for its row, one for its column and one for its 3×3 box, where the box index is (r // 3, c // 3). A digit already present in any of the three sets means the grid is invalid. The grid is a fixed 9×9, so this is O(1) in absolute terms, or O(n²) time and space for an n×n generalisation."
+followUps: ["How would you generalise to an n²×n² grid?", "How could you replace the sets with bitmasks?", "How is validating a grid different from solving it?"]
+previous: "interview-questions:dsa/product-of-array-except-self"
+next: "interview-questions:dsa/encode-and-decode-strings"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You get a 9×9 grid of single-character strings. Each cell holds a digit `"1"` to `"9"` or `"."` for empty. Decide whether the filled cells break any Sudoku rule: a digit may appear at most once in each row, each column and each of the nine 3×3 boxes. You do not need to check that the puzzle is solvable. This is widely known as LeetCode 36, Valid Sudoku.
+
+## Examples
+
+A small excerpt is enough to show the rules. Suppose the top-left box contains:
+
+```text
+5 . .
+. . 5
+. . .
+```
+
+The digit 5 appears twice in the same box, so the grid is invalid even though the two 5s share no row or column. A completely empty grid is valid.
+
+## Approach 1: brute force
+
+Check each of the 27 units separately: collect the 9 cells of every row, every column and every box, drop the dots and check for duplicates.
+
+```python
+def is_valid_sudoku_units(board):
+    def ok(cells):
+        digits = [v for v in cells if v != "."]
+        return len(digits) == len(set(digits))
+    rows = board
+    cols = [[board[r][c] for r in range(9)] for c in range(9)]
+    boxes = [[board[br + r][bc + c] for r in range(3) for c in range(3)]
+             for br in (0, 3, 6) for bc in (0, 3, 6)]
+    return all(ok(u) for u in rows + cols + boxes)
+```
+
+**Complexity:** each cell is read three times, so 243 reads. That is O(n²) for an n×n grid and constant for 9×9. This is already acceptable; the "optimal" version does one pass and is the one most interviewers expect.
+
+## Approach 2: optimal
+
+**Key insight:** every cell belongs to exactly one row, one column and one box, and the box can be named by `(r // 3, c // 3)`. Keep 27 sets and check all three as you visit each cell once.
+
+Walkthrough with a 5 at `(0, 0)` and another 5 at `(1, 2)`:
+
+1. Cell `(0, 0)`: rows[0], cols[0] and box `(0, 0)` do not contain 5. Add it to all three.
+2. Cell `(1, 2)`: rows[1] and cols[2] do not contain 5, but box `(1 // 3, 2 // 3) = (0, 0)` does. Return `False`.
+
+```python
+def is_valid_sudoku(board):
+    rows = [set() for _ in range(9)]
+    cols = [set() for _ in range(9)]
+    boxes = [set() for _ in range(9)]
+    for r in range(9):
+        for c in range(9):
+            v = board[r][c]
+            if v == ".":
+                continue
+            b = (r // 3) * 3 + c // 3
+            if v in rows[r] or v in cols[c] or v in boxes[b]:
+                return False
+            rows[r].add(v)
+            cols[c].add(v)
+            boxes[b].add(v)
+    return True
+```
+
+**Complexity:** O(81) = O(1) time and space for a fixed board; O(n²) for an n×n generalisation.
+
+## Tests
+
+```python
+import copy, random
+
+EMPTY = [["."] * 9 for _ in range(9)]
+
+solved_rows = ["534678912", "672195348", "198342567",
+               "859761423", "426853791", "713924856",
+               "961537284", "287419635", "345286179"]
+SOLVED = [list(row) for row in solved_rows]
+
+def with_cells(board, cells):
+    b = copy.deepcopy(board)
+    for (r, c), v in cells.items():
+        b[r][c] = v
+    return b
+
+for f in (is_valid_sudoku, is_valid_sudoku_units):
+    assert f(EMPTY) is True                                       # empty grid
+    assert f(SOLVED) is True                                      # full valid grid
+    assert f(with_cells(EMPTY, {(0, 0): "7"})) is True            # single digit
+    assert f(with_cells(EMPTY, {(4, 1): "3", (4, 8): "3"})) is False   # row clash
+    assert f(with_cells(EMPTY, {(0, 6): "9", (8, 6): "9"})) is False   # column clash
+    assert f(with_cells(EMPTY, {(0, 0): "5", (1, 2): "5"})) is False   # box clash only
+    assert f(with_cells(EMPTY, {(0, 2): "5", (0, 3): "6", (2, 3): "5"})) is True  # neighbouring boxes
+    assert f(with_cells(SOLVED, {(0, 0): "3"})) is False          # one wrong digit
+
+random.seed(7)
+for _ in range(200):
+    b = copy.deepcopy(SOLVED)
+    for r in range(9):
+        for c in range(9):
+            if random.random() < 0.5:
+                b[r][c] = "."
+    if random.random() < 0.5:
+        b[random.randrange(9)][random.randrange(9)] = str(random.randint(1, 9))
+    assert is_valid_sudoku(b) == is_valid_sudoku_units(b)
+```
+
+## Edge cases and pitfalls
+
+- Getting the box index wrong is the classic bug. `(r // 3) * 3 + c // 3` gives 0 to 8; `r // 3 + c // 3` does not (it maps different boxes to the same number).
+- Validity is not solvability: a grid can pass every rule and still have no solution.
+- The cells are strings. Mixing `"5"` and `5` in the sets makes clashes invisible.
+
+## Where this shows up in data engineering
+
+Checking that a value is unique within several overlapping groups at once is a composite uniqueness constraint. Data quality tools express it as "unique by (row), unique by (column), unique by (box)"; the single-pass, multi-set check is how you test several such constraints without rereading the data.

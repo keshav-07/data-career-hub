@@ -1,0 +1,107 @@
+---
+title: "Maximum Subarray: Largest Sum of a Contiguous Slice with Kadane's Algorithm"
+seoTitle: "Maximum Subarray: Kadane's Algorithm Explained"
+description: "Find the largest sum of any non-empty contiguous slice of an array. Learn the O(n²) scan, Kadane's O(n) algorithm and how to handle all-negative input."
+technology: ["dsa"]
+topic: ["arrays", "dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Kadane's algorithm: walk the array keeping the best sum of a subarray that ends at the current position. At each element, either extend the previous subarray or start fresh, so current = max(x, current + x), and track the largest current seen. This is O(n) time and O(1) space. Initialise with the first element, not zero, so an all-negative array returns its largest element."
+followUps: ["How would you also return the start and end indices of the best subarray?", "How does the divide-and-conquer O(n log n) solution work?", "What changes if the array is circular?"]
+previous: "interview-questions:dsa/longest-consecutive-sequence"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a non-empty list of integers, find the contiguous, non-empty slice with the largest sum and return that sum. This is widely known as LeetCode 53, Maximum Subarray.
+
+The list can hold up to 10^5 values, positive, negative or zero.
+
+## Examples
+
+```text
+nums = [3, -5, 4, -1, 2, -6, 1]   ->  5    (4, -1, 2)
+nums = [-8, -3, -6]               ->  -3   (the single element -3)
+nums = [2, 2, 2]                  ->  6    (the whole array)
+```
+
+## Approach 1: brute force
+
+Fix each start index and extend to the right, keeping a running sum.
+
+```python
+def max_subarray_brute(nums):
+    best = nums[0]
+    for i in range(len(nums)):
+        total = 0
+        for j in range(i, len(nums)):
+            total += nums[j]
+            best = max(best, total)
+    return best
+```
+
+**Complexity:** O(n²) time, O(1) space. (Recomputing each slice sum from scratch would be O(n³).)
+
+## Approach 2: optimal (Kadane's algorithm)
+
+**Key insight:** the best subarray ending at position `i` either is `nums[i]` alone or extends the best subarray ending at `i - 1`. If the running sum has gone negative, it can only hurt what follows, so drop it and start again.
+
+Walkthrough on `[3, -5, 4, -1, 2, -6, 1]`:
+
+| x | current = max(x, current + x) | best |
+|---|---|---|
+| 3 | 3 | 3 |
+| -5 | max(-5, -2) = -2 | 3 |
+| 4 | max(4, 2) = 4 | 4 |
+| -1 | max(-1, 3) = 3 | 4 |
+| 2 | max(2, 5) = 5 | 5 |
+| -6 | max(-6, -1) = -1 | 5 |
+| 1 | max(1, 0) = 1 | 5 |
+
+```python
+def max_subarray(nums):
+    current = best = nums[0]
+    for num in nums[1:]:
+        current = max(num, current + num)
+        best = max(best, current)
+    return best
+```
+
+**Complexity:** O(n) time, O(1) extra space (the slice `nums[1:]` copies the list; iterate by index if that matters).
+
+## Tests
+
+```python
+import random
+
+for f in (max_subarray, max_subarray_brute):
+    assert f([3, -5, 4, -1, 2, -6, 1]) == 5
+    assert f([-8, -3, -6]) == -3                     # all negative
+    assert f([2, 2, 2]) == 6                         # all positive
+    assert f([7]) == 7                               # single element
+    assert f([-7]) == -7
+    assert f([0, 0, 0]) == 0                         # zeros
+    assert f([5, -10**9, 6]) == 6                    # large negative splits the array
+    assert f([10**9, 10**9]) == 2 * 10**9            # large values
+
+random.seed(10)
+for _ in range(300):
+    arr = [random.randint(-10, 10) for _ in range(random.randint(1, 12))]
+    assert max_subarray(arr) == max_subarray_brute(arr)
+```
+
+## Edge cases and pitfalls
+
+- Initialising `best = 0` is the most common bug: an all-negative array then returns 0, which is the sum of an empty slice, and empty slices are not allowed.
+- The problem says non-empty. If an interviewer allows an empty slice, the answer becomes `max(0, kadane)`; ask.
+- To return indices, record a tentative start whenever you restart (`num > current + num`) and copy it into the answer whenever `best` improves.
+
+## Where this shows up in data engineering
+
+Kadane's running-state idea is the same shape as a streaming aggregation that keeps one small state per key and updates it per event. Concretely, "the best consecutive stretch of daily profit" or "the worst drawdown" over a time series is this problem, and the one-pass, constant-memory form is what makes it cheap to compute per key in Spark or a stream processor.
