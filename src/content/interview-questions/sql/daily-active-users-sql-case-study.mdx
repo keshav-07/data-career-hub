@@ -22,6 +22,7 @@ followUps:
   - "The DAU dashboard and the platform breakdown disagree. How could that happen?"
 prerequisites: ["articles:sql/aggregations-group-by-having"]
 related: ["articles:sql/aggregations-group-by-having", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+next: "interview-questions:sql/monthly-revenue-sql-case-study"
 versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from the engine. The two-session isolation timeline is shown as a non-executed example."
 sources:
   - { label: "PostgreSQL 16 documentation: WITH queries (recursive CTEs)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
@@ -483,7 +484,7 @@ Other rewrites worth naming:
 
 The timeline below needs two sessions, so it is shown rather than executed:
 
-<!-- noexec -->
+{/* noexec */}
 ```sql
 -- Session A: the report, default READ COMMITTED
 BEGIN;

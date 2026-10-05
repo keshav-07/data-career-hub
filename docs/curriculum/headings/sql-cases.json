@@ -30,5 +30,37 @@
   "ROLLUP and CUBE → Daily Active Users": {
     "ref": "interview-questions:sql/daily-active-users-sql-case-study",
     "heading": "Approach: ROLLUP and CUBE for subtotals"
+  },
+  "Query optimization & cost reduction → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: query optimisation and cost reduction"
+  },
+  "Funnel / conversion analysis → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: funnel from bookings to net revenue"
+  },
+  "PIVOT rows to columns → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: PIVOT rows to columns"
+  },
+  "Sharding & distributed SQL → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: sharding and distributed SQL"
+  },
+  "Graph traversal in SQL → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: graph traversal for referral revenue"
+  },
+  "Multi-table joins → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: multi-table joins without fan-out"
+  },
+  "Window function performance tuning → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: window function performance tuning"
+  },
+  "JSON parsing in SQL → Monthly Revenue": {
+    "ref": "interview-questions:sql/monthly-revenue-sql-case-study",
+    "heading": "Approach: JSON parsing for channel and coupon revenue"
   }
 }

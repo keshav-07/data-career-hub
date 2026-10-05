@@ -1,0 +1,733 @@
+---
+seoTitle: "Monthly Revenue SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Monthly Revenue: SQL Case Study with 8 Approaches"
+description: "Compute monthly net revenue in SQL with refunds, currencies and empty months, then apply joins, JSON, PIVOT, funnels, graphs, windows, cost tuning and sharding."
+technology: ["sql"]
+topic: ["case-study", "revenue", "aggregation"]
+difficulty: "Hard"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Monthly net revenue is gross revenue from completed orders in the month they were placed, converted to one currency, minus refunds in the month they were paid out. Aggregate order lines to order level and refunds to order level separately before joining, so a second refund cannot duplicate the line items. Build a month spine so months with no sales still appear, and keep gross, refunds and net as separate columns so the numbers reconcile."
+followUps:
+  - "Why does joining orders, order items and refunds in one query overstate revenue?"
+  - "Should a refund reduce the month of the order or the month of the refund?"
+  - "How do you show categories as columns, one per month?"
+  - "How would you compute month-over-month growth and year-to-date revenue efficiently?"
+  - "How does a SUM run on a sharded orders table, and why is AVG harder?"
+  - "Revenue for last month changed after the report was sent. Why?"
+prerequisites: ["articles:sql/joins", "articles:sql/aggregations-group-by-having"]
+related: ["interview-questions:sql/daily-active-users-sql-case-study", "articles:sql/joins", "articles:sql/aggregations-group-by-having", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/daily-active-users-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 and the PIVOT example on DuckDB 1.5.6, with scripts/verify-examples.py; outputs are copied from the engines. The Citus distribution commands are shown but not executed."
+sources:
+  - { label: "PostgreSQL 16 documentation: JSON functions and operators", url: "https://www.postgresql.org/docs/16/functions-json.html" }
+  - { label: "PostgreSQL 16 documentation: WITH queries (SEARCH and CYCLE)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Aggregate functions", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+---
+
+"What was our revenue each month?" sounds like `SUM(amount) GROUP BY month`. In a real schema the money is spread over orders, order lines, refunds and currency rates, and the obvious join double counts. This case study defines monthly net revenue precisely, builds a small dataset with the traps an interviewer would plant, and then answers eight follow-ups, from JSON attributes and pivots to window tuning and sharded execution.
+
+## The business question
+
+Finance and leadership use monthly revenue to track growth, set targets and report to investors. A data engineer has to agree a definition with finance, because each choice moves the number:
+
+- **Gross revenue** is the value of order lines (`qty * unit_price`, already net of discounts) on orders with status `completed`. Cancelled and `pending_payment` orders are excluded.
+- **Order month** is the calendar month of `order_ts` in **UTC**. An order at 23:30 UTC on 31 January belongs to January even though it is already February in Berlin.
+- **Currency**: every amount is converted to USD at the monthly rate for the **order's** month, so a full refund cancels its order exactly in USD.
+- **Refunds** reduce revenue in the month the money went back (the refund month), not the order month. That is the cash view; an accrual view would restate the order month instead. State which one you use, because it decides whether closed months can change.
+- **Net revenue** = gross − refunds. It can be negative for a month with more refunds than sales.
+- **Every month in the range appears**, with 0 rather than a missing row.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE customers (
+  customer_id INT PRIMARY KEY,
+  country     TEXT NOT NULL,
+  referred_by INT                       -- the customer who referred them, if any
+);
+
+CREATE TABLE products (product_id INT PRIMARY KEY, category TEXT NOT NULL);
+
+CREATE TABLE fx_rates (                 -- USD per unit of currency, one rate per month
+  currency TEXT, month DATE, usd_rate NUMERIC(10,4),
+  PRIMARY KEY (currency, month)
+);
+
+CREATE TABLE orders (
+  order_id    INT PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers,
+  order_ts    TIMESTAMPTZ NOT NULL,
+  status      TEXT NOT NULL,            -- completed | cancelled | pending_payment
+  currency    TEXT NOT NULL,
+  attrs       JSONB NOT NULL DEFAULT '{}'   -- channel, coupon and other loosely typed fields
+);
+
+CREATE TABLE order_items (
+  order_id   INT REFERENCES orders,
+  product_id INT REFERENCES products,
+  qty        INT NOT NULL,
+  unit_price NUMERIC(10,2) NOT NULL     -- in the order currency, after discounts
+);
+
+CREATE TABLE refunds (
+  refund_id INT PRIMARY KEY,
+  order_id  INT REFERENCES orders,
+  refund_ts TIMESTAMPTZ NOT NULL,
+  amount    NUMERIC(10,2) NOT NULL      -- in the order currency
+);
+
+INSERT INTO customers VALUES
+  (1,'US',NULL), (2,'US',1), (3,'GB',1), (4,'DE',2), (5,'IN',NULL), (6,'GB',4),
+  (7,'US',8), (8,'US',7);              -- 7 and 8 "referred" each other: a data bug
+
+INSERT INTO products VALUES (10,'Books'), (11,'Books'), (20,'Electronics'), (30,'Grocery');
+
+INSERT INTO fx_rates VALUES
+  ('USD','2026-01-01',1), ('USD','2026-02-01',1), ('USD','2026-03-01',1), ('USD','2026-04-01',1),
+  ('GBP','2026-01-01',1.25), ('GBP','2026-02-01',1.27), ('GBP','2026-03-01',1.26), ('GBP','2026-04-01',1.28),
+  ('EUR','2026-01-01',1.08), ('EUR','2026-02-01',1.09), ('EUR','2026-03-01',1.10), ('EUR','2026-04-01',1.09);
+
+INSERT INTO orders VALUES
+  (1001, 1, '2026-01-05 10:00+00', 'completed',       'USD', '{"channel":"web","coupon":{"code":"NEW10","pct":10}}'),
+  (1002, 2, '2026-01-20 15:00+00', 'completed',       'USD', '{"channel":"app"}'),
+  (1003, 3, '2026-01-31 23:30+00', 'completed',       'GBP', '{"channel":"web"}'),
+  (1004, 4, '2026-02-10 09:00+00', 'cancelled',       'EUR', '{"channel":"app"}'),
+  (1005, 1, '2026-02-14 18:00+00', 'completed',       'USD', '{"channel":null}'),
+  (1006, 5, '2026-02-28 12:00+00', 'completed',       'USD', '{}'),
+  (1010, 7, '2026-02-05 08:00+00', 'completed',       'USD', '{"channel":"web"}'),
+  (1007, 6, '2026-04-03 11:00+00', 'completed',       'GBP', '{"channel":"app","coupon":{"code":"SPRING","pct":"15"}}'),
+  (1008, 2, '2026-04-15 16:00+00', 'pending_payment', 'USD', '{"channel":"web"}'),
+  (1009, 4, '2026-04-20 13:00+00', 'completed',       'EUR', '{"channel":"partner"}'),
+  (1011, 3, '2026-04-28 10:00+00', 'completed',       'GBP', '{"channel":"web"}');   -- no lines: a broken order
+
+INSERT INTO order_items VALUES
+  (1001,10,2,15.00), (1001,20,1,120.00),
+  (1002,11,1,25.00),
+  (1003,20,1,100.00),
+  (1004,30,3,10.00),
+  (1005,20,1,200.00), (1005,10,1,15.00),
+  (1006,30,4,5.00),
+  (1010,10,1,15.00),
+  (1007,11,2,20.00),
+  (1008,20,1,120.00),
+  (1009,30,10,4.00);
+
+INSERT INTO refunds VALUES
+  (1, 1001, '2026-01-10 09:00+00',  20.00),   -- partial refund, same month
+  (2, 1005, '2026-03-02 10:00+00', 200.00),   -- refunded the next month...
+  (3, 1005, '2026-03-03 10:00+00',  15.00),   -- ...in two payments
+  (4, 1007, '2026-04-05 10:00+00',  20.00);   -- GBP refund
+```
+
+By hand: January gross is 150 + 25 + 100 × 1.25 = 300, less a 20 refund. February gross is 215 + 20 + 15 = 250 (order 1004 was cancelled). March has no sales but 215 of refunds. April gross is 40 × 1.28 + 40 × 1.09 = 94.80, less 20 × 1.28 = 25.60.
+
+## Core solution
+
+Aggregate each fact at its own grain, convert currency, then line the months up against a month spine.
+
+```sql
+WITH months AS (
+  SELECT generate_series(DATE '2026-01-01', DATE '2026-04-01', INTERVAL '1 month')::date AS month
+),
+gross AS (
+  SELECT date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+         SUM(oi.qty * oi.unit_price * fx.usd_rate)                AS gross_usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN fx_rates fx    ON fx.currency = o.currency
+                     AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  WHERE o.status = 'completed'
+  GROUP BY 1
+),
+refunded AS (
+  SELECT date_trunc('month', r.refund_ts AT TIME ZONE 'UTC')::date AS month,
+         SUM(r.amount * fx.usd_rate)                              AS refunds_usd
+  FROM refunds r
+  JOIN orders o    ON o.order_id = r.order_id
+  JOIN fx_rates fx ON fx.currency = o.currency
+                  AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  GROUP BY 1
+)
+SELECT m.month,
+       COALESCE(g.gross_usd, 0)::numeric(12,2)                                AS gross_usd,
+       COALESCE(r.refunds_usd, 0)::numeric(12,2)                              AS refunds_usd,
+       (COALESCE(g.gross_usd, 0) - COALESCE(r.refunds_usd, 0))::numeric(12,2) AS net_usd
+FROM months m
+LEFT JOIN gross g    USING (month)
+LEFT JOIN refunded r USING (month)
+ORDER BY m.month;
+```
+
+| month | gross_usd | refunds_usd | net_usd |
+|---|---|---|---|
+| 2026-01-01 | 300.00 | 20.00 | 280.00 |
+| 2026-02-01 | 250.00 | 0.00 | 250.00 |
+| 2026-03-01 | 0.00 | 215.00 | -215.00 |
+| 2026-04-01 | 94.80 | 25.60 | 69.20 |
+
+March shows a negative net, which is correct under the cash definition and surprises people the first time; it is a good thing to point out before the interviewer does. The order without lines (1011) adds nothing, and the cancelled and pending orders are excluded by the status filter.
+
+## Approach: multi-table joins without fan-out
+
+**Why it matters.** Most wrong revenue numbers come from a join, not from the arithmetic. Each join multiplies rows by the number of matches on the other side. Joining two independent child tables (lines and refunds) to the same parent multiplies them against each other.
+
+Here is the tempting single query, restricted to order 1005, which has two lines and two refunds:
+
+```sql
+SELECT o.order_id,
+       SUM(oi.qty * oi.unit_price) AS gross,
+       SUM(r.amount)               AS refunded,
+       COUNT(*)                    AS joined_rows
+FROM orders o
+JOIN order_items oi  ON oi.order_id = o.order_id
+LEFT JOIN refunds r  ON r.order_id = o.order_id
+WHERE o.order_id = 1005
+GROUP BY o.order_id;
+```
+
+| order_id | gross | refunded | joined_rows |
+|---|---|---|---|
+| 1005 | 430.00 | 430.00 | 4 |
+
+Two lines times two refunds gives four rows, so both the gross (215) and the refunds (215) are doubled. The fix is to bring each child to the order grain first, then join one-to-one:
+
+```sql
+WITH line_totals AS (
+  SELECT order_id, SUM(qty * unit_price) AS gross
+  FROM order_items GROUP BY order_id
+),
+refund_totals AS (
+  SELECT order_id, SUM(amount) AS refunded
+  FROM refunds GROUP BY order_id
+)
+SELECT o.order_id, o.status, c.country,
+       COALESCE(l.gross, 0)    AS gross,
+       COALESCE(rt.refunded, 0) AS refunded
+FROM orders o
+JOIN customers c          ON c.customer_id = o.customer_id
+LEFT JOIN line_totals l   ON l.order_id = o.order_id
+LEFT JOIN refund_totals rt ON rt.order_id = o.order_id
+WHERE o.status = 'completed'
+ORDER BY o.order_id;
+```
+
+| order_id | status | country | gross | refunded |
+|---|---|---|---|---|
+| 1001 | completed | US | 150.00 | 20.00 |
+| 1002 | completed | US | 25.00 | 0 |
+| 1003 | completed | GB | 100.00 | 0 |
+| 1005 | completed | US | 215.00 | 215.00 |
+| 1006 | completed | IN | 20.00 | 0 |
+| 1007 | completed | GB | 40.00 | 20.00 |
+| 1009 | completed | DE | 40.00 | 0 |
+| 1010 | completed | US | 15.00 | 0 |
+| 1011 | completed | GB | 0 | 0 |
+
+When you need a dimension that lives on the line, such as product category, join products to lines (a many-to-one join, which cannot fan out) and leave refunds out of that query:
+
+```sql
+SELECT date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+       p.category,
+       SUM(oi.qty * oi.unit_price * fx.usd_rate)::numeric(12,2)  AS gross_usd
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p     ON p.product_id = oi.product_id
+JOIN fx_rates fx    ON fx.currency = o.currency
+                   AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+WHERE o.status = 'completed'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+```
+
+| month | category | gross_usd |
+|---|---|---|
+| 2026-01-01 | Books | 55.00 |
+| 2026-01-01 | Electronics | 245.00 |
+| 2026-02-01 | Books | 30.00 |
+| 2026-02-01 | Electronics | 200.00 |
+| 2026-02-01 | Grocery | 20.00 |
+| 2026-04-01 | Books | 51.20 |
+| 2026-04-01 | Grocery | 43.60 |
+
+**Pitfalls.** A missing FX rate silently drops orders in an inner join; check with a `LEFT JOIN` and `WHERE fx.usd_rate IS NULL`. Refunds cannot be split by category unless they are recorded per line, so a category net revenue needs a rule (for example pro rata by line value) agreed with finance.
+
+**In interviews.** Before writing a join, say the grain of each table and of the result: "orders one row per order, items many per order, refunds many per order, so I aggregate items and refunds separately." A quick check is to compare `SUM` before and after the join.
+
+## Approach: JSON parsing for channel and coupon revenue
+
+**Why it matters.** Order attributes such as acquisition channel and coupon often arrive as JSON from the storefront, and marketing wants revenue split by them. JSON is loosely typed: keys can be missing, explicitly `null`, nested, or hold numbers as strings.
+
+PostgreSQL's `->` returns `jsonb`, `->>` returns `text`, and `#>>` follows a path. A missing key and a JSON `null` both come back as SQL `NULL` from `->>`, so the two cases can be labelled together or told apart with the `?` operator:
+
+```sql
+SELECT order_id,
+       attrs ->> 'channel'                        AS channel_raw,
+       attrs ? 'channel'                          AS has_channel_key,
+       COALESCE(attrs ->> 'channel', 'unknown')   AS channel,
+       attrs #>> '{coupon,code}'                  AS coupon_code,
+       (attrs #>> '{coupon,pct}')::numeric        AS coupon_pct,
+       jsonb_typeof(attrs #> '{coupon,pct}')      AS pct_json_type
+FROM orders
+WHERE status = 'completed'
+ORDER BY order_id;
+```
+
+| order_id | channel_raw | has_channel_key | channel | coupon_code | coupon_pct | pct_json_type |
+|---|---|---|---|---|---|---|
+| 1001 | web | t | web | NEW10 | 10 | number |
+| 1002 | app | t | app | NULL | NULL | NULL |
+| 1003 | web | t | web | NULL | NULL | NULL |
+| 1005 | NULL | t | unknown | NULL | NULL | NULL |
+| 1006 | NULL | f | unknown | NULL | NULL | NULL |
+| 1007 | app | t | app | SPRING | 15 | string |
+| 1009 | partner | t | partner | NULL | NULL | NULL |
+| 1010 | web | t | web | NULL | NULL | NULL |
+| 1011 | web | t | web | NULL | NULL | NULL |
+
+Order 1005 has the key with a `null` value, order 1006 has no key, and order 1007 stores the percentage as a string, which the cast to `numeric` handles; a value like `"15%"` would make the cast fail, so validate the type on ingestion or guard the cast. Monthly revenue by channel then reuses the order-level totals:
+
+```sql
+WITH line_totals AS (
+  SELECT order_id, SUM(qty * unit_price) AS gross FROM order_items GROUP BY order_id
+)
+SELECT date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+       COALESCE(o.attrs ->> 'channel', 'unknown')               AS channel,
+       SUM(l.gross * fx.usd_rate)::numeric(12,2)                AS gross_usd,
+       COUNT(*) FILTER (WHERE o.attrs ? 'coupon')               AS coupon_orders
+FROM orders o
+JOIN line_totals l ON l.order_id = o.order_id
+JOIN fx_rates fx   ON fx.currency = o.currency
+                  AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+WHERE o.status = 'completed'
+GROUP BY 1, 2
+ORDER BY 1, 2;
+```
+
+| month | channel | gross_usd | coupon_orders |
+|---|---|---|---|
+| 2026-01-01 | app | 25.00 | 0 |
+| 2026-01-01 | web | 275.00 | 1 |
+| 2026-02-01 | unknown | 235.00 | 0 |
+| 2026-02-01 | web | 15.00 | 0 |
+| 2026-04-01 | app | 51.20 | 1 |
+| 2026-04-01 | partner | 43.60 | 0 |
+
+**Pitfalls.** Comparing `attrs -> 'channel' = 'web'` compares `jsonb` with `jsonb` and needs the right-hand side to be valid JSON (`'"web"'`); use `->>` for text comparisons. Keys are case-sensitive. If a field is filtered or grouped on in every report, promote it to a real column (or a generated column) during loading, so it is typed, indexed and documented. A GIN index on `attrs` supports containment queries such as `attrs @> '{"channel":"web"}'`.
+
+## Approach: PIVOT rows to columns
+
+**Why it matters.** Finance often wants a grid: one row per category, one column per month. Rows-to-columns is a presentation step, done once the numbers are right.
+
+PostgreSQL has no `PIVOT` keyword. The portable method is conditional aggregation, one `FILTER` (or `CASE`) per output column:
+
+```sql
+WITH cat_month AS (
+  SELECT date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+         p.category,
+         SUM(oi.qty * oi.unit_price * fx.usd_rate) AS gross_usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN products p     ON p.product_id = oi.product_id
+  JOIN fx_rates fx    ON fx.currency = o.currency
+                     AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  WHERE o.status = 'completed'
+  GROUP BY 1, 2
+)
+SELECT category,
+       COALESCE(SUM(gross_usd) FILTER (WHERE month = DATE '2026-01-01'), 0)::numeric(12,2) AS jan,
+       COALESCE(SUM(gross_usd) FILTER (WHERE month = DATE '2026-02-01'), 0)::numeric(12,2) AS feb,
+       COALESCE(SUM(gross_usd) FILTER (WHERE month = DATE '2026-03-01'), 0)::numeric(12,2) AS mar,
+       COALESCE(SUM(gross_usd) FILTER (WHERE month = DATE '2026-04-01'), 0)::numeric(12,2) AS apr,
+       SUM(gross_usd)::numeric(12,2)                                                      AS total
+FROM cat_month
+GROUP BY category
+ORDER BY category;
+```
+
+| category | jan | feb | mar | apr | total |
+|---|---|---|---|---|---|
+| Books | 55.00 | 30.00 | 0.00 | 51.20 | 136.20 |
+| Electronics | 245.00 | 200.00 | 0.00 | 0.00 | 445.00 |
+| Grocery | 0.00 | 20.00 | 0.00 | 43.60 | 63.60 |
+
+DuckDB, Snowflake, BigQuery and SQL Server have a `PIVOT` operator. This DuckDB version loads the category-month figures from above and pivots them; DuckDB derives the column names from the distinct `month` values:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE cat_month (category VARCHAR, month VARCHAR, gross_usd DECIMAL(12,2));
+INSERT INTO cat_month VALUES
+  ('Books','2026-01',55.00), ('Electronics','2026-01',245.00),
+  ('Books','2026-02',30.00), ('Electronics','2026-02',200.00), ('Grocery','2026-02',20.00),
+  ('Books','2026-04',51.20), ('Grocery','2026-04',43.60);
+
+PIVOT cat_month ON month USING SUM(gross_usd) GROUP BY category ORDER BY category;
+```
+
+| category | 2026-01 | 2026-02 | 2026-04 |
+|---|---|---|---|
+| Books | 55.00 | 30.00 | 51.20 |
+| Electronics | 245.00 | 200.00 | NULL |
+| Grocery | NULL | 20.00 | 43.60 |
+
+Two differences matter. March has no column, because no row has that value: a pivot only creates columns for values present in the data, so for a fixed reporting layout you list them (`ON month IN ('2026-01','2026-02','2026-03','2026-04')`) or pivot after joining a month spine. And missing cells are `NULL`, not 0, until you `COALESCE` them.
+
+**In interviews.** Write the conditional-aggregation form unless the interviewer names a dialect; it works everywhere. Mention that a pivot with an unknown set of columns needs dynamic SQL in PostgreSQL, or is better left to the BI tool.
+
+## Approach: funnel from bookings to net revenue
+
+**Why it matters.** Leadership asks why revenue fell even though "orders were up". A funnel shows where money leaks between an order being placed and revenue being kept: placed, then paid (not cancelled or stuck in payment), then kept (not refunded). It is a conversion funnel measured in both orders and dollars.
+
+```sql
+WITH order_value AS (
+  SELECT o.order_id, o.status,
+         date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+         COALESCE(SUM(oi.qty * oi.unit_price), 0) * fx.usd_rate     AS value_usd
+  FROM orders o
+  LEFT JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN fx_rates fx ON fx.currency = o.currency
+                  AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  GROUP BY o.order_id, o.status, month, fx.usd_rate
+),
+refund_value AS (
+  SELECT r.order_id, SUM(r.amount) * MAX(fx.usd_rate) AS refund_usd
+  FROM refunds r
+  JOIN orders o    ON o.order_id = r.order_id
+  JOIN fx_rates fx ON fx.currency = o.currency
+                  AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  GROUP BY r.order_id
+)
+SELECT v.month,
+       COUNT(*)                                             AS placed,
+       COUNT(*) FILTER (WHERE v.status = 'completed')       AS paid,
+       COUNT(*) FILTER (WHERE v.status = 'completed'
+                          AND rv.order_id IS NULL)          AS kept_in_full,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE v.status = 'completed') / COUNT(*), 1) AS pct_paid,
+       SUM(v.value_usd)::numeric(12,2)                      AS placed_usd,
+       SUM(v.value_usd) FILTER (WHERE v.status = 'completed')::numeric(12,2) AS paid_usd,
+       (SUM(v.value_usd) FILTER (WHERE v.status = 'completed')
+        - COALESCE(SUM(rv.refund_usd), 0))::numeric(12,2)   AS kept_usd
+FROM order_value v
+LEFT JOIN refund_value rv ON rv.order_id = v.order_id
+GROUP BY v.month
+ORDER BY v.month;
+```
+
+| month | placed | paid | kept_in_full | pct_paid | placed_usd | paid_usd | kept_usd |
+|---|---|---|---|---|---|---|---|
+| 2026-01-01 | 3 | 3 | 2 | 100.0 | 300.00 | 300.00 | 280.00 |
+| 2026-02-01 | 4 | 3 | 2 | 75.0 | 282.70 | 250.00 | 35.00 |
+| 2026-04-01 | 4 | 3 | 2 | 75.0 | 214.80 | 94.80 | 69.20 |
+
+This funnel is a **cohort** view: refunds are attached to the month the order was placed, so February keeps only 35 of its 250 dollars. That differs from the cash view in the core solution, where the same refunds land in March. Both are legitimate, and the funnel is the one that tells you February's orders were poor quality. The broken order 1011 counts as placed and paid with value 0, which is itself a data-quality finding.
+
+**Pitfalls.** Count stages from the same population (orders placed in the month) so each stage is a subset of the previous one. Avoid dividing by a stage that can be 0 without `NULLIF`. A real checkout funnel (visit, cart, checkout, payment) needs event data and a rule for ordering; the same `COUNT(*) FILTER` pattern applies.
+
+## Approach: graph traversal for referral revenue
+
+**Why it matters.** Growth teams pay referral bonuses and want to know how much revenue each referral tree brings in. The referral relationship is a graph (`customers.referred_by`), and the revenue of a tree includes every descendant, however deep. That needs recursion.
+
+A recursive CTE walks from each root (a customer nobody referred) down through referrals, carrying the root's id. PostgreSQL 14 and later add a `CYCLE` clause that marks and stops cycles, which matters here because customers 7 and 8 refer each other:
+
+```sql
+WITH RECURSIVE tree AS (
+  SELECT customer_id AS root_id, customer_id, 0 AS depth
+  FROM customers
+  WHERE referred_by IS NULL
+  UNION ALL
+  SELECT t.root_id, c.customer_id, t.depth + 1
+  FROM tree t
+  JOIN customers c ON c.referred_by = t.customer_id
+) CYCLE customer_id SET is_cycle USING path,
+customer_revenue AS (
+  SELECT o.customer_id, SUM(oi.qty * oi.unit_price * fx.usd_rate) AS gross_usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN fx_rates fx    ON fx.currency = o.currency
+                     AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  WHERE o.status = 'completed'
+  GROUP BY o.customer_id
+)
+SELECT t.root_id,
+       COUNT(*)                                   AS customers_in_tree,
+       MAX(t.depth)                               AS max_depth,
+       string_agg(t.customer_id::text, ',' ORDER BY t.depth, t.customer_id) AS members,
+       COALESCE(SUM(r.gross_usd), 0)::numeric(12,2) AS tree_gross_usd
+FROM tree t
+LEFT JOIN customer_revenue r ON r.customer_id = t.customer_id
+WHERE NOT t.is_cycle
+GROUP BY t.root_id
+ORDER BY tree_gross_usd DESC;
+```
+
+| root_id | customers_in_tree | max_depth | members | tree_gross_usd |
+|---|---|---|---|---|
+| 1 | 5 | 3 | 1,2,3,4,6 | 609.80 |
+| 5 | 1 | 0 | 5 | 20.00 |
+
+Customer 1's tree reaches depth 3 (1 → 2 → 4 → 6) and brought in 609.80 of gross revenue. Customers 7 and 8 never appear, because neither is a root: their cycle has no entry point. That is a silent loss of 15 dollars of revenue from the report. Find such customers by comparing the tree members with all customers:
+
+```sql
+WITH RECURSIVE tree AS (
+  SELECT customer_id FROM customers WHERE referred_by IS NULL
+  UNION
+  SELECT c.customer_id FROM tree t JOIN customers c ON c.referred_by = t.customer_id
+)
+SELECT customer_id, referred_by
+FROM customers
+WHERE customer_id NOT IN (SELECT customer_id FROM tree)
+ORDER BY customer_id;
+```
+
+| customer_id | referred_by |
+|---|---|
+| 7 | 8 |
+| 8 | 7 |
+
+**Pitfalls.** `UNION` (not `UNION ALL`) in the second query also stops a cycle reachable from a root, because a row already produced is not produced again, but it does not tell you a cycle happened; `CYCLE` does. On engines without `CYCLE`, carry an array or string path and stop when the next id is already in it, and always add a depth limit as a safety net. For large, deep graphs, precompute a closure table (ancestor, descendant, depth) during loading.
+
+## Approach: window function performance tuning
+
+**Why it matters.** The monthly report usually adds month-over-month growth and year-to-date revenue, both window functions. Written carelessly over raw order lines, every window forces a sort of millions of rows. Three habits keep it cheap.
+
+1. **Aggregate first, window second.** Collapse to one row per month, then apply the window to a dozen rows instead of the raw table.
+2. **Share one window definition.** Functions with the same `PARTITION BY` and `ORDER BY` are computed in one pass over one sort. A named `WINDOW` clause makes that explicit.
+3. **Use `ROWS` frames for running totals.** The default frame with `ORDER BY` is `RANGE ... CURRENT ROW`, which includes all peers with the same sort value; `ROWS` is unambiguous and avoids peer handling.
+
+```sql
+WITH monthly AS (
+  SELECT date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+         SUM(oi.qty * oi.unit_price * fx.usd_rate)                AS gross_usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN fx_rates fx    ON fx.currency = o.currency
+                     AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  WHERE o.status = 'completed'
+  GROUP BY 1
+)
+SELECT month,
+       gross_usd::numeric(12,2) AS gross_usd,
+       (LAG(gross_usd) OVER w)::numeric(12,2) AS prev_row_usd,
+       ROUND(100.0 * (gross_usd - LAG(gross_usd) OVER w) / NULLIF(LAG(gross_usd) OVER w, 0), 1) AS mom_pct,
+       SUM(gross_usd) OVER (w ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)::numeric(12,2) AS ytd_usd
+FROM monthly
+WINDOW w AS (ORDER BY month)
+ORDER BY month;
+```
+
+| month | gross_usd | prev_row_usd | mom_pct | ytd_usd |
+|---|---|---|---|---|
+| 2026-01-01 | 300.00 | NULL | NULL | 300.00 |
+| 2026-02-01 | 250.00 | 300.00 | -16.7 | 550.00 |
+| 2026-04-01 | 94.80 | 250.00 | -62.1 | 644.80 |
+
+The month-over-month figure for April compares with February, because March has no row in `monthly`. That is wrong: `LAG` means "previous row", not "previous month". Join the month spine first (as in the core solution) so March exists with 0, or compare with `LAG(month)` and treat a gap as unknown.
+
+You can see the sharing in the plan. Two windows with the same ordering need one sort; a window with a different ordering adds another `Sort` and `WindowAgg` pair:
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT order_id,
+       SUM(qty * unit_price) OVER (PARTITION BY order_id ORDER BY product_id) AS running_in_order,
+       ROW_NUMBER()          OVER (PARTITION BY order_id ORDER BY product_id) AS line_no,
+       RANK()                OVER (ORDER BY unit_price DESC)                  AS price_rank
+FROM order_items;
+```
+
+```text
+WindowAgg
+  ->  Sort
+        Sort Key: order_id, product_id
+        ->  WindowAgg
+              ->  Sort
+                    Sort Key: unit_price DESC
+                    ->  Seq Scan on order_items
+```
+
+Read the plan from the bottom up: the first `Sort` orders the lines by `unit_price` for `RANK`, then a second `Sort` on `(order_id, product_id)` feeds one `WindowAgg` that computes both the running sum and `ROW_NUMBER`. Two windows, two sorts; three windows written with only two distinct specifications still cost two sorts.
+
+**More tuning levers.** An index on the partition and order columns (here `(order_id, product_id)`) lets PostgreSQL read rows already sorted and skip the sort. Filter as early as possible: a `WHERE` on the base query reduces the rows sorted, while filtering on a window result requires a subquery and cannot be pushed below the window. Large sorts that exceed `work_mem` spill to disk, which shows as `Sort Method: external merge` in `EXPLAIN ANALYZE`. In distributed engines, a window without `PARTITION BY` sends every row to one worker, so partition whenever the logic allows.
+
+## Approach: query optimisation and cost reduction
+
+**Why it matters.** A monthly revenue dashboard is opened many times a day and often recomputes years of history on every view. In a warehouse billed by data scanned or compute time, that is a direct cost; in PostgreSQL it is load on the primary. The biggest win is not a better plan for the same query, it is not running the expensive query at all: maintain a small daily summary and aggregate from that.
+
+The demonstration uses a synthetic table of 300,000 order lines over just over ten months:
+
+```sql
+CREATE TABLE sales_big AS
+SELECT g AS line_id,
+       TIMESTAMPTZ '2026-01-01 00:00+00' + (g % 300000) * INTERVAL '90 seconds' AS order_ts,
+       (ARRAY['USD','GBP','EUR'])[g % 3 + 1]           AS currency,
+       ((g * 37) % 5000) / 100.0                       AS amount
+FROM generate_series(1, 300000) AS g;
+
+CREATE TABLE fx_monthly AS
+SELECT c.currency, m::date AS month, r.rate AS usd_rate
+FROM (VALUES ('USD'), ('GBP'), ('EUR')) AS c(currency)
+CROSS JOIN generate_series(DATE '2026-01-01', DATE '2026-12-01', INTERVAL '1 month') AS m
+JOIN (VALUES ('USD', 1.00), ('GBP', 1.27), ('EUR', 1.09)) AS r(currency, rate) ON r.currency = c.currency;
+
+ANALYZE sales_big;
+ANALYZE fx_monthly;
+```
+
+The direct query reads every line on every dashboard load. `EXPLAIN ANALYZE` with timing off shows the row counts, which are what drive cost:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT date_trunc('month', s.order_ts AT TIME ZONE 'UTC') AS month,
+       SUM(s.amount * fx.usd_rate)                         AS gross_usd
+FROM sales_big s
+JOIN fx_monthly fx ON fx.currency = s.currency
+                  AND fx.month = date_trunc('month', s.order_ts AT TIME ZONE 'UTC')::date
+GROUP BY 1;
+```
+
+```text
+HashAggregate (actual rows=11 loops=1)
+  Group Key: date_trunc('month'::text, (s.order_ts AT TIME ZONE 'UTC'::text))
+  Batches: 1  Memory Usage: 793kB
+  ->  Hash Join (actual rows=300000 loops=1)
+        Hash Cond: ((s.currency = fx.currency) AND ((date_trunc('month'::text, (s.order_ts AT TIME ZONE 'UTC'::text)))::date = fx.month))
+        ->  Seq Scan on sales_big s (actual rows=300000 loops=1)
+        ->  Hash (actual rows=36 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 10kB
+              ->  Seq Scan on fx_monthly fx (actual rows=36 loops=1)
+```
+
+Build a daily summary once (and then append only new days), and the dashboard query reads a few hundred rows:
+
+```sql
+CREATE TABLE daily_revenue AS
+SELECT (s.order_ts AT TIME ZONE 'UTC')::date AS day,
+       s.currency,
+       SUM(s.amount) AS amount
+FROM sales_big s
+GROUP BY 1, 2;
+ANALYZE daily_revenue;
+
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT date_trunc('month', d.day)::date AS month,
+       SUM(d.amount * fx.usd_rate)      AS gross_usd
+FROM daily_revenue d
+JOIN fx_monthly fx ON fx.currency = d.currency
+                  AND fx.month = date_trunc('month', d.day)::date
+GROUP BY 1;
+```
+
+```text
+HashAggregate (actual rows=11 loops=1)
+  Group Key: (date_trunc('month'::text, (d.day)::timestamp with time zone))::date
+  Batches: 1  Memory Usage: 24kB
+  ->  Hash Join (actual rows=939 loops=1)
+        Hash Cond: ((d.currency = fx.currency) AND ((date_trunc('month'::text, (d.day)::timestamp with time zone))::date = fx.month))
+        ->  Seq Scan on daily_revenue d (actual rows=939 loops=1)
+        ->  Hash (actual rows=36 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 10kB
+              ->  Seq Scan on fx_monthly fx (actual rows=36 loops=1)
+```
+
+The summary has one row per day and currency (939 rows instead of 300,000). Check that both give the same totals before switching the dashboard over:
+
+```sql
+SELECT (SELECT SUM(amount) FROM sales_big)::numeric(14,2)     AS raw_total,
+       (SELECT SUM(amount) FROM daily_revenue)::numeric(14,2) AS summary_total;
+```
+
+| raw_total | summary_total |
+|---|---|
+| 7498500.00 | 7498500.00 |
+
+Keeping the summary in the original currency and converting at query time means a corrected FX rate does not force a rebuild. Other cost levers, in rough order of impact:
+
+- **Read fewer rows**: filter on the raw timestamp with a range (`order_ts >= ... AND order_ts < ...`) so partition pruning and indexes work; `date_trunc('month', order_ts) = ...` defeats both.
+- **Read fewer columns**: in columnar warehouses, cost tracks the columns scanned, so never `SELECT *` in a revenue model.
+- **Recompute only what changed**: closed months are final under the cash definition; refresh the open month and a few days of late data.
+- **Cache the result**: a materialised view or a BI extract for the dashboard, refreshed after the load.
+
+## Approach: sharding and distributed SQL
+
+**Why it matters.** At large scale, orders live on many nodes: a sharded PostgreSQL cluster (for example with the Citus extension), or a distributed warehouse that spreads data over workers. Monthly revenue still works, but how the data is distributed decides whether the query is cheap.
+
+**Choose the distribution key for the joins.** Distribute `orders`, `order_items` and `refunds` by `customer_id` (put the column on the child tables too), so an order and its lines and refunds sit on the same shard and join locally. Small, shared tables such as `fx_rates` and `products` are copied to every node as reference tables. In Citus that looks like this (not executed here):
+
+{/* noexec */}
+```sql
+SELECT create_distributed_table('orders',      'customer_id');
+SELECT create_distributed_table('order_items', 'customer_id', colocate_with => 'orders');
+SELECT create_distributed_table('refunds',     'customer_id', colocate_with => 'orders');
+SELECT create_reference_table('fx_rates');
+SELECT create_reference_table('products');
+```
+
+**Aggregate in two phases.** `SUM` is decomposable: each shard sums its own rows by month, and the coordinator adds the partial sums. You can simulate three shards on one PostgreSQL node with a hash of the distribution key and see that the combined partials equal the direct answer:
+
+```sql
+WITH order_lines AS (
+  SELECT o.customer_id,
+         date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month,
+         oi.qty * oi.unit_price * fx.usd_rate                     AS usd
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.order_id
+  JOIN fx_rates fx    ON fx.currency = o.currency
+                     AND fx.month = date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date
+  WHERE o.status = 'completed'
+),
+per_shard AS (                                   -- phase 1: runs on every shard
+  SELECT abs(hashint4(customer_id)) % 3 AS shard, month,
+         SUM(usd) AS partial_sum, COUNT(*) AS partial_count
+  FROM order_lines
+  GROUP BY 1, 2
+)
+SELECT month,                                    -- phase 2: the coordinator combines
+       COUNT(*)                                        AS shards_contributing,
+       SUM(partial_sum)::numeric(12,2)                 AS gross_usd,
+       (SUM(partial_sum) / SUM(partial_count))::numeric(12,2) AS avg_line_usd,
+       (SELECT SUM(usd) FROM order_lines l WHERE l.month = p.month)::numeric(12,2) AS single_node_check
+FROM per_shard p
+GROUP BY month
+ORDER BY month;
+```
+
+| month | shards_contributing | gross_usd | avg_line_usd | single_node_check |
+|---|---|---|---|---|
+| 2026-01-01 | 2 | 300.00 | 75.00 | 300.00 |
+| 2026-02-01 | 3 | 250.00 | 62.50 | 250.00 |
+| 2026-04-01 | 2 | 94.80 | 47.40 | 94.80 |
+
+`AVG` is not decomposable on its own: the average of shard averages is wrong when shards hold different numbers of rows. Ship the sum and the count and divide at the end, as above. `COUNT(DISTINCT customer_id)` is decomposable only when the data is distributed by `customer_id`; otherwise each shard must send its distinct values, or you use a HyperLogLog sketch.
+
+**Pitfalls.** Distributing by `order_id` instead makes per-customer queries hit every shard, and distributing by date sends all of today's writes to one node (a hot shard). A join on a non-distribution column forces a repartition (shuffle) of one side across the network, usually the most expensive step in a distributed plan. Cross-shard transactions, such as an order and its refund written by different services, need two-phase commit or an outbox design.
+
+**In interviews.** A strong answer names the distribution key and why, explains partial and final aggregation, and calls out the non-decomposable aggregates.
+
+## Interview tips
+
+**How it is asked.** "Monthly revenue for the last 12 months", "net of refunds", "by category as columns", "month-over-month growth", "why doesn't this revenue match finance's number?", or a schema with orders, lines and refunds where the interviewer waits to see whether you fan out.
+
+**What a strong answer includes.**
+
+1. Clarifying questions first: which statuses count, gross or net, refund month or order month, currency and rate, time zone.
+2. The grain of every table, and aggregation to order level before joining independent children.
+3. A month spine, so empty months show 0 and `LAG` compares real neighbours.
+4. Gross, refunds and net as separate columns that reconcile.
+5. An efficiency plan: daily summary, incremental refresh of open months, sargable date filters.
+
+**Mistakes candidates make.**
+
+- Joining items and refunds together, doubling both.
+- Summing amounts in mixed currencies.
+- Grouping by `EXTRACT(MONTH FROM order_ts)` alone, which merges January 2025 with January 2026.
+- Treating `LAG` as "last month" when months are missing.
+- Using `BETWEEN '2026-01-01' AND '2026-01-31'` on a timestamp, which loses everything after midnight on the 31st.
+- Averaging monthly averages, or averaging shard averages, instead of dividing total by total.
