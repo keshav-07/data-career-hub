@@ -90,5 +90,25 @@
   "Bitmap indexing": {
     "ref": "articles:sql/indexes",
     "heading": "Bitmap indexing"
+  },
+  "Partitioning strategies": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Partitioning strategies"
+  },
+  "Partition pruning": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Partition pruning"
+  },
+  "Materialized views": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Materialized views"
+  },
+  "Columnar vs row storage": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Columnar vs row storage"
+  },
+  "Sharding & distributed SQL": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Sharding and distributed SQL"
   }
 }

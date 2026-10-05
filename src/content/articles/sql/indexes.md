@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/query-optimization-fundamentals"]
 related: ["articles:snowflake/micro-partitions-clustering-pruning", "articles:data-warehousing/partitioning-clustering-data-layout"]
 previous: "articles:sql/query-optimization-fundamentals"
+next: "articles:sql/partitioning-materialized-views-storage"
 versionContext: "SQL examples run on PostgreSQL 16.14 with parallel query switched off for readable plans; the bitmap simulation runs on Python 3. Costs, timings and index sizes vary by machine and data. Oracle bitmap index syntax was not executed."
 sources:
   - { label: "PostgreSQL 16 documentation: Multicolumn indexes", url: "https://www.postgresql.org/docs/16/indexes-multicolumn.html" }
