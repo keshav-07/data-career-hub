@@ -102,5 +102,45 @@
  "Error handling & DLQ": {
   "ref": "articles:aws/lambda-for-data-pipelines",
   "heading": "Error handling and DLQs"
+ },
+ "Glue Data Catalog": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue Data Catalog"
+ },
+ "Glue Crawlers": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue crawlers"
+ },
+ "Glue partitions": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue partitions"
+ },
+ "Glue ETL jobs (Spark)": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue ETL jobs (Spark)"
+ },
+ "PySpark on Glue": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "PySpark on Glue"
+ },
+ "Dynamic frames": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "DynamicFrames"
+ },
+ "Glue Studio": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue Studio"
+ },
+ "Glue bookmarks": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue job bookmarks"
+ },
+ "Glue triggers/workflows": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue triggers and workflows"
+ },
+ "Glue cost tuning": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue cost tuning"
  }
 }
