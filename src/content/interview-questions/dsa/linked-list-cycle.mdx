@@ -1,0 +1,149 @@
+---
+title: "Linked List Cycle: Floyd's Fast and Slow Pointers"
+description: "Detect a cycle in a linked list with a visited set, then in O(1) space with Floyd's tortoise and hare. Python code, why it works, cycle start and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Move a slow pointer one node at a time and a fast pointer two nodes at a time. If the list ends, there is no cycle. If there is a cycle, the fast pointer gains one node per step on the slow one inside the loop, so they must meet. This is Floyd's algorithm: O(n) time and O(1) space, compared with O(n) space for a set of visited nodes."
+followUps: ["How do you find the node where the cycle begins?", "How would you compute the length of the cycle?", "Why must the visited set store nodes rather than values?", "Where else is fast and slow pointer technique useful?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/merge-two-sorted-lists"
+next: "interview-questions:dsa/reorder-list"
+---
+
+## Problem
+
+Given the head of a singly linked list, decide whether the list contains a cycle: some node whose `next` pointer leads back to a node seen earlier, so that following `next` forever never reaches `None`. Return `True` or `False`. Try to use constant extra memory.
+
+This is widely known as LeetCode 141 (Linked List Cycle). Its follow-up, finding where the cycle starts, is LeetCode 142.
+
+Constraints for this version: 0 to 10,000 nodes, values may repeat.
+
+## Examples
+
+| List | Result |
+|---|---|
+| `4 -> 8 -> 15 -> 16 -> 23`, with 23 pointing back to 8 | `True` |
+| `4 -> 8 -> 15` ending in `None` | `False` |
+| single node pointing to itself | `True` |
+| empty list | `False` |
+
+## Approach 1: brute force
+
+Walk the list and remember every node you have visited. Seeing a node twice means a cycle.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def has_cycle_set(head):
+    seen = set()
+    node = head
+    while node:
+        if node in seen:          # identity of the node object, not its value
+            return True
+        seen.add(node)
+        node = node.next
+    return False
+```
+
+O(n) time and O(n) space. Note that the set holds node objects (hashed by identity by default), not values, since different nodes may share a value.
+
+## Approach 2: optimal
+
+**Key insight.** Two runners on a circular track at different speeds always meet. Let `slow` move one step and `fast` move two. Without a cycle, `fast` reaches `None`. With a cycle, once both are inside it, the gap between them shrinks by exactly one node per step, so it reaches zero within one lap: they cannot jump over each other.
+
+**Walkthrough** for `4 -> 8 -> 15 -> 16 -> 23 -> (back to 8)`:
+
+| Step | `slow` | `fast` |
+|---|---|---|
+| 0 | 4 | 4 |
+| 1 | 8 | 15 |
+| 2 | 15 | 23 |
+| 3 | 16 | 15 |
+| 4 | 23 | 23: meet, cycle found |
+
+```python
+def has_cycle(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow = slow.next
+        fast = fast.next.next
+        if slow is fast:
+            return True
+    return False
+```
+
+### Follow-up: where does the cycle start?
+
+After the pointers meet, reset one pointer to the head and move both one step at a time. They meet again at the first node of the cycle. The reason: if the distance from the head to the cycle start is `a`, and the meeting point is `b` steps into the cycle of length `c`, then `2(a + b) = a + b + k*c` for some whole number of laps `k`, so `a = k*c - b`. Walking `a` steps from the meeting point lands exactly on the cycle start.
+
+```python
+def cycle_start(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow = slow.next
+        fast = fast.next.next
+        if slow is fast:
+            finder = head
+            while finder is not slow:
+                finder = finder.next
+                slow = slow.next
+            return finder
+    return None
+```
+
+**Complexity.** O(n) time and O(1) space for both functions.
+
+## Tests
+
+```python
+def build_list(values, pos=-1):
+    """Build a list; if pos >= 0 the last node links back to the node at index pos."""
+    nodes = [ListNode(v) for v in values]
+    for x, y in zip(nodes, nodes[1:]):
+        x.next = y
+    if nodes and pos >= 0:
+        nodes[-1].next = nodes[pos]
+    return (nodes[0] if nodes else None), nodes
+
+cases = [
+    ([4, 8, 15, 16, 23], 1, True),
+    ([4, 8, 15], -1, False),
+    ([1], 0, True),            # self-loop
+    ([1], -1, False),
+    ([], -1, False),
+    ([1, 2], 0, True),
+    ([7, 7, 7, 7], 3, True),   # duplicates: last node points to itself
+    ([7, 7, 7, 7], -1, False), # duplicates without a cycle (a value-based set would be wrong)
+]
+for values, pos, expected in cases:
+    head, nodes = build_list(values, pos)
+    assert has_cycle_set(head) == expected, (values, pos)
+    assert has_cycle(head) == expected, (values, pos)
+    start = cycle_start(head)
+    assert start is (nodes[pos] if expected else None), (values, pos)
+
+head, nodes = build_list(list(range(10_000)), 5_000)
+assert has_cycle(head) and cycle_start(head) is nodes[5_000]
+print("all cycle tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Loop condition.** Check `fast and fast.next` before `fast.next.next`, or you get `AttributeError` on lists of odd or even length.
+- **Compare identity, not values.** Use `slow is fast`. Comparing `.val` gives false positives when values repeat.
+- **Checking before moving.** Both pointers start at `head`, so testing `slow is fast` before the first move returns `True` for every list.
+- **Do not mark nodes by mutating values** (for example setting `val` to a sentinel). It destroys the input and fails if real values can equal the sentinel.
+
+## Where this shows up in data engineering
+
+Cycle detection matters whenever you follow references: detecting circular dependencies between tasks (Airflow rejects DAGs with cycles), parent-child loops in hierarchical data, or redirect chains. Those are usually graph problems solved with depth-first search, but the "follow pointers until you repeat" idea is the same. Floyd's method is specifically useful when you can only follow one next pointer and cannot afford extra memory.

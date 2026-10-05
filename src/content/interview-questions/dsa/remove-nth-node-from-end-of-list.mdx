@@ -1,0 +1,149 @@
+---
+title: "Remove Nth Node From End of List: One Pass with a Gap of n"
+seoTitle: "Remove Nth Node From End of a Linked List"
+description: "Delete the n-th node from the end of a linked list in one pass using two pointers spaced n apart and a dummy head. Python code, walkthrough and tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Put a dummy node before the head. Move a lead pointer n steps ahead, then move a lead and a trailing pointer together until the lead reaches the last node; the trailing pointer is now just before the node to delete, so skip it with trail.next = trail.next.next. The dummy handles deleting the head. One pass, O(L) time and O(1) space."
+followUps: ["How would you return the n-th node from the end without deleting it?", "What should happen if n is larger than the list length?", "Why is a two-pass solution not really worse in big-O terms?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/reorder-list"
+next: "interview-questions:dsa/copy-list-with-random-pointer"
+---
+
+## Problem
+
+Given the head of a singly linked list and a positive integer `n`, remove the node that is `n` positions from the end (so `n = 1` is the last node) and return the head of the resulting list. You may assume `n` is between 1 and the list length.
+
+This is widely known as LeetCode 19 (Remove Nth Node From End of List). Interviewers usually ask for a single pass.
+
+Constraints for this version: the list has 1 to 1,000 nodes and `1 <= n <= length`.
+
+## Examples
+
+| List | `n` | Result |
+|---|---|---|
+| `11 -> 22 -> 33 -> 44 -> 55` | `2` | `11 -> 22 -> 33 -> 55` |
+| `11 -> 22 -> 33 -> 44 -> 55` | `5` | `22 -> 33 -> 44 -> 55` (the head is removed) |
+| `11 -> 22` | `1` | `11` |
+| `11` | `1` | empty list |
+
+## Approach 1: brute force
+
+Two passes: count the length `L`, then walk to the node just before position `L - n` (counting from 0) and unlink the next one.
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def remove_nth_two_pass(head, n):
+    length = 0
+    node = head
+    while node:
+        length += 1
+        node = node.next
+    dummy = ListNode(0, head)
+    prev = dummy
+    for _ in range(length - n):        # stop just before the target
+        prev = prev.next
+    prev.next = prev.next.next
+    return dummy.next
+```
+
+O(L) time and O(1) space. This is already linear; the one-pass version only saves a second walk, but it is the expected answer.
+
+## Approach 2: optimal
+
+**Key insight.** If two pointers start together and one moves `n` steps ahead, then when the leader reaches the last node, the trailer is exactly `n` nodes behind it, which is the node **before** the one to remove. Starting both at a dummy node means "the node before the head" exists, so deleting the head needs no special case.
+
+**Walkthrough** for `11 -> 22 -> 33 -> 44 -> 55`, `n = 2`:
+
+| Step | `lead` | `trail` |
+|---|---|---|
+| start | dummy | dummy |
+| after moving lead 2 steps | 22 | dummy |
+| move both | 33 | 11 |
+| move both | 44 | 22 |
+| move both | 55 (last) | 33 |
+
+`trail` is 33, so set `33.next` to 55, which removes 44.
+
+```python
+def remove_nth_from_end(head, n):
+    dummy = ListNode(0, head)
+    lead = trail = dummy
+    for _ in range(n):
+        lead = lead.next
+    while lead.next:                   # stop when lead is on the last node
+        lead = lead.next
+        trail = trail.next
+    trail.next = trail.next.next       # unlink the target
+    return dummy.next
+```
+
+A recursive variant counts positions on the way back up the call stack. It is a nice alternative to mention, though it uses O(L) stack:
+
+```python
+def remove_nth_recursive(head, n):
+    def walk(node):
+        if node is None:
+            return None, 0
+        rest, depth = walk(node.next)
+        depth += 1                     # position of node counted from the end
+        if depth == n:
+            return rest, depth         # drop this node
+        node.next = rest
+        return node, depth
+    return walk(head)[0]
+```
+
+**Complexity.** One pass, O(L) time, O(1) extra space for the iterative version.
+
+## Tests
+
+```python
+def build_list(values):
+    dummy = tail = ListNode()
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+def to_list(head):
+    out = []
+    while head:
+        out.append(head.val)
+        head = head.next
+    return out
+
+for fn in (remove_nth_two_pass, remove_nth_from_end, remove_nth_recursive):
+    base = [11, 22, 33, 44, 55]
+    for n in range(1, len(base) + 1):
+        expected = base[:len(base) - n] + base[len(base) - n + 1:]
+        assert to_list(fn(build_list(base), n)) == expected, (fn.__name__, n)
+    assert fn(build_list([11]), 1) is None
+    assert to_list(fn(build_list([11, 22]), 1)) == [11]
+    assert to_list(fn(build_list([11, 22]), 2)) == [22]
+    assert to_list(fn(build_list([5, 5, 5]), 2)) == [5, 5]     # duplicates
+print("all remove-nth tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Removing the head** (`n` equals the length) is the case that breaks solutions without a dummy node, because there is no node before the head to relink.
+- **Off by one in the gap.** Starting both pointers at the dummy and advancing the leader `n` steps puts the trailer before the target. Starting at the head instead needs `n + 1` steps or a different stop condition; pick one convention and trace a two-node list.
+- **Single-node list** must return `None`.
+- **Invalid `n`.** If the problem did not promise `1 <= n <= length`, the leader would run off the end; ask the interviewer whether to raise an error or return the list unchanged.
+
+## Where this shows up in data engineering
+
+The "two pointers a fixed distance apart" pattern is the same idea as a sliding window of fixed size over a stream: you keep a lagging reference exactly `n` items behind the newest one, for example to compare a value with the one `n` records earlier, which is what `LAG(value, n)` does in SQL.

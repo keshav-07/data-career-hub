@@ -1,0 +1,180 @@
+---
+title: "Copy List with Random Pointer: Hash Map and Interleaving Solutions"
+seoTitle: "Copy List with Random Pointer: Deep Copy"
+description: "Deep copy a linked list whose nodes also point to arbitrary nodes: a two-pass hash map solution and the O(1)-space interleaving trick, with Python tests."
+technology: ["dsa"]
+topic: ["linked-lists"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+shortAnswer: "First pass: create a copy of every node and store original-to-copy in a dictionary. Second pass: set each copy's next and random to the copies of the original's next and random, looked up in the dictionary. That is O(n) time and O(n) space. To use O(1) extra space, weave each copy right after its original, set random pointers via original.random.next, then unweave the two lists."
+followUps: ["How would you deep copy a general graph with cycles?", "Why does copy.deepcopy work here, and what does it use internally?", "How do you verify that no copied node points back into the original list?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/remove-nth-node-from-end-of-list"
+next: "interview-questions:dsa/add-two-numbers"
+---
+
+## Problem
+
+Each node of a singly linked list has a value, a `next` pointer and an extra `random` pointer that can refer to any node in the same list, or be `None`. Produce a **deep copy**: a brand-new list of new nodes with the same values, where every copied `next` and `random` pointer refers to the corresponding copied node. No pointer in the copy may refer to a node of the original list.
+
+This is widely known as LeetCode 138 (Copy List with Random Pointer). The difficulty is that a `random` pointer can point forward to a node you have not copied yet.
+
+Constraints for this version: 0 to 1,000 nodes; values are integers and may repeat.
+
+## Examples
+
+Describe a list as `[value, index of random target]` pairs, with `None` for no random pointer:
+
+| Original | Copy (new nodes) |
+|---|---|
+| `[[5, None], [9, 0], [2, 3], [7, 1]]` | same shape: node 1's random is copy-of-node-0, node 2's is copy-of-node-3, node 3's is copy-of-node-1 |
+| `[[4, 0]]` (random points to itself) | one new node whose random points to itself |
+| empty | empty |
+
+## Approach 1: brute force
+
+Without a lookup structure, you can find each copy's random target by position: for every original node, walk from the head to find the index of its random target, then walk the copied list to the same index.
+
+```python
+class Node:
+    def __init__(self, val, next=None, random=None):
+        self.val = val
+        self.next = next
+        self.random = random
+
+def copy_random_list_quadratic(head):
+    originals, copies = [], []
+    node = head
+    while node:
+        originals.append(node)
+        copies.append(Node(node.val))
+        node = node.next
+    for i in range(len(copies) - 1):
+        copies[i].next = copies[i + 1]
+    for i, orig in enumerate(originals):
+        if orig.random is not None:
+            j = next(k for k, candidate in enumerate(originals) if candidate is orig.random)
+            copies[i].random = copies[j]
+    return copies[0] if copies else None
+```
+
+The identity search makes it O(n^2) time with O(n) space. It does show the right idea: you need a mapping from each original node to its copy.
+
+## Approach 2: optimal
+
+### Hash map (the standard answer)
+
+**Key insight.** If you create all copies first, any pointer can then be translated with one dictionary lookup: `copy_of[original.random]`.
+
+```python
+def copy_random_list(head):
+    if head is None:
+        return None
+    copy_of = {None: None}          # lets None map to None without a branch
+    node = head
+    while node:                     # pass 1: create every copy
+        copy_of[node] = Node(node.val)
+        node = node.next
+    node = head
+    while node:                     # pass 2: wire next and random
+        copy_of[node].next = copy_of[node.next]
+        copy_of[node].random = copy_of[node.random]
+        node = node.next
+    return copy_of[head]
+```
+
+O(n) time and O(n) space. Nodes are hashed by identity (the default for objects without `__eq__`), which is exactly what you want when values repeat.
+
+### Interleaving (O(1) extra space)
+
+**Key insight.** Store the mapping inside the list itself: put each copy directly after its original, `A -> A' -> B -> B' -> ...`. Then the copy of any node `X` is simply `X.next`, so `A'.random = A.random.next`.
+
+**Walkthrough** for originals `A(random C) -> B(random None) -> C(random A)`:
+
+| Phase | List |
+|---|---|
+| Weave | `A -> A' -> B -> B' -> C -> C'` |
+| Random | `A'.random = C.next = C'`, `B'.random = None`, `C'.random = A.next = A'` |
+| Unweave | original `A -> B -> C` restored, copy `A' -> B' -> C'` |
+
+```python
+def copy_random_list_weave(head):
+    if head is None:
+        return None
+    node = head
+    while node:                               # 1. weave copies in
+        node.next = Node(node.val, node.next)
+        node = node.next.next
+    node = head
+    while node:                               # 2. set random pointers on copies
+        if node.random is not None:
+            node.next.random = node.random.next
+        node = node.next.next
+    copy_head = head.next
+    node = head
+    while node:                               # 3. separate the two lists
+        copy = node.next
+        node.next = copy.next
+        copy.next = copy.next.next if copy.next else None
+        node = node.next
+    return copy_head
+```
+
+**Complexity.** O(n) time, O(1) extra space apart from the output. It temporarily modifies the input, then restores it, which you should mention.
+
+## Tests
+
+```python
+def build(spec):
+    nodes = [Node(v) for v, _ in spec]
+    for a, b in zip(nodes, nodes[1:]):
+        a.next = b
+    for node, (_, r) in zip(nodes, spec):
+        node.random = nodes[r] if r is not None else None
+    return nodes[0] if nodes else None
+
+def describe(head):
+    nodes = []
+    node = head
+    while node:
+        nodes.append(node)
+        node = node.next
+    index = {id(n): i for i, n in enumerate(nodes)}
+    return [[n.val, index[id(n.random)] if n.random else None] for n in nodes], {id(n) for n in nodes}
+
+specs = [
+    [],
+    [[4, 0]],
+    [[4, None]],
+    [[5, None], [9, 0], [2, 3], [7, 1]],
+    [[1, 2], [1, 2], [1, 2]],                     # duplicates, shared random target
+    [[i, (i * 7) % 50] for i in range(50)],
+]
+for fn in (copy_random_list_quadratic, copy_random_list, copy_random_list_weave):
+    for spec in specs:
+        original = build(spec)
+        before, original_ids = describe(original)
+        copy = fn(original)
+        after, copy_ids = describe(copy)
+        assert after == spec, (fn.__name__, spec)
+        assert not (copy_ids & original_ids), "copy shares nodes with the original"
+        assert describe(original)[0] == before, "original list was not restored"
+print("all random-pointer copy tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Shallow copies.** Assigning `copy.random = original.random` links the copy back into the original list. Tests should check node identity, not just values.
+- **Random pointing forward.** A single pass that creates nodes on demand needs the dictionary anyway; do not assume random targets are already copied.
+- **Self-references and `None`** must both work. Mapping `None` to `None` in the dictionary removes a branch.
+- **Not restoring the input** in the weaving method leaves the caller's list corrupted.
+- **Hashing by value** fails when values repeat; key the map by the node object.
+
+## Where this shows up in data engineering
+
+The pattern "first create new IDs for every entity, then rewrite every reference through a mapping" is how you copy or migrate related records: cloning a set of rows that reference each other by surrogate key, or moving objects between environments where IDs change. Doing it in two passes with a lookup table avoids broken foreign keys when a reference points to something not yet copied.
