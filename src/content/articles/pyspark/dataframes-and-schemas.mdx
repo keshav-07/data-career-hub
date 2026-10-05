@@ -19,9 +19,9 @@ related: ["articles:pyspark/transformations-vs-actions", "articles:delta-lake/tr
 versionContext: "All examples run on PySpark 4.2.0 in local mode (local[2]) with Java 21. Error messages are from Spark 4.2; Spark 3.x had ANSI mode off by default, so casts there return NULL instead of failing."
 sources:
   - { label: "PySpark API reference: DataFrame", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/dataframe.html" }
-  - { label: "PySpark API reference: Data types", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/data_types.html" }
+  - { label: "PySpark API reference: StructType", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.types.StructType.html" }
   - { label: "Spark SQL documentation: ANSI compliance", url: "https://spark.apache.org/docs/latest/sql-ref-ansi-compliance.html" }
-  - { label: "Spark SQL guide: Datasets and DataFrames", url: "https://spark.apache.org/docs/latest/sql-programming-guide.html" }
+  - { label: "Spark SQL reference: Data types", url: "https://spark.apache.org/docs/latest/sql-ref-datatypes.html" }
 ---
 
 A DataFrame is a distributed table: named, typed columns whose rows are split into partitions across a cluster. Almost every PySpark pipeline is a chain of DataFrame operations, and the **schema** (column names, types and nullability) is the contract every later step depends on. This lesson covers the core API, how to define schemas on purpose, how to write column logic that behaves correctly with NULLs, and how to cast and reconcile types when data changes shape.
@@ -200,7 +200,7 @@ StructField('amount', DoubleType(), True)
 struct<id:int,address:struct<city:string,zip:string>,tags:array<string>,attrs:map<string,string>>
 ```
 
-The DDL string and the `StructType` are equivalent. DDL is shorter and easy to keep in config; `StructType` is easier to build programmatically. `schema.json()` serialises a schema so you can store it alongside a pipeline and reload it with `StructType.fromJson`. Nested types (`StructType`, `ArrayType`, `MapType`) are covered in [nested data and explode](/pyspark/nested-data-explode/).
+The DDL string and the `StructType` are equivalent. DDL is shorter and easy to keep in config; `StructType` is easier to build programmatically. `schema.json()` serialises a schema so you can store it alongside a pipeline and reload it with `StructType.fromJson`. Nested types (`StructType`, `ArrayType`, `MapType`) are covered in the nested data and explode lesson.
 
 ### Common types
 
