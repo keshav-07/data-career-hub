@@ -142,5 +142,37 @@
  "Glue cost tuning": {
   "ref": "articles:aws/glue-catalog-crawlers-etl",
   "heading": "Glue cost tuning"
+ },
+ "Athena basics": {
+  "ref": "articles:aws/athena",
+  "heading": "Athena basics"
+ },
+ "Querying S3 with SQL": {
+  "ref": "articles:aws/athena",
+  "heading": "Querying S3 with SQL"
+ },
+ "CTAS & external tables": {
+  "ref": "articles:aws/athena",
+  "heading": "CTAS and external tables"
+ },
+ "Partition projection": {
+  "ref": "articles:aws/athena",
+  "heading": "Partition projection"
+ },
+ "Athena performance tuning": {
+  "ref": "articles:aws/athena",
+  "heading": "Athena performance tuning"
+ },
+ "Workgroups": {
+  "ref": "articles:aws/athena",
+  "heading": "Workgroups"
+ },
+ "Federated queries": {
+  "ref": "articles:aws/athena",
+  "heading": "Federated queries"
+ },
+ "Cost per query": {
+  "ref": "articles:aws/athena",
+  "heading": "Cost per query"
  }
 }
