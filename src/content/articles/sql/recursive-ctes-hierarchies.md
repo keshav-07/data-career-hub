@@ -16,6 +16,7 @@ learningObjectives:
   - "Describe engine differences such as recursion limits and CONNECT BY"
 prerequisites: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/joins"]
 related: ["articles:sql/window-functions", "articles:data-warehousing/star-schema"]
+next: "articles:sql/gaps-islands-sessionization"
 versionContext: "SQL examples run on PostgreSQL 16.14 (SEARCH and CYCLE clauses need PostgreSQL 14 or later). The Snowflake CONNECT BY and SQL Server snippets were not executed."
 sources:
   - { label: "PostgreSQL documentation: WITH queries (common table expressions)", url: "https://www.postgresql.org/docs/current/queries-with.html" }

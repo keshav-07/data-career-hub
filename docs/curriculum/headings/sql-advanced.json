@@ -1,5 +1,26 @@
 {
-  "Recursive CTEs": { "ref": "articles:sql/recursive-ctes-hierarchies", "heading": "Recursive CTEs" },
-  "Hierarchical / org-chart queries": { "ref": "articles:sql/recursive-ctes-hierarchies", "heading": "Hierarchical and org-chart queries" },
-  "Graph traversal in SQL": { "ref": "articles:sql/recursive-ctes-hierarchies", "heading": "Graph traversal in SQL" }
+  "Recursive CTEs": {
+    "ref": "articles:sql/recursive-ctes-hierarchies",
+    "heading": "Recursive CTEs"
+  },
+  "Hierarchical / org-chart queries": {
+    "ref": "articles:sql/recursive-ctes-hierarchies",
+    "heading": "Hierarchical and org-chart queries"
+  },
+  "Graph traversal in SQL": {
+    "ref": "articles:sql/recursive-ctes-hierarchies",
+    "heading": "Graph traversal in SQL"
+  },
+  "Gaps and Islands problem": {
+    "ref": "articles:sql/gaps-islands-sessionization",
+    "heading": "The gaps and islands problem"
+  },
+  "Detecting consecutive streaks": {
+    "ref": "articles:sql/gaps-islands-sessionization",
+    "heading": "Detecting consecutive streaks"
+  },
+  "Sessionization of events": {
+    "ref": "articles:sql/gaps-islands-sessionization",
+    "heading": "Sessionization of events"
+  }
 }
