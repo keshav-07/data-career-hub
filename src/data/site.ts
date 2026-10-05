@@ -14,6 +14,7 @@ export const GOALS = [
   { label: "Learn", href: "/data-engineering/" },
   { label: "Interview", href: "/interview/" },
   { label: "Roadmaps", href: "/roadmaps/" },
+  { label: "Planner", href: "/planner/" },
   { label: "Projects", href: "/projects/" },
   { label: "Career", href: "/career/" },
   { label: "Resources", href: "/resources/" },
@@ -48,6 +49,7 @@ export const FOOTER_COLUMNS: { title: string; links: { label: string; href: stri
     links: [
       { label: "Career hub", href: "/career/" },
       { label: "Roadmaps", href: "/roadmaps/" },
+  { label: "Planner", href: "/planner/" },
     ],
   },
   {

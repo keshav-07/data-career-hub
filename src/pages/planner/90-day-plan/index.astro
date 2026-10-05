@@ -1,0 +1,106 @@
+---
+import ContentLayout from "../../../layouts/ContentLayout.astro";
+import PlannerRing from "../../../components/planner/PlannerRing.astro";
+import { HOME } from "../../../utils/breadcrumbs";
+import { planDays, type PlanDay } from "../../../utils/curriculum";
+
+const days = await planDays();
+const hours = days.reduce((a, d) => a + d.hours, 0);
+const phases = [...new Set(days.map((d) => d.phase))];
+const weeksOf = (phase: string) => {
+  const map = new Map<number, PlanDay[]>();
+  for (const d of days.filter((x) => x.phase === phase)) {
+    map.set(d.week, [...(map.get(d.week) ?? []), d]);
+  }
+  return [...map.entries()];
+};
+const milestone = (week: number) => days.find((d) => d.week === week && d.weekly)?.weekly;
+---
+
+<ContentLayout
+  title="90-Day Data Engineer Study Plan"
+  description="A day-by-day 90-day plan for Data Engineering interviews: SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS and system design each day, with milestones."
+  crumbs={[HOME, { label: "Study planner", href: "/planner/" }, { label: "90-day plan" }]}
+  eyebrow="Study planner"
+  deck={`${days.length} days, ${hours} planned hours: about 3 hours on weekdays and 6 at weekends. Each day pairs one topic from every skill with a mock interview, revision or applications. Every topic links to its lesson.`}
+  width="wide"
+  indexable
+>
+  <div data-planner>
+    <section class="section section--tight">
+      <div class="rings planner-head">
+        <PlannerRing tracker="days" label="Days completed" total={days.length} hours={hours} />
+        <div class="planner-head__text">
+          <label class="pl-start js-only">
+            <span>Your start date (optional)</span>
+            <input type="date" data-pl-start />
+          </label>
+          <p class="muted" style="font-size: var(--fs-sm)">
+            Set a start date to see a calendar date on each day and highlight today. Saved in this
+            browser only.
+          </p>
+        </div>
+      </div>
+      <nav class="pl-jump" aria-label="Jump to phase">
+        {phases.map((p, i) => (
+          <a href={`#phase-${i + 1}`}>{p}</a>
+        ))}
+      </nav>
+    </section>
+
+    {phases.map((phase, pi) => (
+      <section class="section section--tight" aria-labelledby={`phase-${pi + 1}`}>
+        <h2 id={`phase-${pi + 1}`}>{phase}</h2>
+        {weeksOf(phase).map(([week, list]) => (
+          <div class="pl-week">
+            <h3 id={`week-${week}`}>
+              Week {week}
+              {milestone(week) && (
+                <span class="pl-milestone">{milestone(week)!.replace(/^Wk\d+:\s*/, "")}</span>
+              )}
+            </h3>
+            <ol class="pl-days" role="list">
+              {list.map((d) => (
+                <li class="pl-day" data-pl-day-card id={`day-${d.day}`}>
+                  <div class="pl-day__head">
+                    <label class="pl-day__done js-only">
+                      <input type="checkbox" data-pl-day={d.day} data-hours={d.hours} />
+                      <span class="visually-hidden">Mark day {d.day} as done</span>
+                    </label>
+                    <strong>Day {d.day}</strong>
+                    <span class="pl-day__date" data-pl-date={d.day}></span>
+                    <span class="pl-day__theme">{d.theme}</span>
+                    <span class="pl-day__hours">{d.hours} h</span>
+                  </div>
+                  <ul class="pl-tasks" role="list">
+                    {d.tasks.map((t) => (
+                      <li>
+                        <span class="pl-tasks__skill">{t.skill}</span>
+                        {t.href ? <a href={t.href}>{t.topic}</a> : <span>{t.topic}</span>}
+                      </li>
+                    ))}
+                    <li>
+                      <span class="pl-tasks__skill">Also</span>
+                      <span>{d.mock}</span>
+                    </li>
+                  </ul>
+                  {(d.monthly || d.outcome) && (
+                    <p class="pl-month">
+                      {d.monthly && <strong>{d.monthly}</strong>}
+                      {d.outcome && <span> Target: {d.outcome}.</span>}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
+      </section>
+    ))}
+  </div>
+</ContentLayout>
+
+<script>
+  import { initPlanner } from "../../../scripts/planner";
+  initPlanner();
+</script>

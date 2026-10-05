@@ -8,7 +8,9 @@ Rules (per file):
   * ```sql blocks run in order against one fresh database (default engine: PostgreSQL).
   * ```python blocks run in order in one shared namespace, using the interpreter given by --python
     (use the PySpark or Airflow virtualenv interpreter for those lessons).
-  * An HTML comment on the line(s) directly above a fence changes how it runs:
+  * A comment on the line(s) directly above a fence changes how it runs. Use an HTML comment in .md
+    files (<!-- noexec -->) and an MDX comment in .mdx files ({/* noexec */}), because MDX rejects
+    HTML comments:
       <!-- noexec -->          skip (pseudo-code, other engines, multi-session demos)
       <!-- engine: duckdb -->  run this sql block on DuckDB instead (sqlite / postgres also accepted)
       <!-- expect-error -->    the block must fail (e.g. demonstrating a constraint)
@@ -16,7 +18,7 @@ Exit code is non-zero if any block fails.
 """
 import json, os, re, subprocess, sys, tempfile, uuid
 
-FENCE = re.compile(r"((?:<!--[^>]*-->\s*\n)*)```(sql|python)[^\n]*\n(.*?)```", re.S)
+FENCE = re.compile(r"((?:(?:<!--[^>]*-->|\{/\*.*?\*/\})\s*\n)*)```(sql|python)[^\n]*\n(.*?)```", re.S)
 
 RUNNER = r'''
 import sys, json, io, contextlib, traceback

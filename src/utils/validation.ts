@@ -7,6 +7,7 @@ const RESERVED_TOP_LEVEL = new Set([
   "career",
   "resources",
   "roadmaps",
+  "planner",
   "search",
   "about",
   "contact",

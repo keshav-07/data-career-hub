@@ -1,0 +1,35 @@
+---
+/** A progress ring for the study planner (filled in the browser by scripts/planner.ts). */
+interface Props {
+  /** Tracker id, "" for every tracker, or "days" for the 90-day plan. */
+  tracker: string;
+  label: string;
+  total: number;
+  hours?: number;
+  href?: string;
+}
+const { tracker, label, total, hours, href } = Astro.props;
+const Tag = href ? "a" : "div";
+---
+
+<Tag
+  class="ring"
+  href={href}
+  data-pl-ring={tracker}
+  data-total={total}
+  data-hours={hours}
+  data-label={label}
+  role={href ? undefined : "img"}
+>
+  <span class="ring__dial" aria-hidden="true">
+    <span class="ring__value" data-ring-value>
+      0%
+    </span>
+  </span>
+  <span>
+    <span class="ring__label">{label}</span>
+    <span class="ring__detail" data-ring-detail>
+      {tracker === "days" ? `0 of ${total} days` : `0 of ${total}`}
+    </span>
+  </span>
+</Tag>

@@ -47,7 +47,13 @@ for (const p of pages) {
   const h1s = (html.match(/<h1[\s>]/g) ?? []).length;
   if (h1s !== 1) errors.push(`${url}: expected exactly one <h1>, found ${h1s}`);
 
-  const decode = (v) => v?.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  const decode = (v) =>
+    v
+      ?.replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
   const title = decode(html.match(/<title>([^<]*)<\/title>/)?.[1]);
   const desc = html.match(/<meta name="description" content="([^"]*)"/)?.[1];
   const canonical = html.match(/<link rel="canonical" href="([^"]*)"/)?.[1];

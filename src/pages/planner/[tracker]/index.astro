@@ -1,0 +1,222 @@
+---
+import ContentLayout from "../../../layouts/ContentLayout.astro";
+import PlannerRing from "../../../components/planner/PlannerRing.astro";
+import { HOME } from "../../../utils/breadcrumbs";
+import { TRACKERS, trackerRows, type TrackerDef } from "../../../utils/curriculum";
+
+export function getStaticPaths() {
+  return TRACKERS.map((t) => ({ params: { tracker: t.id }, props: { def: t } }));
+}
+const { def } = Astro.props as { def: TrackerDef };
+const rows = await trackerRows(def.id);
+const categories = [...new Set(rows.map((r) => r.category))];
+const LEVEL_ORDER = ["Easy", "Beginner", "Medium", "Intermediate", "Hard", "Advanced", "Expert"];
+const levels = LEVEL_ORDER.filter((l) => rows.some((r) => r.difficulty === l));
+const levelClass: Record<string, string> = {
+  Easy: "easy",
+  Beginner: "easy",
+  Medium: "medium",
+  Intermediate: "medium",
+  Hard: "hard",
+  Advanced: "hard",
+  Expert: "hard",
+};
+const others = TRACKERS.filter((t) => t.id !== def.id);
+---
+
+<ContentLayout
+  title={def.title}
+  description={`Every ${def.short} topic from the Data Engineer study planner, each linked to its lesson. Tick what you studied, practised and revised; progress stays in your browser.`}
+  crumbs={[HOME, { label: "Study planner", href: "/planner/" }, { label: def.short }]}
+  eyebrow="Study planner"
+  deck={`${def.blurb} ${rows.length} topics. Open a topic to study it, then tick your progress.`}
+  width="wide"
+  indexable
+>
+  <div data-planner>
+    <section class="section section--tight">
+      <div class="rings planner-head">
+        <PlannerRing tracker={def.id} label={`${def.short} ${def.doneLabel}`} total={rows.length} />
+        <div class="planner-head__text">
+          <p>
+            <strong>{def.fields.map((f) => f.label).join(", ")}</strong> and a confidence score
+            (1–5) for each topic, as in the planner spreadsheet. A topic counts as complete once it
+            is marked <em>{def.fields[0].label.toLowerCase()}</em>.
+          </p>
+          <p class="muted" style="font-size: var(--fs-sm)">
+            Saved in this browser only. Back it up from the <a href="/planner/">study planner</a>{" "}
+            page.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--tight" data-pl-table>
+      <form
+        class="q-filters js-only"
+        role="search"
+        aria-label="Filter topics"
+        onsubmit="return false"
+      >
+        <label>
+          Search
+          <input type="search" data-f-text placeholder="Filter topics" />
+        </label>
+        <label>
+          Category
+          <select data-f-cat>
+            <option value="">All</option>
+            {categories.map((c) => (
+              <option>{c}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Level
+          <select data-f-level>
+            <option value="">All</option>
+            {levels.map((l) => (
+              <option>{l}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Status
+          <select data-f-status>
+            <option value="">All</option>
+            <option value="todo">Not started</option>
+            <option value="started">In progress</option>
+            <option value="done">Complete</option>
+            <option value="weak">Confidence 1–2</option>
+          </select>
+        </label>
+      </form>
+      <p
+        class="muted js-only"
+        role="status"
+        aria-live="polite"
+        data-f-count
+        style="margin-bottom: var(--sp-3)"
+      ></p>
+      <div class="scroll-region" tabindex="0" role="region" aria-label={`${def.title} (table)`}>
+        <table class="q-table pl-table">
+          <caption class="visually-hidden">{def.title}</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="q-num">
+                #
+              </th>
+              <th scope="col">Topic</th>
+              <th scope="col" class="q-topic">
+                Category
+              </th>
+              <th scope="col">Level</th>
+              {def.fields.map((f) => (
+                <th scope="col" class="pl-check">
+                  {f.label}
+                </th>
+              ))}
+              <th scope="col" class="pl-conf">
+                Confidence
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr
+                data-pl-row={r.key}
+                data-cat={r.category}
+                data-level={r.difficulty}
+                data-text={`${r.topic} ${r.category}`.toLowerCase()}
+              >
+                <td class="q-num">{i + 1}</td>
+                <td class="q-title">
+                  {r.href ? <a href={r.href}>{r.topic}</a> : <span>{r.topic}</span>}
+                </td>
+                <td class="q-topic">{r.category}</td>
+                <td>
+                  <span class={`diff diff--${levelClass[r.difficulty] ?? "medium"}`}>
+                    {r.difficulty}
+                  </span>
+                </td>
+                {def.fields.map((f) => (
+                  <td class="pl-check">
+                    <input
+                      type="checkbox"
+                      class="js-only"
+                      data-pl-key={r.key}
+                      data-pl-field={f.id}
+                      aria-label={`${f.label}: ${r.topic}`}
+                    />
+                  </td>
+                ))}
+                <td class="pl-conf">
+                  <select class="js-only" data-pl-key={r.key} aria-label={`Confidence: ${r.topic}`}>
+                    <option value="">–</option>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option>{n}</option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" data-f-empty hidden>
+        <h3>No topics match these filters</h3>
+        <p>Clear a filter to see more topics.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="group-title">Other trackers</h2>
+      <ul class="pl-links" role="list">
+        {others.map((t) => (
+          <li>
+            <a href={`/planner/${t.id}/`}>{t.title}</a>
+          </li>
+        ))}
+        <li>
+          <a href="/planner/90-day-plan/">90-day plan</a>
+        </li>
+      </ul>
+    </section>
+  </div>
+</ContentLayout>
+
+<script>
+  import { initPlanner, topicState } from "../../../scripts/planner";
+  initPlanner();
+  const root = document.querySelector<HTMLElement>("[data-pl-table]")!;
+  const rows = Array.from(root.querySelectorAll<HTMLTableRowElement>("tbody tr"));
+  const text = root.querySelector<HTMLInputElement>("[data-f-text]")!;
+  const cat = root.querySelector<HTMLSelectElement>("[data-f-cat]")!;
+  const level = root.querySelector<HTMLSelectElement>("[data-f-level]")!;
+  const status = root.querySelector<HTMLSelectElement>("[data-f-status]")!;
+  const count = root.querySelector<HTMLElement>("[data-f-count]")!;
+  const empty = root.querySelector<HTMLElement>("[data-f-empty]")!;
+  const update = () => {
+    const words = text.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    let done = 0;
+    rows.forEach((r) => {
+      const t = topicState(r.dataset.plRow!);
+      const st = t.learn ? "done" : Object.keys(t).length ? "started" : "todo";
+      if (st === "done") done++;
+      const ok =
+        words.every((w) => r.dataset.text!.includes(w)) &&
+        (!cat.value || r.dataset.cat === cat.value) &&
+        (!level.value || r.dataset.level === level.value) &&
+        (!status.value || (status.value === "weak" ? !!t.c && t.c <= 2 : status.value === st));
+      r.hidden = !ok;
+      if (ok) shown++;
+    });
+    count.textContent = `Showing ${shown} of ${rows.length} topics · ${done} complete`;
+    empty.hidden = shown !== 0;
+  };
+  [text].forEach((i) => i.addEventListener("input", update));
+  [cat, level, status].forEach((s) => s.addEventListener("change", update));
+  document.addEventListener("planner:change", update);
+  update();
+</script>
