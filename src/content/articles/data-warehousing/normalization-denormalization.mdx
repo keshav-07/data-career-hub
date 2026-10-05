@@ -1,0 +1,416 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Normalization, Denormalization and Wide Tables"
+description: "Normalise a messy orders extract step by step to 1NF, 2NF, 3NF and BCNF, then learn when to denormalise into stars or One Big Table, with verified SQL."
+technology: ["data-warehousing", "sql"]
+topic: ["modelling", "normalization", "denormalization", "one-big-table"]
+difficulty: "Beginner"
+learningObjectives:
+  - "Explain functional dependencies and normalise a table through 1NF, 2NF, 3NF and BCNF"
+  - "Identify update, insert and delete anomalies in denormalised data"
+  - "Weigh the costs and benefits of denormalising for analytics"
+  - "Compare a dimensional model with a wide table and decide when One Big Table fits"
+prerequisites: ["articles:data-warehousing/star-schema", "articles:sql/joins"]
+related: ["articles:sql/ctes-subqueries-temp-tables", "articles:data-warehousing/partitioning-clustering-data-layout"]
+previous: "articles:data-warehousing/star-schema"
+versionContext: "All SQL examples executed on PostgreSQL 16.14. Behaviour of columnar engines is described, not executed."
+sources:
+  - { label: "PostgreSQL 16 documentation: Constraints", url: "https://www.postgresql.org/docs/16/ddl-constraints.html" }
+  - { label: "PostgreSQL 16 documentation: Materialized Views", url: "https://www.postgresql.org/docs/16/rules-materializedviews.html" }
+  - { label: "Kimball Group: Dimensional Modeling Techniques", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/" }
+---
+
+**Normalisation** organises data so each fact is stored once, which protects transactional systems from contradictory updates. **Denormalisation** deliberately repeats data so analytical queries need fewer joins. A Data Engineer works on both sides: you read normalised source databases, and you build denormalised stars and wide tables for analysts. This lesson normalises a messy Kestrel Market extract step by step, then shows what you give up and gain by flattening it again.
+
+## Sample data: a messy orders extract
+
+Kestrel Market's first sales report was a spreadsheet export. Each row is an order, with every item crammed into one text cell and the customer's details typed again on every order:
+
+```sql
+CREATE TABLE raw_orders (
+  order_id      TEXT,
+  order_date    DATE,
+  customer_id   TEXT,
+  customer_name TEXT,
+  customer_city TEXT,
+  items         TEXT   -- 'sku:qty:unit_price' entries separated by commas
+);
+
+INSERT INTO raw_orders VALUES
+  ('O-1001', '2026-03-02', 'C1', 'Asha Rao',   'Pune',      'SKU-RUN-01:1:4999,SKU-SOC-02:2:399'),
+  ('O-1002', '2026-03-02', 'C2', 'Ravi Menon', 'Delhi',     'SKU-ESP-03:1:8999'),
+  ('O-1003', '2026-03-15', 'C1', 'Asha Rao',   'Pune',      'SKU-PAN-04:1:2499,SKU-SOC-02:1:399'),
+  ('O-1004', '2026-04-03', 'C3', 'Meera Iyer', 'Bengaluru', 'SKU-ESP-03:2:8999');
+
+CREATE TABLE raw_products (sku TEXT, product_name TEXT, category TEXT, department TEXT);
+INSERT INTO raw_products VALUES
+  ('SKU-RUN-01', 'Trail running shoes', 'Shoes',       'Footwear'),
+  ('SKU-SOC-02', 'Wool socks (3 pack)', 'Accessories', 'Footwear'),
+  ('SKU-ESP-03', 'Espresso maker',      'Appliances',  'Kitchen'),
+  ('SKU-PAN-04', 'Cast-iron pan',       'Cookware',    'Kitchen');
+```
+
+## Normal forms from 1NF to BCNF
+
+### What it is and why it matters
+
+Normalisation is a sequence of rules, each removing one kind of redundancy. The rules are stated in terms of **functional dependencies**: `A -> B` means "if you know A, there is exactly one B". In Kestrel's data, `customer_id -> customer_city` and `sku -> category`.
+
+Redundancy causes **anomalies**:
+
+- **Update anomaly**: Asha's city is stored on every one of her orders. If she moves and only some rows are updated, the data contradicts itself.
+- **Insert anomaly**: you cannot record a new customer until they place an order, because customers only exist inside order rows.
+- **Delete anomaly**: deleting Ravi's only order also deletes the fact that Ravi exists.
+
+| Normal form | Rule (informally) | What it removes |
+|---|---|---|
+| 1NF | Every column holds one atomic value; no repeating groups; rows are identified by a key | Lists packed into a cell |
+| 2NF | 1NF, and no non-key column depends on only part of a composite key | Order data repeated on each line |
+| 3NF | 2NF, and no non-key column depends on another non-key column (no transitive dependency) | Customer data repeated on each order |
+| BCNF | For every dependency `A -> B`, A is a superkey | Rare leftovers where part of a key depends on a non-key |
+
+Forms beyond BCNF exist (4NF for independent multi-valued facts, 5NF for join dependencies, 6NF where each table holds a key plus one attribute). 6NF reappears in the [Anchor modelling](/data-warehousing/modeling-methodologies/) section of the methodologies lesson.
+
+### First normal form: one value per cell
+
+The `items` column holds a list, so you cannot filter on a SKU, sum quantities or join to products without string parsing. Splitting it gives one row per order line, keyed by `(order_id, line_number)`:
+
+```sql
+CREATE TABLE order_lines_1nf AS
+SELECT o.order_id, o.order_date, o.customer_id, o.customer_name, o.customer_city,
+       i.ord::INT                                   AS line_number,
+       split_part(i.item, ':', 1)                   AS sku,
+       split_part(i.item, ':', 2)::INT              AS quantity,
+       split_part(i.item, ':', 3)::NUMERIC(12,2)    AS unit_price
+FROM raw_orders o
+CROSS JOIN LATERAL string_to_table(o.items, ',') WITH ORDINALITY AS i(item, ord);
+
+SELECT order_id, line_number, customer_name, customer_city, sku, quantity, unit_price
+FROM order_lines_1nf ORDER BY order_id, line_number;
+```
+
+| order_id | line_number | customer_name | customer_city | sku | quantity | unit_price |
+|---|---|---|---|---|---|---|
+| O-1001 | 1 | Asha Rao | Pune | SKU-RUN-01 | 1 | 4999.00 |
+| O-1001 | 2 | Asha Rao | Pune | SKU-SOC-02 | 2 | 399.00 |
+| O-1002 | 1 | Ravi Menon | Delhi | SKU-ESP-03 | 1 | 8999.00 |
+| O-1003 | 1 | Asha Rao | Pune | SKU-PAN-04 | 1 | 2499.00 |
+| O-1003 | 2 | Asha Rao | Pune | SKU-SOC-02 | 1 | 399.00 |
+| O-1004 | 1 | Meera Iyer | Bengaluru | SKU-ESP-03 | 2 | 8999.00 |
+
+The table is now in 1NF, and the redundancy is easier to see: Asha's name and city appear four times.
+
+### Second normal form: no partial dependencies
+
+The key is `(order_id, line_number)`, but `order_date`, `customer_id`, `customer_name` and `customer_city` depend on `order_id` alone. That is a **partial dependency**. 2NF moves them to a table keyed by `order_id`:
+
+```sql
+CREATE TABLE orders_2nf AS
+SELECT DISTINCT order_id, order_date, customer_id, customer_name, customer_city
+FROM order_lines_1nf;
+
+CREATE TABLE order_lines AS
+SELECT order_id, line_number, sku, quantity, unit_price FROM order_lines_1nf;
+ALTER TABLE order_lines ADD PRIMARY KEY (order_id, line_number);
+```
+
+### Third normal form: no transitive dependencies
+
+In `orders_2nf`, the key is `order_id`, yet `customer_name` and `customer_city` really depend on `customer_id`, which depends on `order_id`. That chain `order_id -> customer_id -> customer_city` is a **transitive dependency**. 3NF moves customer attributes to their own table:
+
+```sql
+CREATE TABLE customers (
+  customer_id   TEXT PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  customer_city TEXT NOT NULL
+);
+INSERT INTO customers
+SELECT DISTINCT customer_id, customer_name, customer_city FROM orders_2nf;
+
+CREATE TABLE orders (
+  order_id    TEXT PRIMARY KEY,
+  order_date  DATE NOT NULL,
+  customer_id TEXT NOT NULL REFERENCES customers
+);
+INSERT INTO orders SELECT order_id, order_date, customer_id FROM orders_2nf;
+
+SELECT (SELECT COUNT(*) FROM customers) AS customers,
+       (SELECT COUNT(*) FROM orders)    AS orders,
+       (SELECT COUNT(*) FROM order_lines) AS order_lines;
+```
+
+| customers | orders | order_lines |
+|---|---|---|
+| 3 | 4 | 6 |
+
+Asha's city now lives in exactly one row. The same reasoning applies to products: `sku -> category -> department` is transitive too, so a fully normalised design has separate product, category and department tables, which is exactly the snowflake shape from the [previous lesson](/data-warehousing/star-schema/).
+
+`SELECT DISTINCT` doubles as a test here: if Asha had been typed as "Pune" on one order and "Pune " on another, `customers` would get two rows for `C1` and the primary key would reject the insert. Normalising a messy source is often how you discover its inconsistencies.
+
+### Boyce-Codd normal form: every determinant is a key
+
+3NF has a small gap that BCNF closes. Kestrel delivers through courier partners. Each delivery hub belongs to exactly one courier, and for each pincode the shop uses one hub per courier:
+
+```sql
+CREATE TABLE pincode_routing (
+  pincode TEXT,
+  courier TEXT,
+  hub     TEXT,
+  PRIMARY KEY (pincode, courier)
+);
+INSERT INTO pincode_routing VALUES
+  ('411001', 'SwiftShip', 'PUN-HUB-1'),
+  ('411002', 'SwiftShip', 'PUN-HUB-1'),
+  ('411001', 'RapidRoute', 'PUN-HUB-7');
+```
+
+The dependencies are `(pincode, courier) -> hub` and `hub -> courier`. Every column is part of some candidate key (`(pincode, courier)` or `(pincode, hub)`), so the table is in 3NF. It is **not** in BCNF, because `hub` determines `courier` but is not a key. The anomaly: the fact "PUN-HUB-1 belongs to SwiftShip" is stored twice, and a careless update could assign the same hub to two couriers.
+
+The BCNF decomposition:
+
+```sql
+CREATE TABLE hubs (hub TEXT PRIMARY KEY, courier TEXT NOT NULL);
+CREATE TABLE pincode_hub (pincode TEXT, hub TEXT REFERENCES hubs, PRIMARY KEY (pincode, hub));
+
+INSERT INTO hubs SELECT DISTINCT hub, courier FROM pincode_routing;
+INSERT INTO pincode_hub SELECT pincode, hub FROM pincode_routing;
+
+SELECT ph.pincode, h.courier, ph.hub
+FROM pincode_hub ph JOIN hubs h USING (hub)
+ORDER BY ph.pincode, h.courier;
+```
+
+| pincode | courier | hub |
+|---|---|---|
+| 411001 | RapidRoute | PUN-HUB-7 |
+| 411001 | SwiftShip | PUN-HUB-1 |
+| 411002 | SwiftShip | PUN-HUB-1 |
+
+The cost: the rule "one hub per courier per pincode" can no longer be enforced by a single primary key, because the courier and pincode live in different tables. BCNF decompositions sometimes lose a dependency like this, which is why designers occasionally stop at 3NF.
+
+### Pitfalls
+
+- **Normalising by instinct instead of by dependency.** Write the dependencies down; they decide the tables.
+- **Confusing "atomic" with "smallest possible".** A full address can be atomic if nobody queries its parts. 1NF is about lists and repeating groups.
+- **Assuming the source is clean.** Normalising reveals conflicts (two cities for one customer). Decide which value wins before loading.
+- **Over-normalising analytical tables.** Normal forms protect writes; warehouses are read-heavy.
+
+### In interviews
+
+You may be asked to define the normal forms or to normalise a sample table. State each form as "what it removes" (repeating groups, partial dependencies, transitive dependencies, non-key determinants), name the functional dependencies out loud, and finish with the anomalies normalisation prevents. Knowing that OLTP systems sit around 3NF while warehouses deliberately denormalise is the point most interviewers want to hear.
+
+## Denormalization trade-offs
+
+### What it is and why it matters
+
+Denormalising means storing data redundantly, usually by pre-joining tables, so reads are cheaper. A star schema is a controlled denormalisation: dimensions repeat category and department text, and facts carry keys rather than requiring a chain of joins.
+
+It is safe in a warehouse for a reason that does not hold in an application database: **the warehouse is written only by pipelines**. Users never update a customer row by hand, so the update anomalies that normalisation prevents are controlled by rebuilding or merging tables from a normalised source.
+
+### How it works
+
+Denormalisation buys read performance and simplicity, and pays for it in write complexity and freshness:
+
+| You gain | You pay |
+|---|---|
+| Fewer joins, simpler SQL for analysts | Redundant copies that must be kept consistent |
+| Faster scans, predictable query plans | Larger rewrites when a repeated attribute changes |
+| Pre-computed values (totals, flags) | Data that is only as fresh as the last rebuild |
+| Easier BI tool configuration | Grain and history decisions baked into the table |
+
+A common, controlled form is a **materialised view**: the query is stored, and its result is stored too, until you refresh it. Here the normalised tables from above become a denormalised order-line view:
+
+```sql
+CREATE MATERIALIZED VIEW mv_order_lines AS
+SELECT ol.order_id, ol.line_number, o.order_date, c.customer_name, c.customer_city,
+       ol.sku, ol.quantity, ol.quantity * ol.unit_price AS net_amount
+FROM order_lines ol
+JOIN orders o    ON o.order_id    = ol.order_id
+JOIN customers c ON c.customer_id = o.customer_id;
+
+UPDATE customers SET customer_city = 'Mumbai' WHERE customer_id = 'C1';
+
+SELECT DISTINCT customer_city FROM mv_order_lines WHERE customer_name = 'Asha Rao';
+```
+
+| customer_city |
+|---|
+| Pune |
+
+The view is stale: it still says Pune until it is refreshed.
+
+```sql
+REFRESH MATERIALIZED VIEW mv_order_lines;
+SELECT DISTINCT customer_city FROM mv_order_lines WHERE customer_name = 'Asha Rao';
+```
+
+| customer_city |
+|---|
+| Mumbai |
+
+Notice what just happened to history: every one of Asha's past orders now says Mumbai, including the ones she placed while living in Pune. Whether that is right is a modelling decision (Type 1 against Type 2 history), covered in [slowly changing dimensions](/data-warehousing/slowly-changing-dimensions/). Denormalising forces you to make that decision explicitly.
+
+### Pitfalls
+
+- **Denormalising in the source of truth.** Keep a normalised (or at least clean, keyed) layer and denormalise from it, so you can always rebuild.
+- **Forgetting refresh dependencies.** A denormalised table is stale until every upstream change has been applied.
+- **Pre-computing ratios.** Store the numerator and denominator, not the ratio; ratios cannot be re-aggregated.
+
+### In interviews
+
+"Why would you denormalise?" is answered with the trade-off table above and the observation that warehouses are append-heavy, read-heavy and written by controlled pipelines. A strong answer also says what you keep normalised (the integration or staging layer) and how you refresh the denormalised outputs.
+
+## Dimensional models versus wide tables
+
+### What it is and why it matters
+
+There are two common ways to denormalise for analytics:
+
+- A **dimensional model** (star schema): facts plus a handful of denormalised dimensions. Queries still join, but only fact-to-dimension, one hop.
+- A **wide table**: the joins are done once in the pipeline, and every dimension attribute is copied onto every fact row. Queries need no joins at all.
+
+Columnar warehouses (BigQuery, Snowflake, Redshift, Databricks SQL, DuckDB) made wide tables practical: a query reads only the columns it mentions, and repeated values such as "Footwear" compress extremely well. So the old objection, "a wide table wastes space", is weaker than it used to be. The remaining differences are about change and reuse.
+
+### How they compare
+
+| Concern | Dimensional model | Wide table |
+|---|---|---|
+| Query simplicity | One join per dimension | No joins |
+| Attribute change (rename a category) | Update one dimension row | Rewrite every affected fact row |
+| History of attributes | Type 2 dimension, chosen per attribute | Frozen at build time unless rebuilt |
+| Reuse across processes | Conformed dimensions shared by many facts | Each wide table copies attributes again |
+| Many processes compared | Drill across shared dimensions | Several wide tables that can drift apart |
+| BI and self-service | Needs a semantic layer or modelled joins | Drag-and-drop friendly |
+
+Most mature teams use both: a dimensional core for reuse and correctness, and wide tables built from it for specific dashboards, notebooks and machine learning features.
+
+### Pitfalls
+
+- **Treating them as rivals.** A wide table built from a star is a presentation choice, not a different source of truth.
+- **Building wide tables straight from raw sources.** Each one re-implements the same joins and cleaning, and they disagree.
+
+### In interviews
+
+If asked "star schema or flat table?", avoid dogma. Say the star is the reusable, history-aware core, and wide tables are a serving format for specific consumers, cheap to produce from the star in a columnar engine.
+
+## One Big Table (OBT)
+
+### What it is and why it matters
+
+**One Big Table** is the wide-table approach taken as the main serving model: for a business process, one table at the fact grain with every attribute an analyst might need. It is popular with dbt-style teams and for tools that work best on a single table.
+
+### A worked example
+
+Build the Kestrel order-line OBT from the normalised tables, with product attributes included:
+
+```sql
+CREATE TABLE products AS SELECT * FROM raw_products;
+
+CREATE TABLE obt_order_line AS
+SELECT ol.order_id, ol.line_number, o.order_date,
+       date_trunc('month', o.order_date)::DATE AS order_month,
+       c.customer_id, c.customer_name, c.customer_city,
+       p.sku, p.product_name, p.category, p.department,
+       ol.quantity, ol.quantity * ol.unit_price AS net_amount
+FROM order_lines ol
+JOIN orders o    ON o.order_id    = ol.order_id
+JOIN customers c ON c.customer_id = o.customer_id
+JOIN products p  ON p.sku         = ol.sku;
+
+SELECT department, order_month, SUM(net_amount) AS revenue, COUNT(DISTINCT order_id) AS orders
+FROM obt_order_line
+GROUP BY department, order_month
+ORDER BY order_month, department;
+```
+
+| department | order_month | revenue | orders |
+|---|---|---|---|
+| Footwear | 2026-03-01 | 6196.00 | 2 |
+| Kitchen | 2026-03-01 | 11498.00 | 2 |
+| Kitchen | 2026-04-01 | 17998.00 | 1 |
+
+No joins at query time. Now rename a category: the merchandising team decides "Appliances" should be "Small appliances". In the normalised or dimensional design that is one row; in the OBT it is every historical row of that category:
+
+```sql
+SELECT (SELECT COUNT(*) FROM products       WHERE category = 'Appliances') AS rows_in_dimension,
+       (SELECT COUNT(*) FROM obt_order_line WHERE category = 'Appliances') AS rows_in_obt;
+```
+
+| rows_in_dimension | rows_in_obt |
+|---|---|
+| 1 | 2 |
+
+Two rows here, but in production it is every order line ever sold in the category. That is why OBTs are usually **rebuilt** from the dimensional or normalised layer (fully or by partition) rather than updated in place.
+
+### When OBT fits and what it costs
+
+OBT fits when:
+
+- one business process dominates the questions, at one grain;
+- consumers are BI tools, spreadsheets or ML feature pipelines that prefer a single table;
+- the engine is columnar, so unused columns cost little;
+- the table can be rebuilt cheaply from an upstream model.
+
+It costs you:
+
+- **Rebuilds on attribute change**, as shown above.
+- **Fixed history semantics.** The table holds whichever attribute version you joined at build time. Decide whether it is "as it was" or "as it is now" and document it.
+- **Grain discipline.** Adding an order-level or customer-level metric to a line-level OBT reintroduces the mixed-grain bug.
+- **Duplication across OBTs.** A returns OBT copies the same customer attributes, and the two can drift apart unless both are built from shared dimensions.
+
+### Pitfalls
+
+- Adding "just one more" metric at a different grain.
+- Hundreds of columns nobody owns, with unclear definitions. A semantic layer or column documentation is still needed.
+- Building the OBT from raw data instead of from tested models.
+
+### In interviews
+
+Interviewers use OBT to test whether you understand trade-offs rather than rules. A strong answer: OBT is great for a single dominant use case on a columnar engine, built from a dimensional core; it is a poor system of record because of rebuild cost, frozen history and duplication.
+
+## Practice questions
+
+<details>
+<summary>Define 2NF and 3NF using the terms partial dependency and transitive dependency.</summary>
+
+2NF: the table is in 1NF and no non-key column depends on only part of a composite key (no partial dependency). 3NF: the table is in 2NF and no non-key column depends on another non-key column (no transitive dependency such as `order_id -> customer_id -> customer_city`). Each step removes a source of repeated data and the anomalies that come with it.
+
+</details>
+
+<details>
+<summary>Give an example of a table in 3NF but not BCNF.</summary>
+
+A routing table keyed by `(pincode, courier)` with a `hub` column, where each hub belongs to one courier. `hub -> courier` holds, but `hub` is not a superkey. Every attribute is part of a candidate key, so 3NF is satisfied, but BCNF is not. Decompose into `hubs(hub, courier)` and `pincode_hub(pincode, hub)`, accepting that the original key constraint is no longer enforced by one table.
+
+</details>
+
+<details>
+<summary>Why do warehouses denormalise when normalisation prevents anomalies?</summary>
+
+Anomalies come from uncontrolled updates. Warehouse tables are written only by pipelines, which rebuild or merge them from a clean source, so the anomalies are managed. In return, denormalised tables need fewer joins, are easier for analysts and BI tools, and scan faster in columnar engines.
+
+</details>
+
+<details>
+<summary>A dashboard is built on an OBT. The product team renames a category. What has to happen?</summary>
+
+Every historical row with that category must be rewritten, which normally means rebuilding the OBT (or the affected partitions) from the dimensional layer. If the business wants old orders to keep the old name, the OBT must be built from a Type 2 product dimension using the version valid at order time. Either way, the decision should be documented.
+
+</details>
+
+<details>
+<summary>What is the difference between a star schema and One Big Table, and when would you choose each?</summary>
+
+A star keeps attributes in shared dimension tables joined by keys; OBT copies them onto every fact row. Choose the star as the reusable core when many processes share dimensions and history matters. Choose OBT as a serving layer for a single dominant use case or tool, on a columnar engine, built from the star.
+
+</details>
+
+## Key takeaways
+
+- Normal forms remove redundancy step by step: repeating groups (1NF), partial dependencies (2NF), transitive dependencies (3NF), non-key determinants (BCNF).
+- Normalisation prevents update, insert and delete anomalies; it suits systems with many small writes.
+- Warehouses denormalise because they are read-heavy and written by controlled pipelines; keep a clean upstream layer to rebuild from.
+- Denormalised copies are stale until refreshed, and they bake in a choice about attribute history.
+- Wide tables and OBT remove joins, at the cost of rebuilds, fixed history and duplication. Build them from a dimensional core.
