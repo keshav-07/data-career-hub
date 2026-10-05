@@ -1,0 +1,116 @@
+---
+title: "Merge Intervals: Combine Every Overlapping Range"
+description: "Merge all overlapping intervals into a minimal list of disjoint ranges. Sort by start, then sweep once and extend or close the current interval in O(n log n)."
+technology: ["dsa"]
+topic: ["arrays", "intervals"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Sort the intervals by start. Walk through them keeping the last merged interval: if the next interval starts at or before its end, they overlap, so extend the end to the larger of the two ends; otherwise append the next interval as a new merged one. Sorting dominates, giving O(n log n) time and O(n) space for the output."
+followUps: ["Do intervals that only touch, such as [1, 3] and [3, 5], merge? How would you change that?", "How would you merge intervals arriving one at a time from a stream?", "How would you compute total covered length instead of the merged list?"]
+previous: "interview-questions:dsa/maximum-subarray"
+next: "interview-questions:dsa/insert-interval"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You receive a list of intervals, each a pair `[start, end]` with `start <= end`, in no particular order. Merge every group of overlapping intervals into one interval and return the resulting list of non-overlapping intervals, sorted by start. Intervals that share an endpoint count as overlapping. This is widely known as LeetCode 56, Merge Intervals.
+
+## Examples
+
+```text
+[[8, 10], [1, 4], [3, 6], [12, 12]]   ->  [[1, 6], [8, 10], [12, 12]]
+[[2, 5], [5, 7]]                      ->  [[2, 7]]      (touching endpoints merge)
+[[1, 10], [2, 3], [4, 5]]             ->  [[1, 10]]     (contained intervals)
+[]                                    ->  []
+```
+
+## Approach 1: brute force
+
+Repeatedly find any two overlapping intervals, replace them with their union, and start again until no pair overlaps.
+
+```python
+def merge_brute(intervals):
+    items = [list(iv) for iv in intervals]
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                a, b = items[i], items[j]
+                if a[0] <= b[1] and b[0] <= a[1]:
+                    items[i] = [min(a[0], b[0]), max(a[1], b[1])]
+                    items.pop(j)
+                    changed = True
+                    break
+            if changed:
+                break
+    return sorted(items)
+```
+
+**Complexity:** up to O(n³) time: each merge removes one interval, and each search for an overlapping pair is O(n²).
+
+## Approach 2: optimal
+
+**Key insight:** after sorting by start, any interval that overlaps the current merged block must come immediately after it. So one left-to-right sweep is enough.
+
+Walkthrough on `[[8, 10], [1, 4], [3, 6], [12, 12]]`, sorted to `[[1, 4], [3, 6], [8, 10], [12, 12]]`:
+
+| Next | Last merged | Overlap? (next start ≤ last end) | Merged list |
+|---|---|---|---|
+| [1, 4] | none | | [[1, 4]] |
+| [3, 6] | [1, 4] | 3 ≤ 4, yes: end = max(4, 6) | [[1, 6]] |
+| [8, 10] | [1, 6] | 8 ≤ 6, no | [[1, 6], [8, 10]] |
+| [12, 12] | [8, 10] | 12 ≤ 10, no | [[1, 6], [8, 10], [12, 12]] |
+
+```python
+def merge(intervals):
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return merged
+```
+
+**Complexity:** O(n log n) time for the sort, O(n) space for the sorted copy and the output.
+
+## Tests
+
+```python
+import random
+
+for f in (merge, merge_brute):
+    assert f([[8, 10], [1, 4], [3, 6], [12, 12]]) == [[1, 6], [8, 10], [12, 12]]
+    assert f([[2, 5], [5, 7]]) == [[2, 7]]                 # touching
+    assert f([[1, 10], [2, 3], [4, 5]]) == [[1, 10]]       # contained
+    assert f([]) == []                                     # empty
+    assert f([[4, 9]]) == [[4, 9]]                         # single
+    assert f([[3, 3], [3, 3]]) == [[3, 3]]                 # duplicates
+    assert f([[-5, -2], [-3, 0], [2, 4]]) == [[-5, 0], [2, 4]]   # negatives
+    assert f([[0, 10**9], [10**9, 2 * 10**9]]) == [[0, 2 * 10**9]]  # large values
+
+random.seed(11)
+for _ in range(300):
+    ivs = []
+    for _ in range(random.randint(0, 7)):
+        a = random.randint(-10, 10)
+        ivs.append([a, a + random.randint(0, 5)])
+    assert merge(ivs) == merge_brute(ivs)
+```
+
+## Edge cases and pitfalls
+
+- Use `max(last_end, end)` when merging. Setting the end to the new interval's end breaks on contained intervals such as `[1, 10]` then `[2, 3]`.
+- Decide whether touching intervals merge. Here `<=` merges them; `<` would keep `[2, 5]` and `[5, 7]` separate.
+- `sorted(intervals)` copies; `intervals.sort()` mutates the caller's list. Appending `[start, end]` as a new list avoids aliasing the input.
+
+## Where this shows up in data engineering
+
+Merging overlapping validity ranges is everyday work: consolidating a customer's subscription periods, collapsing overlapping maintenance windows, or tidying slowly changing dimension rows whose `valid_from` and `valid_to` overlap. In SQL the same sweep is written by comparing each start with a running `MAX(end_date) OVER (ORDER BY start_date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)`: a start beyond that maximum begins a new group, and a running count of those flags gives the group id.

@@ -14,6 +14,7 @@ reviewedDate: "2026-10-05"
 shortAnswer: "Kadane's algorithm: walk the array keeping the best sum of a subarray that ends at the current position. At each element, either extend the previous subarray or start fresh, so current = max(x, current + x), and track the largest current seen. This is O(n) time and O(1) space. Initialise with the first element, not zero, so an all-negative array returns its largest element."
 followUps: ["How would you also return the start and end indices of the best subarray?", "How does the divide-and-conquer O(n log n) solution work?", "What changes if the array is circular?"]
 previous: "interview-questions:dsa/longest-consecutive-sequence"
+next: "interview-questions:dsa/merge-intervals"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
