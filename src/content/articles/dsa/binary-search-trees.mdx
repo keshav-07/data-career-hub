@@ -1,0 +1,370 @@
+---
+title: "Binary Search Trees: Ordering, Validation, Insert and Delete"
+seoTitle: "Binary Search Trees for Coding Interviews"
+description: "Use the BST ordering rule to search, validate, insert, delete and find the k-th smallest value, and see how the same idea underlies B-tree indexes and range scans."
+technology: ["dsa"]
+topic: ["binary-search-trees", "trees"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "State the BST invariant precisely and explain why in-order traversal is sorted"
+  - "Validate a BST with value bounds rather than parent comparisons"
+  - "Search, insert and delete nodes, including the two-child deletion case"
+  - "Find the k-th smallest value and the lowest common ancestor using ordering"
+  - "Relate BSTs to balanced trees and B-tree indexes used by databases"
+prerequisites: ["articles:dsa/binary-trees", "articles:dsa/binary-search"]
+previous: "articles:dsa/binary-trees"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "PostgreSQL 16 documentation: Multicolumn indexes", url: "https://www.postgresql.org/docs/16/indexes-multicolumn.html" }
+  - { label: "Python documentation: bisect", url: "https://docs.python.org/3/library/bisect.html" }
+  - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+---
+
+A binary search tree (BST) is a binary tree with an ordering rule: everything in a node's left subtree is smaller than the node, and everything in its right subtree is larger. That rule turns each step down the tree into a binary search decision, so lookups, inserts and deletes take time proportional to the tree's height. It is also the mental model for database indexes, which use a wider, always-balanced relative called the B-tree.
+
+The code blocks share the helpers defined in the first block, so run them in order.
+
+## How a BST works
+
+```python
+from collections import deque
+
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val, self.left, self.right = val, left, right
+
+
+def bst_from(values):
+    root = None
+    for v in values:
+        root = insert_into_bst(root, v)
+    return root
+
+
+def insert_into_bst(root, val):
+    if root is None:
+        return TreeNode(val)
+    node = root
+    while True:                               # iterative: no recursion depth issues
+        if val < node.val:
+            if node.left is None:
+                node.left = TreeNode(val)
+                return root
+            node = node.left
+        else:
+            if node.right is None:
+                node.right = TreeNode(val)
+                return root
+            node = node.right
+
+
+def inorder(root):
+    out, stack, node = [], [], root
+    while stack or node:
+        while node:
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        out.append(node.val)
+        node = node.right
+    return out
+
+
+def search_bst(root, val):
+    node = root
+    while node and node.val != val:
+        node = node.left if val < node.val else node.right
+    return node
+
+
+t = bst_from([4, 2, 7, 1, 3])
+assert inorder(t) == [1, 2, 3, 4, 7]           # in-order of a BST is sorted
+assert search_bst(t, 2).val == 2 and search_bst(t, 5) is None
+t = insert_into_bst(t, 5)
+assert inorder(t) == [1, 2, 3, 4, 5, 7]
+```
+
+**The invariant** applies to whole subtrees, not just children: every value in the left subtree of a node is less than the node, and every value in the right subtree is greater. Interview problems usually assume distinct values; if duplicates are allowed, agree which side they go to.
+
+**Height decides everything.** Search, insert and delete are O(h). If keys arrive in random order h is O(log n) on average, but inserting sorted keys builds a chain where h = n:
+
+| Tree shape | Height | Search, insert, delete |
+|---|---|---|
+| Balanced | O(log n) | O(log n) |
+| Built from sorted input (degenerate) | O(n) | O(n) |
+| Self-balancing (AVL, red-black) | O(log n) guaranteed | O(log n) |
+
+Python has no built-in balanced BST. In practice you use a sorted list with `bisect` (fast lookups, O(n) inserts), a heap (for min or max only), or a third-party sorted container.
+
+## Recognising the pattern
+
+- The problem says "binary search tree", or values are kept in sorted order with frequent inserts.
+- "Validate", "k-th smallest", "closest value", "floor and ceiling", "range sum between low and high".
+- "Lowest common ancestor" in a BST: the ordering tells you which way to go.
+- "Build a balanced tree from sorted data".
+- In-order traversal output being sorted is the key to many BST problems.
+
+## Core templates in Python
+
+### Validate with bounds
+
+Comparing each node only with its children is the classic mistake: a node deep in the left subtree can be larger than an ancestor even if every parent-child pair looks fine. Pass the allowed range down instead.
+
+```python
+def is_valid_bst(root):
+    stack = [(root, float("-inf"), float("inf"))]
+    while stack:
+        node, low, high = stack.pop()
+        if not node:
+            continue
+        if not (low < node.val < high):
+            return False
+        stack.append((node.left, low, node.val))     # left values must stay below node
+        stack.append((node.right, node.val, high))   # right values must stay above node
+    return True
+
+
+valid = TreeNode(5, TreeNode(1), TreeNode(7, TreeNode(6), TreeNode(8)))
+tricky = TreeNode(5, TreeNode(4), TreeNode(6, TreeNode(3), TreeNode(7)))   # 3 is right of 5
+assert is_valid_bst(valid) is True
+assert is_valid_bst(tricky) is False
+assert is_valid_bst(TreeNode(2, TreeNode(2))) is False       # duplicates not allowed here
+assert is_valid_bst(None) is True
+```
+
+An alternative is to check that the in-order traversal is strictly increasing.
+
+### k-th smallest with an early-stopping in-order walk
+
+```python
+def kth_smallest(root, k):
+    stack, node = [], root
+    while stack or node:
+        while node:
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        k -= 1
+        if k == 0:
+            return node.val
+        node = node.right
+    raise ValueError("k is larger than the number of nodes")
+
+
+t = bst_from([5, 3, 6, 2, 4, 1])
+assert [kth_smallest(t, k) for k in range(1, 7)] == [1, 2, 3, 4, 5, 6]
+```
+
+This runs in O(h + k) because it stops as soon as it reaches the k-th node. If the tree changes often and k-th queries are frequent, store subtree sizes in each node so you can steer directly to the answer in O(h).
+
+### Lowest common ancestor using the ordering
+
+```python
+def lca_bst(root, p, q):
+    node = root
+    while node:
+        if p < node.val and q < node.val:
+            node = node.left           # both targets are smaller
+        elif p > node.val and q > node.val:
+            node = node.right          # both targets are larger
+        else:
+            return node                # they split here (or one equals node)
+    return None
+
+
+t = bst_from([6, 2, 8, 0, 4, 7, 9, 3, 5])
+assert lca_bst(t, 2, 8).val == 6
+assert lca_bst(t, 2, 4).val == 2
+assert lca_bst(t, 3, 5).val == 4
+```
+
+Unlike the general binary tree version, this one never needs to explore both sides: O(h) time and O(1) space.
+
+### Delete a node
+
+Three cases: a leaf is removed; a node with one child is replaced by that child; a node with two children takes the value of its in-order successor (the smallest value in its right subtree), and the successor is then deleted from the right subtree.
+
+```python
+def delete_node(root, key):
+    if root is None:
+        return None
+    if key < root.val:
+        root.left = delete_node(root.left, key)
+    elif key > root.val:
+        root.right = delete_node(root.right, key)
+    else:
+        if root.left is None:
+            return root.right             # covers the leaf case too
+        if root.right is None:
+            return root.left
+        successor = root.right
+        while successor.left:
+            successor = successor.left
+        root.val = successor.val
+        root.right = delete_node(root.right, successor.val)
+    return root
+
+
+t = bst_from([5, 3, 6, 2, 4, 7])
+t = delete_node(t, 3)                     # two children
+assert inorder(t) == [2, 4, 5, 6, 7] and is_valid_bst(t)
+t = delete_node(t, 7)                     # leaf
+t = delete_node(t, 6)                     # now a leaf too
+assert inorder(t) == [2, 4, 5] and is_valid_bst(t)
+t = delete_node(t, 5)                     # the root
+assert inorder(t) == [2, 4] and is_valid_bst(t)
+assert inorder(delete_node(t, 42)) == [2, 4]   # missing key: unchanged
+```
+
+Returning the (possibly new) subtree root from each call is what lets the parent reattach it; forgetting to assign `root.left = ...` is the most common bug.
+
+### Build a balanced BST from sorted data
+
+Use the middle element as the root so both halves have (nearly) the same size.
+
+```python
+def sorted_array_to_bst(nums):
+    def build(lo, hi):                    # nums[lo:hi]
+        if lo >= hi:
+            return None
+        mid = (lo + hi) // 2
+        return TreeNode(nums[mid], build(lo, mid), build(mid + 1, hi))
+
+    return build(0, len(nums))
+
+
+def height(node):
+    return 0 if node is None else 1 + max(height(node.left), height(node.right))
+
+
+nums = list(range(1, 16))
+balanced = sorted_array_to_bst(nums)
+assert inorder(balanced) == nums and is_valid_bst(balanced)
+assert height(balanced) == 4                          # log2(16) levels
+assert height(bst_from(nums)) == 15                   # inserting sorted input: a chain
+assert sorted_array_to_bst([]) is None
+```
+
+The last two assertions show why insertion order matters for an unbalanced BST.
+
+## Complexity
+
+| Operation | Balanced | Degenerate | Extra space |
+|---|---|---|---|
+| Search, insert, delete | O(log n) | O(n) | O(1) iterative, O(h) recursive |
+| Validate | O(n) | O(n) | O(h) |
+| k-th smallest | O(h + k) | O(n) | O(h) |
+| LCA in a BST | O(log n) | O(n) | O(1) |
+| Sorted array to BST | O(n) | | O(log n) recursion |
+| In-order traversal | O(n) | O(n) | O(h) |
+
+## Variations and common bugs
+
+- **Validating only parent-child pairs.** Use bounds inherited from ancestors.
+- **Using `0` or the minimum integer as the initial bound**; use infinities (or `None`) so legitimate extreme values pass.
+- **Duplicates:** decide whether they are allowed and on which side, and make validation strict or non-strict accordingly.
+- **Not reattaching the returned subtree** after recursive insert or delete.
+- **Deleting a two-child node by splicing children incorrectly**; use the in-order successor (or predecessor).
+- **Assuming O(log n)** for a tree that might be unbalanced. Say "O(h)" and explain.
+- **Variants:** search in a BST, floor and ceiling, range sum of a BST (prune subtrees outside the range), BST iterator (the iterative in-order stack, one step at a time), two sum in a BST, recover a BST with two swapped nodes, trim a BST.
+
+## BSTs in data-engineering work
+
+- **B-tree indexes.** The default index type in PostgreSQL, MySQL and many other databases is a B-tree: a balanced search tree whose nodes hold many keys each, so the tree is very shallow and each level is one disk page read. Equality and range predicates (`=`, `<`, `BETWEEN`, prefix `LIKE 'abc%'`) can use it because keys are kept in sorted order, just like an in-order BST traversal.
+- **Range scans.** "All events between 10:00 and 10:05" on an indexed column descends the tree to the first key and then walks forward in order, the same as Range Sum of BST with pruning.
+- **Sorted structures in memory.** LSM-tree storage engines (used by Cassandra, RocksDB and others) buffer writes in a sorted in-memory structure before flushing them to sorted files. Stream processors keep ordered state for event-time windows.
+- **Why degenerate trees matter.** A naive BST fed with already-sorted keys, such as auto-increment IDs or timestamps, degrades into a chain. Balanced structures (B-trees, red-black trees) exist precisely because real data often arrives sorted.
+
+```python
+import bisect
+
+# A sorted list + bisect behaves like a read-optimised BST for range queries.
+event_times = sorted([905, 1001, 1003, 1004, 1010, 1100, 1230])
+
+
+def count_between(sorted_values, low, high):
+    """Inclusive range count in O(log n), like an index range scan."""
+    return bisect.bisect_right(sorted_values, high) - bisect.bisect_left(sorted_values, low)
+
+
+def range_sum_bst(root, low, high):
+    if root is None:
+        return 0
+    if root.val < low:
+        return range_sum_bst(root.right, low, high)    # whole left side is too small
+    if root.val > high:
+        return range_sum_bst(root.left, low, high)     # whole right side is too large
+    return root.val + range_sum_bst(root.left, low, high) + range_sum_bst(root.right, low, high)
+
+
+assert count_between(event_times, 1000, 1005) == 3
+assert count_between(event_times, 1300, 1400) == 0
+t = bst_from([10, 5, 15, 3, 7, 18])
+assert range_sum_bst(t, 7, 15) == 32
+print(count_between(event_times, 1000, 1005), range_sum_bst(t, 7, 15))
+```
+
+```text
+3 32
+```
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Convert Sorted Array to BST** (Easy): the middle element is the root; recurse on each half.
+2. **Insert into a BST** (Medium): walk left or right until you reach an empty spot.
+3. **Lowest Common Ancestor of a BST** (Medium): go left if both are smaller, right if both are larger, else stop.
+4. **Validate Binary Search Tree** (Medium): pass (low, high) bounds down; every node must sit strictly inside.
+5. **Kth Smallest Element in a BST** (Medium): in-order traversal, stopping at the k-th visited node.
+6. **Delete Node in a BST** (Medium): leaf or one child is simple; with two children, copy the successor and delete it from the right subtree.
+
+## Practice questions
+
+<details>
+<summary>Why is checking each node against its children not enough to validate a BST?</summary>
+
+The ordering rule applies to entire subtrees. In a tree with root 5, right child 6 and 6's left child 3, every parent-child pair looks valid (3 < 6), but 3 sits in 5's right subtree and is smaller than 5. Passing down the allowed range (here, greater than 5 and less than 6) catches it.
+
+</details>
+
+<details>
+<summary>What is the time complexity of searching a BST?</summary>
+
+O(h), the height. For a balanced tree that is O(log n); for a degenerate tree built from sorted input it is O(n). Self-balancing trees (AVL, red-black) and B-trees guarantee O(log n).
+
+</details>
+
+<details>
+<summary>How do you delete a node that has two children?</summary>
+
+Find its in-order successor, the leftmost node of its right subtree. Copy the successor's value into the node, then delete the successor from the right subtree; the successor has no left child, so that deletion is one of the simple cases. Using the in-order predecessor works symmetrically.
+
+</details>
+
+<details>
+<summary>Why do databases use B-trees rather than binary search trees for indexes?</summary>
+
+Data lives on disk or in pages, and each node visit can cost a page read. A B-tree node holds many keys and has many children, so the tree is only a few levels deep even for very large tables, and each level is one page. It is also kept balanced on every insert and delete, and its leaves are in key order, which makes range scans efficient.
+
+</details>
+
+<details>
+<summary>Find the k-th smallest value in a BST that is modified often and queried often.</summary>
+
+Store the size of each node's subtree and update it on insert and delete. To find the k-th smallest, compare k with the size of the left subtree: if k is smaller or equal, go left; if it is one more, the current node is the answer; otherwise subtract left size plus one and go right. Each query is then O(h).
+
+</details>
+
+## Key takeaways
+
+- A BST keeps smaller values in the left subtree and larger in the right, so its in-order traversal is sorted.
+- Search, insert and delete are O(h): O(log n) when balanced, O(n) when degenerate.
+- Validate with bounds inherited from ancestors, not parent-child comparisons.
+- Delete a two-child node by copying its in-order successor and deleting that instead.
+- Build balanced trees from sorted data by choosing middle elements as roots.
+- Database B-tree indexes apply the same ordering idea with wide, balanced, page-sized nodes.
