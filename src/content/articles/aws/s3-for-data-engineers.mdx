@@ -1,0 +1,530 @@
+---
+title: "Amazon S3 for Data Engineers"
+description: "S3 for data lakes: buckets and keys, storage classes, lifecycle rules, versioning, partitioned layouts, events, encryption, access points and multipart upload."
+technology: ["aws", "data-lakes"]
+topic: ["s3", "object-storage", "data-lake"]
+difficulty: "Beginner"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain how S3 buckets, keys, prefixes and strong consistency work, and why S3 has no real folders"
+  - "Choose a storage class and write a lifecycle configuration that respects minimum storage durations"
+  - "Lay out a data lake in partitioned prefixes so query engines read less data"
+  - "Configure event notifications, default encryption with SSE-KMS and access points for a shared bucket"
+  - "Size multipart uploads within S3's part limits"
+prerequisites: ["articles:aws/aws-for-data-engineers"]
+related: ["articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/parquet-vs-avro-vs-orc", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
+previous: "articles:aws/aws-for-data-engineers"
+versionContext: "Facts checked against the Amazon S3 documentation in October 2026. Python simulations run on Python 3.11. AWS CLI commands, boto3 calls and JSON configurations were written from the S3 documentation and not executed (no AWS account here); the JSON documents were checked to parse."
+sources:
+  - { label: "Amazon S3 User Guide: Understanding and managing storage classes", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html" }
+  - { label: "Amazon S3 User Guide: Configuring default encryption", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-bucket-encryption.html" }
+  - { label: "Amazon S3 User Guide: Multipart upload limits", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html" }
+  - { label: "Amazon S3 User Guide: Event notification types and destinations", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/notification-how-to-event-types-and-destinations.html" }
+  - { label: "AWS What's New: S3 strong read-after-write consistency (December 2020)", url: "https://aws.amazon.com/about-aws/whats-new/2020/12/amazon-s3-now-delivers-strong-read-after-write-consistency-automatically-for-all-applications/" }
+  - { label: "Amazon S3 User Guide: SQL reference for S3 Select", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-select-sql-reference.html" }
+---
+
+Amazon S3 is where almost every AWS data platform keeps its data: raw landing files, curated Parquet and Iceberg tables, query results, logs and backups. Knowing how S3 stores, prices, protects and notifies about objects lets you design a lake that is fast to query, cheap to keep and safe to share. This lesson covers the S3 features a Data Engineer uses every week.
+
+## Sample data
+
+The runnable examples model a small bucket in Python, so you can follow along without an AWS account. The AWS CLI, boto3 and JSON snippets show the real API calls; they are marked as not executed.
+
+```python
+# A tiny in-memory model of a bucket: S3 has no folders, only keys.
+bucket = {
+    "raw/sales/dt=2026-10-01/part-0000.parquet": 48_000_000,
+    "raw/sales/dt=2026-10-01/part-0001.parquet": 51_000_000,
+    "raw/sales/dt=2026-10-02/part-0000.parquet": 47_500_000,
+    "raw/sales/dt=2026-10-03/part-0000.parquet": 52_250_000,
+    "raw/clicks/dt=2026-10-03/hour=09/part-0000.json.gz": 8_000_000,
+}
+
+def list_objects(prefix, delimiter=None):
+    """Mimic ListObjectsV2: keys under a prefix, optionally rolled up by a delimiter."""
+    keys = sorted(k for k in bucket if k.startswith(prefix))
+    if delimiter is None:
+        return keys, []
+    contents, common = [], set()
+    for k in keys:
+        rest = k[len(prefix):]
+        if delimiter in rest:
+            common.add(prefix + rest.split(delimiter)[0] + delimiter)
+        else:
+            contents.append(k)
+    return contents, sorted(common)
+
+print(list_objects("raw/", "/"))
+print(list_objects("raw/sales/", "/"))
+```
+
+```text
+([], ['raw/clicks/', 'raw/sales/'])
+([], ['raw/sales/dt=2026-10-01/', 'raw/sales/dt=2026-10-02/', 'raw/sales/dt=2026-10-03/'])
+```
+
+## Buckets and objects
+
+**What it is.** A **bucket** is a container with a globally unique name, created in one AWS Region. An **object** is a file plus metadata, stored under a **key** such as `raw/sales/dt=2026-10-01/part-0000.parquet`. S3 is a flat key-value store: there are no directories. The console and the CLI show "folders" by splitting keys on `/`, exactly as the `list_objects` model above does with a delimiter. The part before the last delimiter is called a **prefix**.
+
+**How it works.**
+
+- Objects are immutable. "Editing" an object means writing a new object under the same key. You can read a byte range of an object, but not append to or modify part of it (directory buckets in S3 Express One Zone are the exception that supports appends).
+- Since December 2020, S3 gives **strong read-after-write consistency** for every PUT, overwrite, DELETE and LIST, in all Regions, at no extra cost. A reader that starts after a successful write sees that write, and a listing reflects it. Before that, S3 was eventually consistent for overwrites and listings, which is why older Hadoop setups used tools such as EMRFS consistent view. You no longer need them.
+- Performance scales with prefixes. S3 documents a baseline of at least 3,500 PUT/COPY/POST/DELETE and 5,500 GET/HEAD requests per second per partitioned prefix, and scales further as load grows, so spreading heavy request traffic across prefixes raises the ceiling.
+- Objects can be very large. The maximum object size is now 50 TB (raised from 5 TB in December 2025), uploaded with multipart upload.
+
+```bash
+aws s3 mb s3://example-lake-111122223333 --region eu-west-1
+aws s3 cp sales.parquet s3://example-lake-111122223333/raw/sales/dt=2026-10-01/part-0000.parquet
+aws s3api list-objects-v2 --bucket example-lake-111122223333 --prefix raw/sales/ --delimiter /
+```
+
+**Pitfalls.**
+
+- Renaming a "folder" is a copy plus a delete of every object under it. That is slow and not atomic, which is why table formats such as Iceberg never rename directories to commit.
+- `list-objects-v2` returns at most 1,000 keys per page. Code that ignores the continuation token silently misses objects.
+- Bucket names are global and cannot be changed. Encode the account or environment in the name to avoid collisions.
+
+**In interviews.** Say that S3 is an object store with flat keys and strong consistency since 2020, that "folders" are just prefixes, and that renames are expensive. Linking those facts to table formats (atomic commits through metadata, not renames) is a strong answer.
+
+## Storage classes
+
+**What it is.** Every object has a storage class that trades storage price against retrieval price, retrieval time and availability. You choose it per object, at upload or later with lifecycle rules.
+
+| Storage class | API name | Use for | Minimum storage duration | Retrieval |
+|---|---|---|---|---|
+| S3 Standard | `STANDARD` | Hot data, active lake tables | None | Milliseconds |
+| S3 Intelligent-Tiering | `INTELLIGENT_TIERING` | Unknown or changing access patterns | None (small per-object monitoring charge) | Milliseconds for frequent and infrequent tiers |
+| S3 Standard-IA | `STANDARD_IA` | Data read less than about once a month, needs fast access | 30 days | Milliseconds, per-GB retrieval charge |
+| S3 One Zone-IA | `ONEZONE_IA` | Re-creatable infrequent data; stored in one Availability Zone | 30 days | Milliseconds, per-GB retrieval charge |
+| S3 Glacier Instant Retrieval | `GLACIER_IR` | Archive that is read rarely but must be instant | 90 days | Milliseconds |
+| S3 Glacier Flexible Retrieval | `GLACIER` | Archive, restore in minutes to hours | 90 days | Restore first (expedited, standard or bulk) |
+| S3 Glacier Deep Archive | `DEEP_ARCHIVE` | Long-term retention, compliance | 180 days | Restore first, hours |
+| S3 Express One Zone | directory buckets | Very low-latency access in one Availability Zone | None | Single-digit milliseconds |
+
+**How it works.** The minimum storage duration means that if you delete, overwrite or transition an object early, you are billed as if it stayed for the minimum. The infrequent-access classes also have a minimum billable object size, so many tiny objects cost more there than they appear to. The simulation shows the effect of the minimum duration:
+
+```python
+MIN_DAYS = {"STANDARD": 0, "INTELLIGENT_TIERING": 0, "STANDARD_IA": 30, "ONEZONE_IA": 30,
+            "GLACIER_IR": 90, "GLACIER": 90, "DEEP_ARCHIVE": 180}
+
+def billed_days(storage_class, days_stored):
+    """Days of storage you are billed for if the object is deleted after days_stored."""
+    return max(days_stored, MIN_DAYS[storage_class])
+
+for cls, days in [("STANDARD", 3), ("STANDARD_IA", 10), ("GLACIER_IR", 45), ("DEEP_ARCHIVE", 200)]:
+    print(f"{cls:<12} deleted after {days:>3} days -> billed for {billed_days(cls, days)} days")
+```
+
+```text
+STANDARD     deleted after   3 days -> billed for 3 days
+STANDARD_IA  deleted after  10 days -> billed for 30 days
+GLACIER_IR   deleted after  45 days -> billed for 90 days
+DEEP_ARCHIVE deleted after 200 days -> billed for 200 days
+```
+
+**Pitfalls.**
+
+- Temporary or staging data in Standard-IA costs more than in Standard, because of the 30-day minimum and retrieval charges.
+- Objects in Glacier Flexible Retrieval and Deep Archive cannot be queried by Athena or Spark until restored. Glacier Instant Retrieval can be read directly.
+- One Zone-IA loses data if its Availability Zone is lost. Only use it for data you can rebuild.
+
+**In interviews.** Expect "how would you cut S3 storage cost for a lake?" Answer with access patterns: keep hot partitions in Standard, use Intelligent-Tiering when access is unpredictable, move old raw data to Glacier classes with lifecycle rules, and mention minimum durations and retrieval charges as the trap.
+
+## Lifecycle policies
+
+**What it is.** A lifecycle configuration is a set of rules on a bucket that S3 applies automatically: **transition** objects to cheaper classes after some days, **expire** (delete) them, clean up old versions, and abort unfinished multipart uploads.
+
+**How it works.** Each rule has a filter (prefix, object tags or object size), a status, and actions. Days count from object creation (or from becoming noncurrent, for version rules). S3 runs lifecycle asynchronously, so an object can live a little past its rule date. This configuration archives raw sales data and keeps the bucket tidy:
+
+```json
+{
+  "Rules": [
+    {
+      "ID": "raw-sales-tiering",
+      "Filter": { "Prefix": "raw/sales/" },
+      "Status": "Enabled",
+      "Transitions": [
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
+        { "Days": 180, "StorageClass": "GLACIER" }
+      ],
+      "Expiration": { "Days": 730 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+    },
+    {
+      "ID": "abort-stale-multipart",
+      "Filter": {},
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}
+```
+
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket example-lake-111122223333 \
+  --lifecycle-configuration file://lifecycle.json
+```
+
+**Pitfalls.**
+
+- A lifecycle transition into Standard-IA or One Zone-IA needs the object to have been stored for at least 30 days, and S3 by default does not transition very small objects, because they would cost more after the move. Check the transition considerations page when rules seem to do nothing.
+- `put-bucket-lifecycle-configuration` replaces the whole configuration. Always submit every rule, not just the new one.
+- Expiring current versions in a versioned bucket only adds delete markers. You also need `NoncurrentVersionExpiration` to actually free storage.
+- Never apply expiration to a prefix that holds table data for Iceberg or Delta tables. Use the table format's own snapshot expiry, or files referenced by a live snapshot disappear.
+
+**In interviews.** Show a rule with a transition, an expiration and `AbortIncompleteMultipartUpload`, and explain that abandoned multipart parts are billed but invisible in normal listings.
+
+## Versioning
+
+**What it is.** With versioning enabled, every write to a key creates a new **version** instead of replacing the old one, and a delete adds a **delete marker** instead of removing data. It protects against accidental overwrites and deletes, and it is required for replication and Object Lock.
+
+**How it works.** A bucket is in one of three states: unversioned (the default), versioning-enabled or versioning-suspended. Once enabled, you can suspend versioning but never return to unversioned. A GET without a version ID returns the latest version, or a 404 if the latest is a delete marker. Restoring an object is just deleting the delete marker or copying an old version back.
+
+```bash
+aws s3api put-bucket-versioning --bucket example-lake-111122223333 \
+  --versioning-configuration Status=Enabled
+aws s3api list-object-versions --bucket example-lake-111122223333 \
+  --prefix raw/sales/dt=2026-10-01/
+```
+
+**Pitfalls.**
+
+- Every version is billed. A job that rewrites the same keys daily multiplies storage unless a noncurrent-version lifecycle rule cleans up.
+- Huge numbers of delete markers and versions slow down listings. Pair versioning with lifecycle rules from day one.
+- Versioning is not a backup against account compromise on its own. Combine it with replication to another account, Object Lock or AWS Backup for that.
+
+**In interviews.** A common question is "someone deleted a partition, how do you recover it?" With versioning: list versions, remove the delete markers (or copy the previous versions back). Without versioning, the honest answer is that S3 cannot undelete, so you rebuild from the source or a replica.
+
+## Partitioning S3 data for analytics
+
+**What it is.** Partitioning means putting data into prefixes by the values of a column, usually date, such as `sales/dt=2026-10-01/`. Query engines such as Athena, Redshift Spectrum, Glue and Spark use the partition values in the path to skip whole prefixes that cannot match a filter. This is called **partition pruning**, and it is the biggest single lever on lake query cost and speed.
+
+**How it works.** The `column=value` naming is **Hive-style** partitioning. Engines map it to a partition column automatically (or through the Glue Data Catalog). A query with `WHERE dt BETWEEN '2026-10-02' AND '2026-10-03'` reads only those prefixes:
+
+```python
+def scan_plan(table_prefix, wanted_dates):
+    """Return the objects an engine must read when the query filters on dt."""
+    keys, _ = list_objects(table_prefix)
+    picked = [k for k in keys if any(f"/dt={d}/" in k for d in wanted_dates)]
+    return picked, sum(bucket[k] for k in picked), sum(bucket[k] for k in keys)
+
+picked, read_bytes, total_bytes = scan_plan("raw/sales/", ["2026-10-02", "2026-10-03"])
+for k in picked:
+    print(k)
+print(f"bytes read: {read_bytes:,} of {total_bytes:,} ({read_bytes / total_bytes:.0%})")
+```
+
+```text
+raw/sales/dt=2026-10-02/part-0000.parquet
+raw/sales/dt=2026-10-03/part-0000.parquet
+bytes read: 99,750,000 of 198,750,000 (50%)
+```
+
+With a year of data and a one-day filter, the same layout reads about 1/365 of the table.
+
+### Layout guidelines
+
+| Guideline | Why |
+|---|---|
+| Partition by the column most queries filter on, usually event date | Pruning only helps if queries filter on the partition column |
+| Keep partitions coarse enough that each holds files of roughly 128 MB to 1 GB | Thousands of tiny files cost more in requests and planning than they save |
+| Avoid high-cardinality partition columns such as `user_id` | Millions of prefixes, tiny files and slow partition listing |
+| Store columnar, compressed files (Parquet with Snappy or ZSTD) | Engines read only needed columns and use min/max statistics inside files |
+| Use zones such as `raw/`, `curated/`, `analytics/` | Separate permissions, lifecycle rules and retention per zone |
+| Consider a table format (Iceberg) for large or frequently updated tables | Hidden partitioning, compaction, atomic commits and time travel |
+
+**Pitfalls.**
+
+- Filtering on an expression of the partition column, such as `date(event_ts)` when the partition is `dt`, may not prune. Filter on the partition column itself.
+- The **small files problem**: streaming writers that flush every few seconds create millions of small objects. Compact them in a scheduled job, or let Firehose buffer larger files.
+- New partitions are invisible to Athena until registered in the catalogue (crawler, `MSCK REPAIR TABLE`, `ALTER TABLE ADD PARTITION`) unless you use partition projection. The Athena lesson covers this.
+
+**In interviews.** Expect "design the S3 layout for clickstream data". Give zones, Hive-style date (and maybe hour) partitions, Parquet, target file sizes, a compaction job and how new partitions get registered.
+
+## S3 Select
+
+**What it is.** S3 Select runs a simple SQL expression on a single CSV, JSON or Parquet object inside S3 and returns only the matching rows and columns, so a client downloads less data.
+
+**Status.** AWS closed S3 Select (and S3 Glacier Select) to new customers on 25 July 2024. Existing customers can keep using it, but AWS does not plan new features. Learn what it does because older pipelines and interview questions mention it, but build new work on Athena, or read Parquet with column and row-group pruning in your client.
+
+{/* noexec */}
+```python
+import boto3
+
+s3 = boto3.client("s3")
+resp = s3.select_object_content(
+    Bucket="example-lake-111122223333",
+    Key="raw/orders/2026-10-01.csv",
+    ExpressionType="SQL",
+    Expression="SELECT s.order_id, s.amount FROM S3Object s WHERE s.status = 'FAILED'",
+    InputSerialization={"CSV": {"FileHeaderInfo": "USE"}, "CompressionType": "NONE"},
+    OutputSerialization={"CSV": {}},
+)
+for event in resp["Payload"]:
+    if "Records" in event:
+        print(event["Records"]["Payload"].decode())
+```
+
+**Pitfalls.** It works on one object per request, has no joins, and its SQL is a small subset. Accounts that never used it cannot turn it on.
+
+**In interviews.** If asked, explain the idea (push filtering to storage to reduce transfer), then say it is closed to new customers and name the replacement: Athena for SQL over many objects, or Parquet predicate pushdown in Spark or PyArrow.
+
+## Event notifications
+
+**What it is.** S3 can emit an event when something happens to an object, such as `s3:ObjectCreated:*` or `s3:ObjectRemoved:*`, and deliver it to a Lambda function, an SQS queue, an SNS topic, or Amazon EventBridge. Event-driven pipelines start processing a file as soon as it lands instead of polling.
+
+**How it works.** A notification configuration lists destinations, the event types and optional prefix and suffix filters. Turning on EventBridge sends all bucket events to EventBridge, where rules can filter on any field and fan out to many targets, including SQS FIFO queues and Step Functions, which plain notifications cannot target.
+
+```json
+{
+  "QueueConfigurations": [
+    {
+      "Id": "new-sales-files",
+      "QueueArn": "arn:aws:sqs:eu-west-1:111122223333:sales-landing",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {
+          "FilterRules": [
+            { "Name": "prefix", "Value": "raw/sales/" },
+            { "Name": "suffix", "Value": ".parquet" }
+          ]
+        }
+      }
+    }
+  ],
+  "EventBridgeConfiguration": {}
+}
+```
+
+```bash
+aws s3api put-bucket-notification-configuration --bucket example-lake-111122223333 \
+  --notification-configuration file://notification.json
+```
+
+**Pitfalls.**
+
+- Delivery is **at least once** and **not ordered**. Rarely, the same event arrives twice. Make consumers idempotent, for example by recording processed keys and version IDs.
+- Events usually arrive within seconds but can take a minute or longer. Do not use them for strict SLAs without a reconciliation job that lists the prefix.
+- A function triggered by writes to a prefix that also writes to that prefix calls itself in a loop. Write outputs to a different prefix or bucket.
+- Each destination needs a resource policy that lets S3 send to it (queue policy, topic policy or Lambda permission).
+- Overlapping prefix and suffix rules for the same event type on one bucket are rejected. Use EventBridge when several consumers need the same events.
+
+**In interviews.** Describe S3 to SQS to Lambda (or to a Glue job) as the standard file-arrival pattern, and volunteer the at-least-once and ordering caveats with idempotency as the fix.
+
+## Encryption: SSE-S3 and SSE-KMS
+
+**What it is.** Server-side encryption means S3 encrypts objects when it writes them to disk and decrypts them when an authorised caller reads them.
+
+| Option | Who manages keys | Notes |
+|---|---|---|
+| SSE-S3 | S3 | AES-256; the default for all new objects since 5 January 2023 |
+| SSE-KMS | AWS KMS key (AWS managed or customer managed) | Key policy controls who can decrypt; every use is logged in CloudTrail |
+| DSSE-KMS | AWS KMS | Two layers of encryption for compliance requirements |
+| SSE-C | You supply the key on every request | S3 never stores the key; rarely used in data platforms |
+
+**How it works.** Since 5 January 2023, S3 applies SSE-S3 to every new object in every bucket that has no other default, and you cannot turn encryption off for new uploads. Data platforms usually set **SSE-KMS with a customer managed key** as the bucket default, because reading then needs both S3 permissions *and* `kms:Decrypt` on the key, which gives a second, auditable control. Turn on **S3 Bucket Keys** with SSE-KMS: S3 uses a short-lived bucket-level key, which greatly reduces the number of KMS requests and their cost.
+
+```json
+{
+  "Rules": [
+    {
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "aws:kms",
+        "KMSMasterKeyID": "arn:aws:kms:eu-west-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+      },
+      "BucketKeyEnabled": true
+    }
+  ]
+}
+```
+
+A bucket policy can also refuse unencrypted connections and wrong encryption headers. In the second statement, the `Null` condition makes the deny apply only when a client *sends* an encryption header with another value, so uploads without the header still get the bucket default:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::example-lake-111122223333",
+        "arn:aws:s3:::example-lake-111122223333/*"
+      ],
+      "Condition": { "Bool": { "aws:SecureTransport": "false" } }
+    },
+    {
+      "Sid": "DenyNonKmsEncryptionHeader",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::example-lake-111122223333/*",
+      "Condition": {
+        "StringNotEquals": { "s3:x-amz-server-side-encryption": "aws:kms" },
+        "Null": { "s3:x-amz-server-side-encryption": "false" }
+      }
+    }
+  ]
+}
+```
+
+**Pitfalls.**
+
+- "Access Denied" when reading an SSE-KMS object is often a missing `kms:Decrypt` permission or a key policy problem, not an S3 problem.
+- Cross-account readers need permission in the KMS key policy, and they cannot use objects encrypted with the AWS managed key `aws/s3`, because its key policy cannot be changed. Use a customer managed key for shared data.
+- Changing the default encryption affects new objects only. Existing objects keep their encryption until rewritten (for example with S3 Batch Operations copy).
+- Without Bucket Keys, high-volume reads and writes can hit KMS request quotas.
+
+**In interviews.** State the January 2023 default, then explain why you would still choose SSE-KMS with a customer managed key and Bucket Keys: separate key permissions, CloudTrail audit of key use, cross-account sharing, and lower KMS cost.
+
+## Access points
+
+**What it is.** An access point is a named network endpoint attached to a bucket, with its own access policy. Instead of one huge bucket policy covering every team, you give each consumer (finance analysts, the ML team, a partner account) its own access point and policy. An access point can be restricted to a single VPC.
+
+**How it works.** Each access point has an ARN and an alias that you can use wherever a bucket name is expected. Requests through it must be allowed by both the access point policy and the bucket policy, so the usual pattern is to delegate: the bucket policy allows any access through access points owned by your account, and each access point policy grants the detail.
+
+```bash
+aws s3control create-access-point --account-id 111122223333 \
+  --name finance-analysts --bucket example-lake-111122223333 \
+  --vpc-configuration VpcId=vpc-0abc1234def567890
+```
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::111122223333:role/finance-analyst" },
+      "Action": ["s3:GetObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:eu-west-1:111122223333:accesspoint/finance-analysts",
+        "arn:aws:s3:eu-west-1:111122223333:accesspoint/finance-analysts/object/curated/finance/*"
+      ]
+    }
+  ]
+}
+```
+
+**Pitfalls.**
+
+- Forgetting the bucket-side delegation, so every request through the access point is denied.
+- A VPC-only access point cannot be reached from the internet or the console outside that VPC, which surprises people testing from a laptop.
+- Access points govern S3 object access. Table-level and column-level permissions for Athena or Redshift belong in Lake Formation.
+
+**In interviews.** Use access points as the answer to "many teams share one bucket and the bucket policy is unmanageable". Mention per-team policies, VPC restriction and delegation from the bucket policy.
+
+## Multipart upload
+
+**What it is.** Multipart upload splits one large object into parts that upload independently and in parallel, then S3 assembles them. A failed part is retried on its own instead of restarting the whole file.
+
+**How it works.** The low-level flow is `CreateMultipartUpload`, then `UploadPart` for each part, then `CompleteMultipartUpload` (or `AbortMultipartUpload`). The limits are: parts from 5 MiB to 5 GiB (the last part may be smaller), at most 10,000 parts, and objects up to 50 TB. AWS recommends multipart for objects over about 100 MB. The part size must therefore grow for very large objects:
+
+```python
+import math
+
+MiB, GiB = 1024**2, 1024**3
+MIN_PART, MAX_PART, MAX_PARTS = 5 * MiB, 5 * GiB, 10_000
+
+def plan_parts(object_bytes, preferred_part=64 * MiB):
+    """Pick a part size that respects S3's multipart limits."""
+    part = max(preferred_part, MIN_PART, math.ceil(object_bytes / MAX_PARTS))
+    if part > MAX_PART:
+        raise ValueError("object too large for multipart upload")
+    return part, math.ceil(object_bytes / part)
+
+for size in (200 * MiB, 1 * 1024 * GiB, 2_000 * GiB):
+    part, n = plan_parts(size)
+    print(f"{size / GiB:>8.1f} GiB -> part {part / MiB:>7.1f} MiB x {n:>5} parts")
+```
+
+```text
+     0.2 GiB -> part    64.0 MiB x     4 parts
+  1024.0 GiB -> part   104.9 MiB x 10000 parts
+  2000.0 GiB -> part   204.8 MiB x 10000 parts
+```
+
+You rarely call the low-level API yourself. The AWS CLI (`aws s3 cp`) and boto3's managed transfer switch to multipart automatically above a threshold:
+
+{/* noexec */}
+```python
+import boto3
+from boto3.s3.transfer import TransferConfig
+
+MiB = 1024 ** 2
+config = TransferConfig(multipart_threshold=100 * MiB, multipart_chunksize=64 * MiB, max_concurrency=8)
+boto3.client("s3").upload_file(
+    "events-2026-10-01.parquet",
+    "example-lake-111122223333",
+    "raw/events/dt=2026-10-01/events.parquet",
+    Config=config,
+)
+```
+
+**Pitfalls.**
+
+- Incomplete uploads keep their parts, and you pay for them, until aborted. Add the `AbortIncompleteMultipartUpload` lifecycle rule.
+- The ETag of a multipart object is not the MD5 of the file. Use S3 checksums (for example CRC32 or SHA-256) for integrity checks instead of comparing ETags with a local MD5.
+- Very small parts on a huge file hit the 10,000-part limit; very large parts reduce parallelism and make retries expensive.
+
+**In interviews.** Expect "how would you upload a 500 GB file reliably?" Answer: multipart with parallel parts sized to stay under 10,000 parts, retries per part, checksums, and a lifecycle rule to abort abandoned uploads.
+
+## Practice questions
+
+<details>
+<summary>Why does S3 not have real folders, and why does that matter for data pipelines?</summary>
+
+S3 stores objects under flat keys; folders are a display convention based on `/` in keys. Renaming a "folder" means copying and deleting every object, which is slow and not atomic. Pipelines that commit output by renaming a temporary directory can expose partial results, which is one reason table formats such as Iceberg commit through metadata files instead.
+
+</details>
+
+<details>
+<summary>Raw logs are read heavily for a week, occasionally for three months, and must be kept for seven years. Design the storage classes and lifecycle.</summary>
+
+Write to S3 Standard. Transition to Standard-IA after 30 days (the earliest lifecycle allows), to Glacier Flexible Retrieval or Deep Archive after 90 or 180 days, and expire after seven years. Add `AbortIncompleteMultipartUpload` and, if versioned, a noncurrent-version expiration. Check that files are not tiny, because IA classes have a minimum billable size, and remember that archived objects need a restore before Athena can read them.
+
+</details>
+
+<details>
+<summary>S3 event notifications sometimes trigger your Lambda twice for the same file. Is this a bug?</summary>
+
+No. S3 event notifications are delivered at least once and are not guaranteed to be ordered. Make the consumer idempotent: record processed object keys plus version IDs or ETags in a table such as DynamoDB with a conditional write, or make the output an overwrite of a deterministic key so a second run has the same effect.
+
+</details>
+
+<details>
+<summary>An analyst in another account gets Access Denied reading objects even though the bucket policy allows them. What do you check?</summary>
+
+The encryption key. If objects use SSE-KMS, the reader also needs `kms:Decrypt`, granted in the key policy (and in their own IAM policy for cross-account). Objects encrypted with the AWS managed `aws/s3` key cannot be shared across accounts. Also check Block Public Access is not the issue (it is not, for a named account), object ownership settings, and any explicit deny in the bucket policy or an organisation policy.
+
+</details>
+
+<details>
+<summary>Your Athena queries on a date-partitioned table still scan the whole table. Why?</summary>
+
+The filter probably does not use the partition column directly (for example `WHERE date(event_ts) = ...` instead of `WHERE dt = ...`), the partitions are not registered in the catalogue so the table points at one location, or the data is laid out by a different column than the one queried. Filter on the partition column, register partitions or use partition projection, and store data in Parquet so column pruning also helps.
+
+</details>
+
+<details>
+<summary>What are the multipart upload limits, and how do they affect very large files?</summary>
+
+Parts are 5 MiB to 5 GiB (except the last), with at most 10,000 parts, and objects can now be up to 50 TB. A 1 TiB file therefore needs parts of at least about 105 MiB. Choose a part size that stays under the part limit while keeping parallelism high.
+
+</details>
+
+## Key takeaways
+
+- S3 is a flat, strongly consistent object store (since December 2020); folders are prefixes and renames are copies.
+- Storage classes trade storage price for retrieval cost and speed; minimum durations of 30, 90 and 180 days apply to IA and Glacier classes.
+- Lifecycle rules automate tiering, expiry, old-version clean-up and aborting stale multipart uploads.
+- Hive-style date partitions plus Parquet let engines prune data; avoid tiny files and high-cardinality partitions.
+- New objects are encrypted with SSE-S3 by default since January 2023; data platforms usually choose SSE-KMS with Bucket Keys.
+- Event notifications are at least once and unordered, so consumers must be idempotent; S3 Select is closed to new customers.

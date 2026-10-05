@@ -1,0 +1,220 @@
+---
+title: "AWS for Data Engineers: The AWS Data Stack and How the Services Fit Together"
+seoTitle: "AWS for Data Engineers: The Data Stack Mapped"
+description: "A map of the AWS data stack for Data Engineers: ingest, store, process, query, orchestrate, govern and monitor, with a reference architecture and how to choose."
+technology: ["aws", "data-engineering", "cloud"]
+topic: ["fundamentals", "architecture"]
+difficulty: "Beginner"
+pillar: true
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Place each major AWS data service in one of seven layers: ingest, store, process, query, orchestrate, govern and monitor"
+  - "Describe a reference lakehouse architecture on AWS and the path a record takes through it"
+  - "Choose between overlapping services such as Athena and Redshift, Glue and EMR, Kinesis and MSK, or Step Functions and Airflow"
+  - "Explain the pricing dimensions of the main services without quoting prices"
+prerequisites: ["articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
+related: ["articles:etl-elt/modern-data-pipelines", "articles:etl-elt/batch-vs-streaming", "system-designs:scalable-lakehouse", "system-designs:real-time-analytics-pipeline"]
+next: "articles:aws/s3-for-data-engineers"
+versionContext: "Describes AWS services as documented in October 2026. This overview has no executable code; the service lessons hold the commands and policies, which were written from the AWS documentation and not run against an AWS account."
+sources:
+  - { label: "AWS Whitepaper: Big Data Analytics Options on AWS", url: "https://docs.aws.amazon.com/whitepapers/latest/big-data-analytics-options/amazon-athena.html" }
+  - { label: "Amazon S3 User Guide: Storage classes", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html" }
+  - { label: "AWS Step Functions: Choosing workflow type", url: "https://docs.aws.amazon.com/step-functions/latest/dg/choosing-workflow-type.html" }
+  - { label: "AWS Decision Guides: Amazon SQS, Amazon SNS, or Amazon EventBridge?", url: "https://docs.aws.amazon.com/decision-guides/latest/decision-guides/sns-or-sqs-or-eventbridge.html" }
+  - { label: "AWS General Reference: Services in maintenance", url: "https://docs.aws.amazon.com/general/latest/gr/maintenance_services.html" }
+---
+
+AWS offers more than a dozen services that a Data Engineer might touch, and many of them overlap. This guide gives you the map: which layer each service belongs to, how they connect in a typical platform, and how to choose when two services can do the same job. Read it first, then go deeper in the service lessons.
+
+## The seven layers of a data platform
+
+Almost every data platform, on any cloud, does seven things. Grouping AWS services by the job they do makes the catalogue much easier to remember.
+
+| Layer | Job | Main AWS services |
+|---|---|---|
+| Ingest | Bring data in from apps, databases, SaaS tools and devices | Kinesis Data Streams, Amazon Data Firehose, Amazon MSK, AWS DMS, AppFlow, Lambda, S3 uploads |
+| Store | Keep raw and curated data durably and cheaply | Amazon S3 (general purpose buckets, S3 Tables), Redshift managed storage, DynamoDB, RDS and Aurora |
+| Catalogue | Describe what data exists: tables, schemas, partitions | AWS Glue Data Catalog, Glue crawlers |
+| Process | Clean, join, aggregate and reshape data | AWS Glue (Spark), Amazon EMR, EMR Serverless, Lambda, Managed Service for Apache Flink, AWS Batch |
+| Query and serve | Answer questions with SQL, dashboards and search | Amazon Athena, Amazon Redshift, Redshift Spectrum, QuickSight, OpenSearch Service |
+| Orchestrate | Run steps in order, retry them and react to events | AWS Step Functions, Amazon MWAA (managed Airflow), Glue workflows and triggers, EventBridge |
+| Govern and secure | Decide who can see what, encrypt it and audit it | IAM, Lake Formation, AWS KMS, Secrets Manager, CloudTrail |
+| Monitor | Know when something is late, wrong or expensive | CloudWatch metrics, alarms, Logs and Logs Insights, EventBridge, Cost Explorer, AWS Budgets |
+
+The table has eight rows because the catalogue deserves its own line: the Glue Data Catalog is the glue (literally) that lets one table definition be read by Athena, Redshift Spectrum, EMR and Glue jobs alike.
+
+## Ingest
+
+Choose the ingestion service by the shape of the source:
+
+- **Event streams from applications or devices**: Kinesis Data Streams when you want an AWS-native stream with shards you size (or on-demand mode), Amazon MSK when the organisation already uses Kafka clients and tooling.
+- **Stream straight into storage with no code**: Amazon Data Firehose (formerly Kinesis Data Firehose) buffers records and writes files to S3, Redshift, OpenSearch, Apache Iceberg tables and other destinations.
+- **Relational databases, including change data capture**: AWS DMS does a full load and then replicates ongoing changes from the source's transaction log.
+- **SaaS applications** such as Salesforce: Amazon AppFlow, or a third-party ingestion tool.
+- **Files**: direct uploads to S3 (multipart for large files), often triggering an S3 event notification.
+
+## Store
+
+Amazon S3 is the centre of gravity. Raw files land in a raw (bronze) area, cleaned data is written as Parquet or as an open table format such as Apache Iceberg in a curated (silver) area, and business-ready tables sit in a gold area. S3 has been strongly consistent for reads after writes and for listings since December 2020, which is why table formats and Spark can safely run on it without the old "consistent view" workarounds.
+
+Two newer options matter. **S3 Tables** store Iceberg tables in a dedicated table bucket with automatic compaction and snapshot clean-up. **Redshift managed storage** holds warehouse tables for RA3 nodes and Redshift Serverless, separate from compute.
+
+## Process
+
+| You need | Good default |
+|---|---|
+| Small, event-driven transformations (one file, one message) | AWS Lambda |
+| Serverless Spark batch jobs with the Data Catalog built in | AWS Glue for Apache Spark |
+| Full control of Spark, other frameworks (Hive, Trino, Flink), long-running clusters or custom images | Amazon EMR on EC2 or EMR on EKS |
+| Spark or Hive without managing clusters, with your own EMR release | EMR Serverless |
+| Stateful stream processing with event time and windows | Amazon Managed Service for Apache Flink (the service formerly named Kinesis Data Analytics) |
+| Containerised batch jobs that are not Spark | AWS Batch |
+| SQL transformations inside the warehouse | Redshift (often with dbt) or Athena CTAS and `INSERT INTO` |
+
+## Query and serve
+
+- **Athena** runs SQL directly on files in S3, with no cluster. It is ideal for exploration, ad hoc questions and moderate, spiky workloads.
+- **Redshift** is a columnar warehouse for heavy, concurrent BI workloads, joins across large fact tables and predictable dashboard latency. Spectrum lets Redshift read S3 tables too.
+- **QuickSight** builds dashboards on Athena, Redshift and other sources.
+- **OpenSearch Service** serves search and log analytics rather than relational SQL.
+
+## Orchestrate
+
+Pipelines need ordering, retries, backfills and alerts.
+
+- **Step Functions** is serverless, JSON-defined (Amazon States Language) and has direct integrations with Glue, EMR, Athena, Lambda and many more services.
+- **Amazon MWAA** runs Apache Airflow when the team wants Python DAGs, Airflow's ecosystem and portability across clouds.
+- **Glue workflows and triggers** are enough for simple chains of Glue jobs and crawlers.
+- **EventBridge** routes events (a file arrived, a job failed) and runs schedules.
+
+## Govern and secure
+
+IAM is the foundation: every service call is an authenticated principal performing an action on a resource. Pipelines run as **roles** that issue temporary credentials. **Lake Formation** adds database, table, column, row and cell-level permissions over the Data Catalog, plus tag-based access control with LF-Tags and cross-account sharing. **KMS** manages encryption keys, **Secrets Manager** stores database passwords and API tokens, and **CloudTrail** records who called which API.
+
+## Monitor
+
+CloudWatch collects metrics from every service and your own custom metrics, stores logs and lets you query them with Logs Insights. Alarms notify you through SNS. EventBridge rules react to state changes such as "Glue job FAILED". For cost, Cost Explorer shows where money went, Budgets warns before it goes, and cost allocation tags attribute spend to pipelines and teams.
+
+## A reference architecture
+
+The diagram traces one common batch-plus-streaming lakehouse.
+
+```text
+ Sources                Ingest                  Store (S3 lake)                     Serve
+ -------                ------                  ---------------                     -----
+ App events  ──► Kinesis Data Streams ──► Data Firehose ──► s3://lake/raw/events/ ─┐
+ OLTP DB     ──► AWS DMS (full load + CDC) ─────────────► s3://lake/raw/orders/  ─┤
+ SaaS        ──► AppFlow ───────────────────────────────► s3://lake/raw/crm/     ─┤
+                                                                                   │
+                           Glue crawler / table definitions in Glue Data Catalog ◄┤
+                                                                                   │
+            Step Functions or MWAA run, in order:                                  │
+              1. Glue Spark job: raw  ──► curated Iceberg tables (s3://lake/curated/)
+              2. Glue Data Quality rules on curated tables
+              3. Redshift COPY or Spectrum / Athena CTAS ──► gold marts
+                                                                                   │
+            Athena (ad hoc SQL)   Redshift (BI, dashboards)   QuickSight ◄─────────┘
+
+ Cross-cutting: IAM roles, Lake Formation permissions, KMS keys, CloudWatch alarms,
+                EventBridge failure rules, Cost Explorer and Budgets with cost allocation tags
+```
+
+Follow one order record through it:
+
+1. A row changes in the orders database. DMS reads the change from the transaction log and writes it to `s3://lake/raw/orders/` as a Parquet file with an operation column (insert, update or delete).
+2. The orchestrator starts a Glue Spark job on a schedule. It reads only new files (a job bookmark or a watermark), merges the changes into an Iceberg table in the curated zone, and commits a new snapshot.
+3. A Glue Data Quality ruleset checks that `order_id` is complete and unique. A failure stops the workflow and sends an alert.
+4. Athena and Redshift both read the curated table through the Data Catalog. Lake Formation hides the customer email column from analysts who are not tagged for PII.
+5. CloudWatch alarms watch job duration, failures and data freshness. Cost allocation tags on the job, the bucket and the warehouse show what the pipeline costs each month.
+
+## How to choose between overlapping services
+
+| Decision | Choose the first when | Choose the second when |
+|---|---|---|
+| Athena vs Redshift | Queries are ad hoc or spiky, data already lives in S3, you want no infrastructure | Many concurrent users, demanding dashboards, heavy joins, predictable latency, warehouse features such as materialized views and workload management |
+| Glue vs EMR | You want serverless Spark with the Data Catalog and bookmarks built in, and modest tuning needs | You need a specific framework or version, long-running clusters, Spot fleets, custom AMIs or EKS, or fine control of Spark configuration |
+| EMR Serverless vs EMR on EC2 | Jobs are intermittent and you do not want to manage clusters | Clusters run most of the day, need custom bootstrap or very specific instance choices |
+| Lambda vs Glue | One small object or message at a time, finishing well inside 15 minutes | Large datasets, joins, shuffles or jobs that run longer than 15 minutes |
+| Kinesis Data Streams vs MSK | AWS-native, little to operate, integrates with Lambda and Firehose | Existing Kafka producers and consumers, Kafka Connect, Kafka Streams, portability |
+| Firehose vs a custom consumer | You only need to buffer, optionally transform and land data | You need joins, state, exactly-once logic or custom routing |
+| Step Functions vs MWAA | AWS-centric pipelines, serverless, event-driven, pay per state transition | Python DAGs, rich scheduling and backfills, the Airflow provider ecosystem, multi-cloud |
+| S3 Tables vs self-managed Iceberg on S3 | You want AWS to run compaction and snapshot expiry | You need full control of table maintenance or features S3 Tables do not offer |
+
+Two habits make these decisions easier in an interview. First, state the access pattern (who queries, how often, how fresh, how big). Second, name the cost driver of each option, because AWS services differ more in how they bill than in what they can do.
+
+## Pricing dimensions, not prices
+
+Prices change and vary by Region, so learn what each service charges for and look up the current rate on its pricing page.
+
+| Service | What you pay for |
+|---|---|
+| S3 | GB-months stored (by storage class), requests, retrievals for infrequent-access and archive classes, data transfer out, optional features such as Inventory |
+| Athena | Data scanned per query (rounded up, with a minimum per query) or, with provisioned capacity, reserved DPUs |
+| Glue | DPU-hours for jobs, crawlers and interactive sessions, billed per second with a minimum; Data Catalog storage and requests beyond the free allowance |
+| Redshift | Node-hours for provisioned clusters plus managed storage for RA3; RPU-hours for Serverless; Spectrum data scanned; concurrency scaling beyond free credits |
+| EMR | The EC2 (or EKS, or Serverless vCPU and memory) resources plus a per-second EMR charge |
+| Lambda | Requests plus GB-seconds of duration (memory times time) |
+| Kinesis Data Streams | Shard-hours and PUT payload units in provisioned mode; data in and out per GB in on-demand mode; extended retention and enhanced fan-out |
+| Step Functions | State transitions for Standard workflows; requests and duration for Express workflows |
+
+Across the stack, the biggest levers are the same: store columnar, compressed, well-partitioned files of a sensible size; read only what you need; and turn compute off when it is idle.
+
+## Services to know about but not build on
+
+AWS publishes a list of services in maintenance, which are closed to new customers. Check it before you design around an older service. For data engineers the notable changes are: **S3 Select** closed to new customers on 25 July 2024, **Kinesis Data Analytics for SQL applications** was discontinued (applications deleted from 27 January 2026) in favour of Managed Service for Apache Flink, and **Lake Formation governed tables** ended on 31 December 2024 in favour of Iceberg, Hudi and Delta Lake.
+
+## Interview checklist
+
+- Draw the seven layers and name one AWS service for each without hesitating.
+- Explain why S3 plus the Glue Data Catalog lets several engines share data.
+- Defend one choice from the decision table with access pattern and cost driver.
+- Describe how a pipeline gets permissions (an IAM role) and how analysts are restricted (Lake Formation).
+- Say how you would know a pipeline failed or is late, before a user tells you.
+
+## Practice questions
+
+<details>
+<summary>Sketch an AWS architecture for daily sales reporting from a PostgreSQL database.</summary>
+
+DMS does a full load and then ongoing CDC from PostgreSQL into a raw S3 prefix. A scheduled Glue Spark job (run by Step Functions or MWAA) merges the changes into curated Iceberg or Parquet tables registered in the Glue Data Catalog, partitioned by date. Data quality rules run before publishing. Redshift serves the dashboards (loaded by COPY, or reading through Spectrum), or Athena if usage is light. IAM roles grant each step least privilege, Lake Formation restricts sensitive columns, and CloudWatch alarms plus an EventBridge rule on job failure alert the team.
+
+</details>
+
+<details>
+<summary>When would you pick Athena over Redshift?</summary>
+
+When the data already lives in S3, the queries are ad hoc or infrequent, and nobody wants to run a cluster. You pay per data scanned, so it is cheap for light use on well-partitioned Parquet. Redshift wins when many users run demanding queries all day, latency must be predictable, or you need warehouse features such as workload management and materialized views.
+
+</details>
+
+<details>
+<summary>What does the Glue Data Catalog give you that S3 alone does not?</summary>
+
+S3 stores objects and keys, not tables. The Data Catalog stores databases, tables, columns, types, partitions and the S3 location of each table, in a Hive-metastore-compatible form. Athena, Redshift Spectrum, EMR and Glue all read it, so one definition serves many engines, and Lake Formation can attach permissions to it.
+
+</details>
+
+<details>
+<summary>A Lambda function that transforms files is starting to time out. What do you do?</summary>
+
+First check why: Lambda has a hard maximum timeout of 15 minutes, so a job whose input keeps growing will hit it eventually. If one file is simply large, more memory (which also brings more CPU) may help. If the work involves large joins or many files, move it to a Glue or EMR Serverless Spark job, or split the work into smaller units with a Step Functions Map state.
+
+</details>
+
+<details>
+<summary>How do you explain AWS costs for a pipeline without quoting prices?</summary>
+
+Name the billing dimension of each component and the design choice that controls it: S3 storage class and request count, Athena data scanned (reduced by partitioning and Parquet), Glue DPU-hours (worker type, count and runtime), Redshift node-hours or RPU-hours, Lambda GB-seconds. Then show how you would measure it: cost allocation tags on every resource, Cost Explorer grouped by tag, and a Budget with alerts.
+
+</details>
+
+## Key takeaways
+
+- Group AWS services by layer: ingest, store, catalogue, process, query, orchestrate, govern and monitor.
+- S3 plus the Glue Data Catalog is the shared foundation; most engines read the same tables.
+- Choose between overlapping services by access pattern, operational effort and billing model.
+- Pipelines run as IAM roles; Lake Formation adds fine-grained access on top of the catalogue.
+- Learn pricing dimensions, not prices, and design to reduce the dimension that dominates.
+- Check AWS's maintenance list before building on older services such as S3 Select.
