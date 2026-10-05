@@ -69,6 +69,7 @@ sources:
   - { label: "Debezium documentation", url: "https://debezium.io/documentation/" }
   - { label: "PostgreSQL 16: table expressions and joins", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
 previous: "system-designs:streaming-etl-with-kafka-spark"
+next: "system-designs:a-b-testing-data-pipeline"
 ---
 
 ## Approach
