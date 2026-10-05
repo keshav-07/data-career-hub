@@ -1,0 +1,557 @@
+---
+title: "Linked Lists: Pointer Rewiring, Fast and Slow Pointers, LRU Cache"
+seoTitle: "Linked List Pattern for Coding Interviews"
+description: "Reverse, merge, split and reorder linked lists safely with dummy nodes and fast and slow pointers, then build an LRU cache and a k-way merge in Python."
+technology: ["dsa"]
+topic: ["linked-lists", "fast-slow-pointers", "lru-cache"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain how singly and doubly linked lists store data and what their operations cost"
+  - "Reverse, merge and reorder lists in place using a dummy head and careful pointer updates"
+  - "Use fast and slow pointers to find middles, cycles and the n-th node from the end"
+  - "Build an LRU cache from a hash map and a doubly linked list"
+  - "Merge k sorted streams with a heap, as in an external sort"
+prerequisites: ["articles:dsa/two-pointers"]
+previous: "articles:dsa/binary-search"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: collections (OrderedDict)", url: "https://docs.python.org/3/library/collections.html" }
+  - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
+  - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+---
+
+A linked list stores each value in a node that points to the next node, instead of in one contiguous block. You rarely build one in pipeline code, but linked-list problems are a favourite way for interviewers to test careful pointer handling, and two of them (the LRU cache and merging k sorted lists) are directly useful in data systems.
+
+Every code block on this page shares the small helpers defined in the first block, so run the blocks in order.
+
+## How linked lists work
+
+```python
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+
+def build(values):
+    """Build a linked list from a Python list; return its head (or None)."""
+    dummy = ListNode()
+    tail = dummy
+    for v in values:
+        tail.next = ListNode(v)
+        tail = tail.next
+    return dummy.next
+
+
+def to_list(head, limit=10_000):
+    out = []
+    while head and len(out) < limit:
+        out.append(head.val)
+        head = head.next
+    return out
+
+
+assert to_list(build([1, 2, 3])) == [1, 2, 3]
+assert build([]) is None
+```
+
+| Operation | Array (`list`) | Singly linked list |
+|---|---|---|
+| Access the i-th item | O(1) | O(i), walk from the head |
+| Insert or delete at the front | O(n) | O(1) |
+| Insert or delete after a known node | O(n) | O(1) |
+| Append at the end | O(1) amortised | O(1) if you keep a tail pointer, else O(n) |
+| Memory | Compact | One extra pointer per node (two for doubly linked) |
+
+A **doubly linked list** also stores `prev`, so a node can remove itself in O(1) without knowing its predecessor. That is what makes the LRU cache work.
+
+### Two techniques that prevent most bugs
+
+1. **A dummy (sentinel) head.** Start the result with a throwaway node so that "insert at the front" and "delete the head" are not special cases. Return `dummy.next`.
+2. **Save `next` before you rewire.** Once you change `node.next`, the rest of the list is unreachable unless you kept a reference.
+
+## Recognising the pattern
+
+| Signal | Technique |
+|---|---|
+| "Reverse", "reverse in groups", "palindrome list" | Iterative three-pointer reversal |
+| "Merge two sorted lists", "sort a list" | Dummy head and a tail pointer |
+| "Cycle", "middle", "n-th from the end" | Fast and slow pointers |
+| "Reorder", "interleave" | Find middle, reverse second half, merge |
+| "Deep copy with random pointers" | Hash map from old node to new node |
+| "Cache with eviction of least recently used" | Hash map plus doubly linked list |
+| "Merge k sorted lists / streams" | Min-heap of current heads |
+| "Find the duplicate in an array of 1..n without extra space" | Treat values as next pointers; cycle detection |
+
+## Core templates in Python
+
+### Reverse a list
+
+```python
+def reverse_list(head):
+    prev = None
+    current = head
+    while current:
+        nxt = current.next      # 1. save the rest
+        current.next = prev     # 2. point backwards
+        prev = current          # 3. advance prev
+        current = nxt           # 4. advance current
+    return prev                 # new head
+
+
+assert to_list(reverse_list(build([1, 2, 3, 4, 5]))) == [5, 4, 3, 2, 1]
+assert reverse_list(None) is None
+assert to_list(reverse_list(build([7]))) == [7]
+```
+
+### Merge two sorted lists with a dummy head
+
+```python
+def merge_two_lists(a, b):
+    dummy = tail = ListNode()
+    while a and b:
+        if a.val <= b.val:          # <= keeps the merge stable
+            tail.next, a = a, a.next
+        else:
+            tail.next, b = b, b.next
+        tail = tail.next
+    tail.next = a or b              # attach whatever remains
+    return dummy.next
+
+
+assert to_list(merge_two_lists(build([1, 2, 4]), build([1, 3, 4]))) == [1, 1, 2, 3, 4, 4]
+assert to_list(merge_two_lists(None, build([0]))) == [0]
+assert merge_two_lists(None, None) is None
+```
+
+### Fast and slow pointers
+
+The fast pointer moves two steps for every one step of the slow pointer. When fast reaches the end, slow is in the middle; if there is a cycle, fast eventually laps slow and they meet.
+
+```python
+def has_cycle(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow = slow.next
+        fast = fast.next.next
+        if slow is fast:
+            return True
+    return False
+
+
+def middle_node(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow = slow.next
+        fast = fast.next.next
+    return slow                     # second middle for even lengths
+
+
+def remove_nth_from_end(head, n):
+    dummy = ListNode(0, head)
+    lead = trail = dummy
+    for _ in range(n + 1):          # open a gap of n nodes
+        lead = lead.next
+    while lead:
+        lead = lead.next
+        trail = trail.next
+    trail.next = trail.next.next    # trail is just before the target
+    return dummy.next
+
+
+cyclic = build([3, 2, 0, -4])
+cyclic.next.next.next.next = cyclic.next          # tail points back to node "2"
+assert has_cycle(cyclic) is True
+assert has_cycle(build([1, 2])) is False and has_cycle(None) is False
+assert middle_node(build([1, 2, 3, 4, 5])).val == 3
+assert middle_node(build([1, 2, 3, 4])).val == 3
+assert to_list(remove_nth_from_end(build([1, 2, 3, 4, 5]), 2)) == [1, 2, 3, 5]
+assert to_list(remove_nth_from_end(build([1]), 1)) == []
+assert to_list(remove_nth_from_end(build([1, 2]), 2)) == [2]   # removing the head
+```
+
+The dummy node in `remove_nth_from_end` is what makes removing the head (the last test) work without a special case.
+
+### Floyd's cycle start: Find the Duplicate Number
+
+An array of n + 1 values in the range 1..n can be read as a linked list where index `i` points to `nums[i]`. A duplicate value means two indices point to the same node, which creates a cycle; the duplicate is where the cycle starts.
+
+```python
+def find_duplicate(nums):
+    slow = fast = nums[0]
+    while True:                         # phase 1: meet inside the cycle
+        slow = nums[slow]
+        fast = nums[nums[fast]]
+        if slow == fast:
+            break
+    slow = nums[0]                      # phase 2: walk to the cycle entrance
+    while slow != fast:
+        slow = nums[slow]
+        fast = nums[fast]
+    return slow
+
+
+assert find_duplicate([1, 3, 4, 2, 2]) == 2
+assert find_duplicate([3, 1, 3, 4, 2]) == 3
+assert find_duplicate([3, 3, 3, 3, 3]) == 3
+```
+
+Phase 2 works because the distance from the start to the cycle entrance equals the distance from the meeting point to the entrance (modulo the cycle length). This gives O(n) time and O(1) space without modifying the array.
+
+### Combine the techniques: reorder a list
+
+Reorder `L0 → L1 → … → Ln` into `L0 → Ln → L1 → Ln-1 → …`: find the middle, reverse the second half, then interleave.
+
+```python
+def reorder_list(head):
+    if not head or not head.next:
+        return
+    slow, fast = head, head.next          # slow stops at the end of the first half
+    while fast and fast.next:
+        slow, fast = slow.next, fast.next.next
+    second = reverse_list(slow.next)
+    slow.next = None                      # cut the list in two
+    first = head
+    while second:
+        n1, n2 = first.next, second.next
+        first.next = second
+        second.next = n1
+        first, second = n1, n2
+
+
+h = build([1, 2, 3, 4, 5])
+reorder_list(h)
+assert to_list(h) == [1, 5, 2, 4, 3]
+h = build([1, 2, 3, 4])
+reorder_list(h)
+assert to_list(h) == [1, 4, 2, 3]
+```
+
+Forgetting `slow.next = None` leaves a cycle, which is why `to_list` above has a safety limit.
+
+### Arithmetic on lists: add two numbers
+
+Digits are stored in reverse order, so add them from the head like column addition, carrying as you go.
+
+```python
+def add_two_numbers(a, b):
+    dummy = tail = ListNode()
+    carry = 0
+    while a or b or carry:
+        total = carry + (a.val if a else 0) + (b.val if b else 0)
+        carry, digit = divmod(total, 10)
+        tail.next = ListNode(digit)
+        tail = tail.next
+        a = a.next if a else None
+        b = b.next if b else None
+    return dummy.next
+
+
+assert to_list(add_two_numbers(build([2, 4, 3]), build([5, 6, 4]))) == [7, 0, 8]   # 342 + 465
+assert to_list(add_two_numbers(build([9, 9, 9]), build([1]))) == [0, 0, 0, 1]
+```
+
+Including `carry` in the loop condition handles the final carry digit.
+
+### Reverse in groups of k
+
+```python
+def reverse_k_group(head, k):
+    dummy = ListNode(0, head)
+    group_prev = dummy
+    while True:
+        kth = group_prev                      # find the k-th node of this group
+        for _ in range(k):
+            kth = kth.next
+            if not kth:
+                return dummy.next             # fewer than k left: leave as is
+        group_next = kth.next
+        prev, current = group_next, group_prev.next
+        while current is not group_next:      # reverse this group
+            nxt = current.next
+            current.next = prev
+            prev, current = current, nxt
+        first_of_group = group_prev.next      # becomes the last after reversal
+        group_prev.next = kth
+        group_prev = first_of_group
+
+
+assert to_list(reverse_k_group(build([1, 2, 3, 4, 5]), 2)) == [2, 1, 4, 3, 5]
+assert to_list(reverse_k_group(build([1, 2, 3, 4, 5]), 3)) == [3, 2, 1, 4, 5]
+assert to_list(reverse_k_group(build([1, 2]), 1)) == [1, 2]
+```
+
+Starting `prev` at `group_next` connects the reversed group's tail to the rest of the list in the same loop.
+
+### Deep copy with random pointers
+
+```python
+class RandomNode:
+    def __init__(self, val, next=None, random=None):
+        self.val, self.next, self.random = val, next, random
+
+
+def copy_random_list(head):
+    clone = {None: None}                 # old node -> new node
+    node = head
+    while node:                          # pass 1: create every copy
+        clone[node] = RandomNode(node.val)
+        node = node.next
+    node = head
+    while node:                          # pass 2: wire next and random
+        clone[node].next = clone[node.next]
+        clone[node].random = clone[node.random]
+        node = node.next
+    return clone[head]
+
+
+a, b, c = RandomNode(7), RandomNode(13), RandomNode(11)
+a.next, b.next = b, c
+b.random, c.random = a, c
+copy = copy_random_list(a)
+assert copy is not a and copy.next.random is copy and copy.next.next.random is copy.next.next
+assert [copy.val, copy.next.val, copy.next.next.val] == [7, 13, 11]
+assert copy_random_list(None) is None
+```
+
+Mapping `None` to `None` removes the null checks. There is also an O(1)-extra-space version that interleaves copies between original nodes and then separates them.
+
+### LRU cache: hash map plus doubly linked list
+
+The map gives O(1) lookup by key; the list keeps keys in recency order so the least recently used one is at one end and can be evicted in O(1).
+
+```python
+class _Node:
+    __slots__ = ("key", "val", "prev", "next")
+
+    def __init__(self, key=0, val=0):
+        self.key, self.val, self.prev, self.next = key, val, None, None
+
+
+class LRUCache:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.map = {}
+        self.head, self.tail = _Node(), _Node()      # sentinels: head.next is the oldest
+        self.head.next, self.tail.prev = self.tail, self.head
+
+    def _remove(self, node):
+        node.prev.next, node.next.prev = node.next, node.prev
+
+    def _append(self, node):                         # newest goes just before tail
+        node.prev, node.next = self.tail.prev, self.tail
+        self.tail.prev.next = node
+        self.tail.prev = node
+
+    def get(self, key):
+        node = self.map.get(key)
+        if node is None:
+            return -1
+        self._remove(node)
+        self._append(node)                           # mark as most recent
+        return node.val
+
+    def put(self, key, value):
+        if key in self.map:
+            self._remove(self.map[key])
+        node = _Node(key, value)
+        self.map[key] = node
+        self._append(node)
+        if len(self.map) > self.capacity:
+            oldest = self.head.next
+            self._remove(oldest)
+            del self.map[oldest.key]                 # why each node stores its key
+
+
+cache = LRUCache(2)
+cache.put(1, 1)
+cache.put(2, 2)
+assert cache.get(1) == 1          # 1 is now most recent
+cache.put(3, 3)                   # evicts 2
+assert cache.get(2) == -1
+cache.put(4, 4)                   # evicts 1
+assert cache.get(1) == -1 and cache.get(3) == 3 and cache.get(4) == 4
+```
+
+In real Python code, `collections.OrderedDict` does the same job with `move_to_end(key)` and `popitem(last=False)`, and `functools.lru_cache` caches function results. Interviewers usually want the hand-built version first, then credit you for naming these.
+
+```python
+from collections import OrderedDict
+
+
+class LRUCacheOD:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.data = OrderedDict()
+
+    def get(self, key):
+        if key not in self.data:
+            return -1
+        self.data.move_to_end(key)
+        return self.data[key]
+
+    def put(self, key, value):
+        self.data[key] = value
+        self.data.move_to_end(key)
+        if len(self.data) > self.capacity:
+            self.data.popitem(last=False)            # oldest first
+
+
+c2 = LRUCacheOD(2)
+c2.put(1, 1); c2.put(2, 2); c2.get(1); c2.put(3, 3)
+assert c2.get(2) == -1 and c2.get(1) == 1 and c2.get(3) == 3
+```
+
+### Merge k sorted lists with a heap
+
+```python
+import heapq
+
+
+def merge_k_lists(lists):
+    heap = []
+    for i, node in enumerate(lists):
+        if node:
+            heapq.heappush(heap, (node.val, i, node))    # i breaks ties: nodes are not comparable
+    dummy = tail = ListNode()
+    while heap:
+        _, i, node = heapq.heappop(heap)
+        tail.next = node
+        tail = node
+        if node.next:
+            heapq.heappush(heap, (node.next.val, i, node.next))
+    return dummy.next
+
+
+merged = merge_k_lists([build([1, 4, 5]), build([1, 3, 4]), build([2, 6])])
+assert to_list(merged) == [1, 1, 2, 3, 4, 4, 5, 6]
+assert merge_k_lists([]) is None and merge_k_lists([None]) is None
+```
+
+Without the index `i` in the tuple, two equal values would make Python compare `ListNode` objects and raise `TypeError`.
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Reverse, merge two, middle, cycle, remove n-th | O(n) | O(1) |
+| Find duplicate (Floyd) | O(n) | O(1) |
+| Reorder list | O(n) | O(1) |
+| Add two numbers | O(max(m, n)) | O(1) besides the output |
+| Reverse in k-groups | O(n) | O(1) |
+| Copy with random pointers | O(n) | O(n) for the map |
+| LRU cache | O(1) per get and put | O(capacity) |
+| Merge k lists (N nodes total) | O(N log k) | O(k) for the heap |
+
+## Variations and common bugs
+
+- **Losing the rest of the list** by overwriting `next` before saving it.
+- **Special-casing the head** instead of using a dummy node, then forgetting one of the cases.
+- **`while fast.next.next`** without checking `fast` and `fast.next` first, which raises `AttributeError` on short lists.
+- **Leaving a cycle** after splitting a list (forgetting `slow.next = None`).
+- **Comparing nodes with `==`** when you mean identity; use `is`.
+- **Heap tuples without a tie-breaker** when payloads are not comparable.
+- **Recursion on long lists:** recursive reversal is elegant but uses O(n) stack and can exceed Python's recursion limit.
+- **Variants:** palindrome linked list (reverse second half and compare), intersection of two lists (switch heads when a pointer reaches the end), rotate list, sort list (merge sort with fast and slow split), odd-even list.
+
+## Linked lists in data-engineering work
+
+- **Caches.** LRU eviction is used in database buffer pools and in lookup caches inside streaming jobs (for example, caching dimension rows fetched from an API). Knowing it is a hash map plus a recency list lets you reason about its O(1) cost and memory bound.
+- **K-way merge.** The final phase of an external sort, merging sorted spill files, and combining sorted partition outputs are Merge k Sorted Lists. `heapq.merge` does it lazily for any sorted iterables.
+- **Chains of versions.** Table formats such as Apache Iceberg record a parent for each snapshot, and change logs link each version to the previous one. Walking back through history is walking a linked list, and detecting a broken or circular chain is cycle detection.
+- **Following pointers safely.** Resolving redirects, manager-of chains in an HR table or parent IDs in a hierarchy can loop on bad data. Fast and slow pointers (or a visited set) stop an infinite loop.
+
+```python
+import heapq
+
+# Three sorted spill files (here as lists of (ts, event)), merged lazily.
+spill_a = [(1, "a1"), (4, "a2"), (9, "a3")]
+spill_b = [(2, "b1"), (4, "b2")]
+spill_c = [(3, "c1"), (10, "c2")]
+merged = list(heapq.merge(spill_a, spill_b, spill_c))
+assert [ts for ts, _ in merged] == [1, 2, 3, 4, 4, 9, 10]
+
+
+def chain_has_loop(parent_of, start):
+    """Detect a loop in parent pointers (e.g. employee -> manager) with O(1) memory."""
+    slow = fast = start
+    while fast is not None and parent_of.get(fast) is not None:
+        slow = parent_of[slow]
+        fast = parent_of[parent_of[fast]]
+        if slow == fast:
+            return True
+    return False
+
+
+assert chain_has_loop({"ann": "bob", "bob": "cat", "cat": None}, "ann") is False
+assert chain_has_loop({"ann": "bob", "bob": "cat", "cat": "bob"}, "ann") is True
+print(merged)
+```
+
+```text
+[(1, 'a1'), (2, 'b1'), (3, 'c1'), (4, 'a2'), (4, 'b2'), (9, 'a3'), (10, 'c2')]
+```
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Reverse Linked List** (Easy): save next, point back, advance prev and current.
+2. **Merge Two Sorted Lists** (Easy): dummy head and tail; attach the remainder at the end.
+3. **Linked List Cycle** (Easy): fast and slow pointers meet if and only if there is a cycle.
+4. **Remove Nth Node From End of List** (Medium): open a gap of n between two pointers, starting from a dummy.
+5. **Reorder List** (Medium): find the middle, reverse the second half, interleave.
+6. **Add Two Numbers** (Medium): column addition with a carry, continuing while either list or the carry remains.
+7. **Copy List with Random Pointers** (Medium): map each old node to its copy, then wire next and random.
+8. **Find the Duplicate Number** (Medium): values as next pointers; Floyd's algorithm finds the cycle entrance.
+9. **LRU Cache** (Medium): hash map to nodes plus a doubly linked list in recency order.
+10. **Merge k Sorted Lists** (Hard): min-heap of the current head of each list, with an index tie-breaker.
+11. **Reverse Nodes in k-Group** (Hard): check k nodes exist, reverse them, reconnect, repeat.
+
+## Practice questions
+
+<details>
+<summary>Why does a dummy head node simplify linked-list code?</summary>
+
+It gives every real node a predecessor, so inserting before the first node or deleting the head works exactly like any other position. You return `dummy.next` at the end. Without it you need separate branches for the head, which is where most bugs appear.
+
+</details>
+
+<details>
+<summary>Why do fast and slow pointers always meet when there is a cycle?</summary>
+
+Once both pointers are inside the cycle, the fast pointer gains one node on the slow pointer per step. The gap shrinks by one each step, so it reaches zero within one lap of the cycle; it cannot jump over the slow pointer.
+
+</details>
+
+<details>
+<summary>Why does an LRU cache need a doubly linked list rather than a singly linked one?</summary>
+
+On every `get` the accessed node moves to the most recent end, which means removing it from the middle. With a `prev` pointer a node can unlink itself in O(1). In a singly linked list you would have to walk from the head to find its predecessor, which is O(n).
+
+</details>
+
+<details>
+<summary>What is the complexity of merging k sorted lists with a heap, and why is it better than merging them one by one?</summary>
+
+With N total nodes, every node is pushed and popped once on a heap of size at most k: O(N log k). Merging lists one after another re-walks the growing result each time, costing O(N·k) in the worst case. Merging in pairs (divide and conquer) also achieves O(N log k).
+
+</details>
+
+<details>
+<summary>You must merge 200 sorted files that are too large to fit in memory. How?</summary>
+
+Open all files and keep one current record from each in a min-heap keyed by the sort key (with the file index as a tie-breaker). Repeatedly pop the smallest, write it out, and push the next record from the same file. Memory is O(k) records plus I/O buffers. If there are too many files to keep open at once, merge in several passes.
+
+</details>
+
+## Key takeaways
+
+- Linked lists trade O(1) insertion and deletion at known positions for O(n) access by index.
+- A dummy head and "save next before rewiring" prevent most linked-list bugs.
+- Fast and slow pointers find middles, cycles, cycle entrances and positions from the end in O(1) space.
+- An LRU cache is a hash map plus a doubly linked list; `OrderedDict` is the library shortcut.
+- Merging k sorted lists or files uses a heap of size k: O(N log k), the core of external sorting.
