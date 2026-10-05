@@ -1,0 +1,134 @@
+---
+title: "Find Minimum in Rotated Sorted Array: Binary Search Against the Right End"
+seoTitle: "Find Minimum in Rotated Sorted Array"
+description: "Locate the smallest value in a rotated sorted array in O(log n) by comparing the middle with the right end. Python solution, walkthrough, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-search"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "A rotated sorted array is two ascending runs, and the minimum is where the second run starts. Compare nums[mid] with nums[hi]: if it is larger, the drop (and the minimum) is to the right of mid; otherwise the minimum is at mid or to its left. Shrink the range until lo equals hi. This is O(log n) time and O(1) space for distinct values."
+followUps: ["How does the solution change if the array may contain duplicates?", "How would you return the number of positions the array was rotated by?", "Why compare with the right end rather than the left end?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/koko-eating-bananas"
+next: "interview-questions:dsa/search-in-rotated-sorted-array"
+---
+
+## Problem
+
+A list of distinct integers was sorted in ascending order and then rotated: some number of elements were moved, in order, from the front to the back. For example `[3, 6, 8, 12, 20]` rotated by two becomes `[8, 12, 20, 3, 6]`. The rotation could be zero, leaving the list fully sorted. Return the smallest value in O(log n) time.
+
+This is widely known as LeetCode 153 (Find Minimum in Rotated Sorted Array). It is a stepping stone to searching a rotated array for a target.
+
+Constraints for this version: 1 to 5,000 distinct values, each a 32-bit signed integer.
+
+## Examples
+
+| `nums` | Result | Why |
+|---|---|---|
+| `[8, 12, 20, 3, 6]` | `3` | the second run starts at index 3 |
+| `[3, 6, 8, 12, 20]` | `3` | not rotated, so the first value |
+| `[20, 3, 6, 8, 12]` | `3` | rotated by one less than the length |
+| `[9, 4]` | `4` | two elements |
+| `[11]` | `11` | single element |
+
+## Approach 1: brute force
+
+Scan for the minimum, or scan for the first place where a value is smaller than the one before it.
+
+```python
+def find_min_linear(nums):
+    for i in range(1, len(nums)):
+        if nums[i] < nums[i - 1]:
+            return nums[i]          # the drop marks the start of the second run
+    return nums[0]                  # no drop: not rotated
+```
+
+O(n) time, O(1) space. Correct, but it ignores the structure.
+
+## Approach 2: optimal
+
+**Key insight.** Every value in the first (left) run is larger than every value in the second (right) run, and the last element always belongs to the right run. So comparing `nums[mid]` with `nums[hi]` tells you which run `mid` is in:
+
+- `nums[mid] > nums[hi]`: `mid` is in the left run, so the minimum is strictly to the right: `lo = mid + 1`.
+- `nums[mid] < nums[hi]`: `mid` is in the right run, so the minimum is at `mid` or to its left: `hi = mid`.
+
+With distinct values they are never equal unless `mid == hi`, which cannot happen while `lo < hi`.
+
+**Walkthrough** for `[15, 18, 22, 1, 4, 7, 10]`:
+
+| `lo` | `hi` | `mid` | `nums[mid]` vs `nums[hi]` | Decision |
+|---|---|---|---|---|
+| 0 | 6 | 3 | 1 vs 10 | smaller: `hi = 3` |
+| 0 | 3 | 1 | 18 vs 1 | larger: `lo = 2` |
+| 2 | 3 | 2 | 22 vs 1 | larger: `lo = 3` |
+| 3 | 3 | | | answer `nums[3] = 1` |
+
+```python
+def find_min(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] > nums[hi]:
+            lo = mid + 1        # minimum is right of mid
+        else:
+            hi = mid            # mid could be the minimum
+    return nums[lo]
+```
+
+The index `lo` at the end is also the rotation count, which answers a common follow-up.
+
+**Why not compare with the left end?** If `nums[mid] > nums[lo]`, the left half is sorted, but that does not tell you whether the minimum is `nums[lo]` (no rotation) or somewhere to the right. Comparing with the right end has no such ambiguity.
+
+**Complexity.** O(log n) time, O(1) space.
+
+## Tests
+
+```python
+def rotations(sorted_values):
+    n = len(sorted_values)
+    return [sorted_values[i:] + sorted_values[:i] for i in range(n)]
+
+def check(fn):
+    base = [3, 6, 8, 12, 20]
+    for rotated in rotations(base):
+        assert fn(rotated) == 3, (fn.__name__, rotated)
+    assert fn([11]) == 11
+    assert fn([9, 4]) == 4 and fn([4, 9]) == 4
+    assert fn([15, 18, 22, 1, 4, 7, 10]) == 1
+    assert fn([-5, -1, -20, -10]) == -20     # negatives
+    for rotated in rotations(list(range(0, 1000, 7))):
+        assert fn(rotated) == 0
+
+check(find_min_linear)
+check(find_min)
+
+def rotation_count(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] > nums[hi]:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+assert rotation_count([8, 12, 20, 3, 6]) == 3
+assert rotation_count([3, 6, 8, 12, 20]) == 0
+print("all rotated-minimum tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **No rotation.** The algorithm handles it naturally: every comparison says "smaller", `hi` walks down to 0.
+- **Two elements.** `mid` is `lo`, so the comparison is between the two values; check that both orders work.
+- **Off-by-one in the update.** `hi = mid - 1` would skip the minimum when `mid` is the minimum. Only the left run side uses `+ 1`.
+- **Duplicates break the rule.** With repeated values (LeetCode 154), `nums[mid] == nums[hi]` is possible and tells you nothing. The usual fix is `hi -= 1` in that case, which keeps correctness but degrades the worst case to O(n), for example on `[2, 2, 2, 0, 2]`.
+
+## Where this shows up in data engineering
+
+A rotated sorted array is a good model of a circular buffer or a log segment list that wrapped around, such as a ring of time-ordered slots where you need the oldest entry. In everyday pipeline work you rarely search one by hand, so treat this mainly as an interview exercise in choosing the right comparison.

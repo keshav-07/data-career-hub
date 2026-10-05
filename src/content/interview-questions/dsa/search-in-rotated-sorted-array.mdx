@@ -1,0 +1,142 @@
+---
+title: "Search in Rotated Sorted Array: One-Pass Binary Search"
+seoTitle: "Search in Rotated Sorted Array in O(log n)"
+description: "Find a target in a rotated sorted array in O(log n): identify the sorted half at each step, then keep or discard it. Python solutions, walkthrough and tests."
+technology: ["dsa"]
+topic: ["binary-search"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "At any midpoint of a rotated sorted array, at least one half is fully sorted. Check which half is sorted by comparing nums[lo] with nums[mid], then test whether the target lies inside that sorted half's value range; if it does, search there, otherwise search the other half. That keeps every step logarithmic: O(log n) time and O(1) space."
+followUps: ["How would you solve it in two passes (find the rotation point, then binary search)?", "What breaks when duplicates are allowed, and what is the worst case then?", "How would you return a boolean for the duplicate version?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/find-minimum-in-rotated-sorted-array"
+next: "interview-questions:dsa/time-based-key-value-store"
+---
+
+## Problem
+
+You receive a list of distinct integers that was sorted ascending and then rotated at an unknown point (possibly not at all), plus a target value. Return the index of the target, or `-1` if it is absent, in O(log n) time.
+
+This is widely known as LeetCode 33 (Search in Rotated Sorted Array). It combines plain binary search with the run-detection idea from finding the minimum of a rotated array.
+
+Constraints for this version: 1 to 5,000 distinct values, each a 32-bit signed integer.
+
+## Examples
+
+| `nums` | `target` | Result |
+|---|---|---|
+| `[31, 40, 52, 7, 11, 19, 26]` | `11` | `4` |
+| `[31, 40, 52, 7, 11, 19, 26]` | `40` | `1` |
+| `[31, 40, 52, 7, 11, 19, 26]` | `30` | `-1` |
+| `[5]` | `5` | `0` |
+| `[8, 2]` | `2` | `1` |
+
+## Approach 1: brute force
+
+A linear scan works: `nums.index(target)` inside a try block, or a loop. It is O(n) and does not meet the requirement, but say it first to show you know the baseline.
+
+```python
+def search_linear(nums, target):
+    for i, v in enumerate(nums):
+        if v == target:
+            return i
+    return -1
+```
+
+A stronger simple answer is the **two-pass** method: find the rotation point (the index of the minimum) with binary search, decide which run could hold the target, then binary search that run. Still O(log n), just more code.
+
+```python
+from bisect import bisect_left
+
+def search_two_pass(nums, target):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:                      # find index of the minimum
+        mid = (lo + hi) // 2
+        if nums[mid] > nums[hi]:
+            lo = mid + 1
+        else:
+            hi = mid
+    pivot = lo
+    if target >= nums[pivot] and target <= nums[-1]:
+        left, right = pivot, len(nums)  # search the right run
+    else:
+        left, right = 0, pivot          # search the left run
+    i = bisect_left(nums, target, left, right)
+    return i if i < right and nums[i] == target else -1
+```
+
+## Approach 2: optimal
+
+**Key insight.** Cut the range at `mid`. Because there is at most one "drop" in the array, at least one of `[lo, mid]` and `[mid, hi]` contains no drop and is sorted. For a sorted half you can check in O(1) whether the target falls inside it, by comparing with its two end values. That decides which half to keep.
+
+- If `nums[lo] <= nums[mid]`, the left half is sorted. Keep it when `nums[lo] <= target < nums[mid]`, otherwise go right.
+- Otherwise the right half is sorted. Keep it when `nums[mid] < target <= nums[hi]`, otherwise go left.
+
+**Walkthrough** for `[31, 40, 52, 7, 11, 19, 26]`, `target = 11`:
+
+| `lo` | `hi` | `mid` | `nums[mid]` | Sorted half | Target inside? | Next |
+|---|---|---|---|---|---|---|
+| 0 | 6 | 3 | 7 | right: 7..26 | yes (7 to 26) | `lo = 4` |
+| 4 | 6 | 5 | 19 | left: 11..19 | yes (11 to 19) | `hi = 4` |
+| 4 | 4 | 4 | 11 | | match | return 4 |
+
+```python
+def search(nums, target):
+    lo, hi = 0, len(nums) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[lo] <= nums[mid]:                 # left half [lo..mid] is sorted
+            if nums[lo] <= target < nums[mid]:
+                hi = mid - 1
+            else:
+                lo = mid + 1
+        else:                                     # right half [mid..hi] is sorted
+            if nums[mid] < target <= nums[hi]:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+    return -1
+```
+
+**Complexity.** O(log n) time, O(1) space.
+
+## Tests
+
+```python
+def rotations(values):
+    return [values[i:] + values[:i] for i in range(len(values))]
+
+def check(fn):
+    base = [7, 11, 19, 26, 31, 40, 52]
+    for arr in rotations(base):
+        for v in base:
+            assert fn(arr, v) == arr.index(v), (fn.__name__, arr, v)
+        for missing in [0, 8, 30, 53, -1]:
+            assert fn(arr, missing) == -1, (fn.__name__, arr, missing)
+    assert fn([5], 5) == 0 and fn([5], 6) == -1
+    assert fn([8, 2], 2) == 1 and fn([8, 2], 8) == 0 and fn([8, 2], 5) == -1
+    for arr in rotations(list(range(-50, 50, 3))):
+        assert fn(arr, -50) == arr.index(-50)
+
+for fn in (search_linear, search_two_pass, search):
+    check(fn)
+print("all rotated-search tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Use `<=` in `nums[lo] <= nums[mid]`.** When `lo == mid` (two elements left) the "left half" is a single element and counts as sorted. A strict `<` sends you to the wrong branch: on `[8, 2]` with target 2 it treats the right half as sorted, rejects it because 2 is not above 8, and returns `-1`.
+- **Strict versus inclusive bounds.** In the sorted-left test, `target < nums[mid]` is strict because `nums[mid]` was already compared; `nums[lo] <= target` is inclusive because `lo` has not been.
+- **Unrotated input** is just a sorted array, and the left half is always sorted, so this reduces to standard binary search.
+- **Duplicates.** If values can repeat (LeetCode 81), `nums[lo] == nums[mid] == nums[hi]` hides which side is sorted. Shrink both ends by one in that case; the worst case becomes O(n).
+
+## Where this shows up in data engineering
+
+The same reasoning applies to a circular log or ring buffer of time-ordered entries where the write position has wrapped: you can still search by time if you first work out which segment is in order. Mostly, though, this is an interview problem that checks careful handling of boundaries.

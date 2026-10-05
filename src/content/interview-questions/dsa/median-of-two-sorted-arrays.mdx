@@ -1,0 +1,153 @@
+---
+title: "Median of Two Sorted Arrays: Partition Binary Search in O(log min(m, n))"
+seoTitle: "Median of Two Sorted Arrays: Partition Search"
+description: "Find the median of two sorted arrays without merging them: binary search a partition of the shorter array. Python code, walkthrough, edge cases and tests."
+technology: ["dsa"]
+topic: ["binary-search"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Split both arrays so the left parts together hold half the elements and every left value is at most every right value; the median then comes from the largest left value and smallest right value. Binary search how many elements the shorter array contributes to the left side, and the other array's share follows. Checking the four boundary values decides which way to move. This is O(log min(m, n)) time and O(1) space."
+followUps: ["How would you find the k-th smallest element of two sorted arrays?", "Why do you binary search the shorter array?", "How would you get an approximate median of a very large distributed dataset?", "What is the simpler O(m + n) answer and when is it good enough?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/time-based-key-value-store"
+next: "interview-questions:dsa/find-first-and-last-position"
+---
+
+## Problem
+
+You are given two lists of numbers, each sorted ascending, of lengths `m` and `n`. At least one is non-empty. Return the median of all `m + n` values taken together: the middle value when the total count is odd, or the average of the two middle values when it is even. The target running time is logarithmic.
+
+This is widely known as LeetCode 4 (Median of Two Sorted Arrays). It is one of the best-known hard binary search problems; many interviewers accept the linear merge first and then push for the logarithmic solution.
+
+Constraints for this version: each list has 0 to 1,000 values, `m + n >= 1`, values are integers in the 32-bit range.
+
+## Examples
+
+| `a` | `b` | Combined | Result |
+|---|---|---|---|
+| `[2, 9, 14]` | `[4, 6, 20, 25]` | `2 4 6 9 14 20 25` | `9` |
+| `[1, 5]` | `[3, 8]` | `1 3 5 8` | `4.0` |
+| `[]` | `[7]` | `7` | `7` |
+| `[10, 20, 30]` | `[1, 2]` | `1 2 10 20 30` | `10` |
+
+## Approach 1: brute force
+
+Merge the two lists with two pointers, as in merge sort, and read the middle. You only need to merge up to the middle, but the cost is still linear.
+
+```python
+def median_merge(a, b):
+    merged = []
+    i = j = 0
+    while i < len(a) and j < len(b):
+        if a[i] <= b[j]:
+            merged.append(a[i]); i += 1
+        else:
+            merged.append(b[j]); j += 1
+    merged.extend(a[i:])
+    merged.extend(b[j:])
+    total = len(merged)
+    mid = total // 2
+    if total % 2:
+        return merged[mid]
+    return (merged[mid - 1] + merged[mid]) / 2
+```
+
+O(m + n) time and space. It is a perfectly reasonable first answer and is what you would use in practice for small inputs.
+
+## Approach 2: optimal
+
+**Key insight.** The median splits the combined values into a left half and a right half where every left value is no larger than every right value. Suppose you take the first `i` values of `a` and the first `j` values of `b` as the left half, with `i + j = (m + n + 1) // 2`. Once you choose `i`, `j` is fixed. The split is valid exactly when:
+
+- `a[i - 1] <= b[j]` (the last left value of `a` is not above the first right value of `b`), and
+- `b[j - 1] <= a[i]` (and vice versa).
+
+If `a[i - 1] > b[j]`, you took too many from `a`, so move `i` left. Otherwise, if `b[j - 1] > a[i]`, take more from `a`. That is a binary search on `i` in `[0, m]`. Missing neighbours at the ends are treated as minus or plus infinity.
+
+Search the **shorter** array so that `j` is never negative or past the end of `b`, and so the cost is O(log min(m, n)).
+
+**Walkthrough** for `a = [2, 9, 14]`, `b = [4, 6, 20, 25]` (total 7, left half size 4):
+
+| `lo` | `hi` | `i` | `j` | `a` left, right | `b` left, right | Result |
+|---|---|---|---|---|---|---|
+| 0 | 3 | 1 | 3 | 2, 9 | 20, 25 | 20 is above 9: take more from `a`, `lo = 2` |
+| 2 | 3 | 2 | 2 | 9, 14 | 6, 20 | 9 ≤ 20 and 6 ≤ 14: valid |
+
+Total is odd, so the median is the largest left value, `max(9, 6) = 9`.
+
+```python
+def find_median_sorted_arrays(a, b):
+    if len(a) > len(b):
+        a, b = b, a                       # binary search the shorter list
+    m, n = len(a), len(b)
+    if m + n == 0:
+        raise ValueError("both lists are empty")
+    half = (m + n + 1) // 2               # size of the left half
+    neg, pos = float("-inf"), float("inf")
+    lo, hi = 0, m
+    while lo <= hi:
+        i = (lo + hi) // 2                # values taken from a
+        j = half - i                      # values taken from b
+        a_left = a[i - 1] if i > 0 else neg
+        a_right = a[i] if i < m else pos
+        b_left = b[j - 1] if j > 0 else neg
+        b_right = b[j] if j < n else pos
+        if a_left <= b_right and b_left <= a_right:
+            if (m + n) % 2:
+                return max(a_left, b_left)
+            return (max(a_left, b_left) + min(a_right, b_right)) / 2
+        if a_left > b_right:
+            hi = i - 1                    # too many from a
+        else:
+            lo = i + 1                    # too few from a
+    raise AssertionError("inputs were not sorted")
+```
+
+**Complexity.** O(log min(m, n)) time, O(1) space.
+
+## Tests
+
+```python
+import random, statistics
+
+def check(fn):
+    assert fn([2, 9, 14], [4, 6, 20, 25]) == 9
+    assert fn([1, 5], [3, 8]) == 4.0
+    assert fn([], [7]) == 7 and fn([7], []) == 7
+    assert fn([10, 20, 30], [1, 2]) == 10
+    assert fn([1, 1, 1], [1, 1]) == 1                 # duplicates everywhere
+    assert fn([1, 2], [3, 4]) == 2.5                  # no interleaving
+    assert fn([5, 6, 7, 8], [1]) == 6
+    assert fn([-5, -3], [-4]) == -4                   # negatives
+
+def random_check(fn, trials=500):
+    rng = random.Random(11)
+    for _ in range(trials):
+        a = sorted(rng.randint(-20, 20) for _ in range(rng.randint(0, 8)))
+        b = sorted(rng.randint(-20, 20) for _ in range(rng.randint(0, 8)))
+        if not a and not b:
+            continue
+        expected = statistics.median(a + b)
+        assert fn(a, b) == expected, (a, b, fn(a, b), expected)
+
+for fn in (median_merge, find_median_sorted_arrays):
+    check(fn)
+    random_check(fn)
+print("all median tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **One list empty.** With the shorter list empty, `m = 0`, the loop runs once with `i = 0`, and the median comes from `b` alone.
+- **Search the shorter list.** Searching the longer one can make `j` negative, which then indexes from the end of the list in Python without an error. That is a silent bug.
+- **Odd versus even totals.** Using `(m + n + 1) // 2` for the left size means the left half holds the extra element when the total is odd, so the median is `max(a_left, b_left)`.
+- **Return type.** Averages are floats; decide with the interviewer whether `4.0` or `4` is expected.
+- **Sentinels.** Use infinities rather than arbitrary large numbers such as `10**9`, which fail if real values exceed them.
+
+## Where this shows up in data engineering
+
+Exact medians over two sorted inputs are rare in pipelines. What carries over is the idea of choosing a split point so that both sides satisfy an ordering condition, which is how range partitioning chooses boundaries. For large data, engines compute approximate percentiles instead, for example `percentile_approx` in Spark or `APPROX_PERCENTILE` in Snowflake, because exact medians need a global sort.
