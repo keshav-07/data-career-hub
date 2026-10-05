@@ -31,7 +31,7 @@ const shared = {
   updatedDate: z.coerce.date(),
   reviewedDate: z.coerce.date(),
   featured: z.boolean().default(false),
-  seoTitle: z.string().max(70).optional(),
+  seoTitle: z.string().max(52).optional(),
   seoDescription: z.string().min(80).max(170).optional(),
   image: z.string().optional(),
   imageAlt: z.string().optional(),
