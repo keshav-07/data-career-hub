@@ -1,0 +1,38 @@
+{
+  "SELECT, WHERE & basic filtering": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "SELECT and WHERE: choosing columns and filtering rows"
+  },
+  "DISTINCT and de-duplication": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "DISTINCT and removing duplicate rows"
+  },
+  "ORDER BY multi-column sorting": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "ORDER BY: sorting on several columns"
+  },
+  "LIMIT / TOP / FETCH FIRST": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "LIMIT, TOP and FETCH FIRST"
+  },
+  "Aliases and column naming": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "Aliases and column naming"
+  },
+  "Comparison & logical operators": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "Comparison and logical operators"
+  },
+  "IN, BETWEEN, LIKE patterns": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "IN, BETWEEN and LIKE"
+  },
+  "NULL handling with IS NULL / COALESCE": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "Handling NULL: IS NULL, COALESCE and NULLIF"
+  },
+  "CASE WHEN expressions": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "CASE expressions"
+  }
+}
