@@ -42,5 +42,17 @@
   "Market basket / co-occurrence": {
     "ref": "articles:sql/retention-cohort-funnel-analysis",
     "heading": "Market basket and co-occurrence analysis"
+  },
+  "JSON parsing in SQL": {
+    "ref": "articles:sql/json-arrays-regex",
+    "heading": "JSON parsing in SQL"
+  },
+  "Array & nested data handling": {
+    "ref": "articles:sql/json-arrays-regex",
+    "heading": "Array and nested data handling"
+  },
+  "Regex matching in SQL": {
+    "ref": "articles:sql/json-arrays-regex",
+    "heading": "Regex matching in SQL"
   }
 }

@@ -16,6 +16,7 @@ learningObjectives:
   - "Find frequently co-purchased items and explain support, confidence and lift"
 prerequisites: ["articles:sql/window-functions", "articles:sql/aggregations-group-by-having"]
 related: ["articles:sql/gaps-islands-sessionization", "system-designs:clickstream-data-platform", "projects:ecommerce-analytics-platform"]
+next: "articles:sql/json-arrays-regex"
 previous: "articles:sql/gaps-islands-sessionization"
 versionContext: "All SQL examples run on PostgreSQL 16.14. FILTER (WHERE ...) is standard SQL supported by PostgreSQL and DuckDB; on Snowflake, BigQuery and SQL Server write the equivalent COUNT(CASE WHEN ... THEN 1 END)."
 sources:
