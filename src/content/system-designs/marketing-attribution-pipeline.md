@@ -68,6 +68,7 @@ sources:
   - { label: "PostgreSQL: window functions", url: "https://www.postgresql.org/docs/current/functions-window.html" }
   - { label: "PostgreSQL 16: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
 previous: "system-designs:a-b-testing-data-pipeline"
+next: "system-designs:financial-reconciliation-pipeline"
 ---
 
 ## Approach
