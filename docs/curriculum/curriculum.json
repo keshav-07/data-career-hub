@@ -8229,313 +8229,313 @@
     "topic": "Design a Data Lake on cloud object storage",
     "category": "Storage & Lakehouse",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:data-lake-on-cloud-object-storage"
    },
    {
     "topic": "Design a Lakehouse (bronze/silver/gold)",
     "category": "Storage & Lakehouse",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:scalable-lakehouse"
    },
    {
     "topic": "Design a CDC pipeline from OLTP to warehouse",
     "category": "Ingestion & CDC",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:change-data-capture-platform"
    },
    {
     "topic": "Design a real-time streaming platform",
     "category": "Streaming",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:kafka-ingestion-system"
    },
    {
     "topic": "Design an event-driven architecture",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:event-driven-architecture"
    },
    {
     "topic": "Design an analytics / BI platform",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:reporting-analytics-platform"
    },
    {
     "topic": "Design a Customer 360 platform",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:customer-360-platform"
    },
    {
     "topic": "Design a fraud detection pipeline",
     "category": "Streaming",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:fraud-detection-pipeline"
    },
    {
     "topic": "Design a recommendation data pipeline",
     "category": "ML Data",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:recommendation-data-pipeline"
    },
    {
     "topic": "Design a feature store",
     "category": "ML Data",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:feature-store"
    },
    {
     "topic": "Design a metrics / KPI platform",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:metrics-kpi-platform"
    },
    {
     "topic": "Design an ELT pipeline with dbt",
     "category": "Batch ETL",
     "difficulty": "Intermediate",
-    "design": null
+    "design": "system-designs:elt-pipeline-with-dbt"
    },
    {
     "topic": "Design a batch ingestion framework",
     "category": "Ingestion & CDC",
     "difficulty": "Intermediate",
-    "design": null
+    "design": "system-designs:scalable-batch-pipeline"
    },
    {
     "topic": "Design a data quality framework",
     "category": "Governance",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:data-quality-framework"
    },
    {
     "topic": "Design a data observability system",
     "category": "Governance",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:data-observability-system"
    },
    {
     "topic": "Design a data catalog & lineage system",
     "category": "Governance",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:data-catalog-lineage-system"
    },
    {
     "topic": "Design a GDPR/PII compliant pipeline",
     "category": "Governance",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:gdpr-pii-compliant-pipeline"
    },
    {
     "topic": "Design a clickstream analytics pipeline",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:clickstream-data-platform"
    },
    {
     "topic": "Design an IoT sensor data pipeline",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:iot-sensor-data-pipeline"
    },
    {
     "topic": "Design a log ingestion & search platform",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:log-ingestion-search-platform"
    },
    {
     "topic": "Design a near-real-time dashboard backend",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:real-time-analytics-pipeline"
    },
    {
     "topic": "Design a slowly changing dimension framework",
     "category": "Batch ETL",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:slowly-changing-dimension-framework"
    },
    {
     "topic": "Design an idempotent reprocessing system",
     "category": "Batch ETL",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:idempotent-reprocessing-system"
    },
    {
     "topic": "Design a multi-tenant data platform",
     "category": "Platform",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:multi-tenant-data-platform"
    },
    {
     "topic": "Design a cost-optimized warehouse strategy",
     "category": "Platform",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:cost-optimized-warehouse-strategy"
    },
    {
     "topic": "Design a data mesh architecture",
     "category": "Platform",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:data-mesh-architecture"
    },
    {
     "topic": "Design a streaming ETL with Kafka + Spark",
     "category": "Streaming",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:streaming-etl-with-kafka-spark"
    },
    {
     "topic": "Design a near-zero downtime migration",
     "category": "Platform",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:near-zero-downtime-migration"
    },
    {
     "topic": "Design an A/B testing data pipeline",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:a-b-testing-data-pipeline"
    },
    {
     "topic": "Design a marketing attribution pipeline",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:marketing-attribution-pipeline"
    },
    {
     "topic": "Design a financial reconciliation pipeline",
     "category": "Batch ETL",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:financial-reconciliation-pipeline"
    },
    {
     "topic": "Design a time-series metrics store",
     "category": "Storage & Lakehouse",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:time-series-metrics-store"
    },
    {
     "topic": "Design a search indexing pipeline",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:search-indexing-pipeline"
    },
    {
     "topic": "Design a notification/alerting pipeline",
     "category": "Streaming",
     "difficulty": "Intermediate",
-    "design": null
+    "design": "system-designs:notification-alerting-pipeline"
    },
    {
     "topic": "Design an order-events processing system",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:order-events-processing-system"
    },
    {
     "topic": "Design a payment events pipeline (exactly-once)",
     "category": "Streaming",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:payment-events-pipeline-exactly-once"
    },
    {
     "topic": "Design a ride-hailing surge pricing pipeline",
     "category": "Streaming",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:ride-hailing-surge-pricing-pipeline"
    },
    {
     "topic": "Design a social media feed analytics system",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:social-media-feed-analytics-system"
    },
    {
     "topic": "Design a video streaming analytics pipeline",
     "category": "Analytics",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:video-streaming-analytics-pipeline"
    },
    {
     "topic": "Design an e-commerce inventory sync system",
     "category": "Ingestion & CDC",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:e-commerce-inventory-sync-system"
    },
    {
     "topic": "Design a unified batch + streaming (Lambda/Kappa)",
     "category": "Platform",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:unified-batch-streaming-lambda-kappa"
    },
    {
     "topic": "Design a data warehouse for a SaaS product",
     "category": "Storage & Lakehouse",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:cloud-data-warehouse-platform"
    },
    {
     "topic": "Design a churn prediction data pipeline",
     "category": "ML Data",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:churn-prediction-data-pipeline"
    },
    {
     "topic": "Design a real-time leaderboard",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:real-time-leaderboard"
    },
    {
     "topic": "Design a geospatial analytics pipeline",
     "category": "Analytics",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:geospatial-analytics-pipeline"
    },
    {
     "topic": "Design an ad-bidding analytics pipeline",
     "category": "Streaming",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:ad-bidding-analytics-pipeline"
    },
    {
     "topic": "Design a backfill & late-data handling system",
     "category": "Batch ETL",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:backfill-late-data-handling-system"
    },
    {
     "topic": "Design a schema registry & contract system",
     "category": "Governance",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:schema-registry-contract-system"
    },
    {
     "topic": "Design a self-serve analytics platform",
     "category": "Platform",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:self-serve-analytics-platform"
    },
    {
     "topic": "Design an LLM/RAG data ingestion pipeline",
     "category": "ML Data",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:llm-rag-data-ingestion-pipeline"
    },
    {
     "topic": "Design a vector embeddings pipeline",
     "category": "ML Data",
     "difficulty": "Expert",
-    "design": null
+    "design": "system-designs:vector-embeddings-pipeline"
    },
    {
     "topic": "Design a data SLA & freshness monitoring system",
     "category": "Governance",
     "difficulty": "Advanced",
-    "design": null
+    "design": "system-designs:data-sla-freshness-monitoring-system"
    }
   ]
  }
