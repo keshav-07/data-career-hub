@@ -1,0 +1,107 @@
+---
+title: "Best Time to Buy and Sell Stock: Maximum Profit From One Trade"
+seoTitle: "Best Time to Buy and Sell Stock: One Pass"
+description: "Find the largest profit from buying on one day and selling on a later day. Track the cheapest price so far and get the answer in a single O(n) pass."
+technology: ["dsa"]
+topic: ["sliding-window"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Walk through the prices once, keeping the lowest price seen so far. At each day, the best sale today is price minus that minimum; keep the largest such profit, which starts at zero because you may choose not to trade. This is O(n) time and O(1) space. It is a sliding window whose left edge jumps to any new minimum."
+followUps: ["How would you also return the buy and sell days?", "What if you may make as many trades as you like?", "What if each sale carries a fee, or you must wait a day after selling?"]
+previous: "interview-questions:dsa/sort-colors"
+next: "interview-questions:dsa/longest-substring-without-repeating-characters"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of daily prices for one asset. You may buy once and sell once, and the sale must happen on a later day than the purchase. Return the largest possible profit, or 0 if no trade makes money. This is widely known as LeetCode 121, Best Time to Buy and Sell Stock.
+
+The list can hold up to about 10^5 prices.
+
+## Examples
+
+```text
+prices = [9, 4, 6, 3, 8, 5]   ->  5    (buy at 3, sell at 8)
+prices = [10, 7, 7, 2]        ->  0    (prices only fall: do not trade)
+prices = [5]                  ->  0    (no later day to sell on)
+```
+
+## Approach 1: brute force
+
+Try every buy day with every later sell day.
+
+```python
+def max_profit_brute(prices):
+    best = 0
+    for i in range(len(prices)):
+        for j in range(i + 1, len(prices)):
+            best = max(best, prices[j] - prices[i])
+    return best
+```
+
+**Complexity:** O(n²) time, O(1) space.
+
+## Approach 2: optimal
+
+**Key insight:** the best sale on day j uses the cheapest price on any earlier day. So you only need the running minimum, not every earlier price.
+
+Walkthrough on `[9, 4, 6, 3, 8, 5]`:
+
+| Price | Lowest so far (before today) | Profit if sold today | Best |
+|---|---|---|---|
+| 9 | none | | 0 |
+| 4 | 9 | -5 | 0 |
+| 6 | 4 | 2 | 2 |
+| 3 | 4 | -1 | 2 |
+| 8 | 3 | 5 | 5 |
+| 5 | 3 | 2 | 5 |
+
+```python
+def max_profit(prices):
+    lowest = float("inf")
+    best = 0
+    for p in prices:
+        if p < lowest:
+            lowest = p
+        elif p - lowest > best:
+            best = p - lowest
+    return best
+```
+
+**Complexity:** O(n) time, O(1) space.
+
+## Tests
+
+```python
+import random
+
+for f in (max_profit, max_profit_brute):
+    assert f([9, 4, 6, 3, 8, 5]) == 5
+    assert f([10, 7, 7, 2]) == 0           # falling prices
+    assert f([5]) == 0                     # single day
+    assert f([]) == 0                      # empty
+    assert f([3, 3, 3]) == 0               # flat
+    assert f([1, 10**9]) == 10**9 - 1      # large values
+    assert f([2, 9, 1, 5]) == 7            # later minimum does not beat earlier trade
+
+random.seed(26)
+for _ in range(400):
+    ps = [random.randint(0, 20) for _ in range(random.randint(0, 12))]
+    assert max_profit(ps) == max_profit_brute(ps)
+```
+
+## Edge cases and pitfalls
+
+- Selling must come after buying. Computing `max(prices) - min(prices)` ignores order and is wrong for `[9, 1]`.
+- Start the answer at 0, not at negative infinity: not trading is allowed.
+- Updating the minimum and then measuring profit against it on the same day gives 0 for that day, which is harmless; just do not measure against a future minimum.
+
+## Where this shows up in data engineering
+
+"Largest increase from an earlier low" over a time series is a running-minimum window: `value - MIN(value) OVER (ORDER BY ts ROWS UNBOUNDED PRECEDING)`. The same query shape finds the largest drawdown (swap to a running maximum) in finance and monitoring data.

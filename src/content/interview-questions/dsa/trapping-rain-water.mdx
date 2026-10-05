@@ -13,6 +13,8 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Water above bar i is min(highest bar to its left, highest bar to its right) minus its own height, floored at zero. Precomputing left and right maxima gives O(n) time and O(n) space. The two-pointer version keeps running maxima from both ends and always processes the side with the smaller maximum, because that side's water level is already known; it is O(n) time and O(1) space."
 followUps: ["Why is it safe to settle the side with the smaller running maximum?", "How does the monotonic stack solution compute water layer by layer?", "How would you solve the 2D version on a height grid?"]
+previous: "interview-questions:dsa/container-with-most-water"
+next: "interview-questions:dsa/move-zeroes"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
@@ -47,7 +49,7 @@ def trap_brute(heights):
 
 Including the bar itself in both maxima keeps the result non-negative. **Complexity:** O(n²) time, O(1) extra space (the slices allocate, but an index loop would not).
 
-## Approach 2: prefix and suffix maxima
+## Approach 2: optimal time with prefix and suffix maxima
 
 Precompute `left_max[i]` and `right_max[i]` in two passes, then sum in a third.
 
@@ -68,7 +70,7 @@ def trap_prefix(heights):
 
 **Complexity:** O(n) time, O(n) space. This is the step most interviewers want to see first.
 
-## Approach 3: optimal (two pointers)
+## Approach 3: optimal time and space with two pointers
 
 **Key insight:** the water at a bar depends on the *smaller* of its two maxima. If the running maximum from the left is smaller than the running maximum from the right, then for the left pointer's bar the true right maximum is at least the right running maximum, so the left maximum is the limiting one and its water is known exactly. Settle that bar and move inward; otherwise do the same from the right.
 

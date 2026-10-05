@@ -13,6 +13,8 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Keep a write pointer at the next slot for a non-zero value. Scan with a read pointer; whenever it finds a non-zero, swap it into the write slot and advance the write pointer. Non-zeros keep their relative order and every zero ends up after them. This is O(n) time, O(1) extra space, and each element moves at most once."
 followUps: ["How would you minimise the number of writes?", "How would you move all values equal to some k, or all negatives, to the end instead?", "Is the order of the zeros themselves meaningful?"]
+previous: "interview-questions:dsa/trapping-rain-water"
+next: "interview-questions:dsa/sort-colors"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 

@@ -1,0 +1,122 @@
+---
+title: "Longest Repeating Character Replacement: Window With At Most k Changes"
+seoTitle: "Longest Repeating Character Replacement"
+description: "Find the longest substring you can turn into one repeated letter by changing at most k characters. Learn the window rule: length minus top count must stay within k."
+technology: ["dsa"]
+topic: ["sliding-window"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "A window can be made uniform with (window length - count of its most frequent character) replacements. Slide a window, counting characters; when that number exceeds k, move the left edge one step. Keep the highest frequency seen so far rather than recomputing it: the answer only grows when a window with a higher frequency appears, so a stale maximum never produces a wrong answer. This is O(n) time and O(1) space for a fixed alphabet."
+followUps: ["Why is it safe never to decrease the stored maximum frequency?", "How would you solve the binary version: longest run of 1s after flipping at most k 0s?", "How would you return the substring as well as its length?"]
+previous: "interview-questions:dsa/longest-substring-without-repeating-characters"
+next: "interview-questions:dsa/permutation-in-string"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a string of uppercase English letters and an integer `k`. You may change any character to any other uppercase letter, at most `k` times in total. Return the length of the longest substring that can consist of a single repeated letter after those changes. This is widely known as LeetCode 424, Longest Repeating Character Replacement.
+
+## Examples
+
+```text
+s = "BAAAB",    k = 1   ->  4    ("BAAA" or "AAAB": change the B)
+s = "ABCD",     k = 0   ->  1
+s = "AABCABB",  k = 2   ->  5    ("AABCA" -> "AAAAA", or "BCABB" -> "BBBBB")
+```
+
+## Approach 1: brute force
+
+For each start, extend to the right while tracking counts, and accept the window whenever `length - max_count <= k`.
+
+```python
+def character_replacement_brute(s, k):
+    best = 0
+    for i in range(len(s)):
+        counts = [0] * 26
+        top = 0
+        for j in range(i, len(s)):
+            c = ord(s[j]) - ord("A")
+            counts[c] += 1
+            top = max(top, counts[c])
+            if (j - i + 1) - top <= k:
+                best = max(best, j - i + 1)
+    return best
+```
+
+**Complexity:** O(n²) time, O(1) space (26 counters).
+
+## Approach 2: optimal
+
+**Key insight:** a window is fixable when `length - max_count <= k`. Grow the window to the right; when it becomes unfixable, shift it right by one (move both edges), so its length never shrinks. The window size therefore only increases when a better window exists, and the largest size reached is the answer.
+
+The stored `max_count` may become stale after the left edge moves. That is safe: a stale value is the best frequency of some earlier window of the same length, and the window can only grow if a new character pushes a real count above it.
+
+Walkthrough on `"AABCABB"`, `k = 2`:
+
+| right | char | counts (A, B, C) | max_count | length | length - max_count | Action |
+|---|---|---|---|---|---|---|
+| 0 | A | 1, 0, 0 | 1 | 1 | 0 | grow |
+| 1 | A | 2, 0, 0 | 2 | 2 | 0 | grow |
+| 2 | B | 2, 1, 0 | 2 | 3 | 1 | grow |
+| 3 | C | 2, 1, 1 | 2 | 4 | 2 | grow |
+| 4 | A | 3, 1, 1 | 3 | 5 | 2 | grow (best 5) |
+| 5 | B | 3, 2, 1 | 3 | 6 | 3 | too many: drop left A |
+| 6 | B | 2, 3, 1 | 3 | 6 | 3 | too many: drop left A |
+
+Best is 5.
+
+```python
+def character_replacement(s, k):
+    counts = {}
+    left = max_count = best = 0
+    for right, ch in enumerate(s):
+        counts[ch] = counts.get(ch, 0) + 1
+        max_count = max(max_count, counts[ch])
+        if (right - left + 1) - max_count > k:
+            counts[s[left]] -= 1
+            left += 1
+        best = max(best, right - left + 1)
+    return best
+```
+
+**Complexity:** O(n) time, O(1) space for a fixed alphabet (O(k) distinct characters in general).
+
+## Tests
+
+```python
+import random
+
+for f in (character_replacement, character_replacement_brute):
+    assert f("BAAAB", 1) == 4
+    assert f("ABCD", 0) == 1
+    assert f("AABCABB", 2) == 5
+    assert f("", 3) == 0                     # empty
+    assert f("Q", 0) == 1                    # single
+    assert f("AAAA", 2) == 4                 # already uniform
+    assert f("ABAB", 4) == 4                 # k larger than needed
+    assert f("ABAB", 2) == 4
+
+assert character_replacement("AB" * 50_000, 0) == 1      # large input
+
+random.seed(28)
+for _ in range(400):
+    s = "".join(random.choice("ABC") for _ in range(random.randint(0, 12)))
+    k = random.randint(0, 3)
+    assert character_replacement(s, k) == character_replacement_brute(s, k)
+```
+
+## Edge cases and pitfalls
+
+- The window shrinks by exactly one step, using `if`, not `while`. A `while` loop with an exact max is also correct but needs the max recomputed, which costs O(26) per step.
+- Recomputing `max(counts.values())` every step is a valid O(26 · n) solution and easier to explain; mention the stale-max trick as an optimisation.
+- `k` may be larger than the string length; the answer is then simply `len(s)`.
+
+## Where this shows up in data engineering
+
+"Longest stretch that is mostly one state, tolerating up to k exceptions" is a common time-series question: for example, the longest period a sensor stayed in one state allowing a few glitches, or the longest run of on-time loads allowing k late ones. The tolerant sliding window is how to compute it in one pass.
