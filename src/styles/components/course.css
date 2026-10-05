@@ -1,7 +1,40 @@
 @layer components {
+  /* Lesson column width (text, code and tables) and the right rail, sized for a standard 300px ad unit. */
+  .course-shell {
+    --w-lesson: 940px;
+    --w-rail: 300px;
+  }
+  /* Lesson typography: section headings are clearly smaller than the page title so a long lesson with many
+     topics reads as one page, not a stack of pages. */
+  .course-shell .prose {
+    max-width: none;
+    font-size: 1.0625rem;
+  }
+  .course-shell .prose h2 {
+    font-size: clamp(1.4rem, 1.6vw, 1.65rem);
+    margin-top: var(--sp-10);
+    padding-top: var(--sp-5);
+  }
+  .course-shell .prose h3 {
+    font-size: clamp(1.15rem, 1.2vw, 1.3rem);
+    margin-top: var(--sp-6);
+  }
+  .course-shell .prose h4 {
+    font-size: 1.05rem;
+  }
+  @media (min-width: 1680px) {
+    .course-shell {
+      --w-lesson: 1040px;
+    }
+    .course-shell .prose {
+      font-size: 1.125rem;
+    }
+  }
   /* ---------- Course shell: sidebar | lesson | on-this-page ---------- */
+  /* Full-bleed on large screens: the course menu sits at the left edge, Explore (and its ad slot) at the
+     right edge, and the lesson takes the space between, so wide windows are not wasted on margins. */
   .container--course {
-    max-width: calc(1440px + 2 * var(--gutter));
+    max-width: none;
   }
   .course-shell {
     display: grid;
@@ -13,7 +46,7 @@
   .course-shell__main {
     grid-area: main;
     min-width: 0;
-    max-width: calc(var(--w-reading) + var(--sp-16));
+    max-width: var(--w-lesson);
   }
   .course-shell__nav {
     display: none;
@@ -33,7 +66,7 @@
   }
   @media (min-width: 1024px) {
     .course-shell {
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-columns: 264px minmax(0, 1fr);
       grid-template-areas: "nav main" "nav explore";
       gap: var(--sp-6) var(--sp-10);
     }
@@ -72,12 +105,17 @@
   }
   @media (min-width: 1280px) {
     .course-shell {
-      grid-template-columns: 280px minmax(0, 1fr) 280px;
+      grid-template-columns: 264px minmax(0, 1fr) var(--w-rail);
       grid-template-areas: "nav main explore";
+    }
+    /* Centre the lesson between the two side panels when the window is wider than the lesson. */
+    .course-shell__main {
+      justify-self: center;
+      width: 100%;
     }
     .course-shell--no-nav,
     :root[data-sidebar="collapsed"] .course-shell:not(.course-shell--no-nav) {
-      grid-template-columns: minmax(0, 1fr) 280px;
+      grid-template-columns: minmax(0, 1fr) var(--w-rail);
       grid-template-areas: "main explore";
     }
     .course-shell__explore {
@@ -107,8 +145,8 @@
   }
   .lesson-header__title {
     margin-top: var(--sp-2);
-    max-width: var(--w-title);
-    font-size: clamp(1.875rem, 3.2vw, 2.625rem);
+    max-width: 30em;
+    font-size: clamp(1.75rem, 2.4vw, 2.25rem);
   }
   .lesson-header .deck {
     margin-top: var(--sp-4);
