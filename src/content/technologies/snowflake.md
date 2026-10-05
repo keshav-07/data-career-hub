@@ -9,7 +9,7 @@ whatToLearnFirst: ["articles:snowflake/architecture-virtual-warehouses","article
 relatedTechnologies: ["sql","data-warehousing","etl-elt"]
 cheatSheet: "cheat-sheets:snowflake"
 monogram: "Sf"
-lessons: ["articles:snowflake/snowflake-for-data-engineers", "articles:snowflake/architecture-virtual-warehouses", "articles:snowflake/virtual-warehouses-scaling", "articles:snowflake/micro-partitions-clustering-pruning", "articles:snowflake/streams-and-tasks", "articles:snowflake/loading-copy-snowpipe", "articles:snowflake/time-travel-fail-safe-cloning", "articles:snowflake/table-types-semi-structured", "articles:snowflake/security-access-control", "articles:snowflake/cost-optimization", "articles:snowflake/snowflake-vs-databricks"]
+lessons: ["articles:snowflake/snowflake-for-data-engineers", "articles:snowflake/architecture-virtual-warehouses", "articles:snowflake/virtual-warehouses-scaling", "articles:snowflake/micro-partitions-clustering-pruning", "articles:snowflake/streams-and-tasks", "articles:snowflake/loading-copy-snowpipe", "articles:snowflake/time-travel-fail-safe-cloning", "articles:snowflake/table-types-semi-structured", "articles:snowflake/security-access-control", "articles:snowflake/cost-optimization", "articles:snowflake/data-sharing-marketplace", "articles:snowflake/snowflake-vs-databricks"]
 updatedDate: 2026-10-05
 ---
 

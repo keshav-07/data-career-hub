@@ -294,5 +294,29 @@
  "Materialized view costs": {
   "ref": "articles:snowflake/cost-optimization",
   "heading": "Materialized view costs"
+ },
+ "Secure Data Sharing": {
+  "ref": "articles:snowflake/data-sharing-marketplace",
+  "heading": "Secure Data Sharing"
+ },
+ "Shares & grants": {
+  "ref": "articles:snowflake/data-sharing-marketplace",
+  "heading": "Shares and grants"
+ },
+ "Reader accounts": {
+  "ref": "articles:snowflake/data-sharing-marketplace",
+  "heading": "Reader accounts"
+ },
+ "Data Marketplace": {
+  "ref": "articles:snowflake/data-sharing-marketplace",
+  "heading": "The Snowflake Marketplace"
+ },
+ "Listings & exchanges": {
+  "ref": "articles:snowflake/data-sharing-marketplace",
+  "heading": "Listings and exchanges"
+ },
+ "Cross-region/cloud sharing": {
+  "ref": "articles:snowflake/data-sharing-marketplace",
+  "heading": "Cross-region and cross-cloud sharing"
  }
 }
