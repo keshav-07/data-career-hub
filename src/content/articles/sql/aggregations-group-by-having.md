@@ -18,6 +18,7 @@ learningObjectives:
 prerequisites: ["articles:sql/operators-nulls-case"]
 related: ["articles:sql/window-functions", "interview-questions:sql/inner-vs-left-join", "interview-questions:sql/window-functions-vs-group-by"]
 previous: "articles:sql/functions-strings-dates-types"
+next: "articles:sql/set-operations"
 sources:
   - { label: "PostgreSQL documentation: Aggregate functions", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
   - { label: "PostgreSQL documentation: The GROUP BY and HAVING clauses", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }

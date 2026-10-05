@@ -70,5 +70,13 @@
   "Conditional aggregation": {
     "ref": "articles:sql/aggregations-group-by-having",
     "heading": "Conditional aggregation"
+  },
+  "UNION vs UNION ALL": {
+    "ref": "articles:sql/set-operations",
+    "heading": "UNION versus UNION ALL"
+  },
+  "EXCEPT / INTERSECT set operations": {
+    "ref": "articles:sql/set-operations",
+    "heading": "INTERSECT and EXCEPT"
   }
 }
