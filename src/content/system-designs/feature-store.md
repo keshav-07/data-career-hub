@@ -69,6 +69,7 @@ related:
   - "articles:etl-elt/batch-vs-streaming"
   - "articles:delta-lake/transactions-schema-evolution"
 previous: "system-designs:recommendation-data-pipeline"
+next: "system-designs:metrics-kpi-platform"
 versionContext: "The point-in-time join example was run on PostgreSQL 16 using LEFT JOIN LATERAL; feature-store SDK and store configuration are described, not executed."
 sources:
   - { label: "Feast: point-in-time joins", url: "https://docs.feast.dev/getting-started/concepts/point-in-time-joins" }
