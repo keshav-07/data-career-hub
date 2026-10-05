@@ -15,11 +15,11 @@ learningObjectives:
   - "Count recent events with a queue and relate it to buffering in streaming systems"
 prerequisites: ["articles:dsa/stacks"]
 previous: "articles:dsa/stacks"
+next: "articles:dsa/binary-search"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
   - { label: "Python documentation: Using lists as queues", url: "https://docs.python.org/3/tutorial/datastructures.html#using-lists-as-queues" }
-  - { label: "Python documentation: queue (synchronised queues)", url: "https://docs.python.org/3/library/queue.html" }
 ---
 
 A queue is a first-in, first-out (FIFO) collection: items leave in the order they arrived, like people at a till. Queues appear in coding rounds as small design problems (build one from stacks, build a ring buffer) and as the engine of breadth-first search. For Data Engineers they are everywhere: message brokers, buffers between pipeline stages and task queues are all queues.
