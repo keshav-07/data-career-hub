@@ -181,6 +181,10 @@ const technologies = defineCollection({
     whatToLearnFirst: z.array(ref).default([]),
     relatedTechnologies: z.array(z.string()).default([]),
     cheatSheet: ref.optional(),
+    /** Explicit lesson order for the course. Articles in the folder that are not listed are appended by difficulty. */
+    lessons: z.array(ref).default([]),
+    /** Short label for course tiles, e.g. "SQL" or "Py". */
+    monogram: z.string().max(4).optional(),
     updatedDate: z.coerce.date(),
   }),
 });

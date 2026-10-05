@@ -7,6 +7,8 @@ order: 2
 keyFacts: ["The default language for pipelines and orchestration","Generators keep memory flat on large inputs","Idempotent, testable loaders beat clever scripts"]
 whatToLearnFirst: ["articles:python/idempotent-csv-loader"]
 relatedTechnologies: ["sql","pyspark","airflow"]
+monogram: "Py"
+lessons: ["articles:python/python-for-data-engineering", "articles:python/functions-modules-reusable-code", "articles:python/data-structures-for-interviews", "articles:python/iterators-generators", "articles:python/idempotent-csv-loader"]
 updatedDate: 2026-10-04
 ---
 

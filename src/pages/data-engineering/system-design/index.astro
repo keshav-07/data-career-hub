@@ -1,9 +1,14 @@
 ---
 import { getItems } from "../../../utils/content";
 import ContentLayout from "../../../layouts/ContentLayout.astro";
-import ContentRow from "../../../components/content/ContentRow.astro";
+import Tile from "../../../components/content/Tile.astro";
 import { HOME } from "../../../utils/breadcrumbs";
-const all = await getItems("system-designs");
+const order = ["Intermediate", "Advanced"];
+const all = (await getItems("system-designs")).sort(
+  (a, b) =>
+    order.indexOf(a.difficulty ?? "") - order.indexOf(b.difficulty ?? "") ||
+    a.title.localeCompare(b.title),
+);
 ---
 
 <ContentLayout
@@ -11,16 +16,43 @@ const all = await getItems("system-designs");
   description="System-design case studies for Data Engineers: requirements, scale assumptions, architecture, reliability, trade-offs and the follow-ups interviewers ask."
   crumbs={[HOME, { label: "Learn", href: "/data-engineering/" }, { label: "System design" }]}
   eyebrow="System design"
-  deck="Each case study follows the same structure so you can practise a repeatable approach, not memorise one answer."
+  deck="Each case study follows the same structure, so you practise a repeatable approach rather than memorising one answer."
   indexable
 >
   <section class="section section--tight">
-    <ul class="link-list">
+    <ul class="tile-grid tile-grid--wide" role="list">
       {all.map((s) => (
         <li>
-          <ContentRow item={s} />
+          <Tile
+            href={s.url}
+            title={s.title}
+            description={s.entry.data.problem}
+            level={s.difficulty}
+            meta={[s.entry.data.technologies.slice(0, 3).join(" · ")]}
+          />
         </li>
       ))}
+    </ul>
+    <h2 class="group-title" style="margin-top: var(--sp-10)">
+      Prepare
+    </h2>
+    <ul class="tile-grid" role="list">
+      <li>
+        <Tile
+          href="/roadmaps/system-design-interview-roadmap/"
+          eyebrow="Roadmap"
+          title="System design interview roadmap"
+          description="A step-by-step plan through the framework, building blocks and every case study."
+        />
+      </li>
+      <li>
+        <Tile
+          href="/resources/cheat-sheets/data-engineering-system-design/"
+          eyebrow="Cheat sheet"
+          title="System design cheat sheet"
+          description="The framework, quick estimates and trade-offs on one page."
+        />
+      </li>
     </ul>
   </section>
 </ContentLayout>

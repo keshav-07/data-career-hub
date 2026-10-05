@@ -8,6 +8,8 @@ keyFacts: ["Used in every warehouse, lakehouse and Spark SQL","Joins and window 
 whatToLearnFirst: ["articles:sql/joins","articles:sql/window-functions"]
 relatedTechnologies: ["python","pyspark","data-warehousing"]
 cheatSheet: "cheat-sheets:sql-data-engineering"
+monogram: "SQL"
+lessons: ["articles:sql/sql-fundamentals", "articles:sql/joins", "articles:sql/aggregations-group-by-having", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
 updatedDate: 2026-10-04
 ---
 

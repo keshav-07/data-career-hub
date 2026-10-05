@@ -1,15 +1,27 @@
 ---
-import { getItems, techLabel } from "../../utils/content";
+import { getItems, getHub, techLabel } from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
-import Button from "../../components/content/Button.astro";
+import Tile from "../../components/content/Tile.astro";
 import { HOME } from "../../utils/breadcrumbs";
 
 const qs = await getItems("interview-questions");
-const counts = new Map<string, number>();
-qs.forEach((q) => counts.set(q.id.split("/")[0], (counts.get(q.id.split("/")[0]) ?? 0) + 1));
+const counts = new Map<string, { n: number; easy: number; medium: number; hard: number }>();
+for (const q of qs) {
+  const t = q.id.split("/")[0];
+  const c = counts.get(t) ?? { n: 0, easy: 0, medium: 0, hard: 0 };
+  c.n++;
+  c[q.entry.data.difficulty.toLowerCase() as "easy" | "medium" | "hard"]++;
+  counts.set(t, c);
+}
 const groups = await Promise.all(
-  [...counts.entries()].map(async ([t, n]) => ({ t, n, label: await techLabel(t) })),
+  [...counts.entries()].map(async ([t, c]) => ({
+    t,
+    c,
+    label: await techLabel(t),
+    mono: (await getHub(t))?.entry.data.monogram,
+  })),
 );
+groups.sort((a, b) => b.c.n - a.c.n || a.label.localeCompare(b.label));
 const companies = await getItems("company-guides");
 const designs = await getItems("system-designs");
 ---
@@ -19,62 +31,71 @@ const designs = await getItems("system-designs");
   description="Practise Data Engineering interview questions by technology, study system-design case studies and prepare for specific companies with clearly labelled evidence."
   crumbs={[HOME, { label: "Interview" }]}
   eyebrow="Interview"
-  deck="Three focused routes: technology questions, system design and company preparation. Every answer starts with something you can say out loud."
+  deck="Every answer starts with something you can say out loud, then explains the details and the follow-ups."
   indexable
 >
-  <section class="section" aria-labelledby="lanes-h">
-    <h2 id="lanes-h" class="visually-hidden">
-      Interview routes
+  <section class="section section--tight" aria-labelledby="topics-h">
+    <h2 id="topics-h" class="group-title">
+      Questions by topic
     </h2>
-    <div class="lanes">
-      <div class="lane">
-        <h3>Technology interviews</h3>
-        <p>
-          Short answer first, then the reasoning, mistakes to avoid and the follow-ups interviewers
-          ask next.
-        </p>
-        <ul class="link-list" style="margin-top: var(--sp-4)">
-          {groups.map((g) => (
-            <li>
-              <a class="row" href={`/interview/${g.t}/`}>
-                <span class="row__title">{g.label}</span>
-                <span class="row__meta">
-                  {g.n} question{g.n === 1 ? "" : "s"}
-                </span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div class="lane">
-        <h3>System design</h3>
-        <p>
-          Walk through requirements, architecture, reliability and trade-offs for common data
-          platform problems.
-        </p>
-        <Button href="/data-engineering/system-design/" variant="secondary">
-          {designs.length} case stud{designs.length === 1 ? "y" : "ies"}
-        </Button>
-      </div>
-      <div class="lane">
-        <h3>Company preparation</h3>
-        <p>
-          Preparation guides that separate attributed reports from representative practice
-          questions.
-        </p>
-        <Button href="/interview/companies/" variant="secondary">
-          {companies.length} compan{companies.length === 1 ? "y" : "ies"}
-        </Button>
-      </div>
-    </div>
+    <ul class="tile-grid" role="list">
+      {groups.map((g) => (
+        <li>
+          <Tile
+            href={`/interview/${g.t}/`}
+            mono={g.mono ?? g.label.slice(0, 2)}
+            title={`${g.label} interview questions`}
+            meta={[
+              `${g.c.n} questions`,
+              g.c.easy > 0 && `${g.c.easy} easy`,
+              g.c.medium > 0 && `${g.c.medium} medium`,
+              g.c.hard > 0 && `${g.c.hard} hard`,
+            ]}
+          />
+        </li>
+      ))}
+    </ul>
   </section>
 
-  <section class="section" aria-labelledby="plan-h">
-    <div class="section-head">
-      <p class="eyebrow">Structured plan</p>
-      <h2 id="plan-h">Not sure where to start?</h2>
-      <p>Follow a time-boxed plan that sequences concepts, practice and projects.</p>
-    </div>
-    <Button href="/roadmaps/">Browse roadmaps and study plans</Button>
+  <section class="section section--tight" aria-labelledby="more-h">
+    <h2 id="more-h" class="group-title">
+      Beyond technology questions
+    </h2>
+    <ul class="tile-grid" role="list">
+      <li>
+        <Tile
+          href="/data-engineering/system-design/"
+          eyebrow="System design"
+          title="Case studies"
+          description="Walk through requirements, architecture, reliability and trade-offs."
+          meta={[`${designs.length} case studies`]}
+        />
+      </li>
+      <li>
+        <Tile
+          href="/interview/companies/"
+          eyebrow="Company preparation"
+          title="Company guides"
+          description="Preparation that separates attributed information from practice questions."
+          meta={[`${companies.length} companies`]}
+        />
+      </li>
+      <li>
+        <Tile
+          href="/roadmaps/interview-preparation-roadmap/"
+          eyebrow="Plan"
+          title="Interview preparation roadmap"
+          description="What each interview round tests and how to prepare for it."
+        />
+      </li>
+      <li>
+        <Tile
+          href="/roadmaps/60-day-interview-preparation/"
+          eyebrow="Plan"
+          title="60-day interview plan"
+          description="Eight weeks from SQL drills to mock interviews."
+        />
+      </li>
+    </ul>
   </section>
 </ContentLayout>

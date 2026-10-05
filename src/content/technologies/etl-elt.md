@@ -7,6 +7,8 @@ order: 9
 keyFacts: ["ETL transforms before load; ELT transforms after","ELT leans on cheap storage and scalable compute","Constraints such as privacy or format can still favour ETL"]
 whatToLearnFirst: ["articles:etl-elt/etl-vs-elt"]
 relatedTechnologies: ["data-warehousing","sql","airflow"]
+monogram: "ETL"
+lessons: ["articles:etl-elt/modern-data-pipelines", "articles:etl-elt/etl-vs-elt", "articles:etl-elt/batch-vs-streaming", "articles:etl-elt/idempotency-in-data-pipelines", "articles:etl-elt/data-quality-checks-contracts", "articles:etl-elt/pipeline-observability", "articles:etl-elt/pipeline-reliability-and-retries", "articles:etl-elt/cdc-patterns-and-failure-modes"]
 updatedDate: 2026-10-04
 ---
 

@@ -8,6 +8,8 @@ keyFacts: ["Runs Spark workloads on managed compute","Stores tables in Delta Lak
 whatToLearnFirst: ["articles:databricks/workspace-jobs-lakehouse","articles:databricks/unity-catalog-governance"]
 relatedTechnologies: ["spark","pyspark","delta-lake"]
 cheatSheet: "cheat-sheets:databricks"
+monogram: "Db"
+lessons: ["articles:databricks/databricks-for-data-engineers", "articles:databricks/workspace-jobs-lakehouse", "articles:databricks/unity-catalog-governance"]
 updatedDate: 2026-10-05
 ---
 

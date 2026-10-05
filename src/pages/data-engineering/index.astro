@@ -1,12 +1,16 @@
 ---
 import ContentLayout from "../../layouts/ContentLayout.astro";
-import Button from "../../components/content/Button.astro";
+import Tile from "../../components/content/Tile.astro";
 import { getItems } from "../../utils/content";
+import { getCourse } from "../../utils/navigation";
 import { TECH_GROUP_LABELS } from "../../data/site";
 import { HOME } from "../../utils/breadcrumbs";
 
 const hubs = (await getItems("technologies")).sort(
   (a, b) => a.entry.data.order - b.entry.data.order,
+);
+const courses = new Map(
+  (await Promise.all(hubs.map((h) => getCourse(h.id)))).map((c) => [c!.hub.id, c!]),
 );
 const groups = Object.keys(TECH_GROUP_LABELS)
   .map((g) => ({
@@ -14,7 +18,8 @@ const groups = Object.keys(TECH_GROUP_LABELS)
     items: hubs.filter((h) => h.entry.data.group === g),
   }))
   .filter((g) => g.items.length);
-const pillars = (await getItems("articles")).filter((a) => a.entry.data.pillar);
+const designs = await getItems("system-designs");
+const projects = await getItems("projects");
 ---
 
 <ContentLayout
@@ -22,59 +27,66 @@ const pillars = (await getItems("articles")).filter((a) => a.entry.data.pillar);
   description="Learn Data Engineering technology by technology: SQL, Python, Spark, warehousing, streaming and orchestration, with a roadmap to put them in order."
   crumbs={[HOME, { label: "Learn" }]}
   eyebrow="Learn"
-  deck="Start with the roadmap, then go deep on one technology at a time."
+  deck="Choose a course, or follow the roadmap to take them in order."
   indexable
 >
-  <section class="section section--tight">
-    <div class="cluster">
-      <Button href="/data-engineering/roadmap/">Data Engineer roadmap</Button>
-      <Button href="/data-engineering/system-design/" variant="secondary">
-        System design
-      </Button>
-      <Button href="/projects/" variant="secondary">
-        Projects
-      </Button>
-    </div>
-  </section>
-
-  <section class="section section--tight" aria-labelledby="tech-h">
-    <h2 id="tech-h" class="visually-hidden">
-      Technologies
+  <section class="section section--tight" aria-labelledby="start-h">
+    <h2 id="start-h" class="group-title">
+      Start here
     </h2>
-    <div class="tech-groups">
-      {groups.map((g) => (
-        <div class="tech-group">
-          <h3>{g.label}</h3>
-          <ul>
-            {g.items.map((h) => (
-              <li>
-                <a href={h.url}>
-                  {h.entry.data.shortName}
-                  <small>→</small>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
+    <ul class="tile-grid" role="list">
+      <li>
+        <Tile
+          href="/data-engineering/roadmap/"
+          eyebrow="Roadmap"
+          title="Data Engineer roadmap"
+          description="The ordered journey from beginner foundations to job ready."
+        />
+      </li>
+      <li>
+        <Tile
+          href="/data-engineering/system-design/"
+          eyebrow="System design"
+          title="Case studies"
+          description="Design batch, streaming, CDC and lakehouse platforms."
+          meta={[`${designs.length} case studies`]}
+        />
+      </li>
+      <li>
+        <Tile
+          href="/projects/"
+          eyebrow="Practice"
+          title="Projects"
+          description="Hands-on builds from beginner to advanced."
+          meta={[`${projects.length} projects`]}
+        />
+      </li>
+    </ul>
   </section>
 
-  {pillars.length > 0 && (
-    <section class="section section--tight" aria-labelledby="pillar-h">
-      <h2 id="pillar-h" style="font-size: var(--fs-h3)">
-        Pillar guides
-      </h2>
-      <ul class="link-list" style="margin-top: var(--sp-4)">
-        {pillars.map((p) => (
-          <li>
-            <a class="row" href={p.url}>
-              <span class="row__title">{p.title}</span>
-              <span class="row__desc">{p.description}</span>
-            </a>
-          </li>
-        ))}
+  {groups.map((g) => (
+    <section class="section section--tight" aria-label={g.label}>
+      <h2 class="group-title">{g.label}</h2>
+      <ul class="tile-grid" role="list">
+        {g.items.map((h) => {
+          const c = courses.get(h.id);
+          return (
+            <li>
+              <Tile
+                href={h.url}
+                mono={h.entry.data.monogram}
+                title={h.entry.data.shortName}
+                description={h.description}
+                meta={[
+                  `${c?.lessons.length ?? 0} lessons`,
+                  (c?.questions.length ?? 0) > 0 && `${c?.questions.length} questions`,
+                  c && `~${Math.max(1, Math.round(c.minutes / 60))} h`,
+                ]}
+              />
+            </li>
+          );
+        })}
       </ul>
     </section>
-  )}
+  ))}
 </ContentLayout>

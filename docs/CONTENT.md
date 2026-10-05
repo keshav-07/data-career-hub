@@ -20,6 +20,13 @@ create the file, run `npm run build`, and the page, hub listings, related links,
 Slugs are lowercase words separated by hyphens. Once published, a URL is permanent; if it must change,
 add a 301 in `public/_redirects`.
 
+## Courses
+
+Each technology file (`src/content/technologies/<tech>.md`) is a course. Its `lessons` list sets the lesson order,
+for example `lessons: ["articles:sql/sql-fundamentals", "articles:sql/joins"]`; `monogram` is the short label on the
+course tile. Lessons are grouped into modules automatically: pillar guides go in "Start here", the rest by difficulty.
+A new article in the folder that is not in `lessons` is still added to the course, after the listed lessons.
+
 ## Shared frontmatter
 
 ```yaml

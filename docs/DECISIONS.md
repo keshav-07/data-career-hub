@@ -96,3 +96,19 @@ Revisit if Search Console shows distinct queries that the existing page does not
 **D-017 Code verification scope.** SQL examples were executed on SQLite 3.45, Python on Python 3.12, PySpark on
 PySpark 4.2 (local mode), and Airflow DAGs parsed on Airflow 3.3. Snowflake, Databricks, Kafka-cluster and dbt
 examples could not be executed in the build environment; those pages say so in their version context.
+
+**D-018 Course-style navigation and tiles (owner request, supersedes parts of D-005/D-006).** After reviewing the
+first version, the site owner asked for a W3Schools-style learning structure. Implemented:
+- Every technology hub is a **course home**: hero with stats, tabs (Overview, Lessons, Interview, Projects,
+  Resources) and tiles. Lesson order comes from the `lessons` list in each technology file; articles not listed are
+  appended by difficulty, so new content still appears without code changes. Tabs are accessible (`role=tablist`,
+  arrow keys, hash deep links) and every section is visible without JavaScript.
+- Every content page has a **left section sidebar** listing the whole course or section, with the current page
+  highlighted, plus **Previous/Next** at the top and bottom (course order for lessons; difficulty order for interview
+  questions; the previous/next chain for projects and case studies). On mobile the sidebar becomes a collapsible
+  "course contents" panel. Sidebar text is excluded from the search index.
+- Link lists on the homepage and listing pages are replaced by **fully clickable tiles** with one link each and no
+  nested buttons. This overrides the plan's "selective cards" default at the owner's request; tiles stay flat (border,
+  no heavy shadow) to keep the editorial feel.
+Live reference sites (W3Schools, MDN, Microsoft Learn) could not be fetched from the build environment's network, so
+the patterns were applied from their well-known public structure.

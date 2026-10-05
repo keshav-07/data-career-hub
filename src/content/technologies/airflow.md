@@ -7,6 +7,8 @@ order: 6
 keyFacts: ["Workflows are Python-defined DAGs","Retries are only safe if tasks are idempotent","Orchestrate work; do not run heavy processing inside Airflow"]
 whatToLearnFirst: ["articles:airflow/dags-scheduling-retries"]
 relatedTechnologies: ["python","kafka","spark"]
+monogram: "Af"
+lessons: ["articles:airflow/dags-scheduling-retries"]
 updatedDate: 2026-10-04
 ---
 

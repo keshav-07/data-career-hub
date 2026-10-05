@@ -1,29 +1,26 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "../components/content/Button.astro";
+import Tile from "../components/content/Tile.astro";
 import { getItems, getByRef } from "../utils/content";
+import { getCourse } from "../utils/navigation";
 import { SITE, TECH_GROUP_LABELS } from "../data/site";
 
 const hubs = (await getItems("technologies")).sort(
   (a, b) => a.entry.data.order - b.entry.data.order,
 );
-const groups = Object.keys(TECH_GROUP_LABELS)
-  .map((g) => ({
-    id: g,
-    label: TECH_GROUP_LABELS[g],
-    items: hubs.filter((h) => h.entry.data.group === g),
-  }))
-  .filter((g) => g.items.length);
+const courses = await Promise.all(hubs.map((h) => getCourse(h.id)));
 const roadmap = await getByRef("roadmaps:data-engineer-roadmap");
 const stages = roadmap && roadmap.collection === "roadmaps" ? roadmap.entry.data.stages : [];
 const projects = await getItems("projects");
-const levels = ["Beginner", "Intermediate", "Advanced"];
-const featuredProjects = levels
+const featuredProjects = ["Beginner", "Intermediate", "Advanced"]
   .map((l) => projects.find((p) => p.entry.data.level === l))
   .filter((p): p is NonNullable<typeof p> => !!p);
 const featured = (await getItems("articles")).filter((a) => a.entry.data.featured).slice(0, 4);
 const designs = await getItems("system-designs");
 const companies = await getItems("company-guides");
+const questions = await getItems("interview-questions");
+const lessonCount = courses.reduce((n, c) => n + (c?.lessons.length ?? 0), 0);
 ---
 
 <BaseLayout
@@ -34,11 +31,11 @@ const companies = await getItems("company-guides");
   <section class="hero">
     <div class="container">
       <div class="hero__inner">
-        <p class="eyebrow">Data Engineering · learning paths and interview preparation</p>
+        <p class="eyebrow">Data Engineering · courses, interview preparation and projects</p>
         <h1>Learn Data Engineering. Prepare smarter. Get job ready.</h1>
         <p class="deck">
-          One structured place for learning paths, interview preparation, projects and career
-          guidance, so you always know what to study next.
+          Structured courses for every core technology, interview questions with direct answers, and
+          projects you can explain, in one place.
         </p>
         <div class="hero__actions">
           <Button href="/data-engineering/roadmap/" size="lg" fullWidthOnMobile>
@@ -48,13 +45,24 @@ const companies = await getItems("company-guides");
             Explore Interview Preparation
           </Button>
         </div>
-        <p class="hero__signal">
-          {hubs.slice(0, 8).map((h) => (
-            <a href={h.url} style="color: inherit">
-              {h.entry.data.shortName}
-            </a>
-          ))}
-        </p>
+        <dl class="hero__stats">
+          <div>
+            <dt>Courses</dt>
+            <dd>{hubs.length}</dd>
+          </div>
+          <div>
+            <dt>Lessons</dt>
+            <dd>{lessonCount}</dd>
+          </div>
+          <div>
+            <dt>Interview questions</dt>
+            <dd>{questions.length}</dd>
+          </div>
+          <div>
+            <dt>Projects</dt>
+            <dd>{projects.length}</dd>
+          </div>
+        </dl>
       </div>
     </div>
   </section>
@@ -62,30 +70,27 @@ const companies = await getItems("company-guides");
   <section class="section" aria-labelledby="learn-h">
     <div class="container">
       <div class="section-head">
-        <p class="eyebrow">Learn</p>
-        <h2 id="learn-h">Technology by technology, in a sensible order</h2>
-        <p>
-          Each hub lists what to learn first, then beginner to advanced guides, interview questions
-          and projects.
-        </p>
+        <p class="eyebrow">Courses</p>
+        <h2 id="learn-h">Pick a technology and start learning</h2>
+        <p>Each course has ordered lessons, interview questions, projects and a cheat sheet.</p>
       </div>
-      <div class="tech-groups">
-        {groups.map((g) => (
-          <div class="tech-group">
-            <h3>{g.label}</h3>
-            <ul>
-              {g.items.map((h) => (
-                <li>
-                  <a href={h.url}>
-                    {h.entry.data.shortName}
-                    <small>→</small>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
+      <ul class="tile-grid" role="list">
+        {hubs.map((h, i) => (
+          <li>
+            <Tile
+              href={h.url}
+              mono={h.entry.data.monogram}
+              eyebrow={TECH_GROUP_LABELS[h.entry.data.group]}
+              title={h.entry.data.shortName}
+              description={h.description}
+              meta={[
+                `${courses[i]?.lessons.length ?? 0} lessons`,
+                (courses[i]?.questions.length ?? 0) > 0 && `${courses[i]?.questions.length} questions`,
+              ]}
+            />
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   </section>
 
@@ -95,7 +100,7 @@ const companies = await getItems("company-guides");
         <div class="section-head">
           <p class="eyebrow">Roadmap</p>
           <h2 id="road-h">Data Engineer roadmap</h2>
-          <p>From beginner foundations to job-ready, in {stages.length} ordered stages.</p>
+          <p>From beginner foundations to job ready, in {stages.length} ordered stages.</p>
         </div>
         <ol class="roadmap-preview">
           {stages.map((s) => (
@@ -110,8 +115,8 @@ const companies = await getItems("company-guides");
           ))}
         </ol>
         <div style="margin-top: var(--sp-6)">
-          <Button href="/data-engineering/roadmap/" variant="quiet">
-            See the full roadmap →
+          <Button href="/data-engineering/roadmap/" variant="secondary">
+            See the full roadmap
           </Button>
         </div>
       </div>
@@ -124,32 +129,35 @@ const companies = await getItems("company-guides");
         <p class="eyebrow">Interview</p>
         <h2 id="int-h">Three focused ways to prepare</h2>
       </div>
-      <div class="lanes">
-        <div class="lane">
-          <h3>Technology interviews</h3>
-          <p>Direct answers first, then reasoning, mistakes and follow-ups.</p>
-          <Button href="/interview/" variant="secondary">
-            Open interview hub
-          </Button>
-        </div>
-        <div class="lane">
-          <h3>System design</h3>
-          <p>
-            {designs.length} case stud{designs.length === 1 ? "y" : "ies"} with requirements,
-            architecture and trade-offs.
-          </p>
-          <Button href="/data-engineering/system-design/" variant="secondary">
-            See case studies
-          </Button>
-        </div>
-        <div class="lane">
-          <h3>Company preparation</h3>
-          <p>Guides that separate attributed reports from practice questions.</p>
-          <Button href="/interview/companies/" variant="secondary">
-            {companies.length} compan{companies.length === 1 ? "y" : "ies"}
-          </Button>
-        </div>
-      </div>
+      <ul class="tile-grid" role="list">
+        <li>
+          <Tile
+            href="/interview/"
+            eyebrow="Technology interviews"
+            title="Interview questions"
+            description="Direct answers first, then reasoning, common mistakes and follow-ups."
+            meta={[`${questions.length} questions`]}
+          />
+        </li>
+        <li>
+          <Tile
+            href="/data-engineering/system-design/"
+            eyebrow="System design"
+            title="Case studies"
+            description="Requirements, architecture, reliability and trade-offs for real data platforms."
+            meta={[`${designs.length} case studies`]}
+          />
+        </li>
+        <li>
+          <Tile
+            href="/interview/companies/"
+            eyebrow="Company preparation"
+            title="Company guides"
+            description="Preparation that separates attributed information from practice questions."
+            meta={[`${companies.length} companies`]}
+          />
+        </li>
+      </ul>
     </div>
   </section>
 
@@ -160,26 +168,22 @@ const companies = await getItems("company-guides");
           <p class="eyebrow">Projects</p>
           <h2 id="proj-h">Build something you can explain</h2>
         </div>
-        <div class="project-list">
+        <ul class="tile-grid tile-grid--wide" role="list">
           {featuredProjects.map((p) => (
-            <article class="project-summary">
-              <div>
-                <span class="badge">{p.entry.data.level}</span>
-              </div>
-              <div>
-                <h3>
-                  <a href={p.url}>{p.title}</a>
-                </h3>
-                <p class="muted" style="margin-top: var(--sp-2)">
-                  {p.entry.data.problemStatement}
-                </p>
-              </div>
-            </article>
+            <li>
+              <Tile
+                href={p.url}
+                level={p.entry.data.level}
+                title={p.title}
+                description={p.entry.data.problemStatement}
+                meta={[p.entry.data.technologies.slice(0, 3).join(" · ")]}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
         <div style="margin-top: var(--sp-6)">
-          <Button href="/projects/" variant="quiet">
-            All projects →
+          <Button href="/projects/" variant="secondary">
+            All {projects.length} projects
           </Button>
         </div>
       </div>
@@ -193,18 +197,20 @@ const companies = await getItems("company-guides");
           <p class="eyebrow">Featured guides</p>
           <h2 id="feat-h">Start with these</h2>
         </div>
-        <ol class="ranked">
+        <ul class="tile-grid tile-grid--wide" role="list">
           {featured.map((a) => (
             <li>
-              <a href={a.url}>
-                <span class="ranked__title">
-                  {a.title}
-                  <span class="ranked__sub">{a.description}</span>
-                </span>
-              </a>
+              <Tile
+                href={a.url}
+                eyebrow={a.typeLabel}
+                title={a.title}
+                description={a.description}
+                level={a.difficulty}
+                meta={[`${a.minutes} min read`]}
+              />
             </li>
           ))}
-        </ol>
+        </ul>
       </div>
     </section>
   )}
@@ -239,7 +245,7 @@ const companies = await getItems("company-guides");
         </li>
         <li>
           <h3>Structured paths</h3>
-          <p>Every page points to a prerequisite, a related idea and a next step.</p>
+          <p>Every lesson sits in a course with a clear previous and next step.</p>
         </li>
       </ul>
     </div>

@@ -1,9 +1,19 @@
 ---
 import { getItems } from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
-import ContentRow from "../../components/content/ContentRow.astro";
+import Tile from "../../components/content/Tile.astro";
 import { HOME } from "../../utils/breadcrumbs";
 const all = await getItems("roadmaps");
+const groups = [
+  { label: "The roadmap", type: "data-engineer" },
+  { label: "Study plans", type: "study-plan" },
+  { label: "Career plans", type: "career-transition" },
+].map((g) => ({
+  ...g,
+  items: all
+    .filter((r) => r.entry.data.roadmapType === g.type)
+    .sort((a, b) => a.title.localeCompare(b.title)),
+}));
 ---
 
 <ContentLayout
@@ -15,12 +25,25 @@ const all = await getItems("roadmaps");
   indexable
 >
   <section class="section section--tight">
-    <ul class="link-list">
-      {all.map((r) => (
-        <li>
-          <ContentRow item={r} />
-        </li>
+    {groups
+      .filter((g) => g.items.length)
+      .map((g) => (
+        <>
+          <h2 class="group-title">{g.label}</h2>
+          <ul class="tile-grid tile-grid--wide" role="list">
+            {g.items.map((r) => (
+              <li>
+                <Tile
+                  href={r.url}
+                  title={r.title}
+                  description={r.description}
+                  level={r.entry.data.difficulty}
+                  meta={[`${r.entry.data.stages.length} stages`]}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
       ))}
-    </ul>
   </section>
 </ContentLayout>

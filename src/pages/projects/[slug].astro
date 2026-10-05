@@ -4,10 +4,10 @@ import { getItems, getByRef, type ItemOf } from "../../utils/content";
 import ArticleLayout from "../../layouts/ArticleLayout.astro";
 import RelatedList from "../../components/content/RelatedList.astro";
 import NextStep from "../../components/content/NextStep.astro";
-import PrevNext from "../../components/content/PrevNext.astro";
 import Callout from "../../components/content/Callout.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
-import { relatedGroups, nextPrev } from "../../utils/related";
+import { relatedGroups } from "../../utils/related";
+import { sectionNav } from "../../utils/navigation";
 
 export async function getStaticPaths() {
   const all = await getItems("projects");
@@ -18,7 +18,6 @@ const d = item.entry.data;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
 const { groups } = await relatedGroups(item);
-const { next, previous } = await nextPrev(item);
 const lists: [string, string, string[], boolean?][] = [
   ["steps", "Build steps", d.steps, true],
   ["testing", "Testing", d.testing],
@@ -26,9 +25,11 @@ const lists: [string, string, string[], boolean?][] = [
   ["monitoring", "Monitoring", d.monitoring],
   ["cost", "Cost considerations", d.costConsiderations],
 ];
+const nav = await sectionNav("projects", item.url);
 ---
 
 <ArticleLayout
+  nav={nav}
   item={item}
   crumbs={crumbs}
   headings={headings}
@@ -123,7 +124,6 @@ const lists: [string, string, string[], boolean?][] = [
   </Fragment>
   <Fragment slot="footer">
     <RelatedList groups={groups} />
-    <PrevNext previous={previous} next={next} />
     <NextStep
       eyebrow="Next project"
       title="Explain it like an engineer"

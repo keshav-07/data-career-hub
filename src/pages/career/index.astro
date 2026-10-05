@@ -1,10 +1,12 @@
 ---
 import { getItems } from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
-import ContentRow from "../../components/content/ContentRow.astro";
-import Button from "../../components/content/Button.astro";
+import Tile from "../../components/content/Tile.astro";
 import { HOME } from "../../utils/breadcrumbs";
-const all = (await getItems("articles")).filter((a) => a.entry.data.section === "career");
+const guides = (await getItems("articles")).filter((a) => a.entry.data.section === "career");
+const plans = (await getItems("roadmaps")).filter(
+  (r) => r.entry.data.roadmapType === "career-transition",
+);
 ---
 
 <ContentLayout
@@ -16,18 +18,50 @@ const all = (await getItems("articles")).filter((a) => a.entry.data.section === 
   indexable
 >
   <section class="section section--tight">
-    <ul class="link-list">
-      {all.map((a) => (
+    <h2 class="group-title">Guides</h2>
+    <ul class="tile-grid tile-grid--wide" role="list">
+      {guides.map((a) => (
         <li>
-          <ContentRow item={a} />
+          <Tile
+            href={a.url}
+            title={a.title}
+            description={a.description}
+            meta={[`${a.minutes} min read`]}
+          />
         </li>
       ))}
     </ul>
-    <div class="cluster" style="margin-top: var(--sp-8)">
-      <Button href="/roadmaps/">Study plans</Button>
-      <Button href="/projects/" variant="secondary">
-        Projects
-      </Button>
-    </div>
+    <h2 class="group-title">Career plans</h2>
+    <ul class="tile-grid tile-grid--wide" role="list">
+      {plans.map((r) => (
+        <li>
+          <Tile
+            href={r.url}
+            title={r.title}
+            description={r.description}
+            meta={[`${r.entry.data.stages.length} stages`]}
+          />
+        </li>
+      ))}
+    </ul>
+    <h2 class="group-title">Put it into practice</h2>
+    <ul class="tile-grid" role="list">
+      <li>
+        <Tile
+          href="/projects/"
+          eyebrow="Practice"
+          title="Projects"
+          description="Build projects you can demo and explain in interviews."
+        />
+      </li>
+      <li>
+        <Tile
+          href="/interview/"
+          eyebrow="Interview"
+          title="Interview preparation"
+          description="Questions, case studies and company guides."
+        />
+      </li>
+    </ul>
   </section>
 </ContentLayout>

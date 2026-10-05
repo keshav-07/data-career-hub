@@ -2,6 +2,7 @@
 import { getItems } from "../../../utils/content";
 import ContentLayout from "../../../layouts/ContentLayout.astro";
 import Callout from "../../../components/content/Callout.astro";
+import Tile from "../../../components/content/Tile.astro";
 import { HOME } from "../../../utils/breadcrumbs";
 const guides = await getItems("company-guides");
 ---
@@ -28,15 +29,23 @@ const guides = await getItems("company-guides");
     <h2 id="g-h" class="visually-hidden">
       Guides
     </h2>
-    <ul class="link-list">
-      {guides.map((g) => (
-        <li>
-          <a class="row" href={g.url}>
-            <span class="row__title">{g.title}</span>
-            <span class="row__desc">{g.description}</span>
-          </a>
-        </li>
-      ))}
+    <ul class="tile-grid" role="list">
+      {guides
+        .sort((x, y) => x.entry.data.company.localeCompare(y.entry.data.company))
+        .map((g) => (
+          <li>
+            <Tile
+              href={g.url}
+              mono={g.entry.data.company.slice(0, 2)}
+              title={g.entry.data.company}
+              description="Interview preparation with attributed sources and labelled practice questions."
+              meta={[
+                `${g.entry.data.representativeQuestions.length} practice questions`,
+                `${g.entry.data.verifiedSources.length} official source${g.entry.data.verifiedSources.length === 1 ? "" : "s"}`,
+              ]}
+            />
+          </li>
+        ))}
     </ul>
     <p class="muted" style="margin-top: var(--sp-6)">
       More companies are added only when we can meet the evidence standard above.

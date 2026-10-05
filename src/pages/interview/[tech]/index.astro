@@ -3,6 +3,7 @@ import { getItems, techLabel } from "../../../utils/content";
 import ContentLayout from "../../../layouts/ContentLayout.astro";
 import IndexMeta from "../../../components/content/IndexMeta.astro";
 import Button from "../../../components/content/Button.astro";
+import Tile from "../../../components/content/Tile.astro";
 import { HOME } from "../../../utils/breadcrumbs";
 
 export async function getStaticPaths() {
@@ -85,20 +86,20 @@ const hubExists = (await getItems("technologies")).some((t) => t.id === tech);
       </fieldset>
       <p class="muted" role="status" aria-live="polite" data-count></p>
     </div>
-    <ul class="link-list" data-list>
+    <ul class="tile-grid tile-grid--wide" role="list" data-list>
       {qs.map((q) => (
         <li
           data-difficulty={q.entry.data.difficulty}
           data-types={q.entry.data.questionType.join(",")}
         >
-          <a class="row" href={q.url}>
-            <span class="row__title">{q.title}</span>
-            <span class="row__desc">{q.entry.data.shortAnswer.split(/(?<=[.?!])\s/)[0]}</span>
-            <span class="row__meta">
-              {q.entry.data.difficulty} · {q.entry.data.questionType.join(", ")} · ~
-              {q.entry.data.estimatedMinutes} min
-            </span>
-          </a>
+          <Tile
+            href={q.url}
+            title={q.title}
+            level={q.entry.data.difficulty}
+            eyebrow={q.entry.data.questionType.join(" · ")}
+            description={q.entry.data.shortAnswer.split(/(?<=[.?!])\s/)[0]}
+            meta={[`~${q.entry.data.estimatedMinutes} min`]}
+          />
         </li>
       ))}
     </ul>
@@ -113,13 +114,10 @@ const hubExists = (await getItems("technologies")).some((t) => t.id === tech);
       <h2 id="concept-h" style="font-size: var(--fs-h3)">
         Concept review
       </h2>
-      <ul class="link-list" style="margin-top: var(--sp-4)">
+      <ul class="tile-grid" role="list" style="margin-top: var(--sp-4)">
         {articles.map((a) => (
           <li>
-            <a class="row" href={a.url}>
-              <span class="row__title">{a.title}</span>
-              <span class="row__meta">{a.difficulty}</span>
-            </a>
+            <Tile href={a.url} eyebrow="Lesson" title={a.title} level={a.difficulty} />
           </li>
         ))}
       </ul>

@@ -7,6 +7,8 @@ order: 5
 keyFacts: ["Ordering is guaranteed only within a partition","Consumer groups scale reads by partition","Exactly-once needs care end to end"]
 whatToLearnFirst: ["articles:kafka/topics-partitions-consumer-groups"]
 relatedTechnologies: ["spark","airflow","data-warehousing"]
+monogram: "Kf"
+lessons: ["articles:kafka/kafka-real-time-data-engineering", "articles:kafka/topics-partitions-consumer-groups", "articles:kafka/kafka-vs-message-queues"]
 updatedDate: 2026-10-04
 ---
 

@@ -1,0 +1,32 @@
+---
+import type { SectionNav } from "../../utils/navigation";
+interface Props {
+  nav: SectionNav;
+}
+const { nav } = Astro.props;
+---
+
+{nav.groups.map((g) => (
+  <div class="side-nav__group">
+    <p class="side-nav__heading">{g.title}</p>
+    <ol class="side-nav__list" role="list">
+      {g.links.map((l) => (
+        <li>
+          <a
+            href={l.url}
+            aria-current={l.url === nav.current ? "page" : undefined}
+            class="side-nav__link"
+          >
+            {l.number !== undefined && (
+              <span class="side-nav__num" aria-hidden="true">
+                {l.number}
+              </span>
+            )}
+            <span class="side-nav__text">{l.title}</span>
+            {l.meta && <span class="side-nav__meta">{l.meta}</span>}
+          </a>
+        </li>
+      ))}
+    </ol>
+  </div>
+))}

@@ -1,9 +1,12 @@
 ---
-import { getItems } from "../../utils/content";
+import { getItems, getHub } from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
-import ContentRow from "../../components/content/ContentRow.astro";
+import Tile from "../../components/content/Tile.astro";
 import { HOME } from "../../utils/breadcrumbs";
-const sheets = await getItems("cheat-sheets");
+const sheets = (await getItems("cheat-sheets")).sort((a, b) => a.title.localeCompare(b.title));
+const monos = await Promise.all(
+  sheets.map(async (s) => (await getHub(s.technology[0]))?.entry.data.monogram),
+);
 ---
 
 <ContentLayout
@@ -15,11 +18,17 @@ const sheets = await getItems("cheat-sheets");
   indexable
 >
   <section class="section section--tight">
-    <h2 style="font-size: var(--fs-h3)">Cheat sheets</h2>
-    <ul class="link-list" style="margin-top: var(--sp-4)">
-      {sheets.map((s) => (
+    <h2 class="group-title">Cheat sheets</h2>
+    <ul class="tile-grid" role="list">
+      {sheets.map((s, i) => (
         <li>
-          <ContentRow item={s} />
+          <Tile
+            href={s.url}
+            mono={monos[i]}
+            eyebrow="Cheat sheet"
+            title={s.entry.data.cheatTopic}
+            description={s.description}
+          />
         </li>
       ))}
     </ul>

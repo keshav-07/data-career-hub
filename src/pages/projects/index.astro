@@ -2,6 +2,7 @@
 import { getItems } from "../../utils/content";
 import ContentLayout from "../../layouts/ContentLayout.astro";
 import { HOME } from "../../utils/breadcrumbs";
+import Tile from "../../components/content/Tile.astro";
 const all = await getItems("projects");
 const order = ["Beginner", "Intermediate", "Advanced"];
 const sorted = [...all].sort(
@@ -18,25 +19,25 @@ const sorted = [...all].sort(
   indexable
 >
   <section class="section section--tight">
-    <div class="project-list">
-      {sorted.map((p) => (
-        <article class="project-summary">
-          <div>
-            <span class="badge">{p.entry.data.level}</span>
-          </div>
-          <div>
-            <h2 style="font-size: var(--fs-h3)">
-              <a href={p.url}>{p.title}</a>
-            </h2>
-            <p class="muted" style="margin-top: var(--sp-2)">
-              {p.entry.data.problemStatement}
-            </p>
-            <p class="row__meta" style="margin-top: var(--sp-2)">
-              {p.entry.data.technologies.join(" · ")}
-            </p>
-          </div>
-        </article>
-      ))}
-    </div>
+    {order.map((level) => (
+      <>
+        <h2 class="group-title">{level}</h2>
+        <ul class="tile-grid tile-grid--wide" role="list">
+          {sorted
+            .filter((p) => p.entry.data.level === level)
+            .map((p) => (
+              <li>
+                <Tile
+                  href={p.url}
+                  level={p.entry.data.level}
+                  title={p.title}
+                  description={p.entry.data.problemStatement}
+                  meta={[p.entry.data.technologies.slice(0, 3).join(" · ")]}
+                />
+              </li>
+            ))}
+        </ul>
+      </>
+    ))}
   </section>
 </ContentLayout>

@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import Breadcrumb from "../components/navigation/Breadcrumb.astro";
+import SideNav from "../components/navigation/SideNav.astro";
+import Pager from "../components/navigation/Pager.astro";
 import Toc from "../components/content/Toc.astro";
 import Metadata from "../components/content/Metadata.astro";
 import IndexMeta from "../components/content/IndexMeta.astro";
@@ -8,6 +10,7 @@ import { articleSchema, breadcrumbSchema } from "../utils/seo";
 import { formatMonthYear, isoDate } from "../utils/dates";
 import type { Crumb } from "../utils/breadcrumbs";
 import type { Item } from "../utils/content";
+import type { SectionNav } from "../utils/navigation";
 
 interface Heading {
   depth: number;
@@ -20,12 +23,14 @@ interface Props {
   headings?: Heading[];
   eyebrow?: string;
   deck?: string;
-  /** Extra metadata items shown in the compact line (difficulty, reading time are added automatically). */
+  /** Extra metadata items shown in the compact line (reading time and update date are added automatically). */
   meta?: (string | undefined | false)[];
-  /** Wide technical content layout (system design, projects). */
+  /** Wide technical content (system design, projects): code and tables may break out of the reading column. */
   wide?: boolean;
   schema?: object[];
   titleClass?: string;
+  /** Left-hand section navigation with previous/next. Every content page provides one. */
+  nav?: SectionNav;
 }
 const {
   item,
@@ -37,6 +42,7 @@ const {
   wide = false,
   schema = [],
   titleClass,
+  nav,
 } = Astro.props;
 const data = item.entry.data as {
   title: string;
@@ -50,8 +56,7 @@ const data = item.entry.data as {
   imageAlt?: string;
   versionContext?: string;
 };
-const usefulHeadings = headings.filter((h) => h.depth === 2);
-const showToc = usefulHeadings.length >= 3;
+const showToc = headings.filter((h) => h.depth === 2).length >= 3;
 const jsonLd = [
   breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site),
   articleSchema({
@@ -66,7 +71,9 @@ const jsonLd = [
   }),
   ...schema,
 ];
-const containerClass = wide ? "container container--wide" : "container";
+const position = nav?.position
+  ? `${nav.position.noun} ${nav.position.index} of ${nav.position.total}`
+  : undefined;
 ---
 
 <BaseLayout
@@ -82,58 +89,78 @@ const containerClass = wide ? "container container--wide" : "container";
   modifiedTime={isoDate(data.updatedDate)}
 >
   <IndexMeta type={item.typeLabel} technology={item.technology[0]} difficulty={item.difficulty} />
-  <article>
-    <header class="page-header">
-      <div class={containerClass}>
+  <div
+    class={`course-shell container container--course ${showToc ? "course-shell--toc" : ""} ${nav ? "" : "course-shell--no-nav"}`}
+  >
+    {nav && (
+      <aside class="course-shell__nav" data-pagefind-ignore>
+        <SideNav nav={nav} variant="desktop" />
+      </aside>
+    )}
+    <article class="course-shell__main">
+      <header class="lesson-header">
         <Breadcrumb {crumbs} />
-        <div class="page-header__inner">
-          {eyebrow && (
-            <p class="eyebrow" style="margin-top: var(--sp-6)" data-pagefind-weight="3">
-              {eyebrow}
-            </p>
-          )}
-          <h1
-            class={titleClass}
-            data-pagefind-weight="10"
-            style={eyebrow ? undefined : "margin-top: var(--sp-6)"}
-          >
-            {item.title}
-          </h1>
-          {deck && (
-            <p class="deck" data-pagefind-weight="4">
-              {deck}
-            </p>
-          )}
-          <div class="meta">
-            <Metadata
-              items={[
-                ...meta,
-                `${item.minutes} min read`,
-                `Updated ${formatMonthYear(data.updatedDate)}`,
-              ]}
-            />
+        {nav && (
+          <div class="lesson-header__mobile-nav" data-pagefind-ignore>
+            <SideNav nav={nav} variant="mobile" />
           </div>
-          <slot name="header-extra" />
-        </div>
-      </div>
-    </header>
-
-    <div class={containerClass} style="padding-block: var(--sp-8) 0">
-      <div class={`main-with-toc ${showToc && !wide ? "main-with-toc--has-toc" : ""}`}>
-        <div style="min-width:0">
-          {showToc && <Toc headings={headings} variant="mobile" />}
-          <div class={`prose ${wide ? "prose--breakout" : ""}`}>
-            <slot />
-          </div>
-          <slot name="after-prose" />
-          <p class="author" style="margin-top: var(--sp-10)">
-            By {data.author} · Last reviewed {formatMonthYear(data.reviewedDate)}
-            {data.versionContext && <> · {data.versionContext}</>}
+        )}
+        {eyebrow && (
+          <p class="eyebrow lesson-header__eyebrow" data-pagefind-weight="3">
+            {eyebrow}
+            {position && <span class="lesson-header__position"> · {position}</span>}
           </p>
-          <slot name="footer" />
+        )}
+        <h1 class:list={["lesson-header__title", titleClass]} data-pagefind-weight="10">
+          {item.title}
+        </h1>
+        {deck && (
+          <p class="deck" data-pagefind-weight="4">
+            {deck}
+          </p>
+        )}
+        <div class="lesson-header__meta">
+          <Metadata
+            items={[
+              ...meta,
+              `${item.minutes} min read`,
+              `Updated ${formatMonthYear(data.updatedDate)}`,
+            ]}
+          />
         </div>
-        {showToc && !wide && <Toc headings={headings} variant="desktop" />}
+        <slot name="header-extra" />
+        {nav && (
+          <div data-pagefind-ignore>
+            <Pager prev={nav.prev} next={nav.next} variant="compact" noun={nav.position?.noun} />
+          </div>
+        )}
+      </header>
+
+      {showToc && <Toc headings={headings} variant="mobile" />}
+      <div class={`prose ${wide ? "prose--breakout" : ""}`}>
+        <slot />
       </div>
-    </div>
-  </article>
+      <slot name="after-prose" />
+      <p class="author">
+        By {data.author} · Last reviewed {formatMonthYear(data.reviewedDate)}
+        {data.versionContext && <> · {data.versionContext}</>}
+      </p>
+      {nav && (
+        <div data-pagefind-ignore>
+          <Pager prev={nav.prev} next={nav.next} variant="full" noun={nav.position?.noun} />
+        </div>
+      )}
+      <slot name="footer" />
+    </article>
+    {showToc && <Toc headings={headings} variant="desktop" />}
+  </div>
 </BaseLayout>
+
+<script>
+  // Keep the current lesson visible in a long sidebar.
+  const current = document.querySelector<HTMLElement>(".side-nav--desktop [aria-current='page']");
+  const box = current?.closest<HTMLElement>(".course-shell__nav");
+  if (current && box && box.scrollHeight > box.clientHeight) {
+    box.scrollTop = current.offsetTop - box.clientHeight / 3;
+  }
+</script>

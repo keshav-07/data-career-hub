@@ -1,0 +1,82 @@
+---
+/** A fully clickable card. Keep it to one link: no buttons or nested links inside. */
+interface Props {
+  href: string;
+  title: string;
+  description?: string;
+  eyebrow?: string;
+  /** Short label shown in a square badge (technology monogram). */
+  mono?: string;
+  /** Lesson or step number. */
+  num?: number;
+  /** Difficulty or level, shown as a text badge. */
+  level?: string;
+  meta?: (string | undefined | false)[];
+  variant?: "stack" | "row";
+}
+const {
+  href,
+  title,
+  description,
+  eyebrow,
+  mono,
+  num,
+  level,
+  meta = [],
+  variant = "stack",
+} = Astro.props;
+const metaItems = meta.filter(Boolean) as string[];
+---
+
+{variant === "row" ? (
+  <a class="tile tile--row" href={href}>
+    {num !== undefined && (
+      <span class="tile__num" aria-hidden="true">
+        {num}
+      </span>
+    )}
+    {mono && (
+      <span class="tile__mono" aria-hidden="true">
+        {mono}
+      </span>
+    )}
+    <span class="tile__body">
+      {eyebrow && <span class="tile__eyebrow">{eyebrow}</span>}
+      <span class="tile__title">{title}</span>
+      {description && <span class="tile__desc">{description}</span>}
+      {(metaItems.length > 0 || level) && (
+        <span class="tile__meta">
+          {level && <span class="level">{level}</span>}
+          {metaItems.map((m) => (
+            <span>{m}</span>
+          ))}
+        </span>
+      )}
+    </span>
+  </a>
+) : (
+  <a class="tile" href={href}>
+    {(mono || level || eyebrow) && (
+      <span class="tile__top">
+        {mono ? (
+          <span class="tile__mono" aria-hidden="true">
+            {mono}
+          </span>
+        ) : (
+          eyebrow && <span class="tile__eyebrow">{eyebrow}</span>
+        )}
+        {level && <span class="level">{level}</span>}
+      </span>
+    )}
+    {mono && eyebrow && <span class="tile__eyebrow">{eyebrow}</span>}
+    <span class="tile__title">{title}</span>
+    {description && <span class="tile__desc">{description}</span>}
+    {metaItems.length > 0 && (
+      <span class="tile__meta">
+        {metaItems.map((m) => (
+          <span>{m}</span>
+        ))}
+      </span>
+    )}
+  </a>
+)}

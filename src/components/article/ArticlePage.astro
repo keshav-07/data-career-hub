@@ -3,11 +3,11 @@ import { render } from "astro:content";
 import { getHub, type ItemOf } from "../../utils/content";
 import ArticleLayout from "../../layouts/ArticleLayout.astro";
 import RelatedList from "../content/RelatedList.astro";
-import PrevNext from "../content/PrevNext.astro";
 import NextStep from "../content/NextStep.astro";
 import Callout from "../content/Callout.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
-import { relatedGroups, nextPrev } from "../../utils/related";
+import { relatedGroups } from "../../utils/related";
+import { courseNav, sectionNav } from "../../utils/navigation";
 
 interface Props {
   item: ItemOf<"articles">;
@@ -17,17 +17,24 @@ const d = item.entry.data;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
 const { prerequisites, groups } = await relatedGroups(item);
-const { next, previous } = await nextPrev(item);
 const isTutorial = d.kind === "tutorial";
 const isCareer = d.section === "career";
 const hub = isCareer ? undefined : await getHub(d.technology[0]);
+const nav = isCareer ? await sectionNav("career", item.url) : await courseNav(item);
 ---
 
 <ArticleLayout
+  nav={nav}
   item={item}
   crumbs={crumbs}
   headings={headings}
-  eyebrow={isTutorial ? "Tutorial" : isCareer ? "Career" : (hub?.title ?? "Guide")}
+  eyebrow={
+    isCareer
+      ? "Career guide"
+      : hub
+        ? `${hub.entry.data.shortName} course${isTutorial ? " · Tutorial" : ""}`
+        : "Guide"
+  }
   deck={item.description}
   meta={[d.difficulty, d.pillar && "Pillar guide"]}
 >
@@ -72,7 +79,6 @@ const hub = isCareer ? undefined : await getHub(d.technology[0]);
       </section>
     )}
     <RelatedList groups={groups} />
-    <PrevNext previous={previous} next={next} />
     {isCareer && (
       <NextStep
         title="Keep building toward the job"

@@ -8,6 +8,8 @@ keyFacts: ["Python API over Spark’s distributed engine","Transformations are l
 whatToLearnFirst: ["articles:pyspark/window-functions"]
 relatedTechnologies: ["spark","sql","python","delta-lake"]
 cheatSheet: "cheat-sheets:pyspark"
+monogram: "PS"
+lessons: ["articles:pyspark/pyspark-fundamentals", "articles:pyspark/dataframes-and-schemas", "articles:pyspark/transformations-vs-actions", "articles:pyspark/joins-and-join-strategy", "articles:pyspark/window-functions", "articles:pyspark/udfs-and-safer-alternatives"]
 updatedDate: 2026-10-04
 ---
 

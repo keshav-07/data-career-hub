@@ -7,6 +7,8 @@ order: 8
 keyFacts: ["Star schemas separate facts from dimensions","Grain decides what a fact row means","Slowly changing dimensions preserve history"]
 whatToLearnFirst: ["articles:data-warehousing/star-schema"]
 relatedTechnologies: ["sql","etl-elt","delta-lake"]
+monogram: "DW"
+lessons: ["articles:data-warehousing/data-warehousing-fundamentals", "articles:data-warehousing/star-schema", "articles:data-warehousing/slowly-changing-dimensions", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "articles:data-warehousing/partitioning-clustering-data-layout"]
 updatedDate: 2026-10-04
 ---
 

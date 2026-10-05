@@ -7,6 +7,8 @@ order: 4
 keyFacts: ["Driver plans work; executors run tasks","A shuffle ends a stage and is the usual cost centre","Adaptive Query Execution can fix some skew at run time"]
 whatToLearnFirst: ["articles:spark/partitions-shuffles-skew"]
 relatedTechnologies: ["pyspark","delta-lake","kafka"]
+monogram: "Sp"
+lessons: ["articles:spark/apache-spark-architecture", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew", "articles:spark/adaptive-query-execution"]
 updatedDate: 2026-10-04
 ---
 

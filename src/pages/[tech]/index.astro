@@ -1,202 +1,384 @@
 ---
 import { render } from "astro:content";
-import {
-  getItems,
-  getByRef,
-  getHub,
-  sortByTitle,
-  type Item,
-  type ItemOf,
-} from "../../utils/content";
-import ContentLayout from "../../layouts/ContentLayout.astro";
+import { getItems, getHub, type ItemOf } from "../../utils/content";
+import { getCourse } from "../../utils/navigation";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Breadcrumb from "../../components/navigation/Breadcrumb.astro";
 import IndexMeta from "../../components/content/IndexMeta.astro";
-import ContentRow from "../../components/content/ContentRow.astro";
+import Tile from "../../components/content/Tile.astro";
 import Button from "../../components/content/Button.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
+import { breadcrumbSchema } from "../../utils/seo";
 import { TECH_GROUP_LABELS } from "../../data/site";
 
 export async function getStaticPaths() {
   const hubs = await getItems("technologies");
-  return hubs.map((hub) => ({ params: { tech: hub.id }, props: { hubRef: hub.ref } }));
+  return hubs.map((hub) => ({ params: { tech: hub.id } }));
 }
 
-const { hubRef } = Astro.props;
-const hub = (await getByRef(hubRef)) as Item & { collection: "technologies" };
-const tech = hub.id;
+const tech = Astro.params.tech!;
+const course = (await getCourse(tech))!;
+const hub = course.hub;
 const d = hub.entry.data;
 const { Content } = await render(hub.entry);
-
-const articles = (await getItems("articles")).filter(
-  (a) => a.technology.includes(tech) && a.entry.data.section === "learn",
-);
-const byLevel = (lvl: string) => sortByTitle(articles.filter((a) => a.difficulty === lvl));
-const allQuestions = await getItems("interview-questions");
-const questions = allQuestions.filter((q) => q.technology.includes(tech));
-// Interview hubs exist per primary technology (the question folder).
-const hasInterviewHub = allQuestions.some((q) => q.id.startsWith(`${tech}/`));
-const projects = (await getItems("projects")).filter(
-  (p) => p.technology.includes(tech) || p.entry.data.technologies.includes(tech),
-);
-const learnFirst = (await Promise.all(d.whatToLearnFirst.map((r) => getByRef(r)))).filter(
-  (x): x is Item => !!x,
-);
-const cheat = d.cheatSheet ? await getByRef(d.cheatSheet) : undefined;
+const crumbs = await breadcrumbsFor(hub);
 const related = (await Promise.all(d.relatedTechnologies.map((t) => getHub(t)))).filter(
   (x): x is ItemOf<"technologies"> => !!x,
 );
-const crumbs = await breadcrumbsFor(hub);
-const levels = [
-  { id: "beginner", label: "Beginner", items: byLevel("Beginner") },
-  { id: "intermediate", label: "Intermediate", items: byLevel("Intermediate") },
-  { id: "advanced", label: "Advanced", items: byLevel("Advanced") },
-].filter((l) => l.items.length);
-const nav = [
-  { href: "#overview", label: "Overview" },
-  learnFirst.length ? { href: "#learn-first", label: "Learn first" } : null,
-  ...levels.map((l) => ({ href: `#${l.id}`, label: l.label })),
-  questions.length ? { href: "#interview", label: "Interview" } : null,
-  projects.length ? { href: "#projects", label: "Projects" } : null,
-  cheat ? { href: "#cheat-sheet", label: "Cheat sheet" } : null,
-  related.length ? { href: "#related", label: "Related" } : null,
-].filter((x): x is { href: string; label: string } => !!x);
+const relatedCourses = await Promise.all(related.map((r) => getCourse(r.id)));
+const first = course.lessons[0];
+const interviewHub = course.questions.some((q) => q.id.startsWith(`${tech}/`));
+const hours = Math.max(1, Math.round(course.minutes / 60));
+let lessonNo = 0;
+
+const tabs = [
+  { id: "overview", label: "Overview" },
+  { id: "lessons", label: "Lessons", count: course.lessons.length },
+  course.questions.length
+    ? { id: "interview", label: "Interview", count: course.questions.length }
+    : null,
+  course.projects.length || course.designs.length
+    ? { id: "projects", label: "Projects", count: course.projects.length + course.designs.length }
+    : null,
+  { id: "resources", label: "Resources" },
+].filter((t): t is { id: string; label: string; count?: number } => !!t);
 ---
 
-<ContentLayout
+<BaseLayout
   title={d.shortName}
   seoTitle={`${d.shortName}: Learning Path and Guides`}
   description={d.description}
-  crumbs={crumbs}
-  eyebrow={TECH_GROUP_LABELS[d.group]}
-  deck={d.description}
+  schema={[breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site)]}
   indexable
 >
   <IndexMeta type="Technology hub" technology={tech} />
-  <nav
-    class="tech-hub-nav"
-    aria-label={`${d.shortName} sections`}
-    style="margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter)"
-  >
-    {nav.map((n) => (
-      <a href={n.href}>{n.label}</a>
-    ))}
-  </nav>
-
-  <section id="overview" class="section section--tight" aria-labelledby="overview-h">
-    <div class="two-col two-col--aside">
-      <div class="prose">
-        <h2 id="overview-h">Overview</h2>
-        <Content />
+  <section class="course-hero">
+    <div class="container">
+      <Breadcrumb {crumbs} />
+      <div class="course-hero__grid">
+        <div>
+          <p class="eyebrow">Course · {TECH_GROUP_LABELS[d.group]}</p>
+          <h1 class="course-hero__title" data-pagefind-weight="10">
+            <span class="tile__mono" aria-hidden="true">
+              {d.monogram ?? d.shortName.slice(0, 2)}
+            </span>
+            {d.shortName}
+          </h1>
+          <p class="deck" data-pagefind-weight="4">
+            {d.description}
+          </p>
+          <div class="course-hero__actions">
+            {first && (
+              <Button href={first.url} size="lg" fullWidthOnMobile>
+                Start the course
+              </Button>
+            )}
+            {interviewHub && (
+              <Button href={`/interview/${tech}/`} variant="secondary" size="lg" fullWidthOnMobile>
+                Practise interview questions
+              </Button>
+            )}
+          </div>
+        </div>
+        <dl class="stat-grid" aria-label="Course at a glance">
+          <div class="stat">
+            <dt>Lessons</dt>
+            <dd>{course.lessons.length}</dd>
+          </div>
+          <div class="stat">
+            <dt>Interview questions</dt>
+            <dd>{course.questions.length}</dd>
+          </div>
+          <div class="stat">
+            <dt>Projects & case studies</dt>
+            <dd>{course.projects.length + course.designs.length}</dd>
+          </div>
+          <div class="stat">
+            <dt>Reading time</dt>
+            <dd>~{hours} h</dd>
+          </div>
+        </dl>
       </div>
-      <aside aria-label="Key facts">
-        <h2 class="eyebrow" style="font-size: var(--fs-sm)">
-          Key facts
-        </h2>
-        <ul class="link-list" style="margin-top: var(--sp-2)">
-          {d.keyFacts.map((f) => (
-            <li style="padding: var(--sp-3) 0">{f}</li>
-          ))}
-        </ul>
-      </aside>
     </div>
   </section>
 
-  {learnFirst.length > 0 && (
-    <section id="learn-first" class="section section--tight" aria-labelledby="lf-h">
-      <h2 id="lf-h" style="font-size: var(--fs-h3)">
-        What to learn first
-      </h2>
-      <ol class="ranked" style="margin-top: var(--sp-4)">
-        {learnFirst.map((i) => (
-          <li>
-            <a href={i.url}>
-              <span class="ranked__title">
-                {i.title}
-                <span class="ranked__sub">{i.description}</span>
-              </span>
-            </a>
-          </li>
+  <div class="tabs js-only" data-tabs-bar>
+    <div class="container">
+      <div class="tabs__list" role="tablist" aria-label={`${d.shortName} course sections`}>
+        {tabs.map((t, i) => (
+          <button
+            type="button"
+            class="tabs__tab"
+            role="tab"
+            id={`tab-${t.id}`}
+            aria-controls={t.id}
+            aria-selected={i === 0 ? "true" : "false"}
+            tabindex={i === 0 ? 0 : -1}
+          >
+            {t.label}
+            {t.count !== undefined && <span class="tabs__count">{t.count}</span>}
+          </button>
         ))}
-      </ol>
-    </section>
-  )}
+      </div>
+    </div>
+  </div>
 
-  {levels.map((l) => (
-    <section id={l.id} class="section section--tight" aria-labelledby={`${l.id}-h`}>
-      <h2 id={`${l.id}-h`} style="font-size: var(--fs-h3)">
-        {l.label}
-      </h2>
-      <ul class="link-list" style="margin-top: var(--sp-4)">
-        {l.items.map((i) => (
-          <li>
-            <ContentRow item={i} />
-          </li>
-        ))}
-      </ul>
-    </section>
-  ))}
-
-  {questions.length > 0 && (
-    <section id="interview" class="section section--tight" aria-labelledby="int-h">
-      <h2 id="int-h" style="font-size: var(--fs-h3)">
-        {d.shortName} interview preparation
-      </h2>
-      <ul class="link-list" style="margin-top: var(--sp-4)">
-        {questions.map((q) => (
-          <li>
-            <ContentRow item={q} />
-          </li>
-        ))}
-      </ul>
-      {hasInterviewHub && (
-        <div style="margin-top: var(--sp-4)">
-          <Button href={`/interview/${tech}/`} variant="secondary">
-            All {d.shortName} interview questions
-          </Button>
+  <div class="container" data-tabs>
+    <section id="overview" class="tab-panel" role="tabpanel" aria-labelledby="tab-overview">
+      <div class="two-col two-col--aside">
+        <div>
+          <h2 class="tab-panel__title">About this course</h2>
+          <div class="prose">
+            <Content />
+          </div>
+          {course.lessons.length > 0 && (
+            <>
+              <h3 style="margin-top: var(--sp-8); font-size: var(--fs-xl)">What you will learn</h3>
+              <ul class="checklist" style="margin-top: var(--sp-3)">
+                {course.lessons.map((l) => (
+                  <li>{l.title}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
+        <aside aria-labelledby="facts-h">
+          <h2 id="facts-h" class="tile__eyebrow" style="margin-bottom: var(--sp-3)">
+            Key facts
+          </h2>
+          <ul class="checklist">
+            {d.keyFacts.map((f) => (
+              <li>{f}</li>
+            ))}
+          </ul>
+        </aside>
+      </div>
+      {course.modules.length > 0 && (
+        <>
+          <h2 class="group-title" style="margin-top: var(--sp-12)">
+            Course structure
+          </h2>
+          <ul class="tile-grid" role="list">
+            {course.modules.map((m) => (
+              <li>
+                <Tile
+                  href={m.lessons[0].url}
+                  eyebrow={`${m.lessons.length} lesson${m.lessons.length === 1 ? "" : "s"}`}
+                  title={m.title}
+                  description={m.summary}
+                  meta={[`Starts with: ${m.lessons[0].title}`]}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
-  )}
 
-  {projects.length > 0 && (
-    <section id="projects" class="section section--tight" aria-labelledby="proj-h">
-      <h2 id="proj-h" style="font-size: var(--fs-h3)">
-        Projects using {d.shortName}
-      </h2>
-      <ul class="link-list" style="margin-top: var(--sp-4)">
-        {projects.map((p) => (
-          <li>
-            <ContentRow item={p} />
-          </li>
-        ))}
-      </ul>
+    <section id="lessons" class="tab-panel" role="tabpanel" aria-labelledby="tab-lessons">
+      <h2 class="tab-panel__title">Lessons</h2>
+      <p class="tab-panel__lead">
+        Work through the lessons in order. Each one ends with a link to the next.
+      </p>
+      {course.modules.map((m) => (
+        <div>
+          <div class="module-head">
+            <h3>{m.title}</h3>
+            <p>{m.summary}</p>
+          </div>
+          <ol class="tile-grid tile-grid--wide" role="list">
+            {m.lessons.map((l) => (
+              <li>
+                <Tile
+                  variant="row"
+                  href={l.url}
+                  num={++lessonNo}
+                  title={l.title}
+                  description={l.description}
+                  level={l.difficulty}
+                  meta={[l.typeLabel === "Tutorial" && "Tutorial", `${l.minutes} min`]}
+                />
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
     </section>
-  )}
 
-  {cheat && (
-    <section id="cheat-sheet" class="section section--tight" aria-labelledby="cs-h">
-      <h2 id="cs-h" style="font-size: var(--fs-h3)">
-        Cheat sheet
-      </h2>
-      <ul class="link-list" style="margin-top: var(--sp-4)">
+    {course.questions.length > 0 && (
+      <section id="interview" class="tab-panel" role="tabpanel" aria-labelledby="tab-interview">
+        <h2 class="tab-panel__title">Interview questions</h2>
+        <p class="tab-panel__lead">
+          Each question starts with a short answer you can say out loud, then explains the details
+          and follow-ups.
+        </p>
+        <ul class="tile-grid tile-grid--wide" role="list">
+          {course.questions.map((q) => (
+            <li>
+              <Tile
+                href={q.url}
+                title={q.title}
+                level={q.entry.data.difficulty}
+                eyebrow={q.entry.data.questionType.join(" · ")}
+                meta={[`~${q.entry.data.estimatedMinutes} min`]}
+              />
+            </li>
+          ))}
+        </ul>
+        {interviewHub && (
+          <p style="margin-top: var(--sp-6)">
+            <Button href={`/interview/${tech}/`} variant="secondary">
+              Filter all {d.shortName} questions
+            </Button>
+          </p>
+        )}
+      </section>
+    )}
+
+    {(course.projects.length > 0 || course.designs.length > 0) && (
+      <section id="projects" class="tab-panel" role="tabpanel" aria-labelledby="tab-projects">
+        <h2 class="tab-panel__title">Projects and case studies</h2>
+        <p class="tab-panel__lead">
+          Apply what you learned and prepare material to discuss in interviews.
+        </p>
+        {course.projects.length > 0 && (
+          <>
+            <h3 class="group-title">Projects</h3>
+            <ul class="tile-grid tile-grid--wide" role="list">
+              {course.projects.map((p) => (
+                <li>
+                  <Tile
+                    href={p.url}
+                    title={p.title}
+                    description={p.entry.data.problemStatement}
+                    level={p.entry.data.level}
+                    meta={[p.entry.data.technologies.slice(0, 3).join(" · ")]}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {course.designs.length > 0 && (
+          <>
+            <h3 class="group-title">System design case studies</h3>
+            <ul class="tile-grid tile-grid--wide" role="list">
+              {course.designs.map((s) => (
+                <li>
+                  <Tile
+                    href={s.url}
+                    title={s.title}
+                    description={s.entry.data.problem}
+                    level={s.difficulty}
+                  />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+    )}
+
+    <section id="resources" class="tab-panel" role="tabpanel" aria-labelledby="tab-resources">
+      <h2 class="tab-panel__title">Resources</h2>
+      {course.cheatSheets.length > 0 && (
+        <>
+          <h3 class="group-title">Cheat sheets</h3>
+          <ul class="tile-grid" role="list">
+            {course.cheatSheets.map((c) => (
+              <li>
+                <Tile
+                  href={c.url}
+                  eyebrow="Cheat sheet"
+                  title={c.title}
+                  description={c.description}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {related.length > 0 && (
+        <>
+          <h3 class="group-title">Related courses</h3>
+          <ul class="tile-grid" role="list">
+            {related.map((r, i) => (
+              <li>
+                <Tile
+                  href={r.url}
+                  mono={r.entry.data.monogram}
+                  title={r.entry.data.shortName}
+                  description={r.description}
+                  meta={[
+                    `${relatedCourses[i]?.lessons.length ?? 0} lessons`,
+                    (relatedCourses[i]?.questions.length ?? 0) > 0 && `${relatedCourses[i]?.questions.length} questions`,
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <h3 class="group-title">Plan your learning</h3>
+      <ul class="tile-grid" role="list">
         <li>
-          <ContentRow item={cheat} />
+          <Tile
+            href="/data-engineering/roadmap/"
+            eyebrow="Roadmap"
+            title="Data Engineer roadmap"
+            description="See where this course fits in the full journey from beginner to job ready."
+          />
+        </li>
+        <li>
+          <Tile
+            href="/roadmaps/"
+            eyebrow="Plans"
+            title="Study plans"
+            description="30, 60 and 90-day plans that sequence courses, practice and projects."
+          />
         </li>
       </ul>
     </section>
-  )}
+  </div>
+</BaseLayout>
 
-  {related.length > 0 && (
-    <section id="related" class="section section--tight" aria-labelledby="rel-h">
-      <h2 id="rel-h" style="font-size: var(--fs-h3)">
-        Related technologies
-      </h2>
-      <p class="cluster" style="margin-top: var(--sp-3)">
-        {related.map((r) => (
-          <a class="tag" href={r.url}>
-            {r.entry.data.shortName}
-          </a>
-        ))}
-      </p>
-    </section>
-  )}
-</ContentLayout>
+<script>
+  const root = document.querySelector<HTMLElement>("[data-tabs]");
+  const tabs = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("[data-tabs-bar] [role='tab']"),
+  );
+  if (root && tabs.length) {
+    const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")!)!);
+    const select = (index: number, focus = false, updateHash = true) => {
+      tabs.forEach((t, i) => {
+        const on = i === index;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        panels[i].hidden = !on;
+      });
+      if (focus) tabs[index].focus();
+      if (updateHash) history.replaceState(null, "", `#${panels[index].id}`);
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener("click", () => select(i));
+      t.addEventListener("keydown", (e) => {
+        const last = tabs.length - 1;
+        const map: Record<string, number> = {
+          ArrowRight: i === last ? 0 : i + 1,
+          ArrowLeft: i === 0 ? last : i - 1,
+          Home: 0,
+          End: last,
+        };
+        if (e.key in map) {
+          e.preventDefault();
+          select(map[e.key], true);
+        }
+      });
+    });
+    const fromHash = () => panels.findIndex((p) => `#${p.id}` === location.hash);
+    select(Math.max(0, fromHash()), false, false);
+    window.addEventListener("hashchange", () => {
+      if (fromHash() !== -1) select(fromHash(), false, false);
+    });
+  }
+</script>

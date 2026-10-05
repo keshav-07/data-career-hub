@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "../components/content/Button.astro";
+import Tile from "../components/content/Tile.astro";
 ---
 
 <BaseLayout
@@ -9,7 +10,7 @@ import Button from "../components/content/Button.astro";
   noindex
 >
   <section class="not-found">
-    <div class="container container--reading">
+    <div class="container" style="max-width: 900px">
       <p class="eyebrow">404</p>
       <h1 style="margin-top: var(--sp-3)">We could not find that page</h1>
       <p class="deck" style="margin-top: var(--sp-4)">
@@ -27,26 +28,38 @@ import Button from "../components/content/Button.astro";
           Home
         </Button>
       </div>
-      <ul class="link-list" style="margin-top: var(--sp-10)">
+      <ul class="tile-grid" role="list" style="margin-top: var(--sp-6)">
         <li>
-          <a class="row" href="/data-engineering/">
-            <span class="row__title">Learn</span>
-          </a>
+          <Tile
+            href="/data-engineering/"
+            eyebrow="Learn"
+            title="Courses"
+            description="SQL, Python, Spark, warehousing, streaming and more."
+          />
         </li>
         <li>
-          <a class="row" href="/interview/">
-            <span class="row__title">Interview preparation</span>
-          </a>
+          <Tile
+            href="/interview/"
+            eyebrow="Interview"
+            title="Interview preparation"
+            description="Questions, case studies and company guides."
+          />
         </li>
         <li>
-          <a class="row" href="/projects/">
-            <span class="row__title">Projects</span>
-          </a>
+          <Tile
+            href="/projects/"
+            eyebrow="Practice"
+            title="Projects"
+            description="Hands-on builds from beginner to advanced."
+          />
         </li>
         <li>
-          <a class="row" href="/resources/">
-            <span class="row__title">Resources</span>
-          </a>
+          <Tile
+            href="/roadmaps/"
+            eyebrow="Plan"
+            title="Roadmaps"
+            description="The full roadmap and time-boxed study plans."
+          />
         </li>
       </ul>
     </div>

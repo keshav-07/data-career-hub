@@ -105,6 +105,11 @@ export function validateContent(items: Item[], technologyVocab: Set<string>): vo
         for (const r of item.entry.data.whatToLearnFirst) {
           if (!refs.has(r)) errors.push(`${item.ref}: whatToLearnFirst → "${r}" does not resolve`);
         }
+        for (const r of item.entry.data.lessons) {
+          if (!refs.has(r)) errors.push(`${item.ref}: lessons → "${r}" does not resolve`);
+          else if (!r.startsWith(`articles:${item.id}/`))
+            errors.push(`${item.ref}: lesson "${r}" is not in articles/${item.id}/`);
+        }
         for (const t of item.entry.data.relatedTechnologies) {
           if (!hubs.has(t) && !technologyVocab.has(t))
             errors.push(`${item.ref}: unknown related technology "${t}"`);

@@ -8,6 +8,8 @@ keyFacts: ["Storage, compute and services layers scale independently","Virtual w
 whatToLearnFirst: ["articles:snowflake/architecture-virtual-warehouses","articles:snowflake/micro-partitions-clustering-pruning"]
 relatedTechnologies: ["sql","data-warehousing","etl-elt"]
 cheatSheet: "cheat-sheets:snowflake"
+monogram: "Sf"
+lessons: ["articles:snowflake/snowflake-for-data-engineers", "articles:snowflake/architecture-virtual-warehouses", "articles:snowflake/micro-partitions-clustering-pruning", "articles:snowflake/snowflake-vs-databricks"]
 updatedDate: 2026-10-05
 ---
 

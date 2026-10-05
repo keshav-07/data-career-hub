@@ -7,6 +7,8 @@ order: 7
 keyFacts: ["Transaction log gives ACID guarantees on object storage","Schema enforcement and controlled schema evolution","Time travel supports audit and rollback"]
 whatToLearnFirst: ["articles:delta-lake/transactions-schema-evolution"]
 relatedTechnologies: ["spark","pyspark","data-warehousing"]
+monogram: "DL"
+lessons: ["articles:delta-lake/data-lakes-lakehouse-delta", "articles:delta-lake/transactions-schema-evolution", "articles:delta-lake/delta-vs-traditional-lake-tables", "articles:delta-lake/json-vs-parquet", "articles:delta-lake/parquet-vs-avro-vs-orc", "articles:delta-lake/schema-evolution-patterns"]
 updatedDate: 2026-10-04
 ---
 

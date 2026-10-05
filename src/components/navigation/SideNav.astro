@@ -1,0 +1,36 @@
+---
+import type { SectionNav } from "../../utils/navigation";
+import SideNavList from "./SideNavList.astro";
+interface Props {
+  nav: SectionNav;
+  variant: "desktop" | "mobile";
+}
+const { nav, variant } = Astro.props;
+const position = nav.position
+  ? `${nav.position.noun} ${nav.position.index} of ${nav.position.total}`
+  : undefined;
+---
+
+{variant === "desktop" ? (
+  <nav class="side-nav side-nav--desktop" aria-label={nav.label}>
+    <a class="side-nav__title" href={nav.href}>
+      {nav.title}
+    </a>
+    <SideNavList nav={nav} />
+  </nav>
+) : (
+  <details class="side-nav side-nav--mobile">
+    <summary>
+      <span>
+        <strong>{nav.title}</strong>
+        {position && <span class="side-nav__position">{position}</span>}
+      </span>
+    </summary>
+    <nav aria-label={nav.label}>
+      <a class="side-nav__title" href={nav.href}>
+        Overview
+      </a>
+      <SideNavList nav={nav} />
+    </nav>
+  </details>
+)}
