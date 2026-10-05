@@ -1,0 +1,5 @@
+{
+  "Recursive CTEs": { "ref": "articles:sql/recursive-ctes-hierarchies", "heading": "Recursive CTEs" },
+  "Hierarchical / org-chart queries": { "ref": "articles:sql/recursive-ctes-hierarchies", "heading": "Hierarchical and org-chart queries" },
+  "Graph traversal in SQL": { "ref": "articles:sql/recursive-ctes-hierarchies", "heading": "Graph traversal in SQL" }
+}
