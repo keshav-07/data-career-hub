@@ -1,0 +1,376 @@
+---
+title: "Stacks: Matching, Evaluation and Monotonic Stack Templates"
+seoTitle: "Stack Pattern for Coding Interviews"
+description: "Use Python lists as stacks for bracket matching, expression evaluation, min-tracking and monotonic stacks, with tested code and the pipeline jobs they map to."
+technology: ["dsa"]
+topic: ["stacks", "monotonic-stack"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain last-in, first-out behaviour and implement a stack with a Python list"
+  - "Validate nested structures and evaluate postfix expressions with a stack"
+  - "Track a running minimum alongside a stack in O(1) per operation"
+  - "Apply monotonic stacks to next-greater and histogram problems in O(n)"
+  - "Use explicit stacks for nested parsing and deep traversals in pipeline code"
+prerequisites: ["articles:dsa/arrays-and-hashing"]
+previous: "articles:dsa/sliding-window"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: Using lists as stacks", url: "https://docs.python.org/3/tutorial/datastructures.html#using-lists-as-stacks" }
+  - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
+  - { label: "Python documentation: sys.setrecursionlimit", url: "https://docs.python.org/3/library/sys.html#sys.setrecursionlimit" }
+---
+
+A stack is a last-in, first-out (LIFO) collection: you add and remove items at the same end, like a pile of plates. It is the natural structure for anything **nested** (brackets, function calls, JSON) and, as a monotonic stack, for "what is the next bigger value?" questions. In Python, a plain `list` is an efficient stack.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How a stack works
+
+| Operation | Python | Cost |
+|---|---|---|
+| Push | `stack.append(x)` | O(1) amortised |
+| Pop | `stack.pop()` | O(1) |
+| Peek at the top | `stack[-1]` | O(1) |
+| Is it empty? | `not stack` | O(1) |
+
+Always check `if stack` before `pop()` or `stack[-1]`; popping an empty list raises `IndexError`. Do not use `pop(0)` or `insert(0, x)`: they work on the wrong end and cost O(n).
+
+Recursion is a stack too: each call pushes a frame, each return pops one. Any recursive algorithm can be rewritten with an explicit stack, which matters in Python because the default recursion limit is about 1,000 frames.
+
+## Recognising the pattern
+
+| Signal | Stack variant |
+|---|---|
+| Brackets, tags, nesting, "valid", "balanced" | Matching stack |
+| "Undo", "back", "most recent first" | Plain stack |
+| Postfix / reverse Polish expressions, calculators | Evaluation stack |
+| "Get the minimum in O(1) while pushing and popping" | Auxiliary min stack |
+| "Next greater / smaller element", "days until warmer", "span" | Monotonic stack |
+| "Largest rectangle", "how far can each bar extend" | Monotonic increasing stack |
+| Iterative DFS, avoiding recursion limits | Explicit stack of nodes |
+
+## Core templates in Python
+
+### Matching stack: balanced brackets
+
+```python
+def is_valid(s):
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack = []
+    for ch in s:
+        if ch in pairs:
+            if not stack or stack[-1] != pairs[ch]:
+                return False
+            stack.pop()
+        else:
+            stack.append(ch)
+    return not stack                     # leftover openers mean unbalanced
+
+
+assert is_valid("()[]{}") is True
+assert is_valid("([{}])") is True
+assert is_valid("(]") is False
+assert is_valid("([)]") is False
+assert is_valid("((") is False
+assert is_valid("") is True
+```
+
+The two classic bugs are popping an empty stack (input `")"`) and forgetting the final emptiness check (input `"(("`).
+
+### Auxiliary stack: minimum in O(1)
+
+Store, next to each value, the minimum of the stack at the time it was pushed.
+
+```python
+class MinStack:
+    def __init__(self):
+        self.items = []                  # (value, min so far)
+
+    def push(self, value):
+        current_min = min(value, self.items[-1][1]) if self.items else value
+        self.items.append((value, current_min))
+
+    def pop(self):
+        self.items.pop()
+
+    def top(self):
+        return self.items[-1][0]
+
+    def get_min(self):
+        return self.items[-1][1]
+
+
+ms = MinStack()
+for v in [-2, 0, -3]:
+    ms.push(v)
+assert ms.get_min() == -3
+ms.pop()
+assert ms.top() == 0 and ms.get_min() == -2
+```
+
+### Evaluation stack: reverse Polish notation
+
+Operands are pushed; an operator pops two, applies itself, and pushes the result.
+
+```python
+def eval_rpn(tokens):
+    stack = []
+    ops = {
+        "+": lambda a, b: a + b,
+        "-": lambda a, b: a - b,
+        "*": lambda a, b: a * b,
+        "/": lambda a, b: int(a / b),    # truncate towards zero, not floor
+    }
+    for tok in tokens:
+        if tok in ops:
+            b = stack.pop()              # second operand is on top
+            a = stack.pop()
+            stack.append(ops[tok](a, b))
+        else:
+            stack.append(int(tok))
+    return stack[0]
+
+
+assert eval_rpn(["2", "1", "+", "3", "*"]) == 9
+assert eval_rpn(["4", "13", "5", "/", "+"]) == 6
+assert eval_rpn(["10", "6", "9", "3", "+", "-11", "*", "/", "*", "17", "+", "5", "+"]) == 22
+assert eval_rpn(["7", "-2", "/"]) == -3          # -3.5 truncates to -3; 7 // -2 would be -4
+```
+
+Python's `//` floors towards negative infinity, so `-7 // 2` is `-4`. Problems that expect C-style truncation need `int(a / b)` (fine for the small integers in these problems) or sign-aware integer division.
+
+### Generating balanced strings with a stack of choices
+
+Generate Parentheses is usually solved by backtracking, which uses the call stack: add `(` while you have openers left, add `)` while it would not unbalance the string.
+
+```python
+def generate_parentheses(n):
+    out = []
+
+    def build(prefix, opened, closed):
+        if len(prefix) == 2 * n:
+            out.append("".join(prefix))
+            return
+        if opened < n:
+            prefix.append("(")
+            build(prefix, opened + 1, closed)
+            prefix.pop()
+        if closed < opened:
+            prefix.append(")")
+            build(prefix, opened, closed + 1)
+            prefix.pop()
+
+    build([], 0, 0)
+    return out
+
+
+assert generate_parentheses(1) == ["()"]
+assert generate_parentheses(3) == ["((()))", "(()())", "(())()", "()(())", "()()()"]
+assert len(generate_parentheses(4)) == 14        # the 4th Catalan number
+```
+
+### Monotonic stack: next greater element
+
+Keep a stack of indices whose values are **decreasing**. When a bigger value arrives, it is the answer for every smaller value it pops.
+
+```python
+def daily_temperatures(temps):
+    answer = [0] * len(temps)
+    stack = []                           # indices of days still waiting for a warmer day
+    for day, t in enumerate(temps):
+        while stack and temps[stack[-1]] < t:
+            waiting = stack.pop()
+            answer[waiting] = day - waiting
+        stack.append(day)
+    return answer
+
+
+def next_greater_element(nums1, nums2):
+    next_greater = {}
+    stack = []
+    for value in nums2:
+        while stack and stack[-1] < value:
+            next_greater[stack.pop()] = value
+        stack.append(value)
+    return [next_greater.get(v, -1) for v in nums1]
+
+
+assert daily_temperatures([73, 74, 75, 71, 69, 72, 76, 73]) == [1, 1, 4, 2, 1, 1, 0, 0]
+assert daily_temperatures([30, 30, 30]) == [0, 0, 0]
+assert next_greater_element([4, 1, 2], [1, 3, 4, 2]) == [-1, 3, -1]
+assert next_greater_element([2, 4], [1, 2, 3, 4]) == [3, -1]
+```
+
+Each index is pushed once and popped at most once, so both run in O(n) despite the nested `while`.
+
+### Monotonic increasing stack: largest rectangle
+
+For each bar, the widest rectangle using its full height extends until a shorter bar on each side. An increasing stack finds both boundaries: when a shorter bar arrives, every taller bar on the stack has found its right boundary, and the bar beneath it on the stack is its left boundary.
+
+```python
+def largest_rectangle_area(heights):
+    stack = []                                   # indices with increasing heights
+    best = 0
+    for i, h in enumerate(heights + [0]):        # sentinel 0 flushes the stack
+        while stack and heights[stack[-1]] >= h:
+            height = heights[stack.pop()]
+            left = stack[-1] if stack else -1    # last bar shorter than `height`
+            best = max(best, height * (i - left - 1))
+        stack.append(i)
+    return best
+
+
+assert largest_rectangle_area([2, 1, 5, 6, 2, 3]) == 10
+assert largest_rectangle_area([2, 4]) == 4
+assert largest_rectangle_area([]) == 0
+assert largest_rectangle_area([3, 3, 3]) == 9
+```
+
+`heights + [0]` creates a new list; the original stays untouched, and indexing `heights[...]` inside the loop never reaches the sentinel because the sentinel is never popped.
+
+### Sort, then stack: car fleets
+
+Process cars from the one closest to the target. A car behind that would arrive no later than the fleet ahead joins it; otherwise it starts a new fleet.
+
+```python
+def car_fleet(target, position, speed):
+    cars = sorted(zip(position, speed), reverse=True)    # closest to target first
+    fleets = []                                          # arrival times of fleet leaders
+    for pos, spd in cars:
+        arrival = (target - pos) / spd
+        if not fleets or arrival > fleets[-1]:
+            fleets.append(arrival)                       # slower: a new fleet
+        # else: it catches the fleet ahead and merges into it
+    return len(fleets)
+
+
+assert car_fleet(12, [10, 8, 0, 5, 3], [2, 4, 1, 1, 3]) == 3
+assert car_fleet(10, [3], [3]) == 1
+assert car_fleet(100, [0, 2, 4], [4, 2, 1]) == 1
+```
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Valid parentheses | O(n) | O(n) |
+| Min stack | O(1) per operation | O(n) |
+| Evaluate RPN | O(n) | O(n) |
+| Generate parentheses | Proportional to the number of results (Catalan growth) times n | O(n) recursion depth besides output |
+| Next greater, daily temperatures | O(n) | O(n) |
+| Largest rectangle | O(n) | O(n) |
+| Car fleet | O(n log n) for the sort | O(n) |
+
+## Variations and common bugs
+
+- **Popping or peeking an empty stack.** Guard every `pop()` and `stack[-1]`.
+- **Not checking that the stack is empty at the end** of a matching problem.
+- **Operand order in RPN:** the first pop is the right-hand operand.
+- **Floor versus truncation** in integer division with negative numbers.
+- **Storing values instead of indices** in a monotonic stack when you need distances or widths.
+- **Strict versus non-strict comparison** (`<` vs `<=`) in monotonic stacks: decide how equal values behave and test with duplicates.
+- **Forgetting to flush the stack** at the end of the histogram problem; the sentinel bar solves it.
+- **Variants:** next smaller element, stock span, remove k digits, asteroid collision, simplify a Unix path, basic calculator with parentheses, trapping rain water with a stack.
+
+## Stacks in data-engineering work
+
+- **Validating and parsing nested data.** Checking that SQL or a templated config has balanced brackets, finding the nesting depth of JSON, or tracking open and close tags is the matching-stack template.
+- **Iterative depth-first traversal.** Walking a deeply nested JSON document, a directory tree or a long lineage chain recursively can hit Python's recursion limit. An explicit stack has no such limit.
+- **Undo and rollback.** Applying a sequence of schema migrations or file moves and undoing them in reverse order on failure is a stack of completed steps.
+- **Time-series questions.** "For each day, how many days until the metric next exceeds today's value?" is Daily Temperatures; monotonic stacks answer it in one pass.
+
+```python
+def max_json_depth(doc):
+    """Maximum nesting depth of dicts and lists, without recursion."""
+    deepest = 0
+    stack = [(doc, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if isinstance(node, dict):
+            children = node.values()
+        elif isinstance(node, list):
+            children = node
+        else:
+            continue
+        deepest = max(deepest, depth)
+        stack.extend((child, depth + 1) for child in children)
+    return deepest
+
+
+event = {"user": {"id": 7, "tags": ["a", {"k": [1, 2]}]}, "ts": 1}
+assert max_json_depth(event) == 5
+assert max_json_depth({}) == 1 and max_json_depth(42) == 0
+
+deep = current = []
+for _ in range(5000):                    # deeper than the default recursion limit
+    nxt = []
+    current.append(nxt)
+    current = nxt
+assert max_json_depth(deep) == 5001
+print(max_json_depth(event), max_json_depth(deep))
+```
+
+```text
+5 5001
+```
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Valid Parentheses** (Easy): push openers; each closer must match the top; the stack must end empty.
+2. **Next Greater Element I** (Easy): monotonic decreasing stack over the second array, answers stored in a dict.
+3. **Min Stack** (Medium): store the running minimum alongside each value.
+4. **Evaluate Reverse Polish Notation** (Medium): push numbers; an operator pops two (right operand first) and pushes the result.
+5. **Daily Temperatures** (Medium): stack of waiting days; a warmer day resolves all cooler days on top.
+6. **Generate Parentheses** (Medium): backtrack, adding `(` while openers remain and `)` while closers are fewer than openers.
+7. **Car Fleet** (Medium): sort by position descending; a car whose arrival time is not later than the fleet ahead merges with it.
+8. **Largest Rectangle in Histogram** (Hard): increasing stack; popping a bar gives its height and both width boundaries.
+
+## Practice questions
+
+<details>
+<summary>Why are monotonic stack solutions O(n) even though they have a while loop inside a for loop?</summary>
+
+Every index is pushed exactly once and popped at most once. The total number of inner-loop iterations across the whole run is therefore at most n, so the algorithm is O(n) overall.
+
+</details>
+
+<details>
+<summary>How would you support get_min in O(1) on a stack, and what does it cost?</summary>
+
+Store the minimum so far with each pushed value (or keep a second stack of minimums). Push records `min(value, previous_min)`, pop discards it, and `get_min` reads the top. Every operation stays O(1); the cost is extra memory proportional to the stack size.
+
+</details>
+
+<details>
+<summary>Why might a recursive traversal of a nested JSON document fail in Python, and how do you fix it?</summary>
+
+CPython limits recursion depth (by default about 1,000 frames) and raises `RecursionError` beyond it. Deeply nested or adversarial documents can exceed it. Use an explicit stack (or a deque for breadth-first order); raising the limit with `sys.setrecursionlimit` works but risks crashing the interpreter on very deep input.
+
+</details>
+
+<details>
+<summary>In Largest Rectangle in Histogram, what width does a popped bar get?</summary>
+
+When bar `j` is popped because bar `i` is shorter, `i` is its right boundary (exclusive). The new top of the stack is the nearest bar to the left that is shorter than `j`, so it is the left boundary (exclusive), or −1 if the stack is empty. The width is `i - left - 1`.
+
+</details>
+
+<details>
+<summary>What is the difference between a stack and a queue, and which suits depth-first and breadth-first traversal?</summary>
+
+A stack is last-in, first-out; a queue is first-in, first-out. Depth-first search uses a stack (explicitly or via recursion) so it follows one branch to the end before backtracking. Breadth-first search uses a queue so it visits nodes in order of distance from the start.
+
+</details>
+
+## Key takeaways
+
+- A Python list is a stack: `append`, `pop` and `[-1]`, all O(1); guard against empty pops.
+- Use a matching stack for nesting, an evaluation stack for postfix expressions and a paired minimum for O(1) `get_min`.
+- Monotonic stacks answer next-greater and boundary questions in O(n); store indices when you need distances.
+- An explicit stack replaces recursion when inputs might be deeper than Python's recursion limit.
+- In pipelines, stacks validate nested structures, traverse deep documents and undo steps in reverse order.
