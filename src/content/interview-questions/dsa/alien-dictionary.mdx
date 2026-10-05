@@ -1,0 +1,165 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Alien Dictionary: Derive a Letter Order from Sorted Words with Topological Sort"
+seoTitle: "Alien Dictionary: Topological Sort"
+description: "Recover an unknown alphabet's letter order from a sorted word list by comparing adjacent words and topologically sorting the letter graph, with tests."
+technology: ["dsa"]
+topic: ["graphs", "topological-sort"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Compare each pair of adjacent words: the first position where they differ gives one ordering rule, an edge from the earlier word's letter to the later word's letter. If a word is followed by its own proper prefix, the input is invalid. Every letter that appears is a node, even without edges. Topologically sort the letters with Kahn's algorithm; if not all letters come out, the rules contain a cycle and no order exists. With C total characters and an alphabet of size U, the time is O(C + U^2) at most and the space O(U^2) for the edges."
+followUps: ["Why do you only compare adjacent words and not every pair?", "How would you tell whether the order is unique?", "Why must the prefix case be rejected?"]
+previous: "interview-questions:dsa/swim-in-rising-water"
+next: "interview-questions:dsa/climbing-stairs"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+An alien language uses lowercase English letters in an unknown order. You get a list of words from its dictionary,
+already sorted according to that order. Return a string of all letters that appear in the words, arranged in an order
+consistent with the list. If several orders fit, return any of them. If the list cannot be sorted under any order,
+return an empty string.
+
+This is widely known as LeetCode 269, "Alien Dictionary" (a premium problem; also on LintCode as 892). Its core is the
+same topological sort as [Course Schedule II](/interview/dsa/course-schedule-ii/).
+
+Assume up to 100 words of up to 100 letters.
+
+## Examples
+
+```text
+words: ["bca", "bcd", "dab", "dac", "c"]
+rules: a < d (bca vs bcd), b < d (bcd vs dab), b < c (dab vs dac), d < c (dac vs c)
+letters: a, b, c, d
+one valid order: "abdc"
+
+words: ["pq", "p"]
+"p" is a prefix of "pq" but comes after it -> invalid -> ""
+
+words: ["x", "y", "x"]
+x < y and y < x -> cycle -> ""
+
+words: ["zz"]
+only letter z -> "z"
+```
+
+## Approach 1: try every ordering
+
+For small alphabets you can test every permutation of the letters and check that the word list is sorted under it.
+
+```python
+from itertools import permutations
+
+def alien_order_brute(words):
+    letters = sorted(set("".join(words)))
+    for perm in permutations(letters):
+        rank = {ch: i for i, ch in enumerate(perm)}
+        keys = [[rank[ch] for ch in w] for w in words]
+        if all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1)):
+            return "".join(perm)
+    return ""
+```
+
+Python compares lists lexicographically, and a proper prefix sorts first, which matches dictionary order. This is
+O(U! * C) and only usable for a handful of letters, but it is a useful checker for tests.
+
+## Approach 2: optimal, build the rules and topologically sort
+
+### Extracting rules
+
+Only adjacent words matter: if w1 ≤ w2 ≤ w3, the rule from w1 vs w3 is implied by the other two. For each adjacent
+pair, find the first differing position; that gives one edge. Letters after it tell you nothing.
+
+### Kahn's algorithm template
+
+```text
+indegree[c] = 0 for every letter c
+for each edge a -> b (deduplicated): adj[a].add(b); indegree[b] += 1
+queue = letters with indegree 0
+while queue: pop c, output c, decrement successors, enqueue those reaching 0
+if output length < number of letters: cycle -> ""
+```
+
+### Python solution
+
+```python
+from collections import deque
+
+def alien_order(words):
+    adj = {ch: set() for w in words for ch in w}
+    indegree = {ch: 0 for ch in adj}
+
+    for w1, w2 in zip(words, words[1:]):
+        for a, b in zip(w1, w2):
+            if a != b:
+                if b not in adj[a]:
+                    adj[a].add(b)
+                    indegree[b] += 1
+                break
+        else:                                     # no differing position
+            if len(w1) > len(w2):
+                return ""                         # longer word before its own prefix
+
+    queue = deque(sorted(c for c in indegree if indegree[c] == 0))
+    order = []
+    while queue:
+        c = queue.popleft()
+        order.append(c)
+        for nxt in sorted(adj[c]):
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    return "".join(order) if len(order) == len(adj) else ""
+```
+
+The `sorted` calls only make the output deterministic for testing; any order of processing is valid.
+
+### Complexity
+
+- Building rules: O(C), where C is the total number of characters.
+- Topological sort: O(U + E) with E at most U^2 distinct edges (here U is at most 26).
+- Space: O(U + E).
+
+## Tests
+
+```python
+def respects(order, words):
+    if not order:
+        return False
+    rank = {ch: i for i, ch in enumerate(order)}
+    keys = [[rank[ch] for ch in w] for w in words]
+    return set(order) == set("".join(words)) and all(a <= b for a, b in zip(keys, keys[1:]))
+
+for fn in (alien_order, alien_order_brute):
+    assert respects(fn(["bca", "bcd", "dab", "dac", "c"]), ["bca", "bcd", "dab", "dac", "c"])
+    assert fn(["pq", "p"]) == ""                         # prefix after longer word
+    assert fn(["x", "y", "x"]) == ""                     # cycle
+    assert fn(["zz"]) == "z"                             # single letter
+    assert sorted(fn(["ab", "ab"])) == ["a", "b"]        # duplicates give no rule
+    assert respects(fn(["p", "pq"]), ["p", "pq"])        # prefix first is fine
+    # Letters with no rules still appear
+    assert sorted(fn(["ac", "bd"])) == ["a", "b", "c", "d"]
+
+assert alien_order(["bca", "bcd", "dab", "dac", "c"]) == "abdc"
+assert alien_order([]) == ""                             # no words
+```
+
+## Edge cases and pitfalls
+
+- **Prefix case.** `["pq", "p"]` is invalid; forgetting this check returns an order for impossible input.
+- **Isolated letters.** Letters that never appear in a rule must still be in the output; create nodes from all
+  characters, not only from edges.
+- **Duplicate edges** inflate in-degrees if you count them twice; use a set.
+- **Using letters after the first difference.** Only the first differing pair gives information.
+- **Comparing non-adjacent words** is unnecessary and costs O(N^2).
+
+## Where this shows up in data engineering
+
+Inferring an order from observed sequences is how you recover a dependency or processing order from logs, for example
+working out which upstream jobs must have finished before each downstream job by looking at many runs. The prefix
+check is a reminder that sort order rules also cover ties and nulls, which is where collation bugs hide.

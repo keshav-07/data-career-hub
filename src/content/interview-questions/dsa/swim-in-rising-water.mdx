@@ -14,6 +14,7 @@ interviewRelevance: "Medium"
 shortAnswer: "The time needed for a path is the highest elevation on it, so you want the path whose maximum is smallest. Run Dijkstra where a path's cost is the maximum cell value so far: pop the cell with the smallest cost from a min-heap, and push each unvisited neighbour with max(current cost, neighbour's elevation). The first time the bottom-right cell is popped, its cost is the answer. This is O(n^2 log n) on an n by n grid with O(n^2) space. Binary search on the time with a BFS check, or union-find adding cells in elevation order, also work."
 followUps: ["Why does Dijkstra still work when the path cost is a maximum instead of a sum?", "How would the binary-search-plus-BFS solution look and what is its complexity?", "How would union-find solve it by adding cells in order of elevation?"]
 previous: "interview-questions:dsa/min-cost-to-connect-all-points"
+next: "interview-questions:dsa/alien-dictionary"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
