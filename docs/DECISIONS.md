@@ -112,3 +112,33 @@ first version, the site owner asked for a W3Schools-style learning structure. Im
   no heavy shadow) to keep the editorial feel.
 Live reference sites (W3Schools, MDN, Microsoft Learn) could not be fetched from the build environment's network, so
 the patterns were applied from their well-known public structure.
+
+**D-019 Browser-saved progress (owner request; deviation from the plan).** The plan said never to imply personal
+saved progress, since there are no accounts. The owner asked for "mark as done" and completion metrics without
+login, so progress is stored in `localStorage` only (`dch-progress-v1`: visited pages, items marked done, last
+lesson per course). Nothing is sent to a server. The home page shows three progress rings (lessons, questions,
+projects) with a Continue link and a Reset control; course homes show Continue instead of Start. Copy always says
+"saved in this browser", and the privacy page lists every key. No backend was added.
+
+**D-020 Interview questions as index tables, not tabs (owner request; amends D-018).** Question counts will grow
+past 50, so tabs did not scale. Each interview hub, plus a new `/interview/questions/` page listing every question,
+uses a one-line-per-question table with these columns: number, question link, topic, difficulty, type and a Done
+checkbox. The table has search, difficulty, type, topic and status filters. The Interview tab was removed from
+course homes. Concept-review tiles stay as tiles.
+
+**D-021 Hierarchical, collapsible sidebar and pager placement (owner request; amends D-018).** Sidebar modules are
+`<details>` groups. A group is open when it holds the current page or has 16 links or fewer. The current lesson
+expands to show its own sections, and done items show a tick and a course progress bar. The whole sidebar can be
+hidden, and that choice persists (`dch-sidebar`), with an inline bootstrap so the layout does not jump. Previous/Next
+now appears only at the end of the page; the top pager was removed.
+
+**D-022 Explore rail.** Every content page has a right-hand "Explore" rail. Interview practice comes first, then
+related lessons, projects, system design and quick reference, all computed at build time from shared technology and
+references. On mobile the rail drops below the content. The on-page table of contents now lives inside the sidebar
+on desktop (nested under the current lesson) and stays inline on mobile.
+
+**D-023 Ad-ready layout without layout shift.** Ad slots (`AdSlot.astro`) reserve fixed space: the rail slot is
+250px plus a label, the inline slot 280px plus a label. That space is reserved only when ads are configured, so CLS
+stays at 0. AdSense loads on `requestIdleCallback` after the page is interactive, and only when
+`PUBLIC_ADSENSE_CLIENT` and slot IDs are set. With those unset, no ad markup or script ships. Before turning ads
+on, update the privacy page and add a consent banner where the law requires one.

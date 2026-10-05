@@ -97,8 +97,8 @@ status: IN PROGRESS
 current_phase: 7
 current_task: P7-11
 current_task_status: IN PROGRESS
-last_updated: 2026-10-04
-last_successful_validation: 2026-10-04 (npm run validate — check, lint, contrast, inventory, build, dist checks all pass)
+last_updated: 2026-10-05
+last_successful_validation: 2026-10-05 (npm run validate ✅; Playwright QA 165 pages × 7 widths, 0 overflow, CLS 0; v3 interaction tests ✅)
 open_blockers:
   - P0-03 / P8-03..P8-10: production domain and Cloudflare account not yet provided
 release_blockers:
@@ -106,7 +106,9 @@ release_blockers:
   - P7: 136 of 138 items drafted or consolidated, 2 blocked (Visa, Akamai); all need human technical, editorial and SEO review (P7-11) before PUBLISHED
 notes:
   - Repository: github.com/keshav-07/data-career-hub (branch main)
-  - Decisions and deviations are recorded in docs/DECISIONS.md
+  - Decisions and deviations are recorded in docs/DECISIONS.md (D-001..D-023)
+  - Owner design rounds 1 and 2 implemented; see section 0.12 for full history
+```
 ```
 
 The coding agent must update this block at every phase transition and at the end of every implementation session.
@@ -354,6 +356,158 @@ Status: BLOCKED — `dist/` builds and `wrangler deploy --dry-run` passes; domai
 
 Next task: P7-11 human technical/editorial/SEO review of drafted items; P8 launch once a domain and Cloudflare account are provided.
 
+## 0.12 Project history, design changes and open work (as of 2026-10-05)
+
+This section gives the full history up to the date above. It is meant as a hand-off, so someone new to the
+project can continue without the chat history. Full reasoning for each decision is in `docs/DECISIONS.md`.
+
+### 0.12.1 Timeline
+
+| Date | Milestone |
+|---|---|
+| 2026-10-04 | Spec analysed. Repo `keshav-07/data-career-hub` created by the owner (the integration got 403 trying to create it). Astro 7 static site scaffolded: design system, every template, content engine, SEO, Pagefind search, post-build QA checker, contrast audit, Cloudflare config. |
+| 2026-10-04 | Content started: SQL and Python guides and questions, with code executed. |
+| 2026-10-05 | Remaining launch inventory drafted: PySpark/Spark, modelling, lakehouse, Databricks, Snowflake, Kafka, Airflow, dbt, cheat sheets, system design, projects, roadmaps, career, pillar guides, company guides. 136 of 138 items DRAFTED or consolidated; 2 BLOCKED. |
+| 2026-10-05 | **Design round 1** (owner feedback): course homes, W3Schools-style sidebar, clickable tiles everywhere. |
+| 2026-10-05 | **Design round 2** (owner feedback): browser-saved progress, interview index tables, hierarchical collapsible sidebar, Explore rail, pager at the end only, ad-ready slots. |
+| 2026-10-05 | Design detail pass: correct singular/plural counts, numbered steps with inline code fixed, monogram fallback. Decision log D-019..D-023 recorded. |
+
+### 0.12.2 What is built (DONE)
+
+- **Platform:** Astro 7.3 static output, MDX, sitemap and Pagefind 1.5. Custom CSS in cascade layers with light and
+  dark tokens; vanilla TypeScript, no framework runtime. Cloudflare Workers Static Assets (`wrangler.jsonc`),
+  `_headers` with CSP and security headers, `_redirects`, robots.txt and a default OG image.
+- **Content model:** Zod content collections (articles, interview-questions, projects, system-designs, cheat-sheets,
+  roadmaps, company-guides, technologies). References use the form `collection:id`.
+  - Build-time validation fails the build on duplicate URLs, unresolved references, unknown technologies,
+    placeholder text, folder/technology mismatches and "actual company question" wording.
+- **Content files:** 53 articles, 30 interview questions, 8 projects, 8 system designs, 10 cheat sheets, 9 roadmaps,
+  10 company guides and 11 technology courses. In total that is 166 built pages, 164 of them indexable.
+- **Course model:** each technology is a course: Start here (pillar), then Beginner, Intermediate and Advanced
+  modules, ordered by the `lessons` list in the technology file.
+- **Quality gates:** `npm run validate` runs check, lint, the contrast audit, the inventory check, the build and the
+  dist checks.
+  - The dist checks cover unique titles, descriptions and canonicals, one H1 per page, valid JSON-LD, the sitemap
+    matching indexable pages, internal links and anchors, and budgets.
+  - Playwright QA covers 165 pages × 7 widths with zero horizontal overflow, CLS 0.000, and a lab LCP of
+    170–330 ms at 4× CPU.
+- **Budgets:** largest initial JS 6.2 KB gz (target ≤ 75), largest CSS 9.3 KB gz (target ≤ 35). Zero third-party
+  requests unless analytics or ads env vars are set.
+
+### 0.12.3 Changes in plan (deviations from this document)
+
+| ID | Change | Why |
+|---|---|---|
+| D-001 | Content IDs map directly to URLs; no `slug` field | One source of truth, no drift |
+| D-002 | Single `articles` collection with a `section` field | Simpler schema and validation |
+| D-004 | Colour tokens adjusted to pass contrast in both themes | WCAG AA audit |
+| D-005/D-006 | Dropdown menus and tabs deferred at first | Later superseded for courses by D-018 |
+| D-007 | Component gallery replaced by representative pages | Same QA value, less upkeep |
+| D-012 | Contact page states that there is no address yet | No real address provided |
+| D-013 | Reading time computed (prose 220 wpm, code at half speed) | Not hand-authored |
+| D-014 | Interview hubs only for technologies with questions | No empty hubs |
+| D-015 | Redirects instead of duplicate hubs for two sitemap URLs | No duplicate intent |
+| D-016 | 8 inventory items consolidated into existing pages | Plan forbids doorway/duplicate intent |
+| D-017 | Code verification scope (SQLite 3.45, Python 3.12, PySpark 4.2, Airflow 3.3) | Snowflake, Databricks, Kafka and dbt could not run in the build environment |
+| D-018 | Course homes, left section sidebar, clickable tiles (owner request) | Overrides "selective cards" and deferred tabs |
+| D-019 | Browser-saved progress (localStorage, no login, no backend) | Owner request; reverses "never imply saved progress" |
+| D-020 | Interview questions in index tables, not tabs; new `/interview/questions/` | Scales past 50 questions |
+| D-021 | Hierarchical collapsible sidebar; Previous/Next only at the end of the page | Owner request |
+| D-022 | Right-hand Explore rail on every content page, interview practice first | Engagement and internal linking |
+| D-023 | Ad slots with reserved size, idle-loaded AdSense, off by default | Ads without CLS or a slowdown |
+
+### 0.12.4 Design changes
+
+**Round 1, owner feedback: "too many links, should feel like a course, like W3Schools":**
+- Plain link lists on the homepage and listing pages became fully clickable tiles, each with one link and no nested
+  buttons. The tiles are flat: a border and no heavy shadow.
+- Technology hubs became course homepages, with a hero and stats, tabs for Overview, Lessons, Projects and
+  Resources, module tiles and lesson tiles with numbers and levels.
+- Every content page got a left sidebar listing the whole course or section, with the current page highlighted.
+  On mobile it becomes a collapsible "course contents" panel.
+
+**Round 2, owner feedback from screenshots:**
+- **Interview questions:** removed from tabs. Each hub and `/interview/questions/` is now a one-line-per-question
+  table with columns #, Question (link), Topic, Difficulty badge, Type and Done checkbox, plus search, difficulty,
+  type, topic and status filters. Concept-review tiles were kept.
+- **Progress without login:**
+  - Done buttons on lessons, questions and projects.
+  - Ticks in the sidebar, the tables and the tiles, with a course progress bar.
+  - On the homepage, three circular rings (lessons, questions, projects) with "Continue where you left off" and
+    Reset. Course homes show Continue instead of Start.
+  - Everything is stored in `localStorage` (`dch-progress-v1`) and syncs across open tabs.
+- **Sidebar:** modules are collapsible, the current lesson expands to show its own sections, and the whole sidebar
+  can be hidden or shown with the choice remembered (`dch-sidebar`). It does not jump on load.
+- **Pager:** Previous/Next only at the end of the page, as a full-width card pair.
+- **Explore rail:** a right-hand column on every content page with interview practice first, then related lessons,
+  projects, system design and quick reference. On mobile it sits below the content.
+- **Ads:** `AdSlot` rail (250px) and inline (280px) boxes reserve their space, so CLS stays 0. They load on idle and
+  only when `PUBLIC_ADSENSE_CLIENT` is set; nothing ships when it is not. The privacy page lists the storage keys
+  and the ad policy.
+
+**Detail pass:**
+- Counts now read "1 question" vs "2 questions".
+- Numbered architecture steps no longer break inline code one character per line.
+- The ring grid fixed at 360/390px.
+- The sidebar only auto-scrolls when the current item is below the fold.
+- Search filter chips are rendered on the server (CLS fix).
+- Escape closes search in one press.
+
+### 0.12.5 Pending / open work
+
+| Item | Status | Owner action |
+|---|---|---|
+| P0-03 / P8-03..P8-10 production domain, DNS, Cloudflare deploy, Search Console | BLOCKED | Provide the domain and Cloudflare account, then follow `docs/DEPLOYMENT.md` (`npm run build && npx wrangler deploy`) |
+| P7-11 human technical, editorial and SEO review of 136 drafted items | TODO | Review, then move items to PUBLISHED in `docs/content-inventory.json` |
+| Visa and Akamai company guides | BLOCKED | No official interview-process source found; revisit when sources exist |
+| P6-10 screen-reader smoke test, P6-13 Firefox/Safari/Edge/real-device matrix | TODO | Needs a human tester |
+| Thin courses: Airflow (1 lesson), Kafka (3), Databricks (3) | TODO | Add lessons; list them in the technology `lessons` field |
+| Grow interview questions past 50 (currently 30) | TODO | Add files under `src/content/interview-questions/<tech>/`; tables update automatically |
+| Ads go-live | TODO | Get AdSense approval, set `PUBLIC_ADSENSE_CLIENT` and the slot IDs, add a consent banner (EEA/UK) and update the privacy page |
+| Analytics | TODO | Set `PUBLIC_CF_ANALYTICS_TOKEN` |
+| Contact address | TODO | Set `SITE.contactEmail` in `src/data/site.ts` |
+| Live comparison with W3Schools, MDN and Microsoft Learn | NOT POSSIBLE here | The build network blocked those sites; patterns were applied from their known structure |
+
+### 0.12.6 How to run
+
+```text
+npm install
+npm run dev        # http://localhost:4321
+npm run validate   # full quality gate
+npm run build && npx astro preview
+```
+
+Windows PowerShell 5 does not accept `&&`; run the commands one at a time or use PowerShell 7.
+
+### 0.12.7 Commit history (branch `main`)
+
+- `5d07ae3` 2026-10-04 — feat: initial Astro site, design system, templates, content engine and sample content
+- `65cbd16` 2026-10-04 — fix: type-safe hub lookups, zod url schema, lint-clean theme bootstrap
+- `c6b9f18` 2026-10-04 — fix: Escape closes the search dialog in one press
+- `ea6b27c` 2026-10-04 — feat: post-build QA checker for links, SEO, sitemap and budgets
+- `46c1ca2` 2026-10-04 — feat: contrast audit, launch content inventory and reconciliation script
+- `a6d8d27` 2026-10-04 — perf: zero layout shift on search, add default Open Graph image
+- `071124a` 2026-10-04 — docs: build plan with live tracker, decisions, content and deployment guides
+- `8d8fdc4` 2026-10-04 — content: SQL aggregation, CTE and optimisation guides; four SQL interview questions
+- `098cbfd` 2026-10-04 — fix: centre wrapped button labels; shorter SEO titles for SQL questions
+- `640e429` 2026-10-04 — content: state precisely how SQL examples were verified
+- `8594952` 2026-10-04 — content: Python guides and Python interview questions
+- `8cfab77` 2026-10-05 — content: PySpark and Spark guides and interview questions
+- `b9b4c7d` 2026-10-05 — seo: keep every title within 70 characters (seoTitle max 52)
+- `20ca484` 2026-10-05 — content: modelling, lakehouse and pipeline guides; eight interview questions
+- `0b3cad3` 2026-10-05 — content: Databricks and Snowflake hubs, guides, questions and cheat sheets
+- `a183f23` 2026-10-05 — content: Python, Spark interview, Kafka, Airflow, dbt and system design cheat sheets
+- `54e2b31` 2026-10-05 — content: six system-design case studies
+- `707d773` 2026-10-05 — content: five more projects, ordered beginner to advanced
+- `9694d6b` 2026-10-05 — content: six roadmaps and career plans; ignore Markdown links in placeholder check
+- `327e869` 2026-10-05 — content: twelve supporting guides; record consolidated inventory items
+- `b9b82d2` 2026-10-05 — content: eleven pillar guides; technology hubs use the technology name as H1
+- `ea3311b` 2026-10-05 — content: nine company guides with official sources; update tracker
+- `2b19e85` 2026-10-05 — design: course homes, W3Schools-style sidebar navigation and clickable tiles
+- `b065fa8` 2026-10-05 — feat: browser-saved progress, question index tables, collapsible sidebar, explore rail, ad slots
+- `f380791` 2026-10-05 — Design pass: singular/plural counts, fix numbered-step layout with inline code
+- (this commit) — docs: decisions D-019..D-023 and full project history
+
 ## 0.7 Per-task validation contract
 
 A task is `DONE` only when its own acceptance criteria pass.
@@ -408,6 +562,9 @@ Then perform the phase-specific acceptance checklist and inspect:
 - 2026-10-04 — P6 — contrast tokens, CLS fix on /search/, budgets measured — check:contrast ✅ check:dist ✅ — accessibility/performance hardening
 - 2026-10-04 — P7 — 26 inventory items drafted with executed examples — build validation ✅ — launch content started
 - 2026-10-05 — P7 — remaining inventory drafted (136 drafted/consolidated, 2 blocked); company guides limited to attributable official sources — npm run validate ✅ — launch content drafted
+- 2026-10-05 — Design round 1 — course homes, section sidebar, clickable tiles (D-018) — npm run validate ✅ overflow sweep ✅ — owner feedback
+- 2026-10-05 — Design round 2 — browser-saved progress and rings, interview index tables, collapsible hierarchical sidebar, Explore rail, pager at end, ad slots (D-019..D-023) — npm run validate ✅ v3 tests ✅ CLS 0 — owner feedback
+- 2026-10-05 — Detail pass — plural counts, numbered-step layout, monogram fallback — npm run validate ✅ — polish
 ```
 
 The agent must not create a second project tracker elsewhere unless a project-management integration is explicitly introduced later.
