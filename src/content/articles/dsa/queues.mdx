@@ -1,0 +1,336 @@
+---
+title: "Queues: FIFO Buffers, Ring Buffers and Queue Design Problems"
+seoTitle: "Queue Pattern for Coding Interviews"
+description: "How queues work, deque versus list, building queues from stacks and a ring buffer, time-window counters, and the buffering ideas behind message queues and Kafka."
+technology: ["dsa"]
+topic: ["queues", "deque", "design"]
+difficulty: "Beginner"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain first-in, first-out behaviour and why collections.deque beats list for queues"
+  - "Implement a queue with two stacks and analyse its amortised cost"
+  - "Build a fixed-capacity circular queue with index arithmetic"
+  - "Count recent events with a queue and relate it to buffering in streaming systems"
+prerequisites: ["articles:dsa/stacks"]
+previous: "articles:dsa/stacks"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
+  - { label: "Python documentation: Using lists as queues", url: "https://docs.python.org/3/tutorial/datastructures.html#using-lists-as-queues" }
+  - { label: "Python documentation: queue (synchronised queues)", url: "https://docs.python.org/3/library/queue.html" }
+---
+
+A queue is a first-in, first-out (FIFO) collection: items leave in the order they arrived, like people at a till. Queues appear in coding rounds as small design problems (build one from stacks, build a ring buffer) and as the engine of breadth-first search. For Data Engineers they are everywhere: message brokers, buffers between pipeline stages and task queues are all queues.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How a queue works
+
+| Operation | Meaning | `collections.deque` | `list` |
+|---|---|---|---|
+| Enqueue | Add at the back | `q.append(x)`: O(1) | `a.append(x)`: O(1) amortised |
+| Dequeue | Remove from the front | `q.popleft()`: O(1) | `a.pop(0)`: **O(n)** |
+| Peek | Look at the front | `q[0]`: O(1) | `a[0]`: O(1) |
+| Size | Number of items | `len(q)`: O(1) | `len(a)`: O(1) |
+
+A `list` stores items contiguously, so removing the first one shifts all the others. A `deque` is built from linked blocks and supports O(1) appends and pops at **both** ends, which makes it a queue, a stack and a double-ended queue in one. Indexing into the middle of a deque is O(n), so do not use it for random access.
+
+```python
+from collections import deque
+
+q = deque()
+q.append("extract")
+q.append("transform")
+q.append("load")
+assert q.popleft() == "extract"          # first in, first out
+assert q[0] == "transform" and len(q) == 2
+
+ring = deque(maxlen=3)                   # bounded: old items fall off the front
+for i in range(5):
+    ring.append(i)
+assert list(ring) == [2, 3, 4]
+```
+
+For queues shared between threads, use `queue.Queue`, which adds locking and blocking `get`/`put` with optional size limits. `deque` operations at the ends are thread-safe for single appends and pops, but `queue.Queue` gives you the blocking behaviour producer-consumer code needs.
+
+## Recognising the pattern
+
+- "Process in the order received", "first come, first served", "oldest first".
+- "In the last N seconds / calls", "recent requests" (a time-window queue).
+- "Shortest path in an unweighted grid or graph", "level by level", "minimum number of steps" (breadth-first search, covered in the trees and graphs lessons).
+- "Design a buffer / circular queue with fixed capacity".
+- "Implement X using Y" (queue with stacks, stack with queues): a test of amortised analysis.
+
+## Core templates in Python
+
+### Queue using two stacks
+
+Push onto an `inbox` stack. To dequeue, pop from an `outbox` stack; when it is empty, move everything from `inbox` to `outbox`, which reverses the order so the oldest item is on top.
+
+```python
+class MyQueue:
+    def __init__(self):
+        self.inbox = []
+        self.outbox = []
+
+    def push(self, x):
+        self.inbox.append(x)
+
+    def _shift(self):
+        if not self.outbox:
+            while self.inbox:
+                self.outbox.append(self.inbox.pop())
+
+    def pop(self):
+        self._shift()
+        return self.outbox.pop()
+
+    def peek(self):
+        self._shift()
+        return self.outbox[-1]
+
+    def empty(self):
+        return not self.inbox and not self.outbox
+
+
+q = MyQueue()
+q.push(1)
+q.push(2)
+assert q.peek() == 1
+assert q.pop() == 1
+q.push(3)
+assert q.pop() == 2 and q.pop() == 3 and q.empty()
+```
+
+A single `pop` can cost O(n) when it triggers a transfer, but each element is moved from `inbox` to `outbox` only once in its life, so any sequence of n operations costs O(n) in total: **O(1) amortised** per operation. Only transfer when `outbox` is empty; transferring while it still holds items breaks the order.
+
+### Stack using one queue
+
+To make the newest element come out first, rotate the queue after each push so the new item moves to the front.
+
+```python
+from collections import deque
+
+
+class MyStack:
+    def __init__(self):
+        self.q = deque()
+
+    def push(self, x):
+        self.q.append(x)
+        for _ in range(len(self.q) - 1):     # move older items behind the new one
+            self.q.append(self.q.popleft())
+
+    def pop(self):
+        return self.q.popleft()
+
+    def top(self):
+        return self.q[0]
+
+    def empty(self):
+        return not self.q
+
+
+s = MyStack()
+for v in [1, 2, 3]:
+    s.push(v)
+assert s.top() == 3 and s.pop() == 3 and s.pop() == 2
+assert not s.empty() and s.pop() == 1 and s.empty()
+```
+
+Here push is O(n) and pop is O(1). The design choice (cheap push or cheap pop) is worth stating in the interview.
+
+### Circular queue (ring buffer)
+
+A fixed-size array with a `head` index and a count. The tail position is computed with modulo arithmetic, so the queue wraps around without moving any items.
+
+```python
+class MyCircularQueue:
+    def __init__(self, k):
+        self.buf = [None] * k
+        self.capacity = k
+        self.head = 0                 # index of the front item
+        self.size = 0
+
+    def enQueue(self, value):
+        if self.isFull():
+            return False
+        tail = (self.head + self.size) % self.capacity
+        self.buf[tail] = value
+        self.size += 1
+        return True
+
+    def deQueue(self):
+        if self.isEmpty():
+            return False
+        self.buf[self.head] = None    # optional: release the reference
+        self.head = (self.head + 1) % self.capacity
+        self.size -= 1
+        return True
+
+    def Front(self):
+        return -1 if self.isEmpty() else self.buf[self.head]
+
+    def Rear(self):
+        return -1 if self.isEmpty() else self.buf[(self.head + self.size - 1) % self.capacity]
+
+    def isEmpty(self):
+        return self.size == 0
+
+    def isFull(self):
+        return self.size == self.capacity
+
+
+cq = MyCircularQueue(3)
+assert [cq.enQueue(v) for v in (1, 2, 3, 4)] == [True, True, True, False]
+assert cq.Rear() == 3 and cq.isFull()
+assert cq.deQueue() is True
+assert cq.enQueue(4) is True              # wraps around to index 0
+assert cq.Front() == 2 and cq.Rear() == 4
+```
+
+Keeping an explicit `size` avoids the classic ambiguity where `head == tail` could mean either empty or full. The alternative is to waste one slot and treat `(tail + 1) % capacity == head` as full.
+
+### Time-window queue: recent calls
+
+Requests arrive with increasing timestamps; count those in the last 3,000 milliseconds.
+
+```python
+from collections import deque
+
+
+class RecentCounter:
+    def __init__(self, window_ms=3000):
+        self.window = window_ms
+        self.calls = deque()
+
+    def ping(self, t):
+        self.calls.append(t)
+        while self.calls[0] < t - self.window:     # evict calls older than the window
+            self.calls.popleft()
+        return len(self.calls)
+
+
+rc = RecentCounter()
+assert [rc.ping(t) for t in (1, 100, 3001, 3002)] == [1, 2, 3, 3]
+```
+
+The window is inclusive here, `[t - 3000, t]`, which is why the call at time 1 is still counted at time 3001 and evicted at 3002. Always confirm whether the boundary is inclusive.
+
+## Complexity
+
+| Structure or operation | Time | Space |
+|---|---|---|
+| `deque` append, popleft | O(1) | O(n) |
+| `list.pop(0)` | O(n) | |
+| Queue from two stacks | O(1) amortised per operation (O(n) worst single pop) | O(n) |
+| Stack from one queue | Push O(n), pop O(1) | O(n) |
+| Circular queue | O(1) per operation | O(k) fixed |
+| Recent calls | O(1) amortised per ping | O(calls in window) |
+
+## Variations and common bugs
+
+- **Using `list.pop(0)`** as a queue: correct but quadratic over many operations.
+- **Transferring between stacks when the outbox is not empty**, which mixes up the order.
+- **Full versus empty confusion** in a ring buffer when you only track head and tail.
+- **Off-by-one in modulo arithmetic:** the rear is at `(head + size - 1) % capacity`.
+- **Inclusive or exclusive window boundaries** in time-window counters.
+- **Unbounded queues** in long-running code: a producer faster than its consumer grows memory forever. Use a size limit and decide what happens when it is full (block, drop, or reject).
+- **Variants:** design a circular deque, moving average from a data stream (`deque(maxlen=k)` plus a running sum), hit counter, first unique character in a stream (queue plus counts), and breadth-first search.
+
+## Queues in data-engineering work
+
+- **Message brokers.** Kafka, Kinesis, Pub/Sub and SQS move data between producers and consumers as queues or logs. Kafka keeps an append-only log per partition and each consumer group tracks its own offset, so it behaves like many independent queues reading one log, with ordering guaranteed only within a partition.
+- **Backpressure.** A bounded queue between a fast reader and a slow writer stops memory from growing without limit. When it fills, the producer blocks (or the system drops or spills), which is the same choice a ring buffer makes when `enQueue` returns `False`.
+- **Task queues.** Orchestrators and worker pools pull tasks from a queue; priorities turn it into a heap (see the heaps lesson).
+- **Rate limits and recent activity.** Recent Calls is a sliding time window, the same idea as counting requests per client for a rate limiter.
+- **Breadth-first traversal.** Walking lineage graphs level by level ("what is directly downstream, then two hops away") uses a deque.
+
+```python
+import queue
+import threading
+
+buffer = queue.Queue(maxsize=2)          # bounded: put() blocks when full
+loaded = []
+
+
+def consumer():
+    while True:
+        batch = buffer.get()
+        if batch is None:                 # sentinel: no more work
+            break
+        loaded.append(sum(batch))
+        buffer.task_done()
+
+
+worker = threading.Thread(target=consumer)
+worker.start()
+for batch in ([1, 2], [3, 4], [5, 6], [7, 8]):
+    buffer.put(batch)                     # waits while the consumer catches up
+buffer.put(None)
+worker.join()
+assert loaded == [3, 7, 11, 15]
+print(loaded)
+```
+
+```text
+[3, 7, 11, 15]
+```
+
+With one consumer, the order of results matches the order of puts. With several consumers, processing order is no longer guaranteed, which is the same reason Kafka only guarantees order within a partition.
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Implement Queue using Stacks** (Easy): push to an inbox; pop from an outbox that is refilled only when empty; O(1) amortised.
+2. **Implement Stack using Queues** (Easy): after each push, rotate the older items behind the new one.
+3. **Number of Recent Calls** (Easy): append each timestamp and pop from the front while it is older than the window.
+4. **Design Circular Queue** (Medium): fixed array, head index and size; positions wrap with modulo.
+
+## Practice questions
+
+<details>
+<summary>Why is list.pop(0) a poor queue operation in Python?</summary>
+
+A list stores elements contiguously, so removing the first element shifts every remaining element one place left: O(n) per dequeue and O(n²) for n dequeues. `collections.deque.popleft()` is O(1).
+
+</details>
+
+<details>
+<summary>Explain the amortised cost of a queue built from two stacks.</summary>
+
+Each element is pushed onto the inbox once, moved to the outbox once, and popped from the outbox once: three O(1) operations over its lifetime. A single dequeue may move many elements, but the total work over n operations is O(n), so each operation is O(1) amortised.
+
+</details>
+
+<details>
+<summary>How does a ring buffer distinguish a full queue from an empty one?</summary>
+
+If you track only head and tail, both states look like `head == tail`. Either keep an explicit size counter (empty when 0, full when equal to capacity) or leave one slot unused and declare the buffer full when `(tail + 1) % capacity == head`.
+
+</details>
+
+<details>
+<summary>A producer reads files faster than the database writer can load them, and memory keeps growing. What do you change?</summary>
+
+Put a bounded queue between them so the producer blocks (backpressure) when the queue is full, and/or add more consumers. If blocking is not acceptable, decide on an explicit overflow policy: spill to disk, drop with metrics, or reject upstream. Monitor queue depth so you can see when the consumer falls behind.
+
+</details>
+
+<details>
+<summary>How is a Kafka topic different from a classic queue?</summary>
+
+A classic queue removes a message once it is consumed. A Kafka topic is a retained, append-only log split into partitions; consumers track their own offsets, several consumer groups can read the same data independently, and messages can be re-read until retention removes them. Ordering is guaranteed within a partition, not across the topic.
+
+</details>
+
+## Key takeaways
+
+- Queues are FIFO; use `collections.deque` (O(1) at both ends), never `list.pop(0)`.
+- Two stacks make a queue with O(1) amortised operations; transfer only when the outbox is empty.
+- A ring buffer gives a fixed-memory queue; track size to tell full from empty.
+- Time-window counters are queues of timestamps with eviction from the front; agree the boundary rule.
+- Bounded queues give backpressure; message brokers and worker pools are queues at system scale.
