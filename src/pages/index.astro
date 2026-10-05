@@ -1,4 +1,5 @@
 ---
+import { plural } from "../utils/dates";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Button from "../components/content/Button.astro";
 import Tile from "../components/content/Tile.astro";
@@ -136,9 +137,9 @@ const lessonCount = courses.reduce((n, c) => n + (c?.lessons.length ?? 0), 0);
               title={h.entry.data.shortName}
               description={h.description}
               meta={[
-                `${courses[i]?.lessons.length ?? 0} lessons`,
+                plural(courses[i]?.lessons.length ?? 0, "lesson"),
                 (courses[i]?.questions.length ?? 0) > 0 &&
-                  `${courses[i]?.questions.length} questions`,
+                  plural(courses[i]?.questions.length ?? 0, "question"),
               ]}
             />
           </li>
@@ -189,7 +190,7 @@ const lessonCount = courses.reduce((n, c) => n + (c?.lessons.length ?? 0), 0);
             eyebrow="Technology interviews"
             title="Interview questions"
             description="Direct answers first, then reasoning, common mistakes and follow-ups."
-            meta={[`${questions.length} questions`]}
+            meta={[plural(questions.length, "question")]}
           />
         </li>
         <li>

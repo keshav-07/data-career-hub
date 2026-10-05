@@ -1,4 +1,5 @@
 ---
+import { plural } from "../../utils/dates";
 import ContentLayout from "../../layouts/ContentLayout.astro";
 import Tile from "../../components/content/Tile.astro";
 import { getItems } from "../../utils/content";
@@ -58,7 +59,7 @@ const projects = await getItems("projects");
           eyebrow="Practice"
           title="Projects"
           description="Hands-on builds from beginner to advanced."
-          meta={[`${projects.length} projects`]}
+          meta={[plural(projects.length, "project")]}
         />
       </li>
     </ul>
@@ -78,8 +79,8 @@ const projects = await getItems("projects");
                 title={h.entry.data.shortName}
                 description={h.description}
                 meta={[
-                  `${c?.lessons.length ?? 0} lessons`,
-                  (c?.questions.length ?? 0) > 0 && `${c?.questions.length} questions`,
+                  plural(c?.lessons.length ?? 0, "lesson"),
+                  (c?.questions.length ?? 0) > 0 && plural(c?.questions.length ?? 0, "question"),
                   c && `~${Math.max(1, Math.round(c.minutes / 60))} h`,
                 ]}
               />

@@ -17,3 +17,6 @@ export function readingMinutes(body: string | undefined): number {
   // Prose at about 220 words per minute; code is read at roughly half that speed.
   return Math.max(2, Math.round(count(prose) / 220 + count(code) / 110));
 }
+
+/** "1 lesson", "3 lessons". */
+export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;

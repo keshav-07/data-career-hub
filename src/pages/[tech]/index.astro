@@ -1,4 +1,5 @@
 ---
+import { plural } from "../../utils/dates";
 import { render } from "astro:content";
 import { getItems, getHub, type ItemOf } from "../../utils/content";
 import { getCourse } from "../../utils/navigation";
@@ -209,7 +210,7 @@ const tabs = [
                   eyebrow="Interview"
                   title={`${d.shortName} interview questions`}
                   description="The full list with difficulty, type and a box to tick off each one."
-                  meta={[`${hubQuestions.length} questions`]}
+                  meta={[plural(hubQuestions.length, "question")]}
                 />
               </li>
             )}
@@ -373,9 +374,9 @@ const tabs = [
                   title={r.entry.data.shortName}
                   description={r.description}
                   meta={[
-                    `${relatedCourses[i]?.lessons.length ?? 0} lessons`,
+                    plural(relatedCourses[i]?.lessons.length ?? 0, "lesson"),
                     (relatedCourses[i]?.questions.length ?? 0) > 0 &&
-                      `${relatedCourses[i]?.questions.length} questions`,
+                      plural(relatedCourses[i]?.questions.length ?? 0, "question"),
                   ]}
                 />
               </li>

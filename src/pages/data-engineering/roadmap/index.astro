@@ -7,7 +7,7 @@ import RoadmapNodes from "../../../components/roadmap/RoadmapNodes.astro";
 import Metadata from "../../../components/content/Metadata.astro";
 import Button from "../../../components/content/Button.astro";
 import { breadcrumbsFor } from "../../../utils/breadcrumbs";
-import { formatMonthYear } from "../../../utils/dates";
+import { formatMonthYear, plural } from "../../../utils/dates";
 
 const item = (await getByRef("roadmaps:data-engineer-roadmap")) as ItemOf<"roadmaps">;
 const d = item.entry.data;
@@ -27,7 +27,9 @@ const crumbs = await breadcrumbsFor(item);
 >
   <IndexMeta type="Roadmap" technology="data-engineering" />
   <div slot="header-extra" style="margin-top: var(--sp-4)">
-    <Metadata items={[`${d.stages.length} stages`, `Updated ${formatMonthYear(d.updatedDate)}`]} />
+    <Metadata
+      items={[plural(d.stages.length, "stage"), `Updated ${formatMonthYear(d.updatedDate)}`]}
+    />
   </div>
 
   <section class="section section--tight" aria-labelledby="how-h">

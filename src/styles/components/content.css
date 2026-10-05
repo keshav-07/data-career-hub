@@ -585,13 +585,15 @@
   }
   .flow li {
     counter-increment: flow;
-    display: grid;
-    grid-template-columns: 32px 1fr;
-    gap: var(--sp-3);
-    align-items: baseline;
+    position: relative;
+    padding-left: 44px;
+    min-height: 28px;
   }
   .flow li::before {
     content: counter(flow);
+    position: absolute;
+    left: 0;
+    top: 0;
     display: grid;
     place-items: center;
     width: 28px;
