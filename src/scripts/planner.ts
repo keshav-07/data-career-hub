@@ -77,9 +77,9 @@ function decorate() {
     if (card) card.toggleAttribute("data-today", !!d && d.getTime() === today.getTime());
   });
   document.querySelectorAll<HTMLElement>("[data-pl-ring]").forEach((ring) => {
-    let done = 0;
+    let done: number;
     let total = Number(ring.dataset.total) || 0;
-    let detail = "";
+    let detail: string;
     if (ring.dataset.plRing === "days") {
       done = Object.keys(state.days).length;
       const hours = Object.values(state.days).reduce((a, b) => a + b, 0);
