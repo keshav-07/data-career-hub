@@ -71,6 +71,7 @@ related:
   - "system-designs:cloud-data-warehouse-platform"
   - "interview-questions:data-engineering/data-quality-checks"
 previous: "system-designs:event-driven-architecture"
+next: "system-designs:customer-360-platform"
 versionContext: "Design discussion; no code examples. Pricing statements describe pricing models, not current prices."
 sources:
   - { label: "Snowflake documentation: virtual warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses" }
