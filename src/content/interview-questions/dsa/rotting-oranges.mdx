@@ -31,9 +31,9 @@ Assume up to 10 by 10 cells.
 ## Examples
 
 ```text
-2 1 1          minute 1: (0,1),(1,0) rot
-1 1 0          minute 2: (0,2),(1,1) rot
-0 1 1          minute 3: (2,1) rots;  minute 4: (2,2) rots
+1 1 2          minute 1: (0,1),(1,2) rot
+0 1 1          minute 2: (0,0),(1,1) rot
+1 1 0          minute 3: (2,1) rots;  minute 4: (2,0) rots
 -> 4
 
 2 1 0
@@ -134,7 +134,7 @@ fresh neighbours left.
 
 ```python
 for fn in (oranges_rotting, oranges_rotting_simulate):
-    assert fn([[2, 1, 1], [1, 1, 0], [0, 1, 1]]) == 4
+    assert fn([[1, 1, 2], [0, 1, 1], [1, 1, 0]]) == 4
     assert fn([[2, 1, 0], [0, 0, 1]]) == -1          # unreachable fresh orange
     assert fn([[0, 2]]) == 0                         # nothing fresh
     assert fn([[0]]) == 0                            # empty cell only

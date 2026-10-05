@@ -1,0 +1,162 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Network Delay Time: Single-Source Shortest Paths with Dijkstra's Algorithm"
+seoTitle: "Network Delay Time: Dijkstra with a Heap"
+description: "Find how long a signal takes to reach every node of a weighted directed network using Dijkstra's algorithm with a min-heap, plus Bellman-Ford and tests."
+technology: ["dsa"]
+topic: ["graphs", "shortest-path"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "This is single-source shortest paths with non-negative weights, so use Dijkstra's algorithm. Keep a min-heap of (distance, node), pop the closest unsettled node, settle it, and relax its outgoing edges by pushing any shorter distance found. The answer is the largest settled distance, or -1 if some node was never reached. With a binary heap the time is O(E log V) and the space is O(V + E)."
+followUps: ["Why does Dijkstra fail with negative edge weights, and what would you use instead?", "How would you return the actual path to each node?", "Why is it safe to skip stale heap entries instead of decreasing keys?"]
+previous: "interview-questions:dsa/word-ladder"
+next: "interview-questions:dsa/cheapest-flights-within-k-stops"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A network has `n` nodes labelled 1 to n and a list of directed edges `(u, v, w)`: a signal sent from u reaches v after
+w time units, with w at least 0. A signal is sent from node `k`. Return the time when every node has received it,
+or -1 if some node can never receive it.
+
+This is widely known as LeetCode 743, "Network Delay Time".
+
+Assume up to 100 nodes and 6,000 edges with weights up to 100.
+
+## Examples
+
+```text
+n = 4, k = 1
+edges: 1->2 (4), 1->3 (1), 3->2 (2), 2->4 (1)
+shortest times: node1 0, node3 1, node2 3 (via 3), node4 4
+-> 4
+
+n = 3, k = 1, edges: 1->2 (5)
+-> -1   (node 3 is unreachable)
+
+n = 1, k = 1, no edges
+-> 0
+```
+
+## Approach 1: Bellman-Ford
+
+Relax every edge n - 1 times. After round i, every shortest path that uses at most i edges is correct.
+
+```python
+def network_delay_bellman_ford(times, n, k):
+    INF = float("inf")
+    dist = [INF] * (n + 1)
+    dist[k] = 0
+    for _ in range(n - 1):
+        changed = False
+        for u, v, w in times:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                changed = True
+        if not changed:
+            break
+    best = max(dist[1:])
+    return -1 if best == INF else best
+```
+
+It is O(V * E) and also handles negative weights (without negative cycles), but for non-negative weights Dijkstra is
+faster.
+
+## Approach 2: optimal, Dijkstra with a min-heap
+
+### Template
+
+```text
+dist = {source: 0}; heap = [(0, source)]; settled = set()
+while heap:
+    d, u = heappop(heap)
+    if u in settled: continue          # stale entry
+    settled.add(u)
+    for v, w in adj[u]:
+        if d + w < dist.get(v, inf):
+            dist[v] = d + w
+            heappush(heap, (d + w, v))
+```
+
+Why it works: with non-negative weights, the closest unsettled node cannot be improved later, because any other
+route to it would pass through a node that is already at least as far away.
+
+### Python solution
+
+```python
+import heapq
+from collections import defaultdict
+
+def network_delay_time(times, n, k):
+    graph = defaultdict(list)
+    for u, v, w in times:
+        graph[u].append((v, w))
+
+    dist = {k: 0}
+    heap = [(0, k)]
+    settled = set()
+    while heap:
+        d, u = heapq.heappop(heap)
+        if u in settled:
+            continue
+        settled.add(u)
+        for v, w in graph[u]:
+            nd = d + w
+            if nd < dist.get(v, float("inf")):
+                dist[v] = nd
+                heapq.heappush(heap, (nd, v))
+
+    if len(settled) < n:
+        return -1
+    return max(dist[node] for node in settled)
+```
+
+Python's `heapq` has no decrease-key operation, so the code pushes a new entry and skips the outdated ones when they
+are popped (lazy deletion). The heap can then hold up to E entries, which keeps the bound at O(E log E) = O(E log V).
+
+### Complexity
+
+- Time: O((V + E) log V) with a binary heap, usually written O(E log V).
+- Space: O(V + E) for the graph, distances and heap.
+
+## Tests
+
+```python
+edges = [(1, 2, 4), (1, 3, 1), (3, 2, 2), (2, 4, 1)]
+for fn in (network_delay_time, network_delay_bellman_ford):
+    assert fn(edges, 4, 1) == 4
+    assert fn([(1, 2, 5)], 3, 1) == -1                 # unreachable node
+    assert fn([], 1, 1) == 0                            # single node
+    assert fn([(2, 1, 3)], 2, 1) == -1                  # edge points the wrong way
+    assert fn([(1, 2, 0)], 2, 1) == 0                   # zero-weight edge
+    assert fn([(1, 2, 1), (2, 1, 1), (2, 3, 2)], 3, 1) == 3   # cycle
+    assert fn([(1, 2, 9), (1, 2, 2)], 2, 1) == 2        # parallel edges
+
+# Random agreement between Dijkstra and Bellman-Ford
+import random
+random.seed(5)
+for _ in range(50):
+    n = random.randint(1, 6)
+    es = [(random.randint(1, n), random.randint(1, n), random.randint(0, 9)) for _ in range(random.randint(0, 12))]
+    src = random.randint(1, n)
+    assert network_delay_time(es, n, src) == network_delay_bellman_ford(es, n, src)
+```
+
+## Edge cases and pitfalls
+
+- **Answer is the maximum, not the sum**, of the shortest times: the signal travels along all paths at once.
+- **Unreachable nodes** must give -1; check how many nodes were settled.
+- **Not skipping stale heap entries** still gives correct answers but repeats work.
+- **Negative weights** break Dijkstra; mention Bellman-Ford if the constraint is relaxed.
+- **1-based labels**: size arrays `n + 1` or use a dictionary.
+
+## Where this shows up in data engineering
+
+The longest shortest path from a source is the critical path idea that bounds pipeline latency: if each edge is the
+delay between a table landing and its downstream job finishing, the worst downstream arrival time tells you when the
+last dashboard is fresh. In a DAG you can compute it with a topological pass, but Dijkstra is the general tool.

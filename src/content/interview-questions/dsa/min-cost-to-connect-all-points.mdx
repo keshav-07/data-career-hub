@@ -1,0 +1,158 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Min Cost to Connect All Points: Minimum Spanning Tree with Prim or Kruskal"
+seoTitle: "Min Cost to Connect Points: Prim and Kruskal"
+description: "Connect points at minimum total Manhattan distance by building a minimum spanning tree with dense Prim's algorithm or Kruskal's with union-find, plus tests."
+technology: ["dsa"]
+topic: ["graphs", "minimum-spanning-tree"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "The cheapest way to connect every point is a minimum spanning tree of the complete graph whose edge weights are Manhattan distances. Because the graph is dense (every pair is an edge), Prim's algorithm with a plain array of best distances is ideal: repeatedly add the closest point not yet in the tree and update the others, in O(n^2) time and O(n) space. Kruskal's algorithm (sort all n^2 / 2 edges, add each one that joins two different union-find sets) also works in O(n^2 log n)."
+followUps: ["Why is the array version of Prim better than the heap version on a complete graph?", "Why does the cut property guarantee greedy choices are safe?", "How would you find the maximum spanning tree or the second-best tree?"]
+previous: "interview-questions:dsa/reconstruct-itinerary"
+next: "interview-questions:dsa/swim-in-rising-water"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You have a list of points on a grid with integer coordinates. Connecting two points costs their Manhattan distance,
+`|x1 - x2| + |y1 - y2|`. Return the minimum total cost to connect all points so that there is exactly one path between
+any two of them.
+
+This is widely known as LeetCode 1584, "Min Cost to Connect All Points".
+
+Assume up to 1,000 distinct points.
+
+## Examples
+
+```text
+points: (0,0), (3,0), (3,4), (8,4)
+distances used: (0,0)-(3,0) = 3, (3,0)-(3,4) = 4, (3,4)-(8,4) = 5
+-> 12
+
+points: (1,1), (2,5)        -> 5
+points: (7,7)               -> 0   (nothing to connect)
+```
+
+## Approach 1: Kruskal's algorithm with union-find
+
+List every pair as an edge, sort by cost, and add an edge whenever it joins two components, until n - 1 edges are
+chosen.
+
+```python
+def min_cost_kruskal(points):
+    n = len(points)
+    edges = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = abs(points[i][0] - points[j][0]) + abs(points[i][1] - points[j][1])
+            edges.append((d, i, j))
+    edges.sort()
+
+    parent = list(range(n))
+
+    def find(v):
+        while parent[v] != v:
+            parent[v] = parent[parent[v]]
+            v = parent[v]
+        return v
+
+    total, used = 0, 0
+    for d, i, j in edges:
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[ri] = rj
+            total += d
+            used += 1
+            if used == n - 1:
+                break
+    return total
+```
+
+Kruskal is a solid answer, but it stores about n^2 / 2 edges and sorts them: O(n^2 log n) time and O(n^2) memory.
+
+## Approach 2: optimal for dense graphs, Prim's algorithm with an array
+
+### Template
+
+```text
+best[v] = cost of the cheapest edge from the tree to v (start: 0 for point 0, inf for others)
+in_tree = all False
+repeat n times:
+    u = the point not in the tree with the smallest best[u]
+    add u to the tree; total += best[u]
+    for every v not in the tree: best[v] = min(best[v], cost(u, v))
+```
+
+The cut property makes this safe: the cheapest edge crossing from the tree to the rest is always in some minimum
+spanning tree.
+
+### Python solution
+
+```python
+def min_cost_connect_points(points):
+    n = len(points)
+    if n <= 1:
+        return 0
+    INF = float("inf")
+    best = [INF] * n
+    best[0] = 0
+    in_tree = [False] * n
+    total = 0
+    for _ in range(n):
+        u = min((v for v in range(n) if not in_tree[v]), key=best.__getitem__)
+        in_tree[u] = True
+        total += best[u]
+        ux, uy = points[u]
+        for v in range(n):
+            if not in_tree[v]:
+                d = abs(ux - points[v][0]) + abs(uy - points[v][1])
+                if d < best[v]:
+                    best[v] = d
+    return total
+```
+
+With a heap, Prim costs O(E log V), which on a complete graph is O(n^2 log n); the array version avoids the log
+factor because finding the minimum by scanning is O(n) and there are only n rounds.
+
+### Complexity
+
+- Array Prim: O(n^2) time, O(n) space.
+- Kruskal: O(n^2 log n) time, O(n^2) space.
+
+## Tests
+
+```python
+for fn in (min_cost_connect_points, min_cost_kruskal):
+    assert fn([(0, 0), (3, 0), (3, 4), (8, 4)]) == 12
+    assert fn([(1, 1), (2, 5)]) == 5
+    assert fn([(7, 7)]) == 0                         # single point
+    assert fn([]) == 0                               # no points
+    assert fn([(0, 0), (0, 1), (1, 0), (1, 1)]) == 3  # unit square
+    assert fn([(-5, -5), (5, 5)]) == 20              # negative coordinates
+
+import random
+random.seed(9)
+for _ in range(30):
+    pts = list({(random.randint(-20, 20), random.randint(-20, 20)) for _ in range(random.randint(1, 15))})
+    assert min_cost_connect_points(pts) == min_cost_kruskal(pts)
+```
+
+## Edge cases and pitfalls
+
+- **Zero or one point** costs 0.
+- **Euclidean versus Manhattan.** The problem uses Manhattan distance; using Euclidean gives a different tree.
+- **Adding an edge inside one component** in Kruskal creates a cycle; always check with `find`.
+- **Using a heap on a dense graph** is still accepted but slower; explain the choice.
+- **Stopping Kruskal early** after n - 1 edges saves time.
+
+## Where this shows up in data engineering
+
+Minimum spanning trees appear in single-linkage clustering (cutting the k - 1 most expensive tree edges splits points
+into k clusters) and in network design such as linking sites with the least total cable. In data work the clustering
+use is the more common one, for example grouping near-duplicate records by a distance score.

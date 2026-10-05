@@ -1,0 +1,188 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Cheapest Flights Within K Stops: Bounded Bellman-Ford for Limited Hops"
+seoTitle: "Cheapest Flights Within K Stops"
+description: "Find the cheapest route with at most k stops using k + 1 rounds of Bellman-Ford on a copied distance array, with a BFS-by-level variant, tests and pitfalls."
+technology: ["dsa"]
+topic: ["graphs", "shortest-path"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "A route with at most k stops uses at most k + 1 flights, and round i of Bellman-Ford finds the cheapest prices using at most i edges. So run exactly k + 1 rounds, and in each round relax every flight from a copy of the previous round's prices, so one round cannot chain two flights. The answer is the destination's price after the last round, or -1. This is O(k * E) time and O(n) space. Plain Dijkstra on price alone is wrong because a cheaper path may use too many stops."
+followUps: ["Why must each round read from a copy of the previous distances?", "How would you adapt Dijkstra by putting (cost, node, stops) in the heap, and what must you track to prune?", "How would you return the route itself?"]
+previous: "interview-questions:dsa/network-delay-time"
+next: "interview-questions:dsa/reconstruct-itinerary"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+There are `n` cities labelled 0 to n - 1 and a list of one-way flights `(from, to, price)`. Given a source, a
+destination and a number `k`, return the lowest total price to fly from the source to the destination with at most `k`
+stops in between (so at most k + 1 flights). Return -1 if no such route exists.
+
+This is widely known as LeetCode 787, "Cheapest Flights Within K Stops".
+
+Assume up to 100 cities, no duplicate flights between the same pair, positive prices, and k below n.
+
+## Examples
+
+```text
+n = 4, flights: 0->1 (50), 1->2 (50), 2->3 (50), 0->2 (200), 0->3 (400)
+src 0, dst 3
+k = 2: 0->1->2->3 costs 150 (2 stops)            -> 150
+k = 1: 0->2->3 costs 250 (1 stop)                -> 250
+k = 0: only the direct flight 0->3 costs 400      -> 400
+
+n = 3, flights: 0->1 (10), src 0, dst 2, k = 5    -> -1
+```
+
+## Approach 1: DFS over routes with a stop budget
+
+Explore every route from the source, stopping when the budget runs out or the price already exceeds the best found.
+
+```python
+from collections import defaultdict
+
+def cheapest_dfs(n, flights, src, dst, k):
+    graph = defaultdict(list)
+    for u, v, p in flights:
+        graph[u].append((v, p))
+    best = float("inf")
+
+    def dfs(city, cost, flights_left, on_path):
+        nonlocal best
+        if cost >= best:
+            return
+        if city == dst:
+            best = cost
+            return
+        if flights_left == 0:
+            return
+        for nxt, price in graph[city]:
+            if nxt not in on_path:
+                on_path.add(nxt)
+                dfs(nxt, cost + price, flights_left - 1, on_path)
+                on_path.remove(nxt)
+
+    dfs(src, 0, k + 1, {src})
+    return -1 if best == float("inf") else best
+```
+
+The number of routes grows exponentially with k, so this only works for small graphs.
+
+## Approach 2: optimal, k + 1 rounds of Bellman-Ford
+
+### State and recurrence
+
+Let `prices_i[v]` be the cheapest price to reach v using at most i flights.
+
+- Base case: `prices_0[src] = 0`, every other city is infinity.
+- Recurrence: `prices_i[v] = min(prices_(i-1)[v], min over flights u->v of prices_(i-1)[u] + price)`.
+- Answer: `prices_(k+1)[dst]`.
+
+Reading from the previous round (a copy) is what enforces the limit; updating in place could use two flights in one
+round.
+
+Filled table for the first example (cities 0..3):
+
+| round (max flights) | 0 | 1 | 2 | 3 |
+|---|---|---|---|---|
+| 0 | 0 | inf | inf | inf |
+| 1 | 0 | 50 | 200 | 400 |
+| 2 | 0 | 50 | 100 | 250 |
+| 3 | 0 | 50 | 100 | 150 |
+
+So k = 0 reads row 1 (400), k = 1 reads row 2 (250) and k = 2 reads row 3 (150).
+
+### Python solution
+
+```python
+def find_cheapest_price(n, flights, src, dst, k):
+    INF = float("inf")
+    prices = [INF] * n
+    prices[src] = 0
+    for _ in range(k + 1):
+        nxt = prices[:]                       # previous round stays untouched
+        for u, v, p in flights:
+            if prices[u] + p < nxt[v]:
+                nxt[v] = prices[u] + p
+        prices = nxt
+    return -1 if prices[dst] == INF else prices[dst]
+```
+
+### Alternative: Dijkstra with stops in the state
+
+A heap of `(cost, city, flights_used)` also works if you allow revisiting a city with fewer flights used. Keep the
+fewest flights seen per city and skip a popped state that is both more expensive (guaranteed by heap order) and not
+using fewer flights.
+
+```python
+import heapq
+
+def find_cheapest_price_heap(n, flights, src, dst, k):
+    graph = defaultdict(list)
+    for u, v, p in flights:
+        graph[u].append((v, p))
+    fewest = [float("inf")] * n               # fewest flights used on arrival so far
+    heap = [(0, src, 0)]
+    while heap:
+        cost, city, used = heapq.heappop(heap)
+        if city == dst:
+            return cost
+        if used >= fewest[city] or used == k + 1:
+            continue
+        fewest[city] = used
+        for nxt, price in graph[city]:
+            heapq.heappush(heap, (cost + price, nxt, used + 1))
+    return -1
+```
+
+### Complexity
+
+- Bounded Bellman-Ford: O(k * E) time, O(n) space.
+- Heap version: O(E * k * log(E * k)) in the worst case, often faster in practice.
+
+## Tests
+
+```python
+fl = [(0, 1, 50), (1, 2, 50), (2, 3, 50), (0, 2, 200), (0, 3, 400)]
+for fn in (find_cheapest_price, find_cheapest_price_heap, cheapest_dfs):
+    assert fn(4, fl, 0, 3, 2) == 150
+    assert fn(4, fl, 0, 3, 1) == 250
+    assert fn(4, fl, 0, 3, 0) == 400
+    assert fn(3, [(0, 1, 10)], 0, 2, 5) == -1          # unreachable
+    assert fn(2, [], 0, 1, 1) == -1                     # no flights
+    assert fn(2, [(0, 1, 7)], 0, 1, 0) == 7             # direct only
+    assert fn(3, [(0, 1, 1), (1, 2, 1)], 0, 2, 0) == -1  # needs one stop, k = 0
+    assert fn(3, [(0, 1, 1), (1, 0, 1), (1, 2, 5)], 0, 2, 3) == 6   # cycle present
+
+# Random agreement
+import random
+random.seed(2)
+for _ in range(60):
+    n = random.randint(2, 6)
+    pairs = {(random.randrange(n), random.randrange(n)) for _ in range(10)}
+    fs = [(u, v, random.randint(1, 20)) for u, v in pairs if u != v]
+    k = random.randint(0, 3)
+    r = find_cheapest_price(n, fs, 0, n - 1, k)
+    assert r == find_cheapest_price_heap(n, fs, 0, n - 1, k) == cheapest_dfs(n, fs, 0, n - 1, k)
+```
+
+## Edge cases and pitfalls
+
+- **Stops versus flights.** k stops means k + 1 flights; off-by-one here is the most common bug.
+- **Relaxing in place** lets a single round use several flights and breaks the limit.
+- **Plain Dijkstra** settles each city once by price, so it can lock in a cheap path with too many stops and miss a
+  slightly dearer path that fits the limit.
+- **Source equals destination** costs 0.
+- **Unreachable destination** returns -1.
+
+## Where this shows up in data engineering
+
+Bounded-hop queries appear in lineage and network analysis: "which sources feed this table within three transformations",
+or "cheapest data transfer route across regions using at most one intermediate hop". The round-by-round relaxation
+also maps neatly onto iterative SQL or Spark jobs, where each iteration is one join of the frontier with the edge table.
