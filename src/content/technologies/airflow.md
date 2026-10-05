@@ -5,11 +5,11 @@ description: "Airflow schedules and orchestrates pipelines as DAGs. Learn schedu
 group: streaming
 order: 6
 keyFacts: ["Workflows are Python-defined DAGs","Retries are only safe if tasks are idempotent","Orchestrate work; do not run heavy processing inside Airflow"]
-whatToLearnFirst: ["articles:airflow/dags-scheduling-retries"]
+whatToLearnFirst: ["articles:airflow/dag-fundamentals-taskflow", "articles:airflow/dags-scheduling-retries"]
 relatedTechnologies: ["python","kafka","spark"]
 monogram: "Af"
-lessons: ["articles:airflow/dags-scheduling-retries"]
-updatedDate: 2026-10-04
+lessons: ["articles:airflow/dag-fundamentals-taskflow","articles:airflow/dags-scheduling-retries"]
+updatedDate: 2026-10-05
 ---
 
 Airflow is a workflow orchestrator: it decides what runs, when, in what order and what happens on failure. It does not process your data itself. It triggers tools that do.

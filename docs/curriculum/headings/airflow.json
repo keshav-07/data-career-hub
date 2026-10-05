@@ -1,0 +1,30 @@
+{
+ "DAG fundamentals": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "DAG fundamentals"
+ },
+ "DAG authoring best practices": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "DAG authoring best practices"
+ },
+ "Tasks & dependencies": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "Tasks and dependencies"
+ },
+ "TaskFlow API": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "The TaskFlow API"
+ },
+ "DAG params & templating (Jinja)": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "DAG params and templating with Jinja"
+ },
+ "Dynamic DAG generation": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "Dynamic DAG generation"
+ },
+ "Dynamic task mapping": {
+  "ref": "articles:airflow/dag-fundamentals-taskflow",
+  "heading": "Dynamic task mapping"
+ }
+}

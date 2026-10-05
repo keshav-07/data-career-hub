@@ -16,7 +16,6 @@ learningObjectives:
   - "Choose between dynamic DAG generation and dynamic task mapping, and use expand, partial and expand_kwargs"
 prerequisites: ["articles:python/functions-modules-reusable-code"]
 related: ["articles:etl-elt/idempotency-in-data-pipelines", "articles:python/python-for-data-engineering"]
-next: "articles:airflow/operators-hooks-providers"
 versionContext: "Examples run on Apache Airflow 3.3.2 (Task SDK 1.3.2, apache-airflow-providers-standard 1.20.0) with Python 3.11 and a SQLite metadata database created by `airflow db migrate`. Airflow 2 names are given where they differ."
 sources:
   - { label: "Apache Airflow documentation: Dags", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dags.html" }
@@ -593,43 +592,50 @@ When asked "What makes a good DAG?", lead with idempotency and light top-level c
 
 ## Practice questions
 
-<details><summary>What is the difference between a DAG run and a task instance?</summary>
+<details>
+<summary>What is the difference between a DAG run and a task instance?</summary>
 
 A DAG run is one execution of the whole DAG, identified by a `run_id` and (for scheduled runs) a logical date and data interval. A task instance is one task inside one DAG run; it has its own state, try number and, for mapped tasks, a map index. Retrying a task creates a new try of the same task instance, not a new DAG run.
 
 </details>
 
-<details><summary>Why is calling an API at the top level of a DAG file a problem?</summary>
+<details>
+<summary>Why is calling an API at the top level of a DAG file a problem?</summary>
 
 The DAG processor imports every DAG file repeatedly (every 30 seconds per file by default), and workers import it again before each task. A top-level API call therefore runs constantly, slows parsing for every DAG, can hit `dagbag_import_timeout` and turn the DAG into an import error, and may hammer the API. Move the call into a task or generate static config ahead of time.
 
 </details>
 
-<details><summary>How do you make d run after both b and c, which both run after a?</summary>
+<details>
+<summary>How do you make d run after both b and c, which both run after a?</summary>
 
 `a >> [b, c] >> d`. Lists work on one side of `>>`. For list-to-list dependencies use `cross_downstream([b, c], [d, e])`, or `chain` for pairwise links.
 
 </details>
 
-<details><summary>A task must process "yesterday's" files. How do you get the date?</summary>
+<details>
+<summary>A task must process "yesterday's" files. How do you get the date?</summary>
 
 Template the run's own dates: `{{ ds }}`, `{{ data_interval_start }}`, `{{ logical_date }}` or `macros.ds_add(ds, -1)`, depending on the schedule's semantics. In a TaskFlow task, accept `ds` or `data_interval_start` as a parameter or call `get_current_context()`. Never use `datetime.now()`, because a rerun or backfill must process the same slice of data it processed the first time.
 
 </details>
 
-<details><summary>Dynamic DAG generation or dynamic task mapping: which would you use to process every file that landed in a bucket today?</summary>
+<details>
+<summary>Dynamic DAG generation or dynamic task mapping: which would you use to process every file that landed in a bucket today?</summary>
 
 Dynamic task mapping. The set of files is only known at run time, so a listing task returns the paths and a mapped task processes each one, followed by an optional reduce task. Dynamic DAG generation creates DAGs from configuration that exists at parse time, such as a list of source systems.
 
 </details>
 
-<details><summary>What does multiple_outputs=True do on a @task?</summary>
+<details>
+<summary>What does multiple_outputs=True do on a @task?</summary>
 
 It stores each key of the returned dict as its own XCom (plus the whole dict), so downstream tasks can depend on a single key, for example `result["rows"]`. A return type hint of `dict` turns it on automatically.
 
 </details>
 
-<details><summary>What happened to execution_date, SubDAGs and schedule_interval in Airflow 3?</summary>
+<details>
+<summary>What happened to execution_date, SubDAGs and schedule_interval in Airflow 3?</summary>
 
 `execution_date` was removed from the context; use `logical_date` (and the `data_interval_*` values). SubDAGs were removed; use TaskGroups for grouping, or separate DAGs connected by assets or `TriggerDagRunOperator`. `schedule_interval` (and `timetable`) were replaced by the single `schedule` argument, which was introduced in Airflow 2.4.
 
