@@ -1,0 +1,85 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Snowflake Micro-Partitions, Clustering and Pruning"
+seoTitle: "Snowflake Micro-Partitions, Clustering, Pruning"
+description: "How Snowflake stores tables as micro-partitions with metadata, how pruning skips data, when clustering keys help, and how to tell whether a query pruned well."
+inventoryId: "TECH-28"
+technology: ["snowflake", "data-warehousing"]
+topic: ["micro-partitions", "clustering", "performance"]
+difficulty: "Intermediate"
+prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
+related: ["interview-questions:snowflake/micro-partitions-performance", "articles:data-warehousing/partitioning-clustering-data-layout"]
+previous: "articles:snowflake/architecture-virtual-warehouses"
+sources: [{"label": "Snowflake documentation: Micro-partitions and data clustering", "url": "https://docs.snowflake.com/en/user-guide/tables-clustering-micropartitions"}]
+versionContext: "Describes Snowflake behaviour as documented in 2026; SQL examples were not executed against a Snowflake account. Edition-specific features are noted"
+---
+
+Snowflake does not ask you to define partitions. It splits every table automatically into **micro-partitions** and records metadata about each one. Query speed depends largely on how many of those micro-partitions a query can skip.
+
+## Micro-partitions
+
+- Each micro-partition holds a contiguous slice of rows, stored by column and compressed. Snowflake documents them as roughly 50 to 500 MB of uncompressed data each.
+- They are **immutable**: updates and deletes write new micro-partitions.
+- For each column in each micro-partition, Snowflake keeps metadata such as the **minimum and maximum value**.
+
+## Pruning
+
+When a query filters on a column, Snowflake compares the filter with each micro-partition's min/max range and skips those that cannot contain matching rows.
+
+```sql
+SELECT SUM(amount)
+FROM sales
+WHERE sale_date = '2026-10-01';
+```
+
+If the table was loaded in date order, each micro-partition covers a narrow date range and almost all of them are skipped. If dates are scattered randomly across micro-partitions, every range overlaps the filter and nothing can be skipped.
+
+The **query profile** shows "Partitions scanned" versus "Partitions total". A query that scans most partitions to return a few rows is a pruning problem.
+
+## Natural clustering
+
+Data loaded in time order (daily batches, event streams) is naturally well clustered on its time column. Filters on that column prune well without any extra work. Filters on other columns (customer, product) may not.
+
+## Clustering keys
+
+For very large tables where common filters do not prune well, you can define a **clustering key**:
+
+```sql
+ALTER TABLE sales CLUSTER BY (sale_date, region);
+```
+
+Snowflake's automatic clustering service then reorganises micro-partitions in the background so values of the key are co-located. It consumes credits, so use it when:
+
+- the table is large (typically multi-terabyte);
+- queries filter on the key frequently;
+- the query profile shows poor pruning on that key.
+
+Check clustering quality with system functions such as `SYSTEM$CLUSTERING_INFORMATION('sales', '(sale_date)')`, which reports metrics such as clustering depth.
+
+## Writing prunable queries
+
+- Filter on the raw column; wrapping it in a function can prevent pruning in some cases.
+- Avoid `SELECT *` on wide tables: columnar storage reads only the columns you select.
+- Filter before joins and aggregations.
+
+<Callout tone="warning" title="Clustering is not free">
+
+Automatic clustering runs continuously on changed data and is billed. Frequent updates to a clustered table increase that cost. Measure the query savings against the clustering spend.
+
+</Callout>
+
+## Common mistakes
+
+1. Adding clustering keys to small tables.
+2. Choosing a very high-cardinality key (such as a unique id) that cannot be clustered effectively.
+3. Scaling up the warehouse to compensate for poor pruning.
+
+## Interview relevance
+
+"How do micro-partitions affect performance?" and "When would you add a clustering key?" are common Snowflake questions. See the [interview answer](/interview/snowflake/micro-partitions-performance/).
+
+## Key takeaway
+
+Performance comes from skipping micro-partitions. Load data in a sensible order, write filters on raw columns, check the query profile, and add clustering keys only to large tables that need them.

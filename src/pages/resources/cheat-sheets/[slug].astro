@@ -1,6 +1,6 @@
 ---
 import { render } from "astro:content";
-import { getItems, getByRef, type ItemOf } from "../../../utils/content";
+import { getItems, getByRef, getHub, type ItemOf } from "../../../utils/content";
 import ArticleLayout from "../../../layouts/ArticleLayout.astro";
 import RelatedList from "../../../components/content/RelatedList.astro";
 import NextStep from "../../../components/content/NextStep.astro";
@@ -16,7 +16,7 @@ const item = (await getByRef(Astro.props.ref)) as ItemOf<"cheat-sheets">;
 const { Content, headings } = await render(item.entry);
 const crumbs = await breadcrumbsFor(item);
 const { groups } = await relatedGroups(item);
-const tech = item.technology[0];
+const hub = (await Promise.all(item.technology.map((t) => getHub(t)))).find((h) => !!h);
 ---
 
 <ArticleLayout
@@ -30,11 +30,22 @@ const tech = item.technology[0];
   <Content components={{ Callout }} />
   <Fragment slot="footer">
     <RelatedList groups={groups} />
-    <NextStep
-      title="Go deeper"
-      text="Cheat sheets are for revision. The full guides explain the reasoning."
-      href={`/${tech}/`}
-      label={`Open the ${tech} hub`}
-    />
+    {
+      hub ? (
+        <NextStep
+          title="Go deeper"
+          text="Cheat sheets are for revision. The full guides explain the reasoning."
+          href={hub.url}
+          label={`Open the ${hub.entry.data.shortName} hub`}
+        />
+      ) : (
+        <NextStep
+          title="Go deeper"
+          text="Cheat sheets are for revision. The roadmap shows where each topic fits."
+          href="/data-engineering/roadmap/"
+          label="Open the Data Engineer roadmap"
+        />
+      )
+    }
   </Fragment>
 </ArticleLayout>

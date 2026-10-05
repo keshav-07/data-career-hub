@@ -1,0 +1,74 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Databricks Workspace, Jobs and Lakehouse Concepts"
+seoTitle: "Databricks Workspace, Jobs and Lakehouse Basics"
+description: "Get oriented in Databricks: workspaces, notebooks and Git folders, all-purpose versus job compute, scheduled jobs, and the medallion lakehouse on Delta tables."
+inventoryId: "TECH-24"
+technology: ["databricks", "delta-lake"]
+topic: ["platform", "jobs", "lakehouse"]
+difficulty: "Beginner"
+related: ["articles:databricks/unity-catalog-governance", "articles:delta-lake/transactions-schema-evolution", "articles:spark/execution-model-jobs-stages-tasks"]
+next: "articles:databricks/unity-catalog-governance"
+sources: [{"label": "Databricks documentation", "url": "https://docs.databricks.com/"}, {"label": "Databricks documentation: Medallion architecture", "url": "https://docs.databricks.com/en/lakehouse/medallion.html"}]
+versionContext: "Describes Databricks as documented in 2026; Databricks renames products frequently, so check current names. Examples were not executed in a Databricks workspace"
+---
+
+Databricks is a managed platform for Spark, SQL and machine learning on a lakehouse. The concepts below are the ones a data engineer uses every day.
+
+## Workspace
+
+The **workspace** is where you organise and run work: notebooks, files, SQL queries, dashboards, and **Git folders** that connect a folder to a Git repository. Treat Git as the source of truth for production code; notebooks are fine for exploration, but production jobs should run code that is version-controlled and reviewed.
+
+## Compute
+
+| Type | Use |
+|------|-----|
+| **All-purpose (interactive) compute** | Development and exploration, shared by people |
+| **Job compute** | Created for a scheduled job run and shut down after; usually cheaper for production |
+| **SQL warehouses** | SQL and BI workloads |
+| **Serverless options** | Compute managed by Databricks, with fast start-up |
+
+Run production pipelines on job compute (or serverless job compute), not on an interactive cluster someone might restart.
+
+## Jobs
+
+A **job** runs one or more tasks (a notebook, a Python script or wheel, a SQL query, a pipeline) on a schedule or trigger, with dependencies, retries, parameters, notifications and run history. The same design rules as any orchestrator apply: make each task idempotent, pass the processing date as a parameter, and alert on failure. Teams that already use Airflow can trigger Databricks jobs from Airflow instead.
+
+## The medallion lakehouse
+
+Databricks popularised organising Delta tables in layers:
+
+| Layer | Contents | Typical rules |
+|-------|----------|---------------|
+| **Bronze** | Raw data as ingested | Append, keep source fidelity, add ingestion metadata |
+| **Silver** | Cleaned, deduplicated, conformed | Typed schemas, quality checks, merges |
+| **Gold** | Business-level aggregates and models | Star schemas and marts for BI and ML |
+
+Each layer is a set of Delta tables. Because Delta provides ACID commits and time travel, each step can be rerun safely and audited.
+
+## Where Spark fits
+
+Most Databricks pipeline code is ordinary PySpark or SQL. Everything in the [Spark execution model](/spark/execution-model-jobs-stages-tasks/) and [partitions and skew](/spark/partitions-shuffles-skew/) guides applies unchanged.
+
+<Callout tone="info" title="Product names change">
+
+Databricks regularly renames and regroups features (for example, its job orchestration and declarative pipeline products have been rebranded over time). Learn the underlying concepts (compute, jobs, Delta tables, governance) and look up current names in the documentation.
+
+</Callout>
+
+## Common mistakes
+
+1. Running production jobs on shared interactive clusters.
+2. Keeping production logic only in notebooks without version control or tests.
+3. Skipping the silver layer and building gold tables directly on raw data.
+4. Leaving interactive clusters running without auto-termination.
+
+## Interview relevance
+
+Interviewers ask how you would structure a Databricks pipeline: medallion layers, job compute, idempotent tasks, Delta tables and Unity Catalog permissions.
+
+## Key takeaway
+
+Develop in the workspace, version code in Git, run production on job compute, and organise Delta tables into bronze, silver and gold layers.

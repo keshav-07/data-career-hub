@@ -1,0 +1,80 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Snowflake Architecture and Virtual Warehouses"
+seoTitle: "Snowflake Architecture and Virtual Warehouses"
+description: "Understand Snowflake's storage, compute and cloud-services layers, how virtual warehouses are sized, suspended and scaled, and how that drives performance and cost."
+inventoryId: "TECH-27"
+technology: ["snowflake", "data-warehousing"]
+topic: ["architecture", "compute", "cost"]
+difficulty: "Beginner"
+related: ["interview-questions:snowflake/virtual-warehouses", "articles:snowflake/micro-partitions-clustering-pruning"]
+next: "articles:snowflake/micro-partitions-clustering-pruning"
+sources: [{"label": "Snowflake documentation: Key concepts and architecture", "url": "https://docs.snowflake.com/en/user-guide/intro-key-concepts"}, {"label": "Snowflake documentation: Virtual warehouses", "url": "https://docs.snowflake.com/en/user-guide/warehouses"}]
+versionContext: "Describes Snowflake behaviour as documented in 2026; SQL examples were not executed against a Snowflake account. Edition-specific features are noted"
+---
+
+Snowflake separates **where data lives** from **what processes it**. That one design choice explains most of its behaviour, pricing and tuning.
+
+## Three layers
+
+| Layer | What it does |
+|-------|--------------|
+| **Storage** | Holds table data in cloud object storage as compressed, columnar **micro-partitions**. You pay for the data stored. |
+| **Compute** | **Virtual warehouses**: independent clusters that run queries. You pay for the time they run. |
+| **Cloud services** | Metadata, query parsing and optimisation, access control, transactions. Coordinates everything. |
+
+Because storage is shared, many warehouses can read the same tables at once without copying data and without competing for each other's compute.
+
+## Virtual warehouses
+
+A virtual warehouse is a named compute cluster. You choose a **size** (X-Small, Small, Medium and up); each step up roughly doubles the compute resources and the credits consumed per hour.
+
+```sql
+CREATE WAREHOUSE transform_wh
+  WAREHOUSE_SIZE = 'SMALL'
+  AUTO_SUSPEND = 60        -- seconds of inactivity before suspending
+  AUTO_RESUME = TRUE;
+```
+
+- **Auto-suspend** stops billing when the warehouse is idle; **auto-resume** starts it when a query arrives.
+- Billing is per second while running, with a minimum charge each time a warehouse starts. Very aggressive suspend settings on a warehouse that restarts constantly can therefore cost more, not less.
+
+## Scaling up versus scaling out
+
+- **Scale up** (bigger size) when individual queries are slow because they process a lot of data.
+- **Scale out** (multi-cluster warehouses, an Enterprise edition feature) when many users run queries at the same time and queries are **queueing**. Extra clusters start and stop with demand.
+
+A larger warehouse does not fix a query that scans far more data than it needs; pruning does (see [micro-partitions and pruning](/snowflake/micro-partitions-clustering-pruning/)).
+
+## Separate warehouses by workload
+
+A common pattern is one warehouse per workload: ingestion, transformation, BI dashboards, ad-hoc analysis. Each can be sized and scheduled independently, heavy transformations never slow down dashboards, and cost is attributable per team.
+
+## Caching
+
+- **Result cache**: if an identical query runs again and the underlying data has not changed, Snowflake can return the stored result without using a warehouse.
+- **Warehouse cache**: a running warehouse keeps recently read data on local storage, which is lost when it suspends.
+- **Metadata**: some queries (for example `COUNT(*)` on a table, or `MIN`/`MAX` of a column) can be answered from metadata alone.
+
+<Callout tone="info" title="Time Travel and cloning">
+
+Storage is immutable micro-partitions, so Snowflake can offer **Time Travel** (query or restore data as of an earlier point, within a retention period) and **zero-copy cloning** (a clone shares storage until either side changes). Both are useful for safe backfills and testing.
+
+</Callout>
+
+## Common mistakes
+
+1. One shared warehouse for every workload, so a heavy job slows dashboards.
+2. Scaling up to fix concurrency (scale out instead) or to fix poor pruning (fix the query instead).
+3. Leaving warehouses running without auto-suspend.
+4. Ignoring query queueing in monitoring.
+
+## Interview relevance
+
+Common prompts: "What is a virtual warehouse?", "Scale up or out?", "How would you control Snowflake costs?". See the [interview answer](/interview/snowflake/virtual-warehouses/).
+
+## Key takeaway
+
+Storage is shared; compute is many independent warehouses. Size each warehouse for its workload, suspend it when idle, scale out for concurrency and fix pruning before scaling up.

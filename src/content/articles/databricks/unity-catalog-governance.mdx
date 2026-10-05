@@ -1,0 +1,85 @@
+---
+publishedDate: "2026-10-04"
+updatedDate: "2026-10-04"
+reviewedDate: "2026-10-04"
+title: "Unity Catalog and Data Governance Fundamentals"
+seoTitle: "Unity Catalog and Data Governance Fundamentals"
+description: "How Unity Catalog governs data in Databricks: the three-level namespace, metastores, managed versus external tables, grants, lineage and fine-grained access."
+inventoryId: "TECH-26"
+technology: ["databricks", "data-engineering"]
+topic: ["governance", "security"]
+difficulty: "Intermediate"
+prerequisites: ["articles:databricks/workspace-jobs-lakehouse"]
+related: ["interview-questions:databricks/unity-catalog", "articles:delta-lake/transactions-schema-evolution"]
+previous: "articles:databricks/workspace-jobs-lakehouse"
+sources: [{"label": "Databricks documentation: What is Unity Catalog?", "url": "https://docs.databricks.com/en/data-governance/unity-catalog/index.html"}]
+versionContext: "Describes Databricks as documented in 2026; Databricks renames products frequently, so check current names. Examples were not executed in a Databricks workspace"
+---
+
+**Governance** means knowing what data exists, who may use it, and how it flows. In Databricks this is the job of **Unity Catalog**, a central catalog for tables, views, files, models and functions across workspaces.
+
+## The three-level namespace
+
+Every table is addressed as `catalog.schema.table`:
+
+```sql
+SELECT * FROM prod.sales.orders;
+```
+
+- A **catalog** is the top-level container, often per environment or business domain (`dev`, `prod`, `finance`).
+- A **schema** (database) groups related tables inside a catalog.
+- **Tables and views** hold the data.
+
+A **metastore** is the top-level container for catalogs, typically one per region, attached to the workspaces that use it. Because governance lives in the metastore rather than in each workspace, the same permissions apply wherever the data is accessed.
+
+## Managed and external tables
+
+- **Managed tables**: Unity Catalog manages both metadata and the underlying files in a managed storage location. Dropping the table removes the data.
+- **External tables**: metadata is in Unity Catalog, but files live in a location you manage. Dropping the table leaves the files.
+- **Volumes** govern non-tabular files (CSVs, images, models) with the same permission model.
+
+## Permissions
+
+Access is granted with SQL to users, groups or service principals:
+
+```sql
+GRANT USE CATALOG ON CATALOG prod TO `analysts`;
+GRANT USE SCHEMA ON SCHEMA prod.sales TO `analysts`;
+GRANT SELECT ON TABLE prod.sales.orders TO `analysts`;
+```
+
+To read a table a principal needs privileges along the path (catalog and schema usage) as well as on the table. Grant to **groups**, not individuals, so access follows team membership.
+
+For finer control, Unity Catalog supports **row filters** and **column masks**, for example hiding email addresses from everyone outside a support group.
+
+## Lineage and auditing
+
+Unity Catalog captures **lineage**: which jobs and notebooks read and wrote which tables and columns. That answers "what breaks if I change this column?" and "where did this number come from?". Access is also recorded in audit logs.
+
+## A practical setup
+
+1. Catalogs per environment (`dev`, `staging`, `prod`) or per domain.
+2. Schemas per data area or medallion layer.
+3. Production jobs run as **service principals** with only the privileges they need.
+4. Humans get read access to `prod` through groups; writes to `prod` happen only through jobs.
+
+<Callout tone="warning" title="Least privilege applies to pipelines too">
+
+A job that can write to every catalog can damage every catalog. Give each production job its own principal and only the grants it needs.
+
+</Callout>
+
+## Common mistakes
+
+1. Granting privileges to individual users instead of groups.
+2. Running production jobs with personal credentials.
+3. Forgetting the catalog and schema `USE` privileges and debugging "table not found" errors.
+4. Dropping a managed table expecting the files to remain.
+
+## Interview relevance
+
+"What is Unity Catalog used for?" and "How would you control access to sensitive columns?" are common. See the [interview answer](/interview/databricks/unity-catalog/).
+
+## Key takeaway
+
+Unity Catalog gives one namespace, one permission model and lineage across workspaces. Organise catalogs deliberately, grant to groups, run jobs as service principals, and mask sensitive columns.
