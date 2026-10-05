@@ -1,0 +1,166 @@
+---
+title: "Maximum Depth of Binary Tree: Recursive DFS, Iterative DFS and BFS"
+seoTitle: "Maximum Depth of a Binary Tree in Python"
+description: "Find the height of a binary tree three ways: one-line recursion, an explicit stack and level-order counting. Python code, complexity, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "The depth of a tree is 0 if it is empty, otherwise 1 plus the larger depth of its two subtrees, which is a three-line recursion. Iteratively, either count the levels of a breadth-first traversal, or push (node, depth) pairs on a stack and track the maximum. All versions visit each node once: O(n) time, with O(h) memory for depth-first and O(w) for breadth-first."
+followUps: ["How would you find the minimum depth (nearest leaf)?", "What is the difference between depth and height?", "How would you compute the depth of an N-ary tree or a nested JSON document?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+---
+
+## Problem
+
+Given the root of a binary tree, return its maximum depth: the number of nodes on the longest path from the root down to any leaf. An empty tree has depth 0 and a single node has depth 1.
+
+This is widely known as LeetCode 104 (Maximum Depth of Binary Tree). It is the simplest example of combining results from subtrees, the pattern behind most tree problems.
+
+Constraints for this version: 0 to 10,000 nodes.
+
+## Examples
+
+| Tree (level order) | Depth | Longest path |
+|---|---|---|
+| `[8, 3, 12, None, 5, None, None, 4]` | `4` | 8, 3, 5, 4 |
+| `[8, 3, 12]` | `2` | 8, 3 |
+| `[8]` | `1` | 8 |
+| `[]` | `0` | none |
+
+## Approach 1: brute force
+
+A simple but wasteful approach: list every root-to-leaf path and return the length of the longest. Building every path copies nodes repeatedly, which costs up to O(n log n) for a balanced tree and O(n^2) in bad cases, and it stores all paths.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def max_depth_paths(root):
+    if root is None:
+        return 0
+    paths, stack = [], [(root, [root.val])]
+    while stack:
+        node, path = stack.pop()
+        if not node.left and not node.right:
+            paths.append(path)
+        for child in (node.left, node.right):
+            if child:
+                stack.append((child, path + [child.val]))
+    return max(len(p) for p in paths)
+```
+
+## Approach 2: optimal
+
+**Key insight.** You never need the paths, only their lengths. The depth of a node's subtree depends only on the depths of its two children: `1 + max(left, right)`.
+
+### Recursive depth-first
+
+```python
+def max_depth(root):
+    if root is None:
+        return 0
+    return 1 + max(max_depth(root.left), max_depth(root.right))
+```
+
+### Iterative depth-first
+
+Carry each node's depth with it on a stack.
+
+```python
+def max_depth_stack(root):
+    best = 0
+    stack = [(root, 1)] if root else []
+    while stack:
+        node, depth = stack.pop()
+        best = max(best, depth)
+        if node.left:
+            stack.append((node.left, depth + 1))
+        if node.right:
+            stack.append((node.right, depth + 1))
+    return best
+```
+
+### Breadth-first (count levels)
+
+```python
+from collections import deque
+
+def max_depth_bfs(root):
+    if root is None:
+        return 0
+    depth, queue = 0, deque([root])
+    while queue:
+        depth += 1
+        for _ in range(len(queue)):       # process exactly one level
+            node = queue.popleft()
+            if node.left:
+                queue.append(node.left)
+            if node.right:
+                queue.append(node.right)
+    return depth
+```
+
+**Walkthrough** (recursive) for `[8, 3, 12, None, 5, None, None, 4]`: node 4 is a leaf, depth 1. Node 5 has only child 4, depth 2. Node 3 has only child 5, depth 3. Node 12 is a leaf, depth 1. Root: `1 + max(3, 1) = 4`.
+
+**Complexity.** O(n) time for all three. Recursive and stack-based DFS use O(h) memory for height `h` (O(n) worst case for a skewed tree); BFS uses O(w) for the widest level.
+
+## Tests
+
+```python
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([8, 3, 12, None, 5, None, None, 4], 4),
+    ([8, 3, 12], 2),
+    ([8], 1),
+    ([], 0),
+    ([1, None, 2, None, 3, None, 4], 4),          # right-skewed
+    ([1, 2, None, 3, None, 4], 4),                # left-skewed
+    ([5, 5, 5, 5, 5, 5, 5], 3),                   # duplicates, full tree
+]
+for fn in (max_depth_paths, max_depth, max_depth_stack, max_depth_bfs):
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+
+deep = node = TreeNode(0)                          # 3,000 levels: iterative versions only
+for v in range(1, 3000):
+    node.right = TreeNode(v)
+    node = node.right
+assert max_depth_stack(deep) == 3000 and max_depth_bfs(deep) == 3000
+print("all max depth tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Counting edges instead of nodes.** Some definitions measure height in edges (a single node has height 0). Confirm which one the interviewer means; this problem counts nodes.
+- **Empty tree** must return 0, not 1.
+- **Deep skewed trees** overflow Python's recursion limit (about 1,000 by default); mention the iterative alternatives.
+- **BFS level counting.** Snapshot `len(queue)` before the inner loop; reading it while appending mixes levels.
+
+## Where this shows up in data engineering
+
+Measuring depth is a real task when you profile nested data: finding the maximum nesting level of JSON documents before flattening them, checking how deep a hierarchy (an org chart or a category tree stored as parent-child rows) goes, which SQL answers with a recursive CTE that counts levels, or estimating how deep a dependency chain of pipeline tasks is.
