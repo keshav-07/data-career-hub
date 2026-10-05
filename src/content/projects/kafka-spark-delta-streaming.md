@@ -1,4 +1,6 @@
 ---
+previous: "projects:large-scale-batch-processing"
+next: "projects:change-data-capture-pipeline"
 publishedDate: "2026-10-04"
 updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
@@ -21,7 +23,6 @@ interviewQuestions: ["What does the checkpoint store and why is it needed?", "Ho
 resumeBullets: ["Built a Spark Structured Streaming pipeline from Kafka to Delta Lake with checkpoint-based recovery, watermark-bounded deduplication and event-time aggregates", "Verified recovery by restarting the job mid-stream and reconciling aggregates with raw events"]
 extensions: ["Add schema validation with a dead-letter topic", "Serve aggregates to a dashboard"]
 related: ["articles:kafka/topics-partitions-consumer-groups", "articles:delta-lake/transactions-schema-evolution", "system-designs:change-data-capture-platform"]
-previous: "projects:s3-pyspark-snowflake-pipeline"
 ---
 
 ## Business context

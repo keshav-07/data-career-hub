@@ -1,4 +1,6 @@
 ---
+previous: "projects:csv-to-warehouse-pipeline"
+next: "projects:ecommerce-analytics-platform"
 publishedDate: "2026-10-04"
 updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
@@ -21,8 +23,6 @@ interviewQuestions: ["Where are the shuffles in your PySpark job?", "How do you 
 resumeBullets: ["Built a PySpark pipeline that processes daily raw files from object storage into partitioned Parquet and loads a cloud warehouse with idempotent, date-partitioned loads", "Added reconciliation checks between raw, curated and warehouse layers"]
 extensions: ["Add incremental processing with a table format such as Delta Lake", "Add a data contract for the raw schema"]
 related: ["articles:spark/partitions-shuffles-skew", "articles:pyspark/window-functions", "system-designs:scalable-batch-pipeline"]
-previous: "projects:csv-to-warehouse-pipeline"
-next: "projects:kafka-spark-delta-streaming"
 ---
 
 ## Business context

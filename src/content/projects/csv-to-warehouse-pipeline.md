@@ -1,4 +1,5 @@
 ---
+next: "projects:s3-pyspark-snowflake-pipeline"
 publishedDate: "2026-10-04"
 updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
@@ -21,7 +22,6 @@ interviewQuestions: ["What is the grain of your fact table?", "What happens if t
 resumeBullets: ["Built an idempotent Python and SQL pipeline that loads daily order files into a star schema, with automated tests proving reruns do not duplicate data", "Implemented data-quality checks and an audit log that record rows read, loaded and rejected per file"]
 extensions: ["Schedule it with Airflow", "Add slowly changing dimension type 2 for customers", "Move storage to a cloud warehouse"]
 related: ["articles:python/idempotent-csv-loader", "articles:data-warehousing/star-schema"]
-next: "projects:s3-pyspark-snowflake-pipeline"
 ---
 
 ## Business context
