@@ -1,0 +1,171 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Burst Balloons: Interval DP by Choosing the Last Balloon to Burst"
+seoTitle: "Burst Balloons: Interval DP"
+description: "Maximise coins from bursting balloons with interval DP, choosing the last balloon in each range so subproblems stay independent, plus memoised and bottom-up code."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Pad the list with a 1 at each end. Let best(l, r) be the most coins from bursting every balloon strictly between positions l and r. Choose k, the last balloon burst in that range: at that moment its neighbours are l and r, so it earns v[l] * v[k] * v[r], and the two sides are independent subproblems. best(l, r) = max over k of best(l, k) + v[l] * v[k] * v[r] + best(k, r), with best(l, l + 1) = 0. Filling by increasing interval length is O(n^3) time and O(n^2) space."
+followUps: ["Why does choosing the first balloon to burst not give independent subproblems?", "How would you reconstruct the bursting order?", "Which other problems use the same 'last operation' interval trick?"]
+previous: "interview-questions:dsa/edit-distance"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Balloons in a row each carry a number. Bursting a balloon earns the product of its number and the numbers of its
+current left and right neighbours; a missing neighbour (past either end) counts as 1. After a burst, its neighbours
+become adjacent. Burst all balloons in the order that earns the most coins, and return that total.
+
+This is widely known as LeetCode 312, "Burst Balloons".
+
+Assume up to 300 balloons with numbers between 0 and 100.
+
+## Examples
+
+For `[2, 4, 3]` there are six orders. Two of them:
+
+```text
+burst 4, then 2, then 3:  2*4*3 = 24  ->  [2, 3]:  1*2*3 = 6  ->  [3]:  1*3*1 = 3    total 33
+burst 2, then 4, then 3:  1*2*4 = 8   ->  [4, 3]:  1*4*3 = 12 ->  [3]:  1*3*1 = 3    total 23
+```
+
+The other four orders give 24, 32, 24 and 22, so the answer is 33.
+
+```text
+[2, 4, 3]   -> 33
+[5]         -> 5    (1 * 5 * 1)
+[0, 7]      -> 7    (burst 0 first for nothing, then 7 alone)
+[]          -> 0
+```
+
+## Approach 1: try every order
+
+```python
+from itertools import permutations
+
+def max_coins_brute(nums):
+    best = 0
+    for order in permutations(range(len(nums))):
+        alive = list(range(len(nums)))
+        total = 0
+        for idx in order:
+            pos = alive.index(idx)
+            left = nums[alive[pos - 1]] if pos > 0 else 1
+            right = nums[alive[pos + 1]] if pos + 1 < len(alive) else 1
+            total += left * nums[idx] * right
+            alive.pop(pos)
+        best = max(best, total)
+    return best
+```
+
+O(n! * n^2): fine as a test oracle for six balloons, useless beyond that.
+
+## Approach 2: optimal, interval DP on the last burst
+
+### Why "last", not "first"
+
+If you pick the first balloon to burst in a range, its removal changes who the neighbours are on both sides, so the
+left and right parts are no longer independent. If you pick the balloon k that is burst **last** in the open range
+(l, r), then while everything else in the range is being burst, k is still standing and acts as a wall. The left part
+(l, k) and the right part (k, r) cannot affect each other, and when k finally goes its neighbours are exactly l and r.
+
+### State, recurrence and base cases
+
+Pad the input: `v = [1] + nums + [1]`.
+
+- **State:** `best[l][r]` = maximum coins from bursting all balloons strictly between l and r.
+- **Recurrence:** `best[l][r] = max(best[l][k] + v[l] * v[k] * v[r] + best[k][r] for k in range(l + 1, r))`.
+- **Base case:** `best[l][l + 1] = 0` (no balloons between neighbours).
+- **Answer:** `best[0][last]` where last is the index of the right padding.
+- **Order:** by increasing interval length `r - l`.
+
+### Filled table for [2, 4, 3] (padded v = [1, 2, 4, 3, 1])
+
+Only cells with r - l of at least 2 hold balloons.
+
+| l \ r | 2 | 3 | 4 |
+|---|---|---|---|
+| 0 | 8 | 30 | 33 |
+| 1 | | 24 | 30 |
+| 2 | | | 12 |
+
+For `best[0][4]`, the three choices of the last balloon are:
+
+- k = 1 (value 2) last: `best[0][1] + 1*2*1 + best[1][4] = 0 + 2 + 30 = 32`
+- k = 2 (value 4) last: `best[0][2] + 1*4*1 + best[2][4] = 8 + 4 + 12 = 24`
+- k = 3 (value 3) last: `best[0][3] + 1*3*1 + best[3][4] = 30 + 3 + 0 = 33`
+
+The maximum is 33, matching the hand-checked order (burst 4, then 2, then 3: balloon 3 is last).
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def max_coins_memo(nums):
+    v = [1] + list(nums) + [1]
+
+    @lru_cache(maxsize=None)
+    def best(l, r):
+        return max((best(l, k) + v[l] * v[k] * v[r] + best(k, r) for k in range(l + 1, r)), default=0)
+
+    return best(0, len(v) - 1)
+```
+
+### Bottom-up
+
+```python
+def max_coins(nums):
+    v = [1] + list(nums) + [1]
+    size = len(v)
+    best = [[0] * size for _ in range(size)]
+    for length in range(2, size):
+        for l in range(0, size - length):
+            r = l + length
+            best[l][r] = max(best[l][k] + v[l] * v[k] * v[r] + best[k][r] for k in range(l + 1, r))
+    return best[0][size - 1]
+```
+
+### Complexity
+
+O(n^3) time (n^2 intervals, up to n choices of k each) and O(n^2) space. No standard space optimisation.
+
+## Tests
+
+```python
+for fn in (max_coins, max_coins_memo, max_coins_brute):
+    assert fn([5]) == 5                          # single balloon
+    assert fn([0, 7]) == 7                       # zero-valued balloon
+    assert fn([]) == 0                           # empty
+    assert fn([1, 1]) == 2
+
+assert max_coins([2, 4, 3]) == max_coins_brute([2, 4, 3]) == 33
+
+import random
+random.seed(24)
+for _ in range(40):
+    a = [random.randint(0, 6) for _ in range(random.randint(0, 6))]
+    assert max_coins(a) == max_coins_memo(a) == max_coins_brute(a)
+```
+
+## Edge cases and pitfalls
+
+- **Choosing the first balloon** leads to dependent subproblems and wrong answers.
+- **Forgetting the padding** makes the boundary neighbours awkward and error-prone.
+- **Open versus closed intervals.** The recurrence uses open intervals (l, r); mixing in closed bounds double-counts.
+- **Fill order**: shorter intervals first.
+- **Zeros**: a zero balloon earns nothing itself but also zeroes its neighbours' products while it stands; the DP
+  handles this without special cases.
+
+## Where this shows up in data engineering
+
+Rarely directly. The transferable idea is "pick the last operation so the rest splits cleanly", which is also the
+structure of optimal matrix-chain multiplication and of join-order optimisation in query planners, where the final
+join splits the remaining tables into two independent subplans.
