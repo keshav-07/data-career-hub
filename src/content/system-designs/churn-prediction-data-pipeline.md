@@ -67,6 +67,7 @@ sources:
   - { label: "Delta Lake: table batch reads and writes (time travel)", url: "https://docs.delta.io/latest/delta-batch.html" }
   - { label: "PostgreSQL 16: SELECT", url: "https://www.postgresql.org/docs/16/sql-select.html" }
 previous: "system-designs:unified-batch-streaming-lambda-kappa"
+next: "system-designs:real-time-leaderboard"
 ---
 
 ## Approach
