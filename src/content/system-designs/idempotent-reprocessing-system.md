@@ -69,6 +69,7 @@ related:
   - "system-designs:scalable-batch-pipeline"
   - "system-designs:slowly-changing-dimension-framework"
 previous: "system-designs:slowly-changing-dimension-framework"
+next: "system-designs:multi-tenant-data-platform"
 versionContext: "The partition-replacement example was run on PostgreSQL 16, including a retried backfill. Orchestrator and lakehouse commands are described, not executed."
 sources:
   - { label: "Apache Airflow: DAG runs (catchup and backfill)", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dag-run.html" }
