@@ -69,6 +69,7 @@ related:
   - "articles:etl-elt/batch-vs-streaming"
   - "articles:data-warehousing/partitioning-clustering-data-layout"
 previous: "system-designs:clickstream-data-platform"
+next: "system-designs:log-ingestion-search-platform"
 versionContext: "The deduplication, rollup and gap SQL was run on PostgreSQL 16 (date_bin requires PostgreSQL 14 or later). Broker and Flink configuration is described, not executed."
 sources:
   - { label: "HiveMQ: MQTT quality of service levels", url: "https://www.hivemq.com/blog/mqtt-essentials-part-6-mqtt-quality-of-service-levels/" }
