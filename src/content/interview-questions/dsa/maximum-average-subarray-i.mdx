@@ -1,0 +1,100 @@
+---
+title: "Maximum Average Subarray I: Best Average Over a Fixed-Length Window"
+seoTitle: "Maximum Average Subarray I: Fixed Window Sum"
+description: "Find the highest average among all contiguous slices of exactly k elements. A rolling window sum updates in O(1) per step, giving an O(n) one-pass solution."
+technology: ["dsa"]
+topic: ["sliding-window"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Every window has the same length k, so the window with the largest sum has the largest average. Sum the first k values, then slide: add the entering value and subtract the leaving one, keeping the largest sum. Divide by k once at the end. This is O(n) time and O(1) space."
+followUps: ["Why is it better to compare sums and divide once at the end?", "What changes if the window length can be any value of at least k?", "How would you compute every rolling average, not just the best one?"]
+previous: "interview-questions:dsa/sliding-window-maximum"
+next: "interview-questions:dsa/valid-parentheses"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers `nums` and an integer `k` with 1 ≤ k ≤ len(nums), find the contiguous slice of exactly `k` elements with the largest average and return that average as a float. This is widely known as LeetCode 643, Maximum Average Subarray I.
+
+## Examples
+
+```text
+nums = [3, -2, 8, 4, -6, 5],  k = 2   ->  6.0    ((8 + 4) / 2)
+nums = [-3, -1, -7],          k = 3   ->  -3.6666...
+nums = [9],                   k = 1   ->  9.0
+```
+
+## Approach 1: brute force
+
+Sum every window from scratch.
+
+```python
+def find_max_average_brute(nums, k):
+    return max(sum(nums[i:i + k]) for i in range(len(nums) - k + 1)) / k
+```
+
+**Complexity:** O(n · k) time, O(k) space for each slice.
+
+## Approach 2: optimal
+
+**Key insight:** adjacent windows share k − 1 elements, so the next sum is the previous sum plus the new element minus the one that left.
+
+Walkthrough on `[3, -2, 8, 4, -6, 5]`, `k = 2`:
+
+| Window | Update | Sum | Best |
+|---|---|---|---|
+| [3, -2] | initial | 1 | 1 |
+| [-2, 8] | +8 − 3 | 6 | 6 |
+| [8, 4] | +4 − (−2) | 12 | 12 |
+| [4, -6] | −6 − 8 | -2 | 12 |
+| [-6, 5] | +5 − 4 | -1 | 12 |
+
+Answer: 12 / 2 = 6.0.
+
+```python
+def find_max_average(nums, k):
+    window = sum(nums[:k])
+    best = window
+    for i in range(k, len(nums)):
+        window += nums[i] - nums[i - k]
+        best = max(best, window)
+    return best / k
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import math, random
+
+for f in (find_max_average, find_max_average_brute):
+    assert f([3, -2, 8, 4, -6, 5], 2) == 6.0
+    assert math.isclose(f([-3, -1, -7], 3), -11 / 3)     # all negative, k = n
+    assert f([9], 1) == 9.0                              # single element
+    assert f([0, 0, 0], 2) == 0.0                        # zeros
+    assert f([5, 5, 5, 5], 3) == 5.0                     # duplicates
+    assert f([10**9, 10**9, -10**9], 2) == 10**9         # large values
+
+random.seed(32)
+for _ in range(400):
+    arr = [random.randint(-20, 20) for _ in range(random.randint(1, 12))]
+    k = random.randint(1, len(arr))
+    assert math.isclose(find_max_average(arr, k), find_max_average_brute(arr, k))
+```
+
+## Edge cases and pitfalls
+
+- Compare integer sums and divide once at the end. Comparing running averages introduces floating-point rounding for no benefit.
+- Initialise `best` with the first window's sum, not 0, or all-negative inputs return 0.
+- In Python 3 `/` is float division; in some languages integer division silently truncates the result.
+
+## Where this shows up in data engineering
+
+This is a rolling average, one of the most common derived metrics: `AVG(x) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)` for a 7-day average. Incremental add-and-subtract is also how streaming systems keep windowed sums without storing every event's contribution repeatedly.

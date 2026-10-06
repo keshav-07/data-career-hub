@@ -56,7 +56,7 @@ def three_sum_brute(nums):
 Walkthrough on `[3, -1, -2, 0, 1, -1]`, sorted to `[-2, -1, -1, 0, 1, 3]`:
 
 1. i = 0 (−2), need 2: pointers on −1 and 3 give 2, found `[-2, -1, 3]`. Move both pointers inward and skip the repeated −1, leaving pointers on 0 and 1: their sum 1 is below 2, so move left; the pointers meet.
-2. i = 1 (−1), need 1: pointers on −1 and 3 give 2 > 1, move right; −1 and 1 give 0 < 1, move left; 0 and 1 give 1, found `[-1, 0, 1]`.
+2. i = 1 (−1), need 1: pointers on −1 and 3 give 2, too large, so move right; −1 and 1 give 0, too small, so move left; 0 and 1 give 1, found `[-1, 0, 1]`.
 3. i = 2 (−1) equals the previous value: skip it, or `[-1, 0, 1]` would be reported again.
 4. i = 3 (0), need 0: pointers on 1 and 3 give 4, too large; move right and the pointers meet. That was the last start with two values to its right.
 

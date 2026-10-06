@@ -1,0 +1,144 @@
+---
+title: "Implement Stack using Queues: LIFO Behaviour From FIFO Parts"
+seoTitle: "Implement Stack using Queues: One-Queue Rotation"
+description: "Build a last-in, first-out stack using only queue operations. Compare the two-queue transfer with the one-queue rotation that makes push O(n) and pop O(1)."
+technology: ["dsa"]
+topic: ["queue", "stack", "design"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 8
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "With a single queue, make every push restore stack order: append the new item, then rotate the queue by moving the n - 1 older items from the front to the back. The newest item is now at the front, so pop and top are O(1) front operations. Push costs O(n). The alternative keeps push O(1) and pays O(n) on every pop by moving items to a second queue."
+followUps: ["Which operation would you make expensive if pops are much rarer than pushes?", "Can you make both operations amortised O(1) here, as you can for a queue built from stacks?", "Why does Python's deque make this exercise artificial?"]
+previous: "interview-questions:dsa/next-greater-element-i"
+next: "interview-questions:dsa/implement-queue-using-stacks"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Implement a stack with `push(x)`, `pop()` (remove and return the top), `top()` (return the top) and `empty()`, using only standard queue operations: add to the back, remove from the front, look at the front, size and is-empty. This is widely known as LeetCode 225, Implement Stack using Queues.
+
+In Python, use `collections.deque` but only call `append`, `popleft`, `[0]` and `len`, to stay within queue operations.
+
+## Examples
+
+```text
+push(4), push(9), top() -> 9
+pop() -> 9, top() -> 4
+pop() -> 4, empty() -> True
+```
+
+## Approach 1: brute force (two queues, expensive pop)
+
+Push appends to the main queue. To pop, move all but the last item to a helper queue, take the last one, then swap the queues.
+
+```python
+from collections import deque
+
+class StackTwoQueues:
+    def __init__(self):
+        self.q = deque()
+
+    def push(self, x):
+        self.q.append(x)
+
+    def pop(self):
+        helper = deque()
+        while len(self.q) > 1:
+            helper.append(self.q.popleft())
+        item = self.q.popleft()
+        self.q = helper
+        return item
+
+    def top(self):
+        item = self.pop()
+        self.push(item)
+        return item
+
+    def empty(self):
+        return len(self.q) == 0
+```
+
+**Complexity:** push O(1); pop and top O(n). O(n) space.
+
+## Approach 2: optimal (one queue, rotate on push)
+
+**Key insight:** if the queue's front is always the most recently pushed item, a queue behaves like a stack for removals. Rotating after each push keeps that invariant.
+
+Walkthrough:
+
+| Operation | Queue (front → back) |
+|---|---|
+| push(4) | 4 |
+| push(9): append | 4 9 |
+| rotate 1 item | 9 4 |
+| push(1): append | 9 4 1 |
+| rotate 2 items | 1 9 4 |
+| pop() | returns 1, queue 9 4 |
+
+```python
+class MyStack:
+    def __init__(self):
+        self.q = deque()
+
+    def push(self, x):
+        self.q.append(x)
+        for _ in range(len(self.q) - 1):
+            self.q.append(self.q.popleft())
+
+    def pop(self):
+        return self.q.popleft()
+
+    def top(self):
+        return self.q[0]
+
+    def empty(self):
+        return len(self.q) == 0
+```
+
+**Complexity:** push O(n); pop, top and empty O(1). O(n) space. Neither design achieves O(1) amortised for both, because a queue cannot reverse order cheaply.
+
+## Tests
+
+```python
+import random
+
+for cls in (MyStack, StackTwoQueues):
+    s = cls()
+    assert s.empty() is True                     # new stack is empty
+    s.push(4); s.push(9)
+    assert s.top() == 9
+    assert s.pop() == 9 and s.top() == 4
+    assert s.pop() == 4 and s.empty() is True
+    s.push(-1); s.push(-1)                       # duplicates and negatives
+    assert s.pop() == -1 and s.pop() == -1
+    s.push(10**18)                               # large value
+    assert s.top() == 10**18 and not s.empty()
+
+random.seed(40)
+for _ in range(100):
+    a, b, ref = MyStack(), StackTwoQueues(), []
+    for _ in range(40):
+        if ref and random.random() < 0.4:
+            assert a.pop() == b.pop() == ref.pop()
+        else:
+            x = random.randint(-5, 5)
+            a.push(x); b.push(x); ref.append(x)
+        assert a.empty() == b.empty() == (not ref)
+        if ref:
+            assert a.top() == b.top() == ref[-1]
+```
+
+## Edge cases and pitfalls
+
+- Rotate `len - 1` times, not `len` times; a full rotation leaves the queue unchanged.
+- In the two-queue version, `top` must put the item back; forgetting this silently loses data.
+- Popping an empty stack is outside the contract here; say what you would do (raise, or return a sentinel).
+
+## Where this shows up in data engineering
+
+Not directly; real code uses a list or `deque`. The exercise checks that you understand FIFO and LIFO order precisely, which matters when reasoning about message queues (FIFO per partition in Kafka) versus processing stacks such as recursive dependency resolution.

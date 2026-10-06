@@ -1,0 +1,131 @@
+---
+title: "Minimum Window Substring: Shortest Slice Containing Every Required Character"
+seoTitle: "Minimum Window Substring: Expand and Shrink"
+description: "Find the shortest substring of s that contains every character of t, with multiplicity. Learn the expand-then-shrink sliding window with a 'formed' counter in O(m + n)."
+technology: ["dsa"]
+topic: ["sliding-window"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Count the characters t needs. Expand the right edge of a window over s, and track how many distinct required characters currently meet their count. Once all are met, shrink from the left as far as possible while the window stays valid, recording the shortest valid window, then continue expanding. Each index enters and leaves the window at most once, so it runs in O(m + n) time with O(k) space for k distinct characters."
+followUps: ["Why does a single 'formed' counter make the validity check O(1)?", "How would you speed it up when t's characters are rare in s?", "How would you find the shortest window containing all distinct characters of s itself?"]
+previous: "interview-questions:dsa/permutation-in-string"
+next: "interview-questions:dsa/sliding-window-maximum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given strings `s` and `t`, return the shortest contiguous substring of `s` that contains every character of `t`, including repeats (if `t` has two `x`s, the window needs at least two). If no such window exists, return the empty string. When several shortest windows exist, return the leftmost. This is widely known as LeetCode 76, Minimum Window Substring.
+
+Characters are case-sensitive. Lengths go up to about 10^5.
+
+## Examples
+
+```text
+s = "XDOYEZODEYXNZ",  t = "XYZ"   ->  "YXNZ"
+s = "aa",             t = "aa"    ->  "aa"
+s = "ab",             t = "bb"    ->  ""      (only one b available)
+```
+
+## Approach 1: brute force
+
+Check every substring, shortest first, and return the first that covers `t`.
+
+```python
+from collections import Counter
+
+def min_window_brute(s, t):
+    if not t:
+        return ""
+    need = Counter(t)
+    for length in range(len(t), len(s) + 1):
+        for i in range(len(s) - length + 1):
+            window = Counter(s[i:i + length])
+            if all(window[c] >= n for c, n in need.items()):
+                return s[i:i + length]
+    return ""
+```
+
+**Complexity:** O(n² · n) = O(n³) time in the worst case (O(n²) windows, each counted in O(n)), O(k) space.
+
+## Approach 2: optimal
+
+**Key insight:** for each right edge, the best left edge only moves forward. Expand right until the window is valid, then shrink from the left until it would become invalid. A counter `formed` (how many distinct characters of `t` are satisfied) tells you validity in O(1).
+
+Walkthrough on `s = "XDOYEZODEYXNZ"`, `t = "XYZ"` (need one each of X, Y, Z):
+
+1. Expand to index 5 (`Z`): window `"XDOYEZ"` now holds X, Y, Z. formed = 3. Record length 6. Shrinking past `X` breaks it, so stop and expand again.
+2. Expand to index 10 (`X`): window `"DOYEZODEYX"` is valid again. Shrink: drop D, O (still valid), drop Y? There is another Y at 9, so yes; then E; then Z breaks it. Best window so far still length 6.
+3. Expand to index 12 (`Z`): window from index 6, `"ODEYXNZ"`, is valid. Shrink off O, D, E: `"YXNZ"`, length 4. Dropping Y breaks it. Record 4.
+
+```python
+def min_window(s, t):
+    if not t or not s:
+        return ""
+    need = {}
+    for ch in t:
+        need[ch] = need.get(ch, 0) + 1
+    required = len(need)
+    have = {}
+    formed = 0
+    left = 0
+    best_len, best_start = float("inf"), 0
+    for right, ch in enumerate(s):
+        if ch in need:
+            have[ch] = have.get(ch, 0) + 1
+            if have[ch] == need[ch]:
+                formed += 1
+        while formed == required:
+            if right - left + 1 < best_len:
+                best_len, best_start = right - left + 1, left
+            out = s[left]
+            if out in need:
+                have[out] -= 1
+                if have[out] < need[out]:
+                    formed -= 1
+            left += 1
+    return "" if best_len == float("inf") else s[best_start:best_start + best_len]
+```
+
+**Complexity:** O(m + n) time, where m = len(s) and n = len(t); O(k) space for the two maps.
+
+## Tests
+
+```python
+import random
+
+for f in (min_window, min_window_brute):
+    assert f("XDOYEZODEYXNZ", "XYZ") == "YXNZ"
+    assert f("aa", "aa") == "aa"                  # repeated requirement
+    assert f("ab", "bb") == ""                    # not enough copies
+    assert f("a", "a") == "a"                     # single character
+    assert f("", "a") == "" and f("a", "") == ""  # empty inputs
+    assert f("abc", "d") == ""                    # missing character
+    assert f("aBc", "b") == ""                    # case-sensitive
+    assert f("cabwefgewcwaefgcf", "cae") == "cwae"
+
+long_s = "a" * 50_000 + "b" + "a" * 50_000 + "c"
+assert min_window(long_s, "bc") == long_s[50_000:]
+
+random.seed(30)
+for _ in range(400):
+    s = "".join(random.choice("abc") for _ in range(random.randint(0, 10)))
+    t = "".join(random.choice("abc") for _ in range(random.randint(1, 3)))
+    assert min_window(s, t) == min_window_brute(s, t)
+```
+
+## Edge cases and pitfalls
+
+- Count requirements with multiplicity; a set of required characters gets `t = "aa"` wrong.
+- Increment `formed` only when a count reaches the requirement exactly, and decrement only when it drops below. Using `>=` on the way up counts the same character more than once.
+- Record the best window *before* removing the left character.
+- Store the start and length, not the substring, inside the loop; slicing on every improvement adds avoidable copying.
+
+## Where this shows up in data engineering
+
+"Shortest time span in which every required event type occurred" is this problem on an event log: for example, the quickest session in which a user hit every step of a funnel. The expand-and-shrink window over time-ordered events is a practical way to compute it per user.

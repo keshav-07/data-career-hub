@@ -1,0 +1,119 @@
+---
+title: "Permutation in String: Does One String Contain a Rearrangement of Another?"
+seoTitle: "Permutation in String: Fixed-Size Window Counts"
+description: "Check whether some substring of s2 is an anagram of s1. Slide a fixed-length window, update letter counts in O(1) per step, and compare: O(n) overall."
+technology: ["dsa"]
+topic: ["sliding-window"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Any permutation of s1 has the same length and the same letter counts as s1. Slide a window of length len(s1) across s2, adding the entering letter and removing the leaving one, and check whether the window's counts equal s1's. Tracking how many of the 26 letters currently match makes each step O(1), so the whole scan is O(n) time and O(1) space."
+followUps: ["How would you return every starting index of an anagram instead of a boolean?", "How does the matches counter avoid comparing 26 counts at every step?", "What changes if the alphabet is arbitrary Unicode?"]
+previous: "interview-questions:dsa/longest-repeating-character-replacement"
+next: "interview-questions:dsa/minimum-window-substring"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given two lowercase strings `s1` and `s2`, return `True` if `s2` contains a contiguous substring that is a rearrangement of `s1` (same letters, same counts), and `False` otherwise. This is widely known as LeetCode 567, Permutation in String.
+
+## Examples
+
+```text
+s1 = "tea",  s2 = "rotate"     ->  True    ("ate")
+s1 = "aab",  s2 = "abxaab"     ->  True    ("aab")
+s1 = "ab",   s2 = "acb"        ->  False   (a and b are not adjacent)
+s1 = "abc",  s2 = "ab"         ->  False   (s2 is shorter)
+```
+
+## Approach 1: brute force
+
+Compare the sorted form of every substring of length `len(s1)` with sorted `s1`.
+
+```python
+def check_inclusion_brute(s1, s2):
+    m = len(s1)
+    target = sorted(s1)
+    return any(sorted(s2[i:i + m]) == target for i in range(len(s2) - m + 1))
+```
+
+**Complexity:** O((n − m + 1) · m log m) time, O(m) space. (Generating every permutation of `s1` would be O(m!), far worse.)
+
+## Approach 2: optimal
+
+**Key insight:** neighbouring windows differ by one letter in and one letter out, so the counts can be updated in O(1) instead of rebuilt. Keep a `matches` counter: the number of letters (out of 26) whose window count equals the target count. The window is an anagram exactly when `matches == 26`.
+
+Walkthrough on `s1 = "tea"`, `s2 = "rotate"` (window size 3), comparing counts:
+
+| Window | Letters in | Anagram of "tea"? |
+|---|---|---|
+| rot | | no |
+| ota | +a, −r | no |
+| tat | +t, −o | no (two t, no e) |
+| ate | +e, −t | **yes** |
+
+```python
+def check_inclusion(s1, s2):
+    m, n = len(s1), len(s2)
+    if m > n:
+        return False
+    need, have = [0] * 26, [0] * 26
+    for i in range(m):
+        need[ord(s1[i]) - 97] += 1
+        have[ord(s2[i]) - 97] += 1
+    matches = sum(1 for i in range(26) if need[i] == have[i])
+    for right in range(m, n):
+        if matches == 26:
+            return True
+        for idx, delta in ((ord(s2[right]) - 97, 1), (ord(s2[right - m]) - 97, -1)):
+            if have[idx] == need[idx]:
+                matches -= 1
+            have[idx] += delta
+            if have[idx] == need[idx]:
+                matches += 1
+    return matches == 26
+```
+
+Comparing the two 26-slot lists directly (`have == need`) at every step is simpler and still O(26 · n) = O(n); the `matches` counter is the refinement interviewers sometimes ask for.
+
+**Complexity:** O(n) time, O(1) space.
+
+## Tests
+
+```python
+import random
+
+for f in (check_inclusion, check_inclusion_brute):
+    assert f("tea", "rotate") is True
+    assert f("aab", "abxaab") is True
+    assert f("ab", "acb") is False
+    assert f("abc", "ab") is False           # s1 longer than s2
+    assert f("z", "z") is True               # single, equal strings
+    assert f("a", "bbb") is False
+    assert f("aa", "aba") is False           # counts matter
+    assert f("ab", "ba") is True             # match at the very end
+
+assert check_inclusion("xyz", "a" * 100_000 + "zyx") is True    # long input
+
+random.seed(29)
+for _ in range(500):
+    s1 = "".join(random.choice("abc") for _ in range(random.randint(1, 4)))
+    s2 = "".join(random.choice("abc") for _ in range(random.randint(0, 10)))
+    assert check_inclusion(s1, s2) == check_inclusion_brute(s1, s2)
+```
+
+## Edge cases and pitfalls
+
+- Check the final window after the loop; the loop body tests the window *before* sliding.
+- Return `False` early if `s1` is longer than `s2`, or the initial loop reads past the end.
+- In the `matches` update, adjust before and after changing the count: a letter that was matched may stop matching, and one that was not may start.
+- An empty `s1` is trivially contained; clarify if the constraints allow it.
+
+## Where this shows up in data engineering
+
+A fixed-size window updated incrementally, adding the newest item and subtracting the oldest, is how rolling aggregates are computed efficiently: a 7-day rolling count per category is maintained the same way rather than recomputed from scratch each day.

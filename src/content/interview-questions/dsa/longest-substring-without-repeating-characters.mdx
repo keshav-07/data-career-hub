@@ -1,0 +1,118 @@
+---
+title: "Longest Substring Without Repeating Characters: Sliding Window"
+seoTitle: "Longest Substring Without Repeating Characters"
+description: "Find the length of the longest substring whose characters are all different. Learn the sliding window with a last-seen index map that runs in O(n) time."
+technology: ["dsa"]
+topic: ["sliding-window"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Grow a window to the right one character at a time and keep a map from each character to the index where it was last seen. If the new character was last seen inside the window, jump the left edge to just after that index. The window then has no repeats, so record its length. Each index enters and leaves the window once: O(n) time and O(k) space for k distinct characters."
+followUps: ["Why must the left edge never move backwards?", "How would you return the substring itself?", "How would you allow at most two distinct characters, or at most k?"]
+previous: "interview-questions:dsa/best-time-to-buy-and-sell-stock"
+next: "interview-questions:dsa/longest-repeating-character-replacement"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string, return the length of the longest contiguous substring in which no character appears more than once. This is widely known as LeetCode 3, Longest Substring Without Repeating Characters.
+
+The string may be empty and may contain letters, digits, symbols and spaces, up to about 5 × 10^4 characters.
+
+## Examples
+
+```text
+s = "streets"   ->  4    ("stre")
+s = "kkkk"      ->  1
+s = ""          ->  0
+s = "ab cab"    ->  4    ("b ca" or " cab")
+```
+
+## Approach 1: brute force
+
+For each start, extend to the right until a character repeats.
+
+```python
+def longest_unique_brute(s):
+    best = 0
+    for i in range(len(s)):
+        seen = set()
+        for j in range(i, len(s)):
+            if s[j] in seen:
+                break
+            seen.add(s[j])
+        best = max(best, len(seen))
+    return best
+```
+
+**Complexity:** O(n · k) time, where k is the alphabet size (each inner loop stops after at most k + 1 characters), so O(n²) in general. O(k) space.
+
+## Approach 2: optimal
+
+**Key insight:** when a repeat appears, every window that starts at or before the earlier copy is invalid from now on. So the left edge can jump straight past the earlier copy instead of retrying every start.
+
+Walkthrough on `"streets"`:
+
+| right | char | last seen | left after | Window | Best |
+|---|---|---|---|---|---|
+| 0 | s | none | 0 | s | 1 |
+| 1 | t | none | 0 | st | 2 |
+| 2 | r | none | 0 | str | 3 |
+| 3 | e | none | 0 | stre | 4 |
+| 4 | e | 3 | 4 | e | 4 |
+| 5 | t | 1 (outside window) | 4 | et | 4 |
+| 6 | s | 0 (outside window) | 4 | ets | 4 |
+
+The answer is 4, from `"stre"`. Note rows 5 and 6: a character last seen *before* the left edge is not a repeat inside the window, so the left edge must not move back.
+
+```python
+def length_of_longest_substring(s):
+    last = {}
+    left = best = 0
+    for right, ch in enumerate(s):
+        if ch in last and last[ch] >= left:
+            left = last[ch] + 1
+        last[ch] = right
+        best = max(best, right - left + 1)
+    return best
+```
+
+**Complexity:** O(n) time, O(k) space for the map.
+
+## Tests
+
+```python
+import random
+
+for f in (length_of_longest_substring, longest_unique_brute):
+    assert f("streets") == 4
+    assert f("kkkk") == 1                    # all duplicates
+    assert f("") == 0                        # empty
+    assert f("z") == 1                       # single character
+    assert f("ab cab") == 4                  # spaces count
+    assert f("abba") == 2                    # left edge must not move back
+    assert f("dvdf") == 3
+    assert f("aA") == 2                      # case-sensitive
+
+assert length_of_longest_substring("".join(chr(32 + i % 95) for i in range(50_000))) == 95  # long input
+
+random.seed(27)
+for _ in range(400):
+    s = "".join(random.choice("abcd ") for _ in range(random.randint(0, 12)))
+    assert length_of_longest_substring(s) == longest_unique_brute(s)
+```
+
+## Edge cases and pitfalls
+
+- The `last[ch] >= left` check is the subtle part. Without it, `"abba"` returns 3: at the final `a`, the old index 0 would drag the left edge back to 1.
+- An alternative uses a set and moves `left` forward one step at a time while removing characters; it is also O(n) but does more work per repeat.
+- Clarify whether the string can hold arbitrary Unicode; a dictionary handles it, a 128-slot array does not.
+
+## Where this shows up in data engineering
+
+Sliding windows with a "last seen" map are how stream processors detect repeats within a window, for example deduplicating events by id within the last N events or minutes. The rule that the window's start only ever moves forward is the same rule that lets such operators discard old state.

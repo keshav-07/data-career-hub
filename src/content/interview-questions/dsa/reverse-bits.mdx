@@ -1,0 +1,115 @@
+---
+title: "Reverse Bits: Mirror the 32 Bits of an Unsigned Integer"
+seoTitle: "Reverse Bits of a 32-bit Unsigned Integer"
+description: "Reverse the bit order of a 32-bit unsigned integer. Learn the shift-and-OR loop over all 32 bits, and the divide-and-conquer mask swaps used for repeated calls."
+technology: ["dsa"]
+topic: ["arrays", "bit-manipulation"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 6
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Loop exactly 32 times: shift the result left by one, OR in the lowest bit of the input, and shift the input right by one. After 32 steps the first bit read has travelled to the top. Always run all 32 iterations, because leading zeros of the input become trailing zeros of the output. This is O(1) time and space for fixed 32-bit input; for many calls, swapping halves, bytes, nibbles, pairs and single bits with masks takes five steps."
+followUps: ["How would you optimise if the function is called millions of times?", "How does the mask-swapping version work step by step?", "How would you reverse only the significant bits, ignoring leading zeros?"]
+previous: "interview-questions:dsa/number-of-1-bits"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You receive an integer between 0 and 2^32 − 1 representing 32 bits. Return the unsigned integer whose 32-bit representation is the reverse of the input's: bit 0 becomes bit 31, bit 1 becomes bit 30, and so on. This is widely known as LeetCode 190, Reverse Bits.
+
+## Examples
+
+```text
+n = 1            (00000000000000000000000000000001)  ->  2147483648  (1 followed by 31 zeros)
+n = 6            (...0110)                           ->  1610612736  (0110 followed by 28 zeros)
+n = 4294967295   (all ones)                          ->  4294967295
+n = 0                                                ->  0
+```
+
+## Approach 1: brute force (string reversal)
+
+Format as a 32-character binary string, reverse it, and parse it back.
+
+```python
+def reverse_bits_str(n):
+    return int(format(n, "032b")[::-1], 2)
+```
+
+**Complexity:** O(32) = O(1) time and space, but it builds strings, and interviewers want to see the bitwise version.
+
+## Approach 2: optimal (shift and OR)
+
+**Key insight:** reading bits from the low end of `n` and pushing them into the low end of the result reverses their order, like moving cards from one pile to another.
+
+Walkthrough on a 4-bit version for readability, `n = 0110`:
+
+| Step | n's lowest bit | result after | n after |
+|---|---|---|---|
+| 1 | 0 | 0 | 011 |
+| 2 | 1 | 01 | 01 |
+| 3 | 1 | 011 | 0 |
+| 4 | 0 | 0110 | 0 |
+
+With 4 bits the reverse of `0110` is `0110`. With 32 bits, the same steps continue for 28 more zeros and push the pattern to the top.
+
+```python
+def reverse_bits(n):
+    result = 0
+    for _ in range(32):
+        result = (result << 1) | (n & 1)
+        n >>= 1
+    return result
+```
+
+**Complexity:** O(32) = O(1) time, O(1) space.
+
+## Approach 3: divide and conquer with masks
+
+Swap the two 16-bit halves, then the bytes within each half, then nibbles, pairs and single bits. Five constant-time steps reverse all 32 bits, which is attractive when the function is called very often.
+
+```python
+def reverse_bits_masks(n):
+    n = ((n >> 16) | (n << 16)) & 0xFFFFFFFF
+    n = ((n & 0xFF00FF00) >> 8) | ((n & 0x00FF00FF) << 8)
+    n = ((n & 0xF0F0F0F0) >> 4) | ((n & 0x0F0F0F0F) << 4)
+    n = ((n & 0xCCCCCCCC) >> 2) | ((n & 0x33333333) << 2)
+    n = ((n & 0xAAAAAAAA) >> 1) | ((n & 0x55555555) << 1)
+    return n
+```
+
+A third common answer for repeated calls is a 256-entry lookup table of reversed bytes, combined four times.
+
+## Tests
+
+```python
+import random
+
+for f in (reverse_bits, reverse_bits_masks, reverse_bits_str):
+    assert f(1) == 2**31                       # lowest bit to highest
+    assert f(2**31) == 1                       # and back
+    assert f(6) == 1610612736
+    assert f(0) == 0                           # zero
+    assert f(2**32 - 1) == 2**32 - 1           # all ones
+    assert f(0x0000FFFF) == 0xFFFF0000
+
+random.seed(50)
+for _ in range(1000):
+    n = random.getrandbits(32)
+    r = reverse_bits(n)
+    assert r == reverse_bits_masks(n) == reverse_bits_str(n)
+    assert reverse_bits(r) == n                # reversing twice is the identity
+```
+
+## Edge cases and pitfalls
+
+- Stopping the loop when `n` becomes 0 is a bug: the remaining shifts are what move the bits to the top. `1` would return `1` instead of `2^31`.
+- In Python, left shifts never overflow, so mask with `0xFFFFFFFF` where a shift could push bits past position 31 (as in the first mask step).
+- In Java the input arrives as a signed `int`; use `>>>` to shift without sign extension.
+
+## Where this shows up in data engineering
+
+Bit order matters in binary formats and hashing: some file formats and network protocols differ in bit or byte order, and some hash-based partitioning or sketch structures use bit-reversal or similar mixing to spread values evenly. Day to day, the more common need is byte-order conversion (`int.from_bytes(b, "little")`), which is the same idea at byte granularity.

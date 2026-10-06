@@ -1,0 +1,128 @@
+---
+title: "String to Integer (atoi): Parse a Signed 32-bit Integer by Hand"
+seoTitle: "String to Integer (atoi): Careful Parsing"
+description: "Convert a string to a 32-bit signed integer: skip leading spaces, read an optional sign and digits, stop at the first non-digit, and clamp the result to range."
+technology: ["dsa"]
+topic: ["strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Walk the string once in stages: skip leading spaces, read at most one '+' or '-', then accumulate digits with value = value * 10 + digit until a non-digit appears. Apply the sign and clamp to [-2^31, 2^31 - 1]. In languages with fixed-width integers, check for overflow before each multiply-and-add. It is O(n) time and O(1) space; the difficulty is getting every rule and edge case right."
+followUps: ["How would you detect overflow without a wider integer type?", "Why is int(s) in Python not an acceptable answer here?", "How would you extend the parser to decimals or exponents?"]
+previous: "interview-questions:dsa/valid-palindrome-ii"
+next: "interview-questions:dsa/single-number"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Write `my_atoi(s)` that converts a string to a 32-bit signed integer with these rules:
+
+1. Ignore leading space characters.
+2. Read an optional single `+` or `-` sign.
+3. Read consecutive digits, ignoring leading zeros, and stop at the first non-digit or the end. Anything after that is ignored.
+4. If no digits were read, the result is 0.
+5. Clamp the result to the range `[-2^31, 2^31 - 1]`.
+
+This is widely known as LeetCode 8, String to Integer (atoi).
+
+## Examples
+
+```text
+"   -0042kg"      ->  -42
+"7 days"          ->  7
+"+-3"             ->  0             (second sign is not a digit)
+"abc 12"          ->  0             (non-digit before any digit)
+"99999999999"     ->  2147483647    (clamped)
+```
+
+## Approach 1: brute force (regular expression)
+
+Match the allowed prefix with a regular expression, convert it with `int`, and clamp.
+
+```python
+import re
+
+INT_MIN, INT_MAX = -2**31, 2**31 - 1
+
+def my_atoi_regex(s):
+    m = re.match(r" *([+-]?\d+)", s)
+    if not m:
+        return 0
+    return max(INT_MIN, min(INT_MAX, int(m.group(1))))
+```
+
+**Complexity:** O(n) time, O(n) space for the match. Concise, but interviewers usually want the manual parse so they can see the overflow handling. Note that `\d` also matches non-ASCII digits in Python; use `[0-9]` to be strict.
+
+## Approach 2: optimal (manual parse)
+
+**Key insight:** treat it as a tiny state machine (spaces, sign, digits, done) and check for overflow before it happens, so the code also works in languages where integers wrap.
+
+Walkthrough on `"   -0042kg"`:
+
+1. Skip three spaces; index 3.
+2. `-` sets sign = -1; index 4.
+3. Digits: `0` → 0, `0` → 0, `4` → 4, `2` → 42. `k` stops the loop.
+4. Result: -1 × 42 = -42, inside the range.
+
+```python
+def my_atoi(s):
+    i, n = 0, len(s)
+    while i < n and s[i] == " ":
+        i += 1
+    sign = 1
+    if i < n and s[i] in "+-":
+        sign = -1 if s[i] == "-" else 1
+        i += 1
+    value = 0
+    limit = INT_MAX if sign == 1 else -INT_MIN       # 2147483647 or 2147483648
+    while i < n and "0" <= s[i] <= "9":
+        digit = ord(s[i]) - ord("0")
+        if value > (limit - digit) // 10:            # value * 10 + digit would exceed limit
+            return INT_MAX if sign == 1 else INT_MIN
+        value = value * 10 + digit
+        i += 1
+    return sign * value
+```
+
+**Complexity:** O(n) time, O(1) space.
+
+## Tests
+
+```python
+import random
+
+for f in (my_atoi, my_atoi_regex):
+    assert f("   -0042kg") == -42
+    assert f("7 days") == 7
+    assert f("+-3") == 0                         # two signs
+    assert f("abc 12") == 0                      # letters first
+    assert f("") == 0 and f("   ") == 0          # empty and spaces only
+    assert f("-") == 0 and f("+") == 0           # sign only
+    assert f("0") == 0 and f("-0") == 0
+    assert f("99999999999") == INT_MAX           # positive overflow
+    assert f("-99999999999") == INT_MIN          # negative overflow
+    assert f("2147483647") == INT_MAX and f("2147483648") == INT_MAX   # boundary
+    assert f("-2147483648") == INT_MIN and f("-2147483649") == INT_MIN
+    assert f(" +12 3") == 12                     # stops at the space
+
+random.seed(47)
+for _ in range(1000):
+    s = "".join(random.choice(" +-0123456789a") for _ in range(random.randint(0, 14)))
+    assert my_atoi(s) == my_atoi_regex(s)
+```
+
+## Edge cases and pitfalls
+
+- Only spaces are skipped; a tab or letter before the digits gives 0 under these rules. Clarify the whitespace definition with the interviewer.
+- The negative range is one larger than the positive one: `-2147483648` is valid, `2147483648` is not.
+- Check overflow before multiplying. In Java or C++, `value * 10 + digit` can wrap around silently.
+- A sign must be followed directly by a digit: `"- 5"` and `"+-3"` both give 0.
+
+## Where this shows up in data engineering
+
+Hand-rolled parsing with explicit rules is what happens whenever raw files arrive with messy numeric fields: `"  -42 "`, `"1,000"`, `"12kg"`. Engines differ (`CAST`, `TRY_CAST`, `to_number`) in how they treat such input, and many silently return NULL or truncate. Knowing exactly which rules your parser applies, and clamping or rejecting overflow deliberately, prevents silent data corruption.

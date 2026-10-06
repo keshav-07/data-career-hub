@@ -1,0 +1,115 @@
+---
+title: "Daily Temperatures: Days Until a Warmer Day With a Monotonic Stack"
+seoTitle: "Daily Temperatures: Monotonic Stack"
+description: "For each day, count the days until a strictly warmer one, or 0 if none. Learn the decreasing monotonic stack that answers every day in one O(n) pass."
+technology: ["dsa"]
+topic: ["stack"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Keep a stack of indices of days still waiting for a warmer day; their temperatures are non-increasing from bottom to top. For each new day, pop every waiting day that is colder than today and set its answer to today's index minus its index, then push today. Days left on the stack at the end keep the answer 0. Each index is pushed and popped at most once: O(n) time and O(n) space."
+followUps: ["Why are the temperatures on the stack always non-increasing?", "How would you solve it scanning from right to left instead?", "How does this pattern solve Next Greater Element and Largest Rectangle in Histogram?"]
+previous: "interview-questions:dsa/generate-parentheses"
+next: "interview-questions:dsa/car-fleet"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You get a list of daily temperatures. For each day, return how many days you would have to wait for a strictly warmer temperature. If no later day is warmer, the answer for that day is 0. This is widely known as LeetCode 739, Daily Temperatures.
+
+The list can hold up to 10^5 values.
+
+## Examples
+
+```text
+temps = [18, 16, 17, 21, 15, 15, 19]   ->  [3, 1, 1, 0, 2, 1, 0]
+temps = [30, 29, 28]                   ->  [0, 0, 0]
+temps = [10, 10, 11]                   ->  [2, 1, 0]   (equal is not warmer)
+```
+
+## Approach 1: brute force
+
+For each day, scan forward until a warmer day appears.
+
+```python
+def daily_temperatures_brute(temps):
+    out = [0] * len(temps)
+    for i in range(len(temps)):
+        for j in range(i + 1, len(temps)):
+            if temps[j] > temps[i]:
+                out[i] = j - i
+                break
+    return out
+```
+
+**Complexity:** O(n²) time in the worst case (a falling sequence), O(1) extra space.
+
+## Approach 2: optimal (monotonic stack)
+
+**Key insight:** a day that is still waiting is only resolved by the first later day that is warmer. When a warm day arrives, it resolves every colder waiting day at once, and those days never need to be looked at again. Waiting days therefore form a stack with non-increasing temperatures.
+
+Walkthrough on `[18, 16, 17, 21, 15, 15, 19]` (stack shows `index:temp`):
+
+| Day | Temp | Popped (answer) | Stack after |
+|---|---|---|---|
+| 0 | 18 | | 0:18 |
+| 1 | 16 | | 0:18 1:16 |
+| 2 | 17 | 1 (2 − 1 = 1) | 0:18 2:17 |
+| 3 | 21 | 2 (1), 0 (3) | 3:21 |
+| 4 | 15 | | 3:21 4:15 |
+| 5 | 15 | (15 is not warmer) | 3:21 4:15 5:15 |
+| 6 | 19 | 5 (1), 4 (2) | 3:21 6:19 |
+
+Days 3 and 6 stay on the stack and keep 0.
+
+```python
+def daily_temperatures(temps):
+    out = [0] * len(temps)
+    stack = []                         # indices waiting for a warmer day
+    for i, t in enumerate(temps):
+        while stack and temps[stack[-1]] < t:
+            j = stack.pop()
+            out[j] = i - j
+        stack.append(i)
+    return out
+```
+
+**Complexity:** O(n) time, O(n) space for the stack in the worst case.
+
+## Tests
+
+```python
+import random
+
+for f in (daily_temperatures, daily_temperatures_brute):
+    assert f([18, 16, 17, 21, 15, 15, 19]) == [3, 1, 1, 0, 2, 1, 0]
+    assert f([30, 29, 28]) == [0, 0, 0]          # falling
+    assert f([10, 10, 11]) == [2, 1, 0]          # duplicates
+    assert f([]) == []                           # empty
+    assert f([25]) == [0]                        # single day
+    assert f([-5, -10, -3]) == [2, 1, 0]         # negatives
+    assert f([1, 2, 3]) == [1, 1, 0]             # rising
+
+big = list(range(100_000, 0, -1)) + [100_001]
+assert daily_temperatures(big)[0] == 100_000     # large falling input resolved at the end
+
+random.seed(36)
+for _ in range(400):
+    ts = [random.randint(-3, 3) for _ in range(random.randint(0, 12))]
+    assert daily_temperatures(ts) == daily_temperatures_brute(ts)
+```
+
+## Edge cases and pitfalls
+
+- Use strict `<` when popping. Popping on equal temperatures would report a day of the same temperature as "warmer".
+- Store indices on the stack, not temperatures; you need the index to compute the distance.
+- The inner `while` does not make it O(n²): across the whole run there are at most n pops.
+
+## Where this shows up in data engineering
+
+"How long until the metric next exceeds today's value" appears in time-series analysis, for example time until a price recovers, or until a backlog next grows. The monotonic stack computes it for every row in one pass, which is much cheaper than the self-join a naive SQL version would need.

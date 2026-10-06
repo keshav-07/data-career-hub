@@ -13,6 +13,8 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Use Dijkstra's Dutch national flag partition: low marks where the next 0 goes, high where the next 2 goes, and mid scans. A 0 at mid is swapped to low and both advance; a 1 just advances mid; a 2 is swapped to high and high moves left, but mid stays because the swapped-in value is unexamined. Stop when mid passes high. One pass, O(n) time and O(1) space. Counting the three values and rewriting is the simpler two-pass alternative."
 followUps: ["Why does mid not advance after swapping with high?", "How does three-way partitioning help quicksort with many duplicate keys?", "How would you sort k distinct values in place?"]
+previous: "interview-questions:dsa/move-zeroes"
+next: "interview-questions:dsa/best-time-to-buy-and-sell-stock"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 

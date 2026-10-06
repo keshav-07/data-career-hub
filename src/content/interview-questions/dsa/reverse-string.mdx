@@ -1,0 +1,106 @@
+---
+title: "Reverse String: Reverse a Character Array in Place"
+seoTitle: "Reverse String: In-Place Two-Pointer Swap"
+description: "Reverse a list of characters in place with O(1) extra memory. Swap from both ends towards the middle, and know why slicing does not meet the constraint."
+technology: ["dsa"]
+topic: ["strings", "two-pointers"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 4
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Put a pointer at each end, swap the two characters, and move both pointers inward until they meet. Each pair is swapped once, so it is O(n) time and O(1) extra space. Slicing with s[::-1] creates a new list, which breaks the in-place requirement unless you assign it back with s[:] = s[::-1], and even then it uses O(n) temporary memory."
+followUps: ["How would you reverse the order of words in a sentence in place?", "Why are Python strings not reversible in place?", "How would you reverse a string that contains multi-code-point characters such as emoji with modifiers?"]
+previous: "interview-questions:dsa/longest-common-prefix"
+next: "interview-questions:dsa/valid-palindrome-ii"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of single-character strings. Reverse it in place: modify the list itself and use only O(1) extra memory. This is widely known as LeetCode 344, Reverse String.
+
+## Examples
+
+```text
+["e", "t", "l"]          ->  ["l", "t", "e"]
+["a", "b", "c", "d"]     ->  ["d", "c", "b", "a"]
+["z"]                    ->  ["z"]
+```
+
+## Approach 1: brute force
+
+Build a reversed copy and write it back into the original list.
+
+```python
+def reverse_copy(s):
+    rev = []
+    for i in range(len(s) - 1, -1, -1):
+        rev.append(s[i])
+    for i, ch in enumerate(rev):
+        s[i] = ch
+```
+
+**Complexity:** O(n) time, O(n) extra space. Fails the memory requirement.
+
+## Approach 2: optimal
+
+**Key insight:** reversing maps position `i` to position `n - 1 - i`, which is a set of disjoint pairs. Swap each pair once.
+
+Walkthrough on `["a", "b", "c", "d"]`:
+
+| left | right | List after swap |
+|---|---|---|
+| 0 | 3 | d b c a |
+| 1 | 2 | d c b a |
+| 2 | 1 | stop (pointers crossed) |
+
+```python
+def reverse_string(s):
+    left, right = 0, len(s) - 1
+    while left < right:
+        s[left], s[right] = s[right], s[left]
+        left += 1
+        right -= 1
+```
+
+**Complexity:** O(n) time, O(1) extra space. `s.reverse()` does the same in C and is fine to mention.
+
+## Tests
+
+```python
+import random
+
+def run(f, chars):
+    chars = list(chars)
+    assert f(chars) is None          # in place: nothing returned
+    return chars
+
+for f in (reverse_string, reverse_copy):
+    assert run(f, ["e", "t", "l"]) == ["l", "t", "e"]       # odd length
+    assert run(f, ["a", "b", "c", "d"]) == ["d", "c", "b", "a"]   # even length
+    assert run(f, ["z"]) == ["z"]                           # single
+    assert run(f, []) == []                                 # empty
+    assert run(f, ["x", "x", "y"]) == ["y", "x", "x"]       # duplicates
+    assert run(f, list("héllo")) == list("olléh")           # non-ASCII
+
+big = [chr(97 + i % 26) for i in range(100_000)]
+assert run(reverse_string, big) == big[::-1]
+
+random.seed(45)
+for _ in range(300):
+    chars = [random.choice("abc") for _ in range(random.randint(0, 9))]
+    assert run(reverse_string, chars) == run(reverse_copy, chars) == chars[::-1]
+```
+
+## Edge cases and pitfalls
+
+- `s = s[::-1]` inside the function rebinds a local name and leaves the caller's list unchanged.
+- Use `left < right`; with `<=` the middle element of an odd-length list is swapped with itself, which is harmless but shows imprecision.
+- Reversing a list of code points breaks grapheme clusters such as an emoji followed by a skin-tone modifier. Mention it if the input is user text.
+
+## Where this shows up in data engineering
+
+Rarely directly. In-place, constant-memory transformations matter when working on large buffers, for example reversing byte order when converting between big-endian and little-endian encodings in binary file readers.

@@ -1,0 +1,132 @@
+---
+title: "Sliding Window Maximum: Max of Every Window With a Monotonic Deque"
+seoTitle: "Sliding Window Maximum: Monotonic Deque"
+description: "Return the maximum of every length-k window in an array. Learn the monotonic deque that keeps candidates in decreasing order and solves it in O(n) time."
+technology: ["dsa"]
+topic: ["sliding-window", "queue"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Keep a deque of indices whose values are in decreasing order. When a new value arrives, pop indices from the back while their values are not larger, because they can never be a maximum again; then push the new index. Pop from the front when that index has left the window. The front is always the current window's maximum. Each index is pushed and popped at most once: O(n) time and O(k) space. A max-heap with lazy deletion gives O(n log n)."
+followUps: ["Why is it safe to discard smaller values behind a new value?", "How would you compute the sliding window minimum, or both at once?", "How would a heap-based solution handle elements that have left the window?"]
+previous: "interview-questions:dsa/minimum-window-substring"
+next: "interview-questions:dsa/maximum-average-subarray-i"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers `nums` and a window size `k` (1 ≤ k ≤ len(nums)), slide a window of length `k` from left to right one position at a time and return the maximum of each window, in order. There are `len(nums) - k + 1` windows. This is widely known as LeetCode 239, Sliding Window Maximum.
+
+## Examples
+
+```text
+nums = [4, 2, 12, 3, 8, 1, 7],  k = 3   ->  [12, 12, 12, 8, 8]
+nums = [5, 4, 3],               k = 1   ->  [5, 4, 3]
+nums = [-1, -9],                k = 2   ->  [-1]
+```
+
+## Approach 1: brute force
+
+Take `max` of every window.
+
+```python
+def max_sliding_window_brute(nums, k):
+    return [max(nums[i:i + k]) for i in range(len(nums) - k + 1)]
+```
+
+**Complexity:** O(n · k) time, O(k) space per slice.
+
+## Approach 2: optimal (monotonic deque)
+
+**Key insight:** if a newer value is at least as large as an older one, the older one can never be a window maximum again: the newer one stays in the window longer and is not smaller. So keep only a decreasing sequence of candidates; the front is the maximum.
+
+Walkthrough on `[4, 2, 12, 3, 8, 1, 7]`, `k = 3` (deque shows values, stored as indices):
+
+| i | value | Pop back | Pop front (out of window) | Deque | Output |
+|---|---|---|---|---|---|
+| 0 | 4 | | | [4] | |
+| 1 | 2 | | | [4, 2] | |
+| 2 | 12 | 2, 4 | | [12] | 12 |
+| 3 | 3 | | | [12, 3] | 12 |
+| 4 | 8 | 3 | | [12, 8] | 12 |
+| 5 | 1 | | 12 (index 2) | [8, 1] | 8 |
+| 6 | 7 | 1 | | [8, 7] | 8 |
+
+```python
+from collections import deque
+
+def max_sliding_window(nums, k):
+    dq = deque()                 # indices, values decreasing
+    out = []
+    for i, v in enumerate(nums):
+        while dq and nums[dq[-1]] <= v:
+            dq.pop()
+        dq.append(i)
+        if dq[0] <= i - k:
+            dq.popleft()
+        if i >= k - 1:
+            out.append(nums[dq[0]])
+    return out
+```
+
+**Complexity:** O(n) time (each index is appended and removed once), O(k) space.
+
+## Approach 3: max-heap with lazy deletion
+
+Push `(-value, index)` pairs onto a heap and, before reading the top, pop entries whose index has left the window.
+
+```python
+import heapq
+
+def max_sliding_window_heap(nums, k):
+    heap, out = [], []
+    for i, v in enumerate(nums):
+        heapq.heappush(heap, (-v, i))
+        if i >= k - 1:
+            while heap[0][1] <= i - k:
+                heapq.heappop(heap)
+            out.append(-heap[0][0])
+    return out
+```
+
+**Complexity:** O(n log n) time, O(n) space in the worst case (stale entries can pile up). Fine as a stepping stone; the deque is the expected answer.
+
+## Tests
+
+```python
+import random
+
+for f in (max_sliding_window, max_sliding_window_heap, max_sliding_window_brute):
+    assert f([4, 2, 12, 3, 8, 1, 7], 3) == [12, 12, 12, 8, 8]
+    assert f([5, 4, 3], 1) == [5, 4, 3]                  # k = 1
+    assert f([-1, -9], 2) == [-1]                        # negatives, k = n
+    assert f([6], 1) == [6]                              # single element
+    assert f([2, 2, 2, 2], 2) == [2, 2, 2]               # duplicates
+    assert f([1, 2, 3, 4], 2) == [2, 3, 4]               # increasing
+    assert f([10**9, -10**9, 0], 2) == [10**9, 0]        # large values
+
+big = list(range(100_000))
+assert max_sliding_window(big, 1000) == big[999:]
+
+random.seed(31)
+for _ in range(400):
+    arr = [random.randint(-5, 5) for _ in range(random.randint(1, 12))]
+    k = random.randint(1, len(arr))
+    assert max_sliding_window(arr, k) == max_sliding_window_heap(arr, k) == max_sliding_window_brute(arr, k)
+```
+
+## Edge cases and pitfalls
+
+- Store indices, not values, so you can tell when the front has left the window.
+- Pop with `<=` (or `<`; both are correct). With `<`, equal values stay and the deque can be longer, but the front is still right.
+- The front check `dq[0] <= i - k` uses the window `[i - k + 1, i]`; an off-by-one here produces windows of size k + 1.
+- With k = 1 the output is the input; with k = n it is a single value.
+
+## Where this shows up in data engineering
+
+A rolling maximum over the last k rows is `MAX(x) OVER (ORDER BY t ROWS BETWEEN k-1 PRECEDING AND CURRENT ROW)`. Engines and stream processors that maintain rolling max or min incrementally rely on structures like this deque, because max, unlike sum, cannot be updated by subtracting the value that leaves.

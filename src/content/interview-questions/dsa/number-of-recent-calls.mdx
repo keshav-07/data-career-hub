@@ -1,0 +1,116 @@
+---
+title: "Number of Recent Calls: Count Requests in a Sliding Time Window"
+seoTitle: "Number of Recent Calls: Queue Time Window"
+description: "Count how many requests arrived in the last 3000 milliseconds, each time a new one arrives. Keep timestamps in a queue and drop expired ones from the front."
+technology: ["dsa"]
+topic: ["queue", "sliding-window"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 6
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Because timestamps arrive in increasing order, the requests inside the window always form a contiguous block at the end of the history. Keep them in a deque: on each new request, append its time, then pop from the front while the oldest time is earlier than t - 3000. The deque length is the answer. Each timestamp is added and removed once, so the cost is amortised O(1) per call, with space bounded by the number of requests in one window."
+followUps: ["What changes if timestamps can arrive out of order?", "How would you count per user or per API key?", "How would you bound memory if a window could hold millions of requests?"]
+previous: "interview-questions:dsa/design-circular-queue"
+next: "interview-questions:dsa/longest-common-prefix"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Design a counter class with one method, `ping(t)`, called each time a request arrives at time `t` milliseconds. Times are strictly increasing across calls. `ping(t)` records the request and returns how many requests (including this one) happened in the inclusive range `[t - 3000, t]`. This is widely known as LeetCode 933, Number of Recent Calls.
+
+## Examples
+
+```text
+ping(100)   -> 1    window [-2900, 100]: 100
+ping(2500)  -> 2    window [-500, 2500]: 100, 2500
+ping(3100)  -> 3    window [100, 3100]: 100, 2500, 3100   (100 is exactly on the edge)
+ping(3101)  -> 3    window [101, 3101]: 2500, 3100, 3101
+```
+
+## Approach 1: brute force
+
+Store every timestamp and count those in range on each call.
+
+```python
+class RecentCounterScan:
+    def __init__(self):
+        self.times = []
+
+    def ping(self, t):
+        self.times.append(t)
+        return sum(1 for x in self.times if x >= t - 3000)
+```
+
+**Complexity:** O(n) per call after n calls, and memory grows forever.
+
+## Approach 2: optimal (queue)
+
+**Key insight:** since times only increase, a timestamp that has fallen out of the window will never re-enter it. So expired timestamps can be thrown away permanently, and they are always the oldest ones, at the front of a queue.
+
+Walkthrough of the example:
+
+| ping | Append | Drop from front (time below t − 3000) | Queue | Return |
+|---|---|---|---|---|
+| 100 | 100 | | 100 | 1 |
+| 2500 | 2500 | | 100 2500 | 2 |
+| 3100 | 3100 | none (100 is not below 100) | 100 2500 3100 | 3 |
+| 3101 | 3101 | 100 | 2500 3100 3101 | 3 |
+
+```python
+from collections import deque
+
+class RecentCounter:
+    def __init__(self, window=3000):
+        self.window = window
+        self.q = deque()
+
+    def ping(self, t):
+        self.q.append(t)
+        while self.q[0] < t - self.window:
+            self.q.popleft()
+        return len(self.q)
+```
+
+**Complexity:** amortised O(1) per call (each timestamp is appended and popped at most once); space O(w), where w is the largest number of requests in one window.
+
+## Tests
+
+```python
+import random
+
+for cls in (RecentCounter, RecentCounterScan):
+    c = cls()
+    assert [c.ping(t) for t in (100, 2500, 3100, 3101)] == [1, 2, 3, 3]
+    c2 = cls()
+    assert c2.ping(1) == 1                                     # single call
+    c3 = cls()
+    assert [c3.ping(t) for t in (0, 3000, 3001, 6001)] == [1, 2, 2, 2]   # inclusive edge
+    c4 = cls()
+    assert [c4.ping(t) for t in (10**9, 10**9 + 1)] == [1, 2] # large timestamps
+    c5 = cls()
+    assert [c5.ping(t) for t in (1, 10_000, 20_000)] == [1, 1, 1]   # gaps empty the window
+
+big = RecentCounter()
+assert [big.ping(t) for t in range(1, 100_001)][-1] == 3001    # dense stream
+
+random.seed(43)
+for _ in range(200):
+    a, b, t = RecentCounter(), RecentCounterScan(), 0
+    for _ in range(30):
+        t += random.randint(1, 2000)
+        assert a.ping(t) == b.ping(t)
+```
+
+## Edge cases and pitfalls
+
+- The window is inclusive: a request at exactly `t - 3000` still counts, so drop only times strictly below it.
+- The queue is never empty inside the loop, because the current `t` was just appended and is always in range.
+- If timestamps can arrive out of order, the front is no longer the oldest. You then need a sorted structure (or a bucketed counter) instead of a plain queue.
+
+## Where this shows up in data engineering
+
+This is a sliding-window count, the core of rate limiters and of stream-processing metrics such as "events in the last 5 minutes". Stream processors handle the out-of-order case with event-time windows and watermarks, which decide when old data can be dropped, just as the front of this queue is dropped.

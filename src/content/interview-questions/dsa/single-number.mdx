@@ -1,0 +1,105 @@
+---
+title: "Single Number: Find the Value That Appears Only Once Using XOR"
+seoTitle: "Single Number: XOR in O(1) Space"
+description: "Every value appears twice except one. Find it with a hash set in O(n) space, or XOR all values together so the pairs cancel, in O(n) time and O(1) space."
+technology: ["dsa"]
+topic: ["hashing", "bit-manipulation"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "XOR every value together. XOR is associative and commutative, x ^ x = 0 and x ^ 0 = x, so every pair cancels and only the unpaired value remains, regardless of order. This is O(n) time and O(1) extra space. A hash set that adds unseen values and removes repeated ones also works in O(n) time but needs O(n) space."
+followUps: ["What if every other value appears three times instead of twice?", "What if exactly two values appear once?", "Does the XOR trick work with negative numbers in Python?"]
+previous: "interview-questions:dsa/string-to-integer-atoi"
+next: "interview-questions:dsa/number-of-1-bits"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You get a non-empty list of integers in which every value occurs exactly twice, except one value that occurs once. Return that value, using linear time and, ideally, constant extra space. This is widely known as LeetCode 136, Single Number.
+
+## Examples
+
+```text
+nums = [7, 3, 7]              ->  3
+nums = [-4, 9, 9, 2, 2]       ->  -4
+nums = [11]                   ->  11
+```
+
+## Approach 1: brute force (hash set)
+
+Add a value the first time you see it and remove it the second time; one value is left.
+
+```python
+def single_number_set(nums):
+    seen = set()
+    for num in nums:
+        if num in seen:
+            seen.remove(num)
+        else:
+            seen.add(num)
+    return seen.pop()
+```
+
+**Complexity:** O(n) time on average, O(n) space. (Counting each value with `nums.count` would be O(n²).)
+
+## Approach 2: optimal (XOR)
+
+**Key insight:** XOR flips bits. Applying the same value twice flips the same bits twice, which undoes it, so pairs vanish whatever their positions.
+
+Walkthrough on `[7, 3, 7]` in binary:
+
+| Step | Value | Running XOR |
+|---|---|---|
+| start | | 000 |
+| 1 | 7 = 111 | 111 |
+| 2 | 3 = 011 | 100 |
+| 3 | 7 = 111 | 011 = 3 |
+
+```python
+def single_number(nums):
+    result = 0
+    for num in nums:
+        result ^= num
+    return result
+```
+
+`functools.reduce(operator.xor, nums)` is the same in one line.
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (single_number, single_number_set):
+    assert f([7, 3, 7]) == 3
+    assert f([-4, 9, 9, 2, 2]) == -4            # negative single value
+    assert f([11]) == 11                        # single element
+    assert f([0, 5, 5]) == 0                    # the answer is zero
+    assert f([-1, -1, -2]) == -2                # negative pairs
+    assert f([2**40, 3, 3]) == 2**40            # large values
+
+random.seed(48)
+for _ in range(300):
+    pool = random.sample(range(-50, 51), random.randint(1, 8))
+    single, pairs = pool[0], pool[1:]
+    arr = [single] + pairs + pairs
+    random.shuffle(arr)
+    assert single_number(arr) == single_number_set(arr) == single
+```
+
+## Edge cases and pitfalls
+
+- XOR only cancels values that occur an **even** number of times. For "every other value appears three times", count each bit position modulo 3 instead.
+- Python integers are unbounded and XOR works on negative numbers using two's-complement semantics, so no masking is needed. In fixed-width languages it works the same way.
+- The XOR trick relies on the guarantee. If the input could have no single value, or several, XOR returns a meaningless number.
+
+## Where this shows up in data engineering
+
+XOR-based fingerprints are an order-independent way to compare sets: XOR the hashes of every row in two copies of a table, and if the results differ, the tables differ. Some reconciliation and checksum tools use this, keeping in mind that duplicate rows cancel each other out, so a sum or count of hashes is usually combined with it.

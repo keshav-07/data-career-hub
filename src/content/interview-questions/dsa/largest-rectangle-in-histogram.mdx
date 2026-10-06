@@ -1,0 +1,122 @@
+---
+title: "Largest Rectangle in Histogram: Biggest Area Under the Bars"
+seoTitle: "Largest Rectangle in Histogram: Monotonic Stack"
+description: "Find the largest rectangle that fits inside a bar chart. Learn the increasing monotonic stack that finds each bar's left and right limits in one O(n) pass."
+technology: ["dsa"]
+topic: ["stack"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "The best rectangle uses some bar as its height and extends left and right until a shorter bar. Keep a stack of indices with increasing heights. When a shorter bar arrives, pop taller bars: for each popped bar, the current index is its right limit and the new stack top is its left limit, so its area is height times (i - top - 1). A sentinel bar of height 0 at the end flushes the stack. Each bar is pushed and popped once: O(n) time, O(n) space."
+followUps: ["Why does the new stack top give the left boundary of the popped bar?", "How does this solve Maximal Rectangle in a 0/1 matrix?", "How would the divide-and-conquer solution work, and what is its complexity?"]
+previous: "interview-questions:dsa/car-fleet"
+next: "interview-questions:dsa/next-greater-element-i"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of non-negative bar heights, each bar 1 unit wide, standing side by side. Return the area of the largest axis-aligned rectangle that fits entirely within the bars. This is widely known as LeetCode 84, Largest Rectangle in Histogram.
+
+The list can hold up to 10^5 bars.
+
+## Examples
+
+```text
+heights = [3, 1, 4, 5, 2, 1]   ->  8    (height 4 across bars 2 and 3)
+heights = [2, 2, 2]            ->  6
+heights = [0]                  ->  0
+```
+
+## Approach 1: brute force
+
+For each bar as the shortest bar of the rectangle, extend left and right while bars are at least as tall.
+
+```python
+def largest_rectangle_brute(heights):
+    best = 0
+    n = len(heights)
+    for i, h in enumerate(heights):
+        left = i
+        while left > 0 and heights[left - 1] >= h:
+            left -= 1
+        right = i
+        while right < n - 1 and heights[right + 1] >= h:
+            right += 1
+        best = max(best, h * (right - left + 1))
+    return best
+```
+
+**Complexity:** O(n²) time in the worst case (all equal heights), O(1) extra space.
+
+## Approach 2: optimal (monotonic stack)
+
+**Key insight:** for each bar, you need the nearest shorter bar on each side. If you keep bar indices on a stack in increasing height order, then when a bar is popped, the bar causing the pop is its nearest shorter bar on the right, and the bar below it on the stack is its nearest shorter bar on the left. So its maximal rectangle is known exactly at the moment it is popped.
+
+Walkthrough on `[3, 1, 4, 5, 2, 1]` with a sentinel 0 appended (stack shows `index:height`):
+
+| i | h | Popped: height × width | Stack after |
+|---|---|---|---|
+| 0 | 3 | | 0:3 |
+| 1 | 1 | 3 × 1 = 3 | 1:1 |
+| 2 | 4 | | 1:1 2:4 |
+| 3 | 5 | | 1:1 2:4 3:5 |
+| 4 | 2 | 5 × 1 = 5, 4 × 2 = **8** | 1:1 4:2 |
+| 5 | 1 | 2 × 3 = 6, 1 × 5 = 5 | 5:1 |
+| 6 | 0 | 1 × 6 = 6 | 6:0 |
+
+At i = 5 the equal-height bar at index 1 is popped too (the code pops on `>=`). Its area is undercounted at that moment, but the bar at index 5 has the same height and is measured with the full width 6 when the sentinel arrives, so the maximum is still right. Popping only on `>` is equally correct. The best area is 8.
+
+```python
+def largest_rectangle_area(heights):
+    stack = []                                  # indices, heights increasing
+    best = 0
+    for i, h in enumerate(heights + [0]):       # sentinel flushes the stack
+        while stack and heights[stack[-1]] >= h:
+            height = heights[stack.pop()]
+            left = stack[-1] if stack else -1
+            best = max(best, height * (i - left - 1))
+        stack.append(i)
+    return best
+```
+
+The sentinel index equals `len(heights)`, and `heights[stack[-1]]` is never read for it because nothing is processed after it.
+
+**Complexity:** O(n) time, O(n) space.
+
+## Tests
+
+```python
+import random
+
+for f in (largest_rectangle_area, largest_rectangle_brute):
+    assert f([3, 1, 4, 5, 2, 1]) == 8
+    assert f([2, 2, 2]) == 6                     # duplicates
+    assert f([0]) == 0                           # single zero bar
+    assert f([7]) == 7                           # single bar
+    assert f([]) == 0                            # empty
+    assert f([1, 2, 3, 4, 5]) == 9               # increasing (3 × 3)
+    assert f([5, 4, 3, 2, 1]) == 9               # decreasing
+    assert f([10**4, 0, 10**4]) == 10**4         # large values split by zero
+
+assert largest_rectangle_area([1] * 100_000) == 100_000   # large flat input
+
+random.seed(38)
+for _ in range(400):
+    hs = [random.randint(0, 6) for _ in range(random.randint(0, 12))]
+    assert largest_rectangle_area(hs) == largest_rectangle_brute(hs)
+```
+
+## Edge cases and pitfalls
+
+- Without the sentinel, bars left on the stack at the end are never measured; an increasing histogram would return 0.
+- The width is `i - left - 1`, where `left` is the index *below* the popped bar on the stack, or -1 if the stack is empty. Using the popped index itself as the left edge undercounts.
+- `heights + [0]` copies the list; append and remove the sentinel if memory matters.
+
+## Where this shows up in data engineering
+
+The direct problem is rare, but its matrix form (largest all-ones rectangle) appears in layout and capacity questions. The transferable skill is the monotonic stack for "nearest smaller value on each side", which answers questions such as how long each price level held before a lower price appeared, in one pass over a time series.
