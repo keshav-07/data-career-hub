@@ -82,5 +82,33 @@
  "Smart sensors": {
   "ref": "articles:airflow/sensors-deferrable-operators",
   "heading": "Smart Sensors (removed)"
+ },
+ "Scheduler internals": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "Scheduler internals"
+ },
+ "Schedule intervals & cron": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "Schedule intervals and cron"
+ },
+ "Execution date vs logical date": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "Execution date vs logical date"
+ },
+ "Catchup & start_date pitfalls": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "Catchup and start_date pitfalls"
+ },
+ "Timetables": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "Timetables"
+ },
+ "Data-aware scheduling (Datasets)": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "Data-aware scheduling with assets"
+ },
+ "SLAs": {
+  "ref": "articles:airflow/dags-scheduling-retries",
+  "heading": "SLAs and deadline alerts"
  }
 }
