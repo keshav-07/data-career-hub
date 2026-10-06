@@ -14,6 +14,7 @@ interviewRelevance: "Medium"
 shortAnswer: "Each palindromic substring has exactly one centre, either a character or the gap between two characters. For each of the 2n - 1 centres, expand outwards while both ends match and add one for every successful step. That counts each palindrome once in O(n^2) time and O(1) space. The interval DP pal[i][j] = (s[i] == s[j]) and pal[i + 1][j - 1] gives the same count in O(n^2) time and space."
 followUps: ["How would you count only distinct palindromic substrings?", "How does Manacher's algorithm give the count in O(n)?", "How would you return the counts per length?"]
 previous: "interview-questions:dsa/longest-palindromic-substring"
+next: "interview-questions:dsa/decode-ways"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 

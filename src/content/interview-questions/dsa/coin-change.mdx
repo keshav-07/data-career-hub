@@ -13,6 +13,7 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Let fewest(a) be the minimum number of coins that sum to a. The last coin used is some c, so fewest(a) = 1 + min over coins c <= a of fewest(a - c), with fewest(0) = 0 and unreachable amounts marked as infinity. Fill a table from 0 up to the target and return -1 if the target stays infinite. With A the amount and k coin types this is O(A * k) time and O(A) space. Greedy (largest coin first) is wrong for many coin sets."
 followUps: ["Why does greedy work for some coin systems but not others?", "How would you count the number of combinations instead (Coin Change II)?", "How would you return the actual coins used?", "How does a BFS over amounts solve the same problem?"]
+previous: "interview-questions:dsa/decode-ways"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
@@ -22,9 +23,9 @@ You are given a list of coin values and a target amount. You have an unlimited s
 smallest number of coins that add up exactly to the amount, or -1 if it cannot be done. An amount of 0 needs 0 coins.
 
 This is widely known as LeetCode 322, "Coin Change". Counting the number of ways instead is
-[Coin Change II](/interview/dsa/coin-change-ii/).
+Coin Change II.
 
-Assume up to 12 coin values between 1 and 2^31 - 1 and an amount up to 10,000.
+Assume a dozen or so positive coin values and an amount up to 10,000.
 
 ## Examples
 
@@ -156,7 +157,7 @@ for fn in (coin_change, coin_change_memo, coin_change_bfs, coin_change_recursive
     assert fn([7, 3], 1) == -1                     # every coin too large
 
 assert coin_change([1, 2, 5], 100) == 20
-assert coin_change([186, 419, 83, 408], 6249) == coin_change_bfs([186, 419, 83, 408], 6249)
+assert coin_change([37, 52, 91, 140], 3000) == coin_change_bfs([37, 52, 91, 140], 3000)
 
 import random
 random.seed(14)
