@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/query-optimization-fundamentals", "articles:sql/indexes"]
 related: ["articles:pyspark/joins-and-join-strategy", "articles:spark/adaptive-query-execution", "interview-questions:pyspark/broadcast-join"]
 previous: "articles:sql/partitioning-materialized-views-storage"
+next: "articles:sql/sql-performance-at-scale"
 versionContext: "Examples run on PostgreSQL 16.14 with parallel query switched off for readable plans. Plan costs and timings vary by machine; the machine used was heavily loaded, so timings are described only qualitatively. Snowflake, BigQuery and Spark notes were not executed."
 sources:
   - { label: "PostgreSQL documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/current/using-explain.html" }
