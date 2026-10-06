@@ -346,5 +346,37 @@
  "Cross-account data sharing": {
   "ref": "articles:aws/lake-formation",
   "heading": "Cross-account data sharing"
+ },
+ "VPC & networking basics": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "VPC and networking basics"
+ },
+ "RDS/Aurora basics": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "RDS and Aurora basics"
+ },
+ "DynamoDB for DE": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "DynamoDB for data engineers"
+ },
+ "SQS & SNS": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "SQS and SNS"
+ },
+ "AWS DMS (migration/CDC)": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "AWS DMS (migration and CDC)"
+ },
+ "MSK (managed Kafka)": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "MSK (managed Kafka)"
+ },
+ "Cost Explorer & budgets": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "Cost Explorer and budgets"
+ },
+ "Well-Architected for data": {
+  "ref": "articles:aws/aws-data-services-landscape",
+  "heading": "Well-Architected for data"
  }
 }
