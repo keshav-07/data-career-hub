@@ -69,6 +69,7 @@ related:
   - "system-designs:data-quality-framework"
   - "articles:airflow/dags-scheduling-retries"
 previous: "system-designs:data-quality-framework"
+next: "system-designs:data-catalog-lineage-system"
 versionContext: "The volume-anomaly SQL was run on PostgreSQL 16 against generated sample metadata. Collector and integration configuration is described, not executed."
 sources:
   - { label: "OpenLineage: object model", url: "https://openlineage.io/docs/spec/object-model/" }
