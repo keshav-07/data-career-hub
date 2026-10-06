@@ -1,0 +1,115 @@
+---
+title: "Valid Palindrome II: Palindrome After Deleting at Most One Character"
+seoTitle: "Valid Palindrome II: One Deletion Allowed"
+description: "Decide whether a string can become a palindrome by removing at most one character. Two pointers find the first mismatch, then test both possible deletions in O(n)."
+technology: ["dsa"]
+topic: ["strings", "two-pointers"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Move two pointers inward while the characters match. At the first mismatch, one of the two characters must be the deleted one, so check whether the remaining range is a palindrome after skipping the left character, or after skipping the right one. If either works the answer is True. Each check is linear and runs at most twice, so the total is O(n) time and O(1) space."
+followUps: ["Why is it enough to try only the two deletions at the first mismatch?", "How would you generalise to at most k deletions?", "How would you return which index to delete?"]
+previous: "interview-questions:dsa/reverse-string"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a lowercase string, return `True` if it is a palindrome or can be made into one by deleting at most one character, and `False` otherwise. This is widely known as LeetCode 680, Valid Palindrome II.
+
+## Examples
+
+```text
+"level"    ->  True    (already a palindrome)
+"lexvel"   ->  True    (delete x)
+"abcab"    ->  False   (no single deletion works)
+"ab"       ->  True    (delete either)
+```
+
+## Approach 1: brute force
+
+Try deleting each position (and deleting nothing), and test whether the result is a palindrome.
+
+```python
+def valid_palindrome_brute(s):
+    if s == s[::-1]:
+        return True
+    for i in range(len(s)):
+        t = s[:i] + s[i + 1:]
+        if t == t[::-1]:
+            return True
+    return False
+```
+
+**Complexity:** O(n²) time, O(n) space for each candidate string.
+
+## Approach 2: optimal
+
+**Key insight:** matching outer characters can never be the problem, so skip them. At the first mismatch `s[left] != s[right]`, a valid deletion must remove one of those two characters; any other deletion leaves the mismatched pair facing each other. So only two candidates need checking.
+
+Walkthrough on `"lexvel"`:
+
+| left | right | Characters | Action |
+|---|---|---|---|
+| 0 | 5 | l, l | match, move in |
+| 1 | 4 | e, e | match, move in |
+| 2 | 3 | x, v | mismatch: test `s[3..3]` (skip x) → "v" is a palindrome → `True` |
+
+```python
+def valid_palindrome(s):
+    def is_pal(i, j):
+        while i < j:
+            if s[i] != s[j]:
+                return False
+            i += 1
+            j -= 1
+        return True
+
+    left, right = 0, len(s) - 1
+    while left < right:
+        if s[left] != s[right]:
+            return is_pal(left + 1, right) or is_pal(left, right - 1)
+        left += 1
+        right -= 1
+    return True
+```
+
+**Complexity:** O(n) time, O(1) extra space.
+
+## Tests
+
+```python
+import random
+
+for f in (valid_palindrome, valid_palindrome_brute):
+    assert f("level") is True
+    assert f("lexvel") is True
+    assert f("abcab") is False
+    assert f("ab") is True
+    assert f("") is True and f("q") is True          # empty and single
+    assert f("aaab") is True                         # delete the b
+    assert f("abc") is False
+    assert f("cbbcc") is True                        # needs the right-side deletion
+    assert f("ccbbc") is True                        # needs the left-side deletion
+
+assert valid_palindrome("a" * 50_000 + "b" + "a" * 49_999) is True   # long input
+
+random.seed(46)
+for _ in range(500):
+    s = "".join(random.choice("abc") for _ in range(random.randint(0, 8)))
+    assert valid_palindrome(s) == valid_palindrome_brute(s)
+```
+
+## Edge cases and pitfalls
+
+- Check **both** deletions. Greedily skipping only the left (or only the right) mismatched character fails cases like `"cbbcc"` or `"ccbbc"`.
+- After the first mismatch, the helper must not allow a second deletion; it is a strict palindrome check.
+- Pass indices to the helper rather than slicing, to keep space O(1).
+
+## Where this shows up in data engineering
+
+The idea of tolerating a bounded number of differences is the basis of fuzzy matching: edit distance with a small threshold is used in data cleansing to match names or codes that differ by a typo. This problem is the one-edit special case solved in linear time.
