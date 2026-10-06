@@ -8,7 +8,7 @@ difficulty: "Easy"
 questionType: ["coding"]
 estimatedMinutes: 10
 interviewRelevance: "High"
-shortAnswer: "Keep a min-heap holding at most k values: the k largest seen so far. Its smallest element, heap[0], is the k-th largest overall. When a new value arrives, push it and, if the heap now has more than k items, pop the smallest. Each add costs O(log k) and memory is O(k), however long the stream is; building the initial heap from n values costs O(n log k)."
+shortAnswer: "Keep a min-heap holding at most k values: the k largest seen so far. Its smallest element, heap[0], is the k-th largest overall. When a new value arrives, push it and, if the heap now has more than k items, pop the smallest. Each add costs O(log k) and memory is O(k), however long the stream is; trimming the initial n values down to k costs at most O(n log n)."
 followUps: ["Why a min-heap rather than a max-heap?", "How would you report the top k values, not just the k-th?", "What changes if values can also be removed from the stream?", "How would you do this across many machines?"]
 versionContext: "Python 3 solutions verified with assert-based tests"
 sources:
