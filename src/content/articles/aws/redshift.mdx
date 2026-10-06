@@ -1,6 +1,6 @@
 ---
 title: "Amazon Redshift for Data Engineers"
-description: "Redshift for Data Engineers: architecture, RA3 managed storage, distribution and sort keys, COPY and UNLOAD, vacuum, WLM, concurrency scaling, Spectrum and Serverless."
+description: "Redshift for Data Engineers: architecture, RA3, distribution and sort keys, COPY and UNLOAD, vacuum, WLM, concurrency scaling, Spectrum and Serverless."
 technology: ["aws", "data-warehousing", "sql"]
 topic: ["redshift", "data-warehouse", "mpp"]
 difficulty: "Intermediate"
@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:aws/athena", "articles:data-warehousing/star-schema"]
 related: ["articles:snowflake/architecture-virtual-warehouses", "articles:data-warehousing/data-warehousing-fundamentals", "system-designs:cloud-data-warehouse-platform"]
 previous: "articles:aws/athena"
+next: "articles:aws/emr"
 versionContext: "Redshift facts checked against the Amazon Redshift documentation in October 2026. Redshift SQL and CLI need a cluster or Serverless workgroup, so they were written from the Redshift documentation and not executed. Redshift is derived from an old PostgreSQL version but differs a lot; the runnable SQL is a PostgreSQL 16 analogue (a BRIN index standing in for zone maps, and a materialized view), labelled as such, and the distribution model is a Python simulation (Python 3.11)."
 sources:
   - { label: "Amazon Redshift: Provisioned clusters", url: "https://docs.aws.amazon.com/redshift/latest/mgmt/working-with-clusters.html" }

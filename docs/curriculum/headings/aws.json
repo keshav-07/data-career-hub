@@ -218,5 +218,33 @@
  "Redshift Serverless": {
   "ref": "articles:aws/redshift",
   "heading": "Redshift Serverless"
+ },
+ "EMR clusters": {
+  "ref": "articles:aws/emr",
+  "heading": "EMR clusters"
+ },
+ "Spark on EMR": {
+  "ref": "articles:aws/emr",
+  "heading": "Spark on EMR"
+ },
+ "Instance fleets & spot": {
+  "ref": "articles:aws/emr",
+  "heading": "Instance fleets and Spot"
+ },
+ "Bootstrap actions": {
+  "ref": "articles:aws/emr",
+  "heading": "Bootstrap actions"
+ },
+ "EMR on EKS": {
+  "ref": "articles:aws/emr",
+  "heading": "EMR on EKS"
+ },
+ "EMR Serverless": {
+  "ref": "articles:aws/emr",
+  "heading": "EMR Serverless"
+ },
+ "Cost optimization on EMR": {
+  "ref": "articles:aws/emr",
+  "heading": "Cost optimisation on EMR"
  }
 }
