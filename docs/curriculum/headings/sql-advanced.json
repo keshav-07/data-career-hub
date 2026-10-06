@@ -142,5 +142,17 @@
   "Approximate distinct (HLL)": {
     "ref": "articles:sql/sql-performance-at-scale",
     "heading": "Approximate distinct with HyperLogLog"
+  },
+  "Isolation levels (ACID)": {
+    "ref": "articles:sql/transactions-isolation-mvcc",
+    "heading": "Isolation levels and ACID"
+  },
+  "Deadlocks & locking": {
+    "ref": "articles:sql/transactions-isolation-mvcc",
+    "heading": "Deadlocks and locking"
+  },
+  "MVCC concepts": {
+    "ref": "articles:sql/transactions-isolation-mvcc",
+    "heading": "MVCC concepts"
   }
 }

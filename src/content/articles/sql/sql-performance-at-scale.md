@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/window-functions", "articles:sql/query-optimizer-internals"]
 related: ["articles:spark/partitions-shuffles-skew", "interview-questions:spark/data-skew", "articles:sql/gaps-islands-sessionization"]
 previous: "articles:sql/query-optimizer-internals"
+next: "articles:sql/transactions-isolation-mvcc"
 versionContext: "PostgreSQL examples run on PostgreSQL 16.14 (the window run condition needs PostgreSQL 15+); DuckDB example run on DuckDB 1.5.6; Python simulations on Python 3. Snowflake and BigQuery snippets were written from their documentation and not executed."
 sources:
   - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
