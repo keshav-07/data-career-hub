@@ -25,7 +25,7 @@ and `html_handling: "force-trailing-slash"` (matches the canonical URL policy).
 
 ## Custom domain and HTTPS
 
-In the Cloudflare dashboard: Workers & Pages → `data-career-hub` → Settings → Domains & Routes → add the custom
+In the Cloudflare dashboard: Workers & Pages → `datadank` → Settings → Domains & Routes → add the custom
 domain. Cloudflare provisions the certificate. Verify `https://` loads and `http://` redirects.
 
 ## Post-deploy verification (task P8-05 to P8-09)

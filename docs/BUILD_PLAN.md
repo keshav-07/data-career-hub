@@ -4573,7 +4573,7 @@ Cloudflare Workers Static Assets
 ```jsonc
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "data-career-hub",
+  "name": "datadank",
   "compatibility_date": "YYYY-MM-DD",
   "assets": {
     "directory": "./dist",
