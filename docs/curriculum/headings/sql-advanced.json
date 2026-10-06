@@ -54,5 +54,81 @@
   "Regex matching in SQL": {
     "ref": "articles:sql/json-arrays-regex",
     "heading": "Regex matching in SQL"
+  },
+  "Query optimization & cost reduction": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Query optimization and cost reduction"
+  },
+  "Reading EXPLAIN / execution plans": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Reading EXPLAIN and execution plans"
+  },
+  "Query rewriting for performance": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Query rewriting for performance"
+  },
+  "Avoiding full table scans": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Avoiding full table scans"
+  },
+  "Anti-pattern detection": {
+    "ref": "articles:sql/query-optimization-fundamentals",
+    "heading": "Anti-pattern detection"
+  },
+  "Index design (B-tree, composite)": {
+    "ref": "articles:sql/indexes",
+    "heading": "B-tree and composite index design"
+  },
+  "Covering indexes": {
+    "ref": "articles:sql/indexes",
+    "heading": "Covering indexes"
+  },
+  "Index selectivity & cardinality": {
+    "ref": "articles:sql/indexes",
+    "heading": "Index selectivity and cardinality"
+  },
+  "Bitmap indexing": {
+    "ref": "articles:sql/indexes",
+    "heading": "Bitmap indexing"
+  },
+  "Partitioning strategies": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Partitioning strategies"
+  },
+  "Partition pruning": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Partition pruning"
+  },
+  "Materialized views": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Materialized views"
+  },
+  "Columnar vs row storage": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Columnar vs row storage"
+  },
+  "Sharding & distributed SQL": {
+    "ref": "articles:sql/partitioning-materialized-views-storage",
+    "heading": "Sharding and distributed SQL"
+  },
+  "Join algorithms (hash, merge, nested loop)": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Join algorithms: hash, merge and nested loop"
+  },
+  "Statistics & the optimizer": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Statistics and the optimizer"
+  },
+  "Cardinality estimation": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Cardinality estimation"
+  },
+  "CTE materialization trade-offs": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "CTE materialization trade-offs"
+  },
+  "Spilling & memory management": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Spilling and memory management"
   }
 }

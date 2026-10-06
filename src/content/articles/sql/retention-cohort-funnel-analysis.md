@@ -22,7 +22,7 @@ versionContext: "All SQL examples run on PostgreSQL 16.14. FILTER (WHERE ...) is
 sources:
   - { label: "PostgreSQL documentation: Aggregate expressions and FILTER", url: "https://www.postgresql.org/docs/current/sql-expressions.html#SYNTAX-AGGREGATES" }
   - { label: "PostgreSQL documentation: Date/time functions (date_trunc)", url: "https://www.postgresql.org/docs/current/functions-datetime.html" }
-  - { label: "Snowflake documentation: Identifying sequences of rows that match a pattern (MATCH_RECOGNIZE)", url: "https://docs.snowflake.com/en/user-guide/match-recognize-introduction" }
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
 ---
 
 Product and marketing teams ask the same questions again and again: do users come back, are newer users better than older ones, where do people drop out of checkout, which channel deserves credit for a sale, and what is bought together. Data Engineers build the tables behind those dashboards, and SQL interviews for analytics-heavy roles use exactly these problems. This lesson writes each one from raw event tables and points out the definition choices that change the answer.
