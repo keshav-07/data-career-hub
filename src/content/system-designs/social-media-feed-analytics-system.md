@@ -69,6 +69,7 @@ sources:
   - { label: "Delta Lake: table streaming reads and writes", url: "https://docs.delta.io/delta-streaming/" }
   - { label: "PostgreSQL 16: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
 previous: "system-designs:ride-hailing-surge-pricing-pipeline"
+next: "system-designs:video-streaming-analytics-pipeline"
 ---
 
 ## Approach
