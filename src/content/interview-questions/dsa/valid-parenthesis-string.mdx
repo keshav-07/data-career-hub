@@ -1,0 +1,159 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Valid Parenthesis String: Track a Range of Open Counts Greedily"
+seoTitle: "Valid Parenthesis String: Greedy Range"
+description: "Check a string of parentheses and wildcards that can be either bracket or empty by tracking the lowest and highest possible open count, with DP and tests."
+technology: ["dsa"]
+topic: ["greedy"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+shortAnswer: "Track the range of possible open-bracket counts after each character: lo is the smallest, hi the largest. An opening bracket raises both, a closing bracket lowers both, and a star lowers lo (treat it as a close) and raises hi (treat it as an open). If hi drops below 0, too many closes: return false. Clamp lo at 0, because a negative count is never a real option. At the end the string is valid exactly when lo is 0. This is O(n) time and O(1) space; a DP over (index, open count) is O(n^2)."
+followUps: ["Why is it safe to clamp lo at zero?", "How does the two-stack solution (indices of open brackets and stars) work?", "How would you return one valid replacement for the stars?"]
+previous: "interview-questions:dsa/partition-labels"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A string contains only `(`, `)` and `*`. Each `*` may be treated as `(`, as `)` or as an empty string. Decide whether
+some choice for the stars makes the string a balanced bracket sequence (every opening bracket closed later, in order).
+
+This is widely known as LeetCode 678, "Valid Parenthesis String".
+
+Assume up to 100 characters.
+
+## Examples
+
+```text
+"(*)"     -> True    (star as empty)
+"(*))"    -> True    (star as an opening bracket)
+"*)("     -> False   (the final opening bracket can never close)
+"((*"     -> False   (one star cannot close two brackets)
+""        -> True
+```
+
+## Approach 1: dynamic programming over open counts
+
+`go(i, open)` says whether the suffix from i can be finished when `open` brackets are currently unclosed.
+
+```python
+from functools import lru_cache
+
+def check_valid_dp(s):
+    @lru_cache(maxsize=None)
+    def go(i, open_count):
+        if open_count < 0:
+            return False
+        if i == len(s):
+            return open_count == 0
+        ch = s[i]
+        if ch == "(":
+            return go(i + 1, open_count + 1)
+        if ch == ")":
+            return go(i + 1, open_count - 1)
+        return go(i + 1, open_count + 1) or go(i + 1, open_count - 1) or go(i + 1, open_count)
+    return go(0, 0)
+```
+
+There are O(n^2) states with O(1) work each: O(n^2) time and space. Plain recursion without the cache is O(3^n).
+
+## Approach 2: optimal, greedy range of open counts
+
+### Why a range is enough
+
+After reading a prefix, the set of possible open counts (over all star choices) is a contiguous range of integers:
+each star widens it by one in both directions, and brackets shift it. So two numbers, `lo` and `hi`, describe every
+possibility.
+
+- `(`: `lo += 1`, `hi += 1`.
+- `)`: `lo -= 1`, `hi -= 1`.
+- `*`: `lo -= 1` (as a close), `hi += 1` (as an open).
+- If `hi` becomes negative, even the most generous choice closed too much: invalid.
+- Clamp `lo` to 0, since a count below zero is never a valid state; the choices that led there are discarded.
+- At the end, valid exactly when `lo == 0` (zero open brackets is achievable).
+
+### Python solution
+
+```python
+def check_valid_string(s):
+    lo = hi = 0
+    for ch in s:
+        if ch == "(":
+            lo += 1
+            hi += 1
+        elif ch == ")":
+            lo -= 1
+            hi -= 1
+        else:
+            lo -= 1
+            hi += 1
+        if hi < 0:
+            return False
+        lo = max(lo, 0)
+    return lo == 0
+```
+
+Trace for `"(*))"`: after `(` the range is 1..1; after `*` it is 0..2; after `)` it is 0..1 (lo clamped from -1);
+after `)` it is 0..0. `lo == 0`, so it is valid.
+
+### Complexity
+
+O(n) time, O(1) space.
+
+## Tests
+
+```python
+for fn in (check_valid_string, check_valid_dp):
+    assert fn("(*)")
+    assert fn("(*))")
+    assert not fn("*)(")
+    assert not fn("((*")
+    assert fn("")                         # empty string
+    assert fn("*")                        # single star as empty
+    assert not fn(")")                    # single close
+    assert not fn("*(")                   # needs clamping of lo
+    assert not fn("())")                  # needs the hi check
+    assert fn("**((**")                   # stars on both sides
+
+import itertools
+def brute(s):
+    stars = [i for i, ch in enumerate(s) if ch == "*"]
+    for choice in itertools.product("()", repeat=len(stars)):
+        t = list(s)
+        for idx, c in zip(stars, choice):
+            t[idx] = c
+        bal = 0
+        for c in t:
+            bal += 1 if c == "(" else -1 if c == ")" else 0
+            if bal < 0:
+                break
+        else:
+            if bal == 0:
+                return True
+    return False
+
+import random
+random.seed(32)
+for _ in range(300):
+    s = "".join(random.choice("()*") for _ in range(random.randint(0, 8)))
+    assert check_valid_string(s) == check_valid_dp(s) == brute(s), s
+```
+
+## Edge cases and pitfalls
+
+- **Not clamping `lo`.** For `"*("`, an unclamped `lo` goes to -1 and then back to 0, so the check wrongly passes;
+  with clamping it ends at 1 and correctly fails.
+- **Skipping the `hi < 0` test.** For `"())"`, a clamped `lo` ends at 0, but `hi` went negative at the third
+  character, so the string is invalid.
+- **Treating stars only as opening brackets** (or only as closing) fails on mixed cases.
+- **Order matters.** `"*)("` has enough stars but the final `(` comes after everything that could close it.
+
+## Where this shows up in data engineering
+
+Bracket balancing is how you validate nested structures in streamed text, such as checking that JSON objects or SQL
+parentheses are balanced without building a full parse tree. The range trick is useful when some tokens are ambiguous
+or missing, for example when validating truncated log lines.
