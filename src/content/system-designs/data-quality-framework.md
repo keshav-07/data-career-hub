@@ -70,6 +70,7 @@ related:
   - "system-designs:elt-pipeline-with-dbt"
   - "system-designs:scalable-batch-pipeline"
 previous: "system-designs:scalable-batch-pipeline"
+next: "system-designs:data-observability-system"
 versionContext: "The check-and-gate SQL was run on PostgreSQL 16. Tool configuration (dbt, Great Expectations, Soda) is described, not executed."
 sources:
   - { label: "dbt documentation: data tests", url: "https://docs.getdbt.com/docs/build/data-tests" }
