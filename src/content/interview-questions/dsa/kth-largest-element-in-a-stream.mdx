@@ -1,0 +1,142 @@
+---
+title: "Kth Largest Element in a Stream: Size-k Min-Heap"
+seoTitle: "Kth Largest Element in a Stream (Min-Heap)"
+description: "Track the k-th largest value of a growing stream by keeping only the k largest values in a min-heap. Python heapq solution, complexity, pitfalls and tests."
+technology: ["dsa"]
+topic: ["heaps-priority-queues"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Keep a min-heap holding at most k values: the k largest seen so far. Its smallest element, heap[0], is the k-th largest overall. When a new value arrives, push it and, if the heap now has more than k items, pop the smallest. Each add costs O(log k) and memory is O(k), however long the stream is; building the initial heap from n values costs O(n log k)."
+followUps: ["Why a min-heap rather than a max-heap?", "How would you report the top k values, not just the k-th?", "What changes if values can also be removed from the stream?", "How would you do this across many machines?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+sources:
+  - { label: "Python documentation: heapq - Heap queue algorithm", url: "https://docs.python.org/3/library/heapq.html" }
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/design-add-and-search-words"
+---
+
+## Problem
+
+Design a class that is created with an integer `k` and an initial list of numbers. It has one method, `add(value)`, which appends a value to the stream and returns the `k`-th largest value seen so far (counting duplicates separately). You may assume that whenever `add` returns, at least `k` values have been seen.
+
+This is widely known as LeetCode 703 (Kth Largest Element in a Stream). It is the simplest "keep the top k" heap problem.
+
+Constraints for this version: `1 <= k <= 10,000`, the initial list has 0 to 10,000 values, and there are up to 10,000 calls to `add`.
+
+## Examples
+
+```text
+tracker = KthLargest(3, [12, 5, 30, 8])
+add(10)   -> 10    values 30, 12, 10, 8, 5: third largest is 10
+add(2)    -> 10    2 is too small to matter
+add(15)   -> 12    30, 15, 12 are now the top three
+add(40)   -> 15
+add(15)   -> 15    duplicates count: 40, 30, 15, 15
+```
+
+## Approach 1: brute force
+
+Keep every value in a sorted list and index from the end. With `bisect.insort` the list stays sorted.
+
+```python
+from bisect import insort
+
+class KthLargestSorted:
+    def __init__(self, k, nums):
+        self.k = k
+        self.values = sorted(nums)
+
+    def add(self, value):
+        insort(self.values, value)        # O(n) because of shifting
+        return self.values[-self.k]
+```
+
+Each `add` is O(n) for the insertion, and memory grows with the whole stream.
+
+## Approach 2: optimal
+
+**Key insight.** Values smaller than the current k-th largest can never matter again, because the k-th largest only goes up as more values arrive. So keep just the `k` largest values. Among those, you need the smallest one (that is the k-th largest overall), and a **min-heap** gives the smallest element in O(1) and removes it in O(log k).
+
+**Walkthrough** with `k = 3`, initial `[12, 5, 30, 8]`:
+
+| Step | Heap after (as a set) | Returned |
+|---|---|---|
+| init | 8, 12, 30 (5 was popped) | |
+| add 10 | push 10, pop 8: 10, 12, 30 | 10 |
+| add 2 | push 2, pop 2: 10, 12, 30 | 10 |
+| add 15 | push 15, pop 10: 12, 15, 30 | 12 |
+| add 40 | push 40, pop 12: 15, 30, 40 | 15 |
+
+```python
+import heapq
+
+class KthLargest:
+    def __init__(self, k, nums):
+        self.k = k
+        self.heap = list(nums)
+        heapq.heapify(self.heap)                  # O(n)
+        while len(self.heap) > k:
+            heapq.heappop(self.heap)              # keep only the k largest
+
+    def add(self, value):
+        if len(self.heap) < self.k:
+            heapq.heappush(self.heap, value)
+        elif value > self.heap[0]:
+            heapq.heapreplace(self.heap, value)   # pop smallest and push in one step
+        return self.heap[0]
+```
+
+`heapq.heapreplace` pops the smallest element and pushes the new one in a single O(log k) operation. Skipping values that are not larger than `heap[0]` avoids pointless heap work.
+
+**Complexity.** Construction is O(n + (n - k) log n) with `heapify` and pops; `add` is O(log k). Memory is O(k).
+
+## Tests
+
+```python
+import random
+
+def check(cls):
+    t = cls(3, [12, 5, 30, 8])
+    assert [t.add(v) for v in [10, 2, 15, 40, 15]] == [10, 10, 12, 15, 15]
+
+    one = cls(1, [])                       # k = 1 tracks the maximum
+    assert [one.add(v) for v in [4, 1, 9, 9, 3]] == [4, 4, 9, 9, 9]
+
+    short = cls(2, [7])                    # fewer than k values at the start
+    assert short.add(3) == 3 and short.add(10) == 7
+
+    neg = cls(2, [-5, -1, -9])
+    assert neg.add(-3) == -3
+
+    rng = random.Random(20)
+    for _ in range(50):
+        k = rng.randint(1, 6)
+        initial = [rng.randint(-20, 20) for _ in range(rng.randint(k - 1, 10))]
+        tracker, seen = cls(k, initial), list(initial)
+        for _ in range(30):
+            v = rng.randint(-20, 20)
+            seen.append(v)
+            assert tracker.add(v) == sorted(seen, reverse=True)[k - 1]
+
+check(KthLargestSorted)
+check(KthLargest)
+
+big = KthLargest(100, range(100_000))
+assert big.add(-1) == 99_900 and len(big.heap) == 100
+print("all kth largest in a stream tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Max-heap instinct.** A max-heap of everything works but costs O(n) memory and O(k log n) per query. The size-k min-heap is the expected answer.
+- **Fewer than k values initially.** Do not pop while the heap is below size `k`; just push.
+- **Duplicates** count separately; a set-based solution is wrong.
+- **Python's heap is a min-heap.** For a max-heap, push negated values (or tuples with negated keys).
+
+## Where this shows up in data engineering
+
+Top-k over a stream is a staple: the 10 biggest transactions today, the slowest queries in the last hour, the most active users. A bounded min-heap keeps memory fixed no matter how much data flows through, and it combines well across partitions: each worker keeps its own top k, and a final step merges those small heaps. Spark's `takeOrdered` and `top` on RDDs follow this per-partition-then-merge pattern.
