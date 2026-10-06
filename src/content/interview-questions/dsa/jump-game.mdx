@@ -1,0 +1,132 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Jump Game: Can You Reach the Last Index? Greedy Furthest Reach"
+seoTitle: "Jump Game: Greedy Furthest Reach"
+description: "Decide whether you can reach the end of an array of maximum jump lengths by tracking the furthest reachable index greedily, compared with the DP version, plus tests."
+technology: ["dsa"]
+topic: ["greedy"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Scan left to right keeping reach, the furthest index you can get to so far. At index i, if i is beyond reach you are stuck and the answer is false; otherwise update reach to max(reach, i + nums[i]). If the scan finishes (or reach covers the last index), the answer is true. This is O(n) time and O(1) space; a DP over 'can I reach index i' is correct but O(n^2)."
+followUps: ["How do you find the minimum number of jumps (Jump Game II)?", "Why is the greedy correct: why can tracking only the furthest reach not miss a path?", "How would you solve it scanning from right to left?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You start at index 0 of a list of non-negative integers. The value at each index is the maximum number of positions you
+may jump forward from there (any jump from 1 up to that value is allowed). Decide whether you can reach the last index.
+
+This is widely known as LeetCode 55, "Jump Game". [Jump Game II](/interview/dsa/jump-game-ii/) asks for the fewest
+jumps.
+
+Assume up to 10,000 values, each up to 100,000.
+
+## Examples
+
+```text
+[1, 3, 0, 0, 2]   -> True    (0 -> 1 -> 4)
+[2, 1, 0, 4]      -> False   (every route lands on index 2, whose value is 0)
+[0]               -> True    (already at the last index)
+[0, 1]            -> False
+```
+
+## Approach 1: dynamic programming
+
+`can[i]` says whether index i is reachable. Index 0 is; any reachable index marks everything within its jump range.
+
+```python
+def can_jump_dp(nums):
+    if not nums:
+        return False
+    can = [False] * len(nums)
+    can[0] = True
+    for i in range(len(nums)):
+        if not can[i]:
+            continue
+        for step in range(1, nums[i] + 1):
+            if i + step < len(nums):
+                can[i + step] = True
+    return can[-1]
+```
+
+O(n * maximum jump) time, which can be O(n^2) or worse with large values.
+
+## Approach 2: optimal, greedy furthest reach
+
+### Why it works
+
+The set of reachable indices is always a prefix `0..reach`: if you can reach index j, you can reach every index
+before it, because some earlier jump passed over it and could have stopped there. So one number, the end of that
+prefix, describes everything. Each reachable index can only extend the prefix.
+
+### Template
+
+```text
+reach = 0
+for i in 0 .. n-1:
+    if i > reach: return False         # a gap: index i cannot be reached
+    reach = max(reach, i + nums[i])
+    if reach >= n - 1: return True
+```
+
+### Python solution
+
+```python
+def can_jump(nums):
+    if not nums:
+        return False
+    reach = 0
+    for i, jump in enumerate(nums):
+        if i > reach:
+            return False
+        reach = max(reach, i + jump)
+        if reach >= len(nums) - 1:
+            return True
+    return True
+```
+
+A right-to-left variant keeps `goal`, the leftmost index known to reach the end, and moves it left whenever
+`i + nums[i] >= goal`; the answer is whether `goal` reaches 0.
+
+### Complexity
+
+O(n) time, O(1) space.
+
+## Tests
+
+```python
+for fn in (can_jump, can_jump_dp):
+    assert fn([1, 3, 0, 0, 2])
+    assert not fn([2, 1, 0, 4])
+    assert fn([0])                       # single element
+    assert not fn([0, 1])                # stuck at the start
+    assert fn([5, 0, 0, 0, 0])           # one big jump
+    assert not fn([1, 1, 0, 0])
+    assert fn([2, 0, 0])
+
+assert not can_jump([]) and not can_jump_dp([])   # empty: no last index (convention)
+
+import random
+random.seed(26)
+for _ in range(200):
+    a = [random.randint(0, 3) for _ in range(random.randint(1, 10))]
+    assert can_jump(a) == can_jump_dp(a)
+```
+
+## Edge cases and pitfalls
+
+- **Single element** is already at the end: True, even if its value is 0.
+- **Zeros** are only a problem if every route lands on them; do not reject an array just because it contains a 0.
+- **Checking `i > reach` after updating** reach lets you "jump" from an unreachable index.
+- **Treating the value as an exact jump length** instead of a maximum changes the problem completely.
+
+## Where this shows up in data engineering
+
+Tracking the furthest point covered so far is the same idea as merging coverage intervals: checking whether a set of
+partitions or backfill runs covers a full date range without gaps. Sort by start, keep the furthest end, and report a
+gap when the next start is beyond it.
