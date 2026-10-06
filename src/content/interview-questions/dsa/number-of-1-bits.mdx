@@ -1,0 +1,101 @@
+---
+title: "Number of 1 Bits: Count Set Bits in an Integer"
+seoTitle: "Number of 1 Bits: Hamming Weight"
+description: "Count the 1 bits in the binary form of a non-negative integer. Compare shifting through every bit with the n & (n - 1) trick that loops once per set bit."
+technology: ["dsa"]
+topic: ["arrays", "bit-manipulation"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Repeatedly clear the lowest set bit with n &= n - 1 and count how many times you can do it before n reaches 0. Subtracting 1 flips the lowest 1 bit and every 0 below it, so the AND removes exactly that bit. The loop runs once per set bit, at most 32 times for a 32-bit value, so it is O(1) for fixed-width input and O(k) for k set bits in general."
+followUps: ["Why does n & (n - 1) remove exactly the lowest set bit?", "How would you count bits for every number from 0 to n in O(n)?", "How would you handle a negative number in Python, where integers have no fixed width?"]
+previous: "interview-questions:dsa/single-number"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a non-negative integer that fits in 32 bits, return how many bits in its binary representation are 1 (its Hamming weight). This is widely known as LeetCode 191, Number of 1 Bits.
+
+## Examples
+
+```text
+n = 13            ->  3    (1101)
+n = 64            ->  1    (1000000)
+n = 0             ->  0
+n = 4294967295    ->  32   (2^32 - 1, all ones)
+```
+
+## Approach 1: brute force (check every bit)
+
+Test the lowest bit and shift right until the number is 0.
+
+```python
+def hamming_weight_shift(n):
+    count = 0
+    while n:
+        count += n & 1
+        n >>= 1
+    return count
+```
+
+**Complexity:** O(b) for b bits in the number (up to 32). Already constant time for 32-bit input; the follow-up is to loop only over set bits.
+
+## Approach 2: optimal (clear the lowest set bit)
+
+**Key insight:** `n - 1` turns the lowest 1 bit into 0 and all the 0 bits below it into 1. ANDing with `n` keeps everything above that bit and clears the rest, so `n & (n - 1)` is `n` with its lowest set bit removed.
+
+Walkthrough on `13`:
+
+| n (binary) | n - 1 | n & (n - 1) | count |
+|---|---|---|---|
+| 1101 | 1100 | 1100 | 1 |
+| 1100 | 1011 | 1000 | 2 |
+| 1000 | 0111 | 0000 | 3 |
+
+```python
+def hamming_weight(n):
+    count = 0
+    while n:
+        n &= n - 1
+        count += 1
+    return count
+```
+
+In Python 3.10+, `n.bit_count()` returns the same value directly, and `bin(n).count("1")` works in any version.
+
+**Complexity:** O(k) for k set bits, at most 32 iterations: O(1) for fixed-width input. O(1) space.
+
+## Tests
+
+```python
+import random
+
+for f in (hamming_weight, hamming_weight_shift):
+    assert f(13) == 3
+    assert f(64) == 1                      # single set bit
+    assert f(0) == 0                       # zero
+    assert f(1) == 1
+    assert f(2**32 - 1) == 32              # all 32 bits set
+    assert f(2**31) == 1                   # highest 32-bit position
+    assert f(0b1010_1010) == 4
+
+random.seed(49)
+for _ in range(1000):
+    n = random.getrandbits(32)
+    assert hamming_weight(n) == hamming_weight_shift(n) == bin(n).count("1")
+```
+
+## Edge cases and pitfalls
+
+- Python integers have no fixed width, so `-1` has infinitely many 1 bits in two's-complement terms and both loops would never end. If negative input is possible, mask first: `n & 0xFFFFFFFF`.
+- In Java, use the unsigned shift `>>>`; the signed `>>` keeps copying the sign bit and loops forever on negative numbers.
+- `n & (n - 1) == 0` is also the standard test for "n is a power of two" (for n > 0).
+
+## Where this shows up in data engineering
+
+Population count is the workhorse behind bitmap indexes and bitmap-based counting: the number of rows matching a filter is the popcount of the filter's bitmap, and structures such as Roaring bitmaps and HyperLogLog rely on fast bit counting and bit-position tricks.

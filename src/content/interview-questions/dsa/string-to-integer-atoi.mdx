@@ -14,6 +14,7 @@ reviewedDate: "2026-10-05"
 shortAnswer: "Walk the string once in stages: skip leading spaces, read at most one '+' or '-', then accumulate digits with value = value * 10 + digit until a non-digit appears. Apply the sign and clamp to [-2^31, 2^31 - 1]. In languages with fixed-width integers, check for overflow before each multiply-and-add. It is O(n) time and O(1) space; the difficulty is getting every rule and edge case right."
 followUps: ["How would you detect overflow without a wider integer type?", "Why is int(s) in Python not an acceptable answer here?", "How would you extend the parser to decimals or exponents?"]
 previous: "interview-questions:dsa/valid-palindrome-ii"
+next: "interview-questions:dsa/single-number"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
