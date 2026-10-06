@@ -70,6 +70,7 @@ sources:
   - { label: "Apache Kafka documentation: delivery semantics", url: "https://kafka.apache.org/documentation/#semantics" }
   - { label: "PostgreSQL 16: transaction isolation", url: "https://www.postgresql.org/docs/16/transaction-iso.html" }
 previous: "system-designs:video-streaming-analytics-pipeline"
+next: "system-designs:unified-batch-streaming-lambda-kappa"
 ---
 
 ## Approach
