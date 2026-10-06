@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Real-Time Leaderboard"
-description: "A system-design case study for live leaderboards: score events, idempotent updates, sorted sets, tie-breaking, time-windowed boards, sharding, anti-cheat and recovery."
+description: "A system-design case study for live leaderboards: score events, idempotent updates, sorted sets, tie-breaking, windowed boards, sharding and recovery."
 technology: ["data-engineering", "kafka"]
 topic: ["streaming", "serving", "architecture"]
 tags: ["leaderboard", "redis", "sorted-sets", "ranking", "idempotency", "top-k"]
@@ -70,6 +70,7 @@ sources:
   - { label: "Redis documentation source: ZRANGE", url: "https://github.com/redis/docs/blob/main/content/commands/zrange.md" }
   - { label: "Apache Kafka documentation: delivery semantics", url: "https://kafka.apache.org/documentation/#semantics" }
 previous: "system-designs:churn-prediction-data-pipeline"
+next: "system-designs:geospatial-analytics-pipeline"
 ---
 
 ## Approach
