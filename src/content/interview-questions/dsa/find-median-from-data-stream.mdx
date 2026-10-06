@@ -1,0 +1,169 @@
+---
+title: "Find Median from Data Stream: Two Heaps Kept in Balance"
+seoTitle: "Find Median from a Data Stream: Two Heaps"
+description: "Maintain the running median of a stream with a max-heap for the lower half and a min-heap for the upper half. Python code, rebalancing walkthrough and tests."
+technology: ["dsa"]
+topic: ["heaps-priority-queues"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "Split the numbers seen so far into a lower half kept in a max-heap and an upper half kept in a min-heap, with every lower value no larger than every upper value and the lower half holding the same number of items or one more. To add a value, push it into the lower heap, move the lower heap's largest to the upper heap, and move one back if the upper heap became larger. The median is the lower top, or the average of both tops. add is O(log n), median is O(1), memory O(n)."
+followUps: ["How would you support removing values, for a sliding-window median?", "What if all values are integers in a small range?", "How would you compute an approximate median over billions of values with bounded memory?", "How would you get the 90th percentile instead of the median?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+sources:
+  - { label: "Python documentation: heapq - Heap queue algorithm", url: "https://docs.python.org/3/library/heapq.html" }
+  - { label: "Python documentation: statistics - Mathematical statistics functions", url: "https://docs.python.org/3/library/statistics.html" }
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/design-twitter"
+---
+
+## Problem
+
+Design a class with two methods:
+
+- `add_num(num)` adds an integer from a data stream.
+- `find_median()` returns the median of all numbers added so far: the middle value when the count is odd, or the mean of the two middle values when it is even.
+
+`find_median` is only called after at least one number has been added. This is widely known as LeetCode 295 (Find Median from Data Stream), and the two-heap technique it teaches is one of the most reused heap ideas.
+
+Constraints for this version: values between -100,000 and 100,000; up to 50,000 calls in total.
+
+## Examples
+
+```text
+add_num(8)      median 8
+add_num(3)      median 5.5     values 3, 8
+add_num(20)     median 8       values 3, 8, 20
+add_num(1)      median 5.5     values 1, 3, 8, 20
+add_num(13)     median 8       values 1, 3, 8, 13, 20
+```
+
+## Approach 1: brute force
+
+Keep a sorted list with `bisect.insort`, and read the middle.
+
+```python
+from bisect import insort
+
+class MedianFinderSorted:
+    def __init__(self):
+        self.values = []
+
+    def add_num(self, num):
+        insort(self.values, num)              # O(log n) search, O(n) shift
+
+    def find_median(self):
+        n = len(self.values)
+        mid = n // 2
+        if n % 2:
+            return self.values[mid]
+        return (self.values[mid - 1] + self.values[mid]) / 2
+```
+
+`find_median` is O(1), but `add_num` is O(n) because inserting into a Python list shifts elements. For small streams this is fine, and it is a good baseline to test against.
+
+## Approach 2: optimal
+
+**Key insight.** The median only depends on the boundary between the smaller half and the larger half. Keep the smaller half in a **max-heap** (so its largest value is on top) and the larger half in a **min-heap** (smallest on top). If the halves have equal size, the median is the average of the two tops; if the lower half has one extra element, the median is the lower top.
+
+Two invariants:
+
+1. **Order**: every value in `low` is at most every value in `high`.
+2. **Size**: `len(low)` equals `len(high)` or `len(high) + 1`.
+
+Adding a value in three steps keeps both: push into `low`; move `low`'s largest into `high` (this fixes any order violation); if `high` is now larger than `low`, move `high`'s smallest back. Python's `heapq` is a min-heap, so `low` stores negated values.
+
+**Walkthrough** (heaps shown as sorted contents):
+
+| Add | `low` (max-heap) | `high` (min-heap) | Median |
+|---|---|---|---|
+| 8 | 8 | | 8 |
+| 3 | 3 | 8 | (3 + 8) / 2 = 5.5 |
+| 20 | 3, 8 | 20 | 8 |
+| 1 | 1, 3 | 8, 20 | (3 + 8) / 2 = 5.5 |
+| 13 | 1, 3, 8 | 13, 20 | 8 |
+
+```python
+import heapq
+
+class MedianFinder:
+    def __init__(self):
+        self.low = []        # max-heap via negation: the smaller half
+        self.high = []       # min-heap: the larger half
+
+    def add_num(self, num):
+        heapq.heappush(self.low, -num)
+        heapq.heappush(self.high, -heapq.heappop(self.low))   # keep the order invariant
+        if len(self.high) > len(self.low):                    # keep the size invariant
+            heapq.heappush(self.low, -heapq.heappop(self.high))
+
+    def find_median(self):
+        if len(self.low) > len(self.high):
+            return -self.low[0]
+        return (-self.low[0] + self.high[0]) / 2
+```
+
+**Complexity.** `add_num` does a constant number of heap operations, O(log n). `find_median` is O(1). Memory is O(n), because every value must be kept for an exact median.
+
+### Follow-ups worth knowing
+
+- **Small integer range.** If all values are in, say, 0 to 100, keep a count per value and walk the counts to the middle: O(1) add and O(range) median.
+- **Sliding window median.** Values must also leave. Use the two heaps with lazy deletion (a dictionary of values to discard when they reach the top), or a sorted container.
+- **Huge streams.** Exact medians need all the data. Approximate quantile sketches such as t-digest or KLL keep bounded memory with a small, controllable error.
+
+## Tests
+
+```python
+import random, statistics
+
+def check(cls):
+    m = cls()
+    expected = [8, 5.5, 8, 5.5, 8]
+    for value, want in zip([8, 3, 20, 1, 13], expected):
+        m.add_num(value)
+        assert m.find_median() == want, (cls.__name__, value)
+
+    single = cls()
+    single.add_num(-4)
+    assert single.find_median() == -4
+
+    dup = cls()                                # duplicates
+    for v in [5, 5, 5, 5]:
+        dup.add_num(v)
+    assert dup.find_median() == 5
+
+    asc, desc = cls(), cls()                   # sorted input in both directions
+    for i in range(1, 101):
+        asc.add_num(i)
+        desc.add_num(101 - i)
+    assert asc.find_median() == desc.find_median() == 50.5
+
+check(MedianFinderSorted)
+check(MedianFinder)
+
+rng = random.Random(27)
+for _ in range(50):
+    m, seen = MedianFinder(), []
+    for _ in range(rng.randint(1, 200)):
+        v = rng.randint(-100_000, 100_000)
+        m.add_num(v)
+        seen.append(v)
+        assert m.find_median() == statistics.median(seen)
+        assert len(m.low) - len(m.high) in (0, 1)
+        assert not m.high or -m.low[0] <= m.high[0]
+print("all running median tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting to negate** when pushing into or reading from the max-heap. Every access to `low` needs a minus sign.
+- **Skipping the transfer step.** Pushing straight into one heap based on a comparison works only if you compare correctly and handle the empty-heap case; the push, move, rebalance pattern avoids both.
+- **Integer versus float results.** The even case returns a float (`5.5`); the odd case returns the stored integer. Agree on the expected type.
+- **Empty stream.** `find_median` before any `add_num` would read an empty heap; the problem rules this out, but say how you would handle it (raise an error or return `None`).
+
+## Where this shows up in data engineering
+
+Running medians and percentiles are common monitoring metrics: median latency of a service, median order value per hour, p50 and p95 of job durations. Exact two-heap medians suit moderate in-memory streams, for example inside a single stream processor's window state. At warehouse or cluster scale, engines use approximate functions (Spark's `percentile_approx`, Snowflake's `APPROX_PERCENTILE`) built on quantile sketches, because an exact median needs every value in memory or a full sort.

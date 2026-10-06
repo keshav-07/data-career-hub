@@ -1,0 +1,208 @@
+---
+title: "Design Twitter: News Feed with a K-Way Heap Merge"
+seoTitle: "Design Twitter: News Feed with a Heap Merge"
+description: "Design a small social feed: post, follow, unfollow and the ten most recent posts from followed users, merged lazily with a heap. Python code, trade-offs and tests."
+technology: ["dsa"]
+topic: ["heaps-priority-queues"]
+difficulty: "Medium"
+questionType: ["coding", "architecture"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Store each user's posts as an append-only list of (timestamp, post id) and each user's followees as a set. To build a feed, put the newest post of the user and of every followee into a max-heap keyed by timestamp, then pop the newest, push the next older post from the same author, and stop after 10. That is a k-way merge: O(F + 10 log F) per feed for F followees, with O(1) post, follow and unfollow."
+followUps: ["How would this change for users with millions of followers (fan-out on write versus fan-out on read)?", "How would you paginate the feed?", "How would you persist and shard the data?", "Why use a global counter rather than wall-clock time for ordering?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+sources:
+  - { label: "Python documentation: heapq - Heap queue algorithm", url: "https://docs.python.org/3/library/heapq.html" }
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/task-scheduler"
+next: "interview-questions:dsa/find-median-from-data-stream"
+---
+
+## Problem
+
+Design an in-memory class for a tiny social network with four operations:
+
+- `post_tweet(user_id, tweet_id)`: the user publishes a post with a unique id.
+- `get_news_feed(user_id)`: return the ids of the 10 most recent posts written by the user or by anyone the user follows, newest first.
+- `follow(follower_id, followee_id)`: start following someone.
+- `unfollow(follower_id, followee_id)`: stop following someone.
+
+Users always see their own posts. Following yourself, or unfollowing someone you do not follow, has no effect. This is widely known as LeetCode 355 (Design Twitter). It combines a small object design with a heap-based merge of sorted lists.
+
+Constraints for this version: up to 500 users, up to 30,000 calls in total, post ids unique.
+
+## Examples
+
+```text
+post_tweet(1, 101)
+post_tweet(2, 201)
+get_news_feed(1)   -> [101]          user 1 does not follow user 2 yet
+follow(1, 2)
+post_tweet(2, 202)
+get_news_feed(1)   -> [202, 201, 101]
+unfollow(1, 2)
+get_news_feed(1)   -> [101]
+```
+
+## Approach 1: brute force
+
+Store every post in one global list with its author, and build a feed by scanning from the newest post backwards, keeping posts whose author is the user or a followee.
+
+```python
+from collections import defaultdict
+
+class TwitterScan:
+    def __init__(self):
+        self.posts = []                       # (author, post id), oldest first
+        self.following = defaultdict(set)
+
+    def post_tweet(self, user_id, tweet_id):
+        self.posts.append((user_id, tweet_id))
+
+    def get_news_feed(self, user_id):
+        wanted = self.following[user_id] | {user_id}
+        feed = []
+        for author, tweet_id in reversed(self.posts):
+            if author in wanted:
+                feed.append(tweet_id)
+                if len(feed) == 10:
+                    break
+        return feed
+
+    def follow(self, follower_id, followee_id):
+        if follower_id != followee_id:
+            self.following[follower_id].add(followee_id)
+
+    def unfollow(self, follower_id, followee_id):
+        self.following[follower_id].discard(followee_id)
+```
+
+Simple, but a feed for a user whose followees post rarely can scan the entire history: O(P) for `P` total posts.
+
+## Approach 2: optimal
+
+**Key insight.** Each author's posts are already sorted by time, because they are appended in order. A feed is the newest 10 elements of the merge of a few sorted lists, one per followed author. Merging `k` sorted lists newest-first is a job for a heap: seed it with each author's newest post, then repeatedly pop the newest and push that author's next older post. You stop after 10 pops, so you never touch older posts.
+
+A global, increasing counter gives each post a timestamp. This avoids ties and clock problems that wall-clock times could introduce.
+
+**Walkthrough** after the example's `follow(1, 2)` and `post_tweet(2, 202)` (timestamps 0, 1, 2):
+
+| Heap (newest first) | Pop | Push |
+|---|---|---|
+| 202 (t=2, user 2), 101 (t=0, user 1) | 202 | 201 (t=1, user 2) |
+| 201, 101 | 201 | nothing older from user 2 |
+| 101 | 101 | nothing older from user 1 |
+
+Feed: `[202, 201, 101]`.
+
+```python
+import heapq
+from collections import defaultdict
+from itertools import count
+
+class Twitter:
+    FEED_SIZE = 10
+
+    def __init__(self):
+        self.clock = count()                         # global increasing timestamps
+        self.posts = defaultdict(list)               # user -> [(time, tweet_id)], oldest first
+        self.following = defaultdict(set)
+
+    def post_tweet(self, user_id, tweet_id):
+        self.posts[user_id].append((next(self.clock), tweet_id))
+
+    def get_news_feed(self, user_id):
+        authors = self.following[user_id] | {user_id}
+        heap = []
+        for author in authors:
+            timeline = self.posts.get(author)
+            if timeline:
+                time, tweet_id = timeline[-1]
+                heap.append((-time, tweet_id, author, len(timeline) - 1))
+        heapq.heapify(heap)
+        feed = []
+        while heap and len(feed) < self.FEED_SIZE:
+            _, tweet_id, author, idx = heapq.heappop(heap)
+            feed.append(tweet_id)
+            if idx > 0:
+                time, older_id = self.posts[author][idx - 1]
+                heapq.heappush(heap, (-time, older_id, author, idx - 1))
+        return feed
+
+    def follow(self, follower_id, followee_id):
+        if follower_id != followee_id:
+            self.following[follower_id].add(followee_id)
+
+    def unfollow(self, follower_id, followee_id):
+        self.following[follower_id].discard(followee_id)
+```
+
+Timestamps are unique, so heap tuples never need to compare beyond the first element.
+
+**Complexity.** `post_tweet`, `follow` and `unfollow` are O(1). `get_news_feed` is O(F) to seed and heapify the heap for `F` followees, plus O(10 log F) for the pops and pushes. Memory is O(P + E) for posts and follow edges.
+
+### Design discussion
+
+- **Fan-out on read** (this design) computes feeds when they are requested. It is cheap for posting but slow for users who follow many accounts.
+- **Fan-out on write** pushes each new post into every follower's precomputed feed. Reads become trivial, but a post by an account with millions of followers costs millions of writes. Large systems mix both: fan out on write for ordinary accounts and merge very popular accounts' posts at read time.
+- **Memory.** Keeping every post in memory is fine for an interview. In production, only recent posts per user stay in a cache, and older ones are read from storage.
+- **Pagination.** Return the last timestamp seen as a cursor, and on the next request seed the heap with posts older than that cursor (a binary search in each author's list).
+
+## Tests
+
+```python
+import random
+
+def check(cls):
+    t = cls()
+    t.post_tweet(1, 101)
+    t.post_tweet(2, 201)
+    assert t.get_news_feed(1) == [101]
+    t.follow(1, 2)
+    t.post_tweet(2, 202)
+    assert t.get_news_feed(1) == [202, 201, 101]
+    t.unfollow(1, 2)
+    assert t.get_news_feed(1) == [101]
+    t.unfollow(1, 2)                         # unfollowing twice is harmless
+    t.follow(1, 1)                           # self-follow is ignored
+    t.unfollow(1, 1)
+    assert t.get_news_feed(1) == [101]       # still sees own posts
+    assert t.get_news_feed(99) == []         # unknown user
+    for i in range(15):
+        t.post_tweet(3, 300 + i)
+    t.follow(4, 3)
+    assert t.get_news_feed(4) == list(range(314, 304, -1))   # only the 10 newest
+
+check(TwitterScan)
+check(Twitter)
+
+rng = random.Random(26)
+a, b = TwitterScan(), Twitter()
+next_id = 1000
+for _ in range(5000):
+    op = rng.random()
+    u, v = rng.randint(1, 8), rng.randint(1, 8)
+    if op < 0.4:
+        a.post_tweet(u, next_id); b.post_tweet(u, next_id); next_id += 1
+    elif op < 0.6:
+        a.follow(u, v); b.follow(u, v)
+    elif op < 0.7:
+        a.unfollow(u, v); b.unfollow(u, v)
+    else:
+        assert a.get_news_feed(u) == b.get_news_feed(u)
+print("all design twitter tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Own posts.** Remember to include the user in the author set; forgetting this is the most common bug.
+- **Self-follow and unfollow.** Following yourself must not cause duplicate posts, and `unfollow` must not remove yourself. Using a set plus the explicit `| {user_id}` handles both.
+- **Unknown users.** `get_news_feed` on a user with no posts or follows returns an empty list.
+- **Seeding the heap with every post** instead of each author's newest is correct but slow for prolific authors.
+- **Ordering by post id** is wrong; ids are unique, not chronological.
+
+## Where this shows up in data engineering
+
+Merging several time-ordered streams into one ordered output is a core streaming task: combining per-partition event logs, merging change feeds from several shards, or producing an activity timeline from many sources. The fan-out on read versus write trade-off is the same decision you make when choosing between computing an aggregate at query time and maintaining a precomputed table, such as a materialised view, updated as events arrive.
