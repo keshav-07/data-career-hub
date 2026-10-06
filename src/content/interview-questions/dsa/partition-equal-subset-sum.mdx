@@ -1,0 +1,188 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Partition Equal Subset Sum: 0/1 Knapsack on Half the Total"
+seoTitle: "Partition Equal Subset Sum: 0/1 Knapsack"
+description: "Decide whether a list can be split into two groups with equal sums by solving a 0/1 subset-sum DP for half the total, with table, 1D and bitset versions."
+technology: ["dsa"]
+topic: ["dynamic-programming", "knapsack"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Two equal halves exist exactly when the total is even and some subset sums to half of it. That is 0/1 subset sum: can(i, t) = can(i - 1, t) or can(i - 1, t - nums[i - 1]), with can(0, 0) true. Using a one-dimensional boolean array of size target + 1, iterate each number once and loop the target downwards so each number is used at most once. Time O(n * T) and space O(T), where T is half the total."
+followUps: ["Why must the inner loop go downwards in the 1D version?", "How would you return the two groups?", "How would you split into k equal groups?", "How does a Python integer used as a bitset speed this up?"]
+previous: "interview-questions:dsa/longest-increasing-subsequence"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of positive integers, decide whether you can divide them into two groups whose sums are equal. Every
+number must go into exactly one group.
+
+This is widely known as LeetCode 416, "Partition Equal Subset Sum".
+
+Assume up to 200 numbers, each between 1 and 100.
+
+## Examples
+
+```text
+[3, 1, 4, 2]       -> True   (3 + 2 = 1 + 4 = 5)
+[2, 9, 3]          -> False  (total 14, half 7: no subset sums to 7)
+[1, 2, 6]          -> False  (total 9 is odd)
+[7, 7]             -> True
+```
+
+## Approach 1: plain recursion
+
+```python
+def can_partition_recursive(nums):
+    total = sum(nums)
+    if total % 2:
+        return False
+
+    def go(i, target):
+        if target == 0:
+            return True
+        if i == len(nums) or target < 0:
+            return False
+        return go(i + 1, target - nums[i]) or go(i + 1, target)
+
+    return go(0, total // 2)
+```
+
+Each number is in or out, so up to 2^n branches.
+
+## Approach 2: optimal, 0/1 knapsack DP
+
+### State, recurrence and base cases
+
+- **State:** `can[i][t]` = whether some subset of the first i numbers sums to t.
+- **Recurrence:** `can[i][t] = can[i - 1][t] or (t >= v and can[i - 1][t - v])` where `v = nums[i - 1]`.
+- **Base cases:** `can[0][0] = True`; `can[0][t] = False` for t above 0.
+- **Answer:** `can` at the last row and column `total // 2`.
+
+### Filled table for [3, 1, 4, 2], target 5 (T = reachable)
+
+| first i numbers | t=0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| none | T | F | F | F | F | F |
+| 3 | T | F | F | T | F | F |
+| 3, 1 | T | T | F | T | T | F |
+| 3, 1, 4 | T | T | F | T | T | T |
+| 3, 1, 4, 2 | T | T | T | T | T | T |
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def can_partition_memo(nums):
+    total = sum(nums)
+    if total % 2:
+        return False
+
+    @lru_cache(maxsize=None)
+    def go(i, target):
+        if target == 0:
+            return True
+        if i == len(nums) or target < 0:
+            return False
+        return go(i + 1, target - nums[i]) or go(i + 1, target)
+
+    return go(0, total // 2)
+```
+
+### Bottom-up 2D
+
+```python
+def can_partition_table(nums):
+    total = sum(nums)
+    if total % 2:
+        return False
+    target = total // 2
+    can = [[False] * (target + 1) for _ in range(len(nums) + 1)]
+    can[0][0] = True
+    for i in range(1, len(nums) + 1):
+        v = nums[i - 1]
+        for t in range(target + 1):
+            can[i][t] = can[i - 1][t] or (t >= v and can[i - 1][t - v])
+    return can[-1][target]
+```
+
+### Space optimised (1D, loop downwards)
+
+```python
+def can_partition(nums):
+    total = sum(nums)
+    if total % 2:
+        return False
+    target = total // 2
+    can = [True] + [False] * target
+    for v in nums:
+        for t in range(target, v - 1, -1):     # downwards: v used at most once
+            if can[t - v]:
+                can[t] = True
+        if can[target]:
+            return True
+    return can[target]
+```
+
+Going downwards means `can[t - v]` still holds the value from before this number was considered. Going upwards would
+let the same number be added twice, which solves the unbounded version instead.
+
+### Bitset trick
+
+A Python integer can hold all reachable sums as bits: shifting left by v adds v to every reachable sum at once.
+
+```python
+def can_partition_bits(nums):
+    total = sum(nums)
+    if total % 2:
+        return False
+    reach = 1                                  # bit 0 set: sum 0 reachable
+    for v in nums:
+        reach |= reach << v
+    return bool(reach >> (total // 2) & 1)
+```
+
+### Complexity
+
+- DP: O(n * T) time; O(n * T) space for 2D, O(T) for 1D.
+- Bitset: the same number of bit operations, but done many bits at a time, so much faster in practice.
+
+## Tests
+
+```python
+for fn in (can_partition, can_partition_table, can_partition_memo, can_partition_bits, can_partition_recursive):
+    assert fn([3, 1, 4, 2])
+    assert not fn([2, 9, 3])                    # even total, no half
+    assert not fn([1, 2, 6])                    # odd total
+    assert fn([7, 7])
+    assert not fn([5])                          # single element cannot split
+    assert fn([])                               # empty: two empty groups (convention)
+    assert fn([1, 1, 1, 1, 2, 2])
+    assert not fn([1, 5])                       # an upward 1D loop would say True
+
+import random
+random.seed(17)
+for _ in range(100):
+    a = [random.randint(1, 12) for _ in range(random.randint(1, 10))]
+    assert can_partition(a) == can_partition_recursive(a) == can_partition_bits(a)
+```
+
+## Edge cases and pitfalls
+
+- **Odd total** answers False immediately.
+- **Upward inner loop** in the 1D version reuses numbers. With `[1, 5]` (half is 3), an upward loop marks 1, then 2
+  (1 + 1), then 3 (1 + 1 + 1) and wrongly answers True; the correct answer is False.
+- **A single number larger than half** makes the answer False; that falls out of the DP naturally.
+- **Empty input** is a convention question; say what you return.
+
+## Where this shows up in data engineering
+
+Balancing work into two equal halves is a load-balancing question: splitting files or partitions between two
+workers so both finish at the same time. Exact balance is this NP-hard subset-sum problem, which is why real
+schedulers use greedy heuristics (largest first onto the least loaded worker) and accept a small imbalance.
