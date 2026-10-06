@@ -69,6 +69,7 @@ related:
   - "system-designs:data-observability-system"
   - "system-designs:data-lake-on-cloud-object-storage"
 previous: "system-designs:data-observability-system"
+next: "system-designs:gdpr-pii-compliant-pipeline"
 versionContext: "The impact-analysis query was run on PostgreSQL 16 against a small edge table. Catalog connectors and OpenLineage integrations are described, not executed."
 sources:
   - { label: "OpenLineage: object model", url: "https://openlineage.io/docs/spec/object-model/" }
