@@ -298,5 +298,29 @@
  "Orchestration patterns": {
   "ref": "articles:aws/step-functions",
   "heading": "Orchestration patterns"
+ },
+ "Metrics & alarms": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Metrics and alarms"
+ },
+ "Custom metrics": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Custom metrics"
+ },
+ "Logs & Log Insights": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Logs and Logs Insights"
+ },
+ "Dashboards": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Dashboards"
+ },
+ "EventBridge rules": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "EventBridge rules"
+ },
+ "Monitoring pipelines": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Monitoring pipelines"
  }
 }
