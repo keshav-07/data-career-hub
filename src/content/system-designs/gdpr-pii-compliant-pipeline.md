@@ -70,6 +70,7 @@ related:
   - "system-designs:customer-360-platform"
   - "system-designs:scalable-lakehouse"
 previous: "system-designs:data-catalog-lineage-system"
+next: "system-designs:clickstream-data-platform"
 versionContext: "The pseudonymisation and crypto-shredding sketch runs on Python 3 with the cryptography package (Fernet); production systems keep keys in a KMS. This page explains engineering patterns and is not legal advice."
 sources:
   - { label: "Delta Lake documentation: deletion vectors", url: "https://docs.delta.io/delta-deletion-vectors/" }
