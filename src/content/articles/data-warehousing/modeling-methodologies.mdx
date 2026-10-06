@@ -1,0 +1,629 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Data Modeling Methodologies: Kimball, Inmon, Data Vault, Anchor and Medallion"
+seoTitle: "Kimball, Inmon, Data Vault, Anchor, Medallion"
+description: "Compare Kimball, Inmon, Data Vault 2.0, Anchor modelling, medallion layers and Activity Schema with working tables for one shop, and learn when each fits."
+technology: ["data-warehousing", "sql"]
+topic: ["modelling", "data-vault", "kimball", "inmon", "medallion", "activity-schema"]
+difficulty: "Advanced"
+learningObjectives:
+  - "Explain the Kimball bus architecture and the Inmon Corporate Information Factory and how they differ"
+  - "Build Data Vault 2.0 hubs, links and satellites with hash keys and hash diffs, and load them insert-only"
+  - "Describe Anchor modelling's anchors, attributes, ties and knots and query a 6NF model"
+  - "Place medallion bronze, silver and gold layers relative to modelling methods"
+  - "Build an Activity Schema stream and answer a temporal question from it"
+  - "Choose a methodology honestly, weighing what each one costs"
+prerequisites: ["articles:data-warehousing/star-schema", "articles:data-warehousing/slowly-changing-dimensions", "articles:data-warehousing/normalization-denormalization"]
+related: ["articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "articles:etl-elt/etl-vs-elt", "system-designs:cloud-data-warehouse-platform"]
+previous: "articles:data-warehousing/slowly-changing-dimensions"
+next: "articles:data-warehousing/modern-modeling-practice"
+versionContext: "All SQL examples executed on PostgreSQL 16.14 (md5() for hash keys, jsonb for raw and feature data). Platform-specific features (Delta Lake, Snowflake) are described, not executed."
+sources:
+  - { label: "Kimball Group: Dimensional Modeling Techniques", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/" }
+  - { label: "Microsoft Tech Community: Data Vault 2.0 modelling on Microsoft Fabric", url: "https://techcommunity.microsoft.com/blog/analyticsonazure/data-vault-2-0-modelling-in-synapse-data-warehouse-on-microsoft-fabric/4003349" }
+  - { label: "Anchor Modeling: About", url: "https://www.anchormodeling.com/about/" }
+  - { label: "Databricks documentation: What is the medallion lakehouse architecture?", url: "https://docs.databricks.com/aws/en/lakehouse/medallion" }
+  - { label: "ActivitySchema specification 2.0 (GitHub)", url: "https://github.com/ActivitySchema/ActivitySchema/blob/main/2.0.md" }
+---
+
+The previous lessons taught the building blocks of dimensional models. This lesson steps back to the **methodologies** that decide how a whole warehouse is organised: where history lives, which layer is the source of truth, and how new sources are added. Interviewers use this topic to test judgement, so every section ends with what the method costs, and the last section compares them side by side. All examples model the same Kestrel Market customers and orders (the fictional online shop used across this course), so you can see the same data take each shape.
+
+## Kimball dimensional modelling
+
+### What it is and why it matters
+
+Ralph Kimball's approach builds the warehouse **bottom up from business processes**. Each process (orders, returns, inventory) becomes a star schema at the atomic grain, and the stars are integrated through **conformed dimensions** recorded in the **enterprise bus matrix**. There is no separate normalised enterprise layer that users query: the set of conformed stars *is* the warehouse.
+
+### How it works
+
+The **four-step design process** for each process:
+
+1. Choose the business process (Kestrel orders).
+2. Declare the grain (one row per order line).
+3. Identify the dimensions true at that grain (date, customer, product, promotion).
+4. Identify the facts (quantity, net amount).
+
+Delivery is incremental: ship the orders star, then add returns reusing the same dimensions, then inventory. Everything in the earlier lessons of this course is Kimball: [star schemas](/data-warehousing/star-schema/), [fact table types](/data-warehousing/fact-tables/), [dimension patterns](/data-warehousing/dimension-tables/), [bridges](/data-warehousing/bridge-tables-hierarchies/) and [SCDs](/data-warehousing/slowly-changing-dimensions/).
+
+### Strengths and costs
+
+| Strengths | Costs |
+|---|---|
+| Fast time to first value: one process at a time | Conformed dimensions need cross-team agreement, which is hard |
+| Simple, predictable queries; BI tools understand stars | Source changes ripple into dimensions and facts; restructuring a star means reloading |
+| Well-documented patterns for nearly every problem | History handling (Type 2) is embedded in the presentation tables, so mistakes are costly to fix |
+| Works well on columnar warehouses | Without discipline, stars drift into departmental silos with conflicting definitions |
+
+### In interviews
+
+Describe Kimball as "bottom-up, process-oriented stars integrated by conformed dimensions", name the four steps, and mention the bus matrix. Most modern analytics engineering (including typical dbt projects) uses Kimball-style marts as its serving layer, even when another method sits underneath.
+
+## Inmon and the Corporate Information Factory
+
+### What it is and why it matters
+
+Bill Inmon's approach is **top down**. First build an integrated, subject-oriented, time-variant, non-volatile **enterprise data warehouse (EDW) in third normal form**, holding all history for the whole organisation. Departmental **data marts** (often dimensional) are then derived from the EDW. The surrounding architecture, including staging, an operational data store (ODS) for current operational reporting, the EDW and the marts, is called the **Corporate Information Factory (CIF)**.
+
+```text
+sources -> staging -> ODS (current, integrated)
+                  \-> EDW (3NF, all history, enterprise-wide) -> data marts (stars per department)
+```
+
+### A worked example: a normalised EDW feeding a mart
+
+The EDW models entities and relationships, not reports. History is kept with effective dates on each normalised table:
+
+```sql
+CREATE TABLE edw_customer (
+  customer_id TEXT PRIMARY KEY,
+  customer_name TEXT NOT NULL
+);
+CREATE TABLE edw_customer_address (
+  customer_id TEXT NOT NULL REFERENCES edw_customer,
+  city        TEXT NOT NULL,
+  effective_from DATE NOT NULL,
+  effective_to   DATE NOT NULL DEFAULT '9999-12-31',
+  PRIMARY KEY (customer_id, effective_from)
+);
+CREATE TABLE edw_order (
+  order_id    TEXT PRIMARY KEY,
+  customer_id TEXT NOT NULL REFERENCES edw_customer,
+  order_date  DATE NOT NULL
+);
+CREATE TABLE edw_order_line (
+  order_id    TEXT NOT NULL REFERENCES edw_order,
+  line_number INT  NOT NULL,
+  sku         TEXT NOT NULL,
+  net_amount  NUMERIC(12,2) NOT NULL,
+  PRIMARY KEY (order_id, line_number)
+);
+
+INSERT INTO edw_customer VALUES ('C1', 'Asha Rao'), ('C2', 'Ravi Menon');
+INSERT INTO edw_customer_address VALUES
+  ('C1', 'Pune',   '2026-01-01', '2026-03-10'),
+  ('C1', 'Mumbai', '2026-03-10', '9999-12-31'),
+  ('C2', 'Delhi',  '2026-01-01', '9999-12-31');
+INSERT INTO edw_order VALUES ('O-1001', 'C1', '2026-03-02'), ('O-1002', 'C2', '2026-03-02'), ('O-1003', 'C1', '2026-03-15');
+INSERT INTO edw_order_line VALUES
+  ('O-1001', 1, 'SKU-RUN-01', 4999.00), ('O-1001', 2, 'SKU-SOC-02', 798.00),
+  ('O-1002', 1, 'SKU-ESP-03', 8999.00), ('O-1003', 1, 'SKU-PAN-04', 2499.00);
+
+-- A sales mart derived from the EDW: denormalised, city as at order time
+CREATE VIEW mart_sales_by_city AS
+SELECT o.order_date, a.city, ol.sku, ol.net_amount
+FROM edw_order_line ol
+JOIN edw_order o            ON o.order_id = ol.order_id
+JOIN edw_customer_address a ON a.customer_id = o.customer_id
+                           AND o.order_date >= a.effective_from AND o.order_date < a.effective_to;
+
+SELECT city, SUM(net_amount) AS revenue FROM mart_sales_by_city GROUP BY city ORDER BY city;
+```
+
+| city | revenue |
+|---|---|
+| Delhi | 8999.00 |
+| Mumbai | 2499.00 |
+| Pune | 5797.00 |
+
+The mart can be dropped and rebuilt with a different shape at any time, because the EDW holds the integrated history.
+
+### Strengths and costs
+
+| Strengths | Costs |
+|---|---|
+| One integrated, enterprise-wide source of truth | Long time to first value: the enterprise model comes first |
+| Marts are disposable and can be rebuilt in new shapes | Needs a strong central data modelling team |
+| Normalised storage handles change in one place | Many joins; analysts rarely query the EDW directly |
+| Fits heavily regulated organisations that want one audited core | The 3NF model must be redesigned when the business changes structurally |
+
+### In interviews
+
+"Kimball or Inmon?" is a classic. Contrast bottom-up stars integrated by conformed dimensions with a top-down 3NF EDW feeding marts. A balanced answer notes that many real warehouses are hybrids (an integrated layer, often Data Vault or normalised staging, feeding Kimball marts), and that cheap storage and ELT have made "integrate first, present as stars" common.
+
+## Data Vault 2.0: hubs, links and satellites
+
+### What it is and why it matters
+
+**Data Vault**, created by Dan Linstedt (version 2.0 published in 2013), is a modelling method for the **integration layer**: an auditable, insert-only store of all history from all sources, designed so that new sources and changing sources can be added without redesigning what already exists. It splits every entity into three table types:
+
+- **Hub**: the list of unique business keys for a core concept (customer, order, product). Nothing else.
+- **Link**: a relationship between hubs (customer placed order), as unique combinations of their keys.
+- **Satellite**: descriptive attributes and their history, attached to one hub or link, split by source and by rate of change.
+
+Version 2.0 standardised **hash keys**: instead of sequence-generated surrogate keys, each hub and link key is a deterministic hash (MD5 is the common choice; SHA-1 or SHA-256 also appear) of the normalised business key. Because the key can be computed from the source row alone, hubs, links and satellites can be loaded in parallel without lookups.
+
+### A worked example: DDL
+
+```sql
+CREATE TABLE hub_customer (
+  customer_hk   CHAR(32) PRIMARY KEY,      -- md5 of the normalised business key
+  customer_id   TEXT NOT NULL,             -- the business key itself
+  load_dts      TIMESTAMP NOT NULL,        -- first time this key was seen
+  record_source TEXT NOT NULL
+);
+CREATE TABLE hub_order (
+  order_hk      CHAR(32) PRIMARY KEY,
+  order_id      TEXT NOT NULL,
+  load_dts      TIMESTAMP NOT NULL,
+  record_source TEXT NOT NULL
+);
+CREATE TABLE link_customer_order (
+  customer_order_hk CHAR(32) PRIMARY KEY,  -- md5 of both business keys
+  customer_hk   CHAR(32) NOT NULL REFERENCES hub_customer,
+  order_hk      CHAR(32) NOT NULL REFERENCES hub_order,
+  load_dts      TIMESTAMP NOT NULL,
+  record_source TEXT NOT NULL
+);
+CREATE TABLE sat_customer_shop (
+  customer_hk   CHAR(32) NOT NULL REFERENCES hub_customer,
+  load_dts      TIMESTAMP NOT NULL,
+  hash_diff     CHAR(32) NOT NULL,         -- md5 of all descriptive columns, for change detection
+  customer_name TEXT,
+  city          TEXT,
+  email         TEXT,
+  record_source TEXT NOT NULL,
+  PRIMARY KEY (customer_hk, load_dts)
+);
+
+CREATE TABLE stg_shop_customer (customer_id TEXT, customer_name TEXT, city TEXT, email TEXT);
+CREATE TABLE stg_shop_order (order_id TEXT, customer_id TEXT);
+```
+
+### Loading: insert-only, idempotent
+
+Each load computes keys and hash diffs in staging, then inserts only what is new. The business key is trimmed and upper-cased before hashing, and multi-part keys and attribute lists are joined with a delimiter, so `' c1'` and `'C1'` give the same hub key.
+
+```sql
+INSERT INTO stg_shop_customer VALUES ('C1', 'Asha Rao', 'Pune', 'asha@example.com'), (' c2', 'Ravi Menon', 'Delhi', 'ravi@example.com');
+INSERT INTO stg_shop_order VALUES ('O-1001', 'C1'), ('O-1002', 'C2');
+
+-- Hubs: new business keys only
+INSERT INTO hub_customer
+SELECT DISTINCT md5(upper(trim(customer_id))), upper(trim(customer_id)), TIMESTAMP '2026-01-01 02:00', 'shop.customers'
+FROM stg_shop_customer s
+WHERE NOT EXISTS (SELECT 1 FROM hub_customer h WHERE h.customer_hk = md5(upper(trim(s.customer_id))));
+
+INSERT INTO hub_order
+SELECT DISTINCT md5(upper(trim(order_id))), upper(trim(order_id)), TIMESTAMP '2026-01-01 02:00', 'shop.orders'
+FROM stg_shop_order s
+WHERE NOT EXISTS (SELECT 1 FROM hub_order h WHERE h.order_hk = md5(upper(trim(s.order_id))));
+
+-- Link: new relationships only
+INSERT INTO link_customer_order
+SELECT DISTINCT md5(upper(trim(customer_id)) || '||' || upper(trim(order_id))),
+       md5(upper(trim(customer_id))), md5(upper(trim(order_id))), TIMESTAMP '2026-01-01 02:00', 'shop.orders'
+FROM stg_shop_order s
+WHERE NOT EXISTS (SELECT 1 FROM link_customer_order l
+                  WHERE l.customer_order_hk = md5(upper(trim(s.customer_id)) || '||' || upper(trim(s.order_id))));
+
+-- Satellite: a new row only when the hash diff differs from the latest row for that key
+INSERT INTO sat_customer_shop
+SELECT s.hk, TIMESTAMP '2026-01-01 02:00', s.hash_diff, s.customer_name, s.city, s.email, 'shop.customers'
+FROM (
+  SELECT md5(upper(trim(customer_id))) AS hk,
+         md5(concat_ws('||', customer_name, city, email)) AS hash_diff,
+         customer_name, city, email
+  FROM stg_shop_customer
+) s
+LEFT JOIN LATERAL (
+  SELECT hash_diff FROM sat_customer_shop t WHERE t.customer_hk = s.hk ORDER BY load_dts DESC LIMIT 1
+) latest ON true
+WHERE latest.hash_diff IS DISTINCT FROM s.hash_diff;
+
+SELECT h.customer_id, left(h.customer_hk, 8) AS hk_prefix, s.city, left(s.hash_diff, 8) AS diff_prefix
+FROM hub_customer h JOIN sat_customer_shop s USING (customer_hk) ORDER BY h.customer_id;
+```
+
+| customer_id | hk_prefix | city | diff_prefix |
+|---|---|---|---|
+| C1 | 1a2ddc2d | Pune | 46a6b4bc |
+| C2 | f1a543f5 | Delhi | 1db4ce8d |
+
+On 10 March Asha moves. The next load runs the **same** statements with a new timestamp. The hub and link inserts add nothing; the satellite adds one row for Asha and nothing for Ravi:
+
+```sql
+TRUNCATE stg_shop_customer;
+INSERT INTO stg_shop_customer VALUES ('C1', 'Asha Rao', 'Mumbai', 'asha@example.com'), ('C2', 'Ravi Menon', 'Delhi', 'ravi@example.com');
+
+INSERT INTO hub_customer
+SELECT DISTINCT md5(upper(trim(customer_id))), upper(trim(customer_id)), TIMESTAMP '2026-03-10 02:00', 'shop.customers'
+FROM stg_shop_customer s
+WHERE NOT EXISTS (SELECT 1 FROM hub_customer h WHERE h.customer_hk = md5(upper(trim(s.customer_id))));
+
+INSERT INTO sat_customer_shop
+SELECT s.hk, TIMESTAMP '2026-03-10 02:00', s.hash_diff, s.customer_name, s.city, s.email, 'shop.customers'
+FROM (
+  SELECT md5(upper(trim(customer_id))) AS hk,
+         md5(concat_ws('||', customer_name, city, email)) AS hash_diff,
+         customer_name, city, email
+  FROM stg_shop_customer
+) s
+LEFT JOIN LATERAL (
+  SELECT hash_diff FROM sat_customer_shop t WHERE t.customer_hk = s.hk ORDER BY load_dts DESC LIMIT 1
+) latest ON true
+WHERE latest.hash_diff IS DISTINCT FROM s.hash_diff;
+
+SELECT h.customer_id, s.load_dts, s.city
+FROM hub_customer h JOIN sat_customer_shop s USING (customer_hk)
+ORDER BY h.customer_id, s.load_dts;
+```
+
+| customer_id | load_dts | city |
+|---|---|---|
+| C1 | 2026-01-01 02:00:00 | Pune |
+| C1 | 2026-03-10 02:00:00 | Mumbai |
+| C2 | 2026-01-01 02:00:00 | Delhi |
+
+Nothing was updated or deleted: the vault is an append-only, auditable record of what each source said and when. Satellites have no end date in the strict 2.0 pattern; the end of a version is derived with `LEAD(load_dts)` when needed.
+
+### From vault to information marts
+
+Users do not query the raw vault. It feeds a **business vault** (derived, rule-applied satellites and helper tables) and **information marts**, usually Kimball stars. Two helper structures make that fast: **point-in-time (PIT) tables**, which store, for each hub key and snapshot date, the matching load date in each satellite, and **bridge tables** that pre-join hubs and links along common paths. A current-state customer dimension is a "latest row per key" query:
+
+```sql
+CREATE VIEW dim_customer_current AS
+SELECT DISTINCT ON (h.customer_hk) h.customer_hk AS customer_key, h.customer_id, s.customer_name, s.city
+FROM hub_customer h
+JOIN sat_customer_shop s USING (customer_hk)
+ORDER BY h.customer_hk, s.load_dts DESC;
+
+SELECT customer_id, customer_name, city FROM dim_customer_current ORDER BY customer_id;
+```
+
+| customer_id | customer_name | city |
+|---|---|---|
+| C1 | Asha Rao | Mumbai |
+| C2 | Ravi Menon | Delhi |
+
+### Strengths and costs
+
+| Strengths | Costs |
+|---|---|
+| New sources add new hubs, links and satellites without touching existing tables | Many more tables and joins than a star; hard to query directly |
+| Insert-only, fully auditable history of every source | Needs an extra layer (business vault, marts) before anyone can use the data |
+| Hash keys enable parallel loading with no key lookups | Hash keys are wide (32 hex chars as text, or 16 bytes binary) and joins on them are slower than on integers |
+| Loading patterns are so regular they are usually generated (for example by dbt packages) | Requires discipline and tooling; a half-implemented vault is the worst of both worlds |
+
+### Pitfalls
+
+- **Inconsistent key normalisation** (trim, case, delimiter) between loaders, so the same customer gets two hub keys.
+- **One huge satellite per hub.** Split satellites by source and by rate of change, or every change copies dozens of unchanged columns.
+- **Treating the vault as the presentation layer.** It is for integration and audit; build marts on top.
+
+### In interviews
+
+Define hub, link and satellite in one line each, explain why hash keys replaced sequences (parallel, deterministic loading), describe the hash diff for change detection, and say honestly that Data Vault pays off for many changing sources and strong audit needs, and is overhead for a small team with a handful of stable sources.
+
+## Anchor modelling
+
+### What it is and why it matters
+
+**Anchor modelling**, developed by Lars Rönnbäck and colleagues, takes normalisation to **sixth normal form**: every attribute lives in its own table. The building blocks are:
+
+| Construct | What it holds | Kestrel example |
+|---|---|---|
+| Anchor | Only an identity (surrogate key) | `cu_customer` |
+| Attribute | One property of an anchor, optionally historised with a `changed_at` time | `cu_nam_customer_name`, `cu_cit_customer_city` |
+| Knot | A small, shared set of values (like an enumeration) | `tie_tier` loyalty tiers |
+| Tie | A relationship between anchors, optionally historised | customer placed order |
+
+Because each attribute is a separate table, the model only ever **grows by adding tables**: a new attribute is a new table, never an `ALTER TABLE` on a big one. Old queries keep working, and history is kept per attribute. The project's tooling generates views that reassemble the "latest" and "point in time" state.
+
+### A worked example
+
+The names below follow Anchor modelling's mnemonic style in simplified form:
+
+```sql
+CREATE TABLE cu_customer (cu_id INT PRIMARY KEY);                        -- anchor
+CREATE TABLE ti_tier (ti_id INT PRIMARY KEY, ti_tier TEXT NOT NULL UNIQUE);  -- knot
+
+CREATE TABLE cu_nam_customer_name (                                      -- static attribute
+  cu_id INT PRIMARY KEY REFERENCES cu_customer, cu_nam TEXT NOT NULL
+);
+CREATE TABLE cu_cit_customer_city (                                      -- historised attribute
+  cu_id INT NOT NULL REFERENCES cu_customer, cu_cit TEXT NOT NULL, changed_at DATE NOT NULL,
+  PRIMARY KEY (cu_id, changed_at)
+);
+CREATE TABLE cu_tie_customer_tier (                                      -- knotted, historised attribute
+  cu_id INT NOT NULL REFERENCES cu_customer, ti_id INT NOT NULL REFERENCES ti_tier, changed_at DATE NOT NULL,
+  PRIMARY KEY (cu_id, changed_at)
+);
+
+INSERT INTO cu_customer VALUES (1), (2);
+INSERT INTO ti_tier VALUES (1, 'Silver'), (2, 'Gold');
+INSERT INTO cu_nam_customer_name VALUES (1, 'Asha Rao'), (2, 'Ravi Menon');
+INSERT INTO cu_cit_customer_city VALUES (1, 'Pune', '2026-01-01'), (1, 'Mumbai', '2026-03-10'), (2, 'Delhi', '2026-01-01');
+INSERT INTO cu_tie_customer_tier VALUES (1, 1, '2026-01-01'), (1, 2, '2026-05-01'), (2, 1, '2026-01-01');
+```
+
+A point-in-time view takes, for each attribute, the latest value at or before the requested time. As of 1 April 2026:
+
+```sql
+SELECT c.cu_id, n.cu_nam AS name,
+       (SELECT cu_cit FROM cu_cit_customer_city x
+         WHERE x.cu_id = c.cu_id AND x.changed_at <= DATE '2026-04-01'
+         ORDER BY x.changed_at DESC LIMIT 1) AS city,
+       (SELECT t.ti_tier FROM cu_tie_customer_tier x JOIN ti_tier t USING (ti_id)
+         WHERE x.cu_id = c.cu_id AND x.changed_at <= DATE '2026-04-01'
+         ORDER BY x.changed_at DESC LIMIT 1) AS tier
+FROM cu_customer c
+LEFT JOIN cu_nam_customer_name n USING (cu_id)
+ORDER BY c.cu_id;
+```
+
+| cu_id | name | city | tier |
+|---|---|---|---|
+| 1 | Asha Rao | Mumbai | Silver |
+| 2 | Ravi Menon | Delhi | Silver |
+
+Asha had moved to Mumbai by 1 April but was not yet Gold (that changed on 1 May). Each attribute keeps its own timeline, so no row ever has to be copied to record a change in one column.
+
+### Strengths and costs
+
+| Strengths | Costs |
+|---|---|
+| Schema evolution is additive only: new attributes never alter existing tables | A very large number of narrow tables |
+| History per attribute without duplicating unchanged columns | Every read reassembles rows with many joins; relies on views and the optimiser's join elimination |
+| No NULLs stored: a missing value is a missing row | Little mainstream tooling and few practitioners compared with Kimball or Data Vault |
+| Very good fit for highly volatile, evolving domains | Columnar warehouses already make wide tables cheap, which reduces the benefit |
+
+### In interviews
+
+Anchor modelling is a less common question, so a crisp definition goes a long way: 6NF, anchors (identity), attributes (one per table, optionally historised), ties (relationships) and knots (shared value sets), with additive-only evolution as the payoff and join-heavy reads as the price. Comparing it to Data Vault (both separate keys from attributes; anchor goes further, one table per attribute) shows depth.
+
+## Medallion architecture: bronze, silver and gold
+
+### What it is and why it matters
+
+The **medallion architecture**, popularised by Databricks for lakehouses, organises tables into layers by **quality and refinement**, not by modelling technique:
+
+| Layer | Contents | Typical operations |
+|---|---|---|
+| Bronze | Raw data as received, append-only, plus ingestion metadata (load time, source file) | Land and keep; no business logic |
+| Silver | Cleaned, typed, deduplicated, conformed data; often close to source entities | Parse, validate, deduplicate, merge changes (CDC), join reference data |
+| Gold | Business-ready data for consumption | Stars, aggregates, wide tables, feature tables |
+
+Medallion is best understood as a **layering convention**. It says nothing about how silver or gold are modelled: silver might be normalised or a Data Vault, gold is very often Kimball stars or OBTs.
+
+### A worked example
+
+Kestrel's order service emits JSON events, including a duplicate delivery and a later correction:
+
+```sql
+CREATE TABLE bronze_order_events (
+  raw          JSONB NOT NULL,
+  _ingested_at TIMESTAMP NOT NULL,
+  _source_file TEXT NOT NULL
+);
+INSERT INTO bronze_order_events VALUES
+  ('{"order_id":"O-1001","customer":"C1","amount":"5797.00","status":"placed","updated":"2026-03-02T10:00:00"}', '2026-03-02 10:05', 'orders/2026-03-02/part-0001.json'),
+  ('{"order_id":"O-1001","customer":"C1","amount":"5797.00","status":"placed","updated":"2026-03-02T10:00:00"}', '2026-03-02 10:06', 'orders/2026-03-02/part-0002.json'),
+  ('{"order_id":"O-1002","customer":"C2","amount":"8999.00","status":"placed","updated":"2026-03-02T11:00:00"}', '2026-03-02 11:05', 'orders/2026-03-02/part-0003.json'),
+  ('{"order_id":"O-1001","customer":"C1","amount":"5398.00","status":"amended","updated":"2026-03-03T09:00:00"}', '2026-03-03 09:05', 'orders/2026-03-03/part-0001.json');
+
+-- Silver: typed, one row per order, latest version wins
+CREATE TABLE silver_orders AS
+SELECT DISTINCT ON (raw->>'order_id')
+       raw->>'order_id'                  AS order_id,
+       raw->>'customer'                  AS customer_id,
+       (raw->>'amount')::NUMERIC(12,2)   AS net_amount,
+       raw->>'status'                    AS status,
+       (raw->>'updated')::TIMESTAMP      AS updated_at
+FROM bronze_order_events
+ORDER BY raw->>'order_id', (raw->>'updated')::TIMESTAMP DESC, _ingested_at DESC;
+
+-- Gold: a business-ready aggregate
+CREATE TABLE gold_daily_revenue AS
+SELECT updated_at::DATE AS order_day, COUNT(*) AS orders, SUM(net_amount) AS revenue
+FROM silver_orders GROUP BY 1;
+
+SELECT (SELECT COUNT(*) FROM bronze_order_events) AS bronze_rows,
+       (SELECT COUNT(*) FROM silver_orders)       AS silver_rows,
+       (SELECT SUM(net_amount) FROM silver_orders) AS silver_revenue;
+```
+
+| bronze_rows | silver_rows | silver_revenue |
+|---|---|---|
+| 4 | 2 | 14397.00 |
+
+Bronze keeps all four events, including the duplicate, so silver can always be rebuilt with corrected logic. Silver holds one current row per order (the amendment won). The gold table here groups by the last update date, which is a deliberate simplification: a real gold model would use the order date and a proper star.
+
+### Strengths and costs
+
+| Strengths | Costs |
+|---|---|
+| Simple, widely understood vocabulary for data quality stages | Says nothing about modelling; teams still need Kimball, Data Vault or similar for silver and gold |
+| Raw data is always replayable from bronze | Three copies of data; storage and compute grow |
+| Fits streaming and batch, and lakehouse table formats | Layer boundaries are fuzzy ("is this silver or gold?") without written conventions |
+
+### In interviews
+
+If asked "medallion or Kimball?", explain that they answer different questions: medallion is about refinement stages, Kimball about the shape of the presentation model. A good answer places stars in gold, cleaned and conformed entities in silver, and raw immutable data in bronze.
+
+## Activity Schema and event modelling
+
+### What it is and why it matters
+
+**Activity Schema** (the open specification at version 2.0) models analytics around **what entities do over time** instead of around business processes. Every action a customer takes ("visited site", "added to cart", "completed order", "clicked email") becomes a row in a single **activity stream** per entity, with a fixed set of columns. Questions like "what did customers do before their first order?" or "did they reorder within 30 days?" become self-joins of the stream on time, instead of joins between many fact tables with different grains.
+
+The core columns are `activity_id`, `ts`, `customer`, `activity` and `feature_json` (activity-specific attributes as semi-structured data). Optional ones include `anonymous_customer_id`, `revenue_impact` and `link`, plus two derived columns: `activity_occurrence` (the nth time this customer did this activity) and `activity_repeated_at` (when they next did it).
+
+### A worked example: the stream table
+
+```sql
+CREATE TABLE customer_stream (
+  activity_id           TEXT PRIMARY KEY,
+  ts                    TIMESTAMP NOT NULL,
+  customer              TEXT,               -- NULL until the visitor is identified
+  anonymous_customer_id TEXT,
+  activity              TEXT NOT NULL,
+  feature_json          JSONB,
+  revenue_impact        NUMERIC(12,2),
+  link                  TEXT,
+  activity_occurrence   INT,
+  activity_repeated_at  TIMESTAMP
+);
+
+INSERT INTO customer_stream (activity_id, ts, customer, anonymous_customer_id, activity, feature_json, revenue_impact) VALUES
+  ('a1', '2026-03-01 09:00', 'C1', 'anon-77', 'visited_site',    '{"channel":"email"}',  NULL),
+  ('a2', '2026-03-02 10:00', 'C1', NULL,      'completed_order', '{"order_id":"O-1001"}', 5797.00),
+  ('a3', '2026-03-14 20:00', 'C1', NULL,      'visited_site',    '{"channel":"search"}', NULL),
+  ('a4', '2026-03-15 08:30', 'C1', NULL,      'completed_order', '{"order_id":"O-1003"}', 2898.00),
+  ('a5', '2026-03-02 10:30', 'C2', NULL,      'visited_site',    '{"channel":"social"}', NULL),
+  ('a6', '2026-03-02 11:00', 'C2', NULL,      'completed_order', '{"order_id":"O-1002"}', 8999.00),
+  ('a7', '2026-03-20 18:00', 'C3', NULL,      'visited_site',    '{"channel":"email"}',  NULL);
+
+-- Derived columns, recomputed per customer and activity
+UPDATE customer_stream s
+SET activity_occurrence  = d.occ,
+    activity_repeated_at = d.next_ts
+FROM (
+  SELECT activity_id,
+         ROW_NUMBER() OVER w AS occ,
+         LEAD(ts)     OVER w AS next_ts
+  FROM customer_stream
+  WINDOW w AS (PARTITION BY customer, activity ORDER BY ts, activity_id)
+) d
+WHERE d.activity_id = s.activity_id;
+
+SELECT customer, activity, ts, activity_occurrence, activity_repeated_at
+FROM customer_stream WHERE customer = 'C1' ORDER BY ts;
+```
+
+| customer | activity | ts | activity_occurrence | activity_repeated_at |
+|---|---|---|---|---|
+| C1 | visited_site | 2026-03-01 09:00:00 | 1 | 2026-03-14 20:00:00 |
+| C1 | completed_order | 2026-03-02 10:00:00 | 1 | 2026-03-15 08:30:00 |
+| C1 | visited_site | 2026-03-14 20:00:00 | 2 | NULL |
+| C1 | completed_order | 2026-03-15 08:30:00 | 2 | NULL |
+
+### A temporal question: first-touch channel and conversion
+
+"For each customer's first visit, which channel brought them, and did they order within 7 days?" The derived columns make "first" a filter (`activity_occurrence = 1`), and the conversion is a time-bounded self-join:
+
+```sql
+SELECT v.customer,
+       v.feature_json->>'channel' AS first_channel,
+       MIN(o.ts)                  AS first_order_within_7_days,
+       COALESCE(SUM(o.revenue_impact), 0) AS revenue_within_7_days
+FROM customer_stream v
+LEFT JOIN customer_stream o
+       ON o.customer = v.customer
+      AND o.activity = 'completed_order'
+      AND o.ts >  v.ts
+      AND o.ts <= v.ts + INTERVAL '7 days'
+WHERE v.activity = 'visited_site' AND v.activity_occurrence = 1
+GROUP BY v.customer, v.feature_json->>'channel'
+ORDER BY v.customer;
+```
+
+| customer | first_channel | first_order_within_7_days | revenue_within_7_days |
+|---|---|---|---|
+| C1 | email | 2026-03-02 10:00:00 | 5797.00 |
+| C2 | social | 2026-03-02 11:00:00 | 8999.00 |
+| C3 | email | NULL | 0 |
+
+In a star schema this would need a sessions fact, an orders fact, a "first visit" derivation and a careful time-windowed join between two grains. In the stream every question has the same shape: pick a primary activity, then join other activities before, after or between occurrences.
+
+### Strengths and costs
+
+| Strengths | Costs |
+|---|---|
+| One table, one shape: new activities need no schema change | Not suited to measures that are not events (balances, inventory levels) |
+| Customer-journey and funnel questions are natural | Attributes live in JSON, so typing and documentation discipline matter |
+| Identity stitching (anonymous to known) is handled in one place | Very large single table; needs clustering by activity and time on big data |
+| Fits event-driven products and product analytics | Less familiar to BI tools and analysts than stars; fewer practitioners |
+
+### In interviews
+
+Event modelling comes up for product analytics and clickstream roles. Describe the stream (entity, timestamp, activity, features), the derived occurrence and next-occurrence columns, and a temporal self-join for a funnel. Then position it honestly: excellent for journeys and funnels, a complement to, not a replacement for, stars for financial reporting.
+
+## Choosing a methodology
+
+No method is best in general. Each optimises for something and charges for it elsewhere:
+
+| Method | Optimises for | Main cost | Fits when |
+|---|---|---|---|
+| Kimball | Query simplicity and speed to value | Agreement on conformed dimensions; restructuring is expensive | Most analytics teams; BI-heavy organisations; the serving layer of almost any stack |
+| Inmon (3NF EDW) | One integrated enterprise truth | Long time to value; join-heavy core | Large, regulated organisations with central data teams |
+| Data Vault 2.0 | Auditability and adding sources without rework | Many tables; needs marts and automation on top | Many volatile sources, strict audit or regulatory needs, large teams |
+| Anchor | Additive-only schema evolution with per-attribute history | Extreme join counts; niche tooling | Highly volatile domains where schema changes constantly |
+| Medallion | Clear quality stages and replayability | Extra copies; no modelling guidance | Lakehouses; combine with one of the methods above |
+| Activity Schema | Customer-journey questions from one table | Weak for non-event data; JSON discipline | Product analytics, funnels, event-driven businesses |
+
+The common modern combination is: **bronze** raw landing, a **silver** integration layer (cleaned entities, sometimes a Data Vault when sources are many and volatile), and **gold** Kimball stars or OBTs for consumption, with an activity stream alongside for product analytics. For a small team with a handful of stable sources, cleaned staging models plus Kimball marts are usually enough, and adding a vault would be cost without benefit.
+
+## Practice questions
+
+<details>
+<summary>Compare Kimball and Inmon in three sentences.</summary>
+
+Kimball builds bottom-up: one star per business process at the atomic grain, integrated by conformed dimensions, and the stars are the warehouse. Inmon builds top-down: an enterprise-wide 3NF warehouse holding integrated history first, with departmental marts derived from it. Kimball delivers value sooner and is simpler to query; Inmon gives a single integrated core at the cost of a longer build and a join-heavy model.
+
+</details>
+
+<details>
+<summary>What are hubs, links and satellites, and why does Data Vault 2.0 use hash keys?</summary>
+
+A hub holds unique business keys for a core concept, a link holds relationships between hubs, and a satellite holds descriptive attributes and their history for one hub or link. Hash keys (for example MD5 of the trimmed, upper-cased business key) are deterministic, so every table can compute its keys from the source row alone and load in parallel without looking up sequence values in other tables. A hash diff of the descriptive columns detects satellite changes cheaply.
+
+</details>
+
+<details>
+<summary>How do you load a Data Vault satellite idempotently?</summary>
+
+Compute the hub hash key and a hash diff of the descriptive columns in staging. Insert a satellite row only when no row exists for that key or the latest row's hash diff differs. Rerunning with the same data inserts nothing; new values insert a new row with the new load timestamp. Nothing is updated or deleted.
+
+</details>
+
+<details>
+<summary>What is the relationship between medallion architecture and dimensional modelling?</summary>
+
+They are complementary. Medallion defines quality stages (raw bronze, cleaned silver, business-ready gold) but not table design. Dimensional modelling designs the gold layer (stars, conformed dimensions), and silver may be normalised entities or a Data Vault.
+
+</details>
+
+<details>
+<summary>When would you choose an activity stream over a star schema?</summary>
+
+When the main questions are about sequences of customer behaviour: funnels, first-touch attribution, time between actions, retention. The stream answers them with one table and temporal self-joins, and new activities need no schema change. For financial reporting, inventory and balances, stars remain the better fit; many teams run both.
+
+</details>
+
+<details>
+<summary>A startup with five stable SaaS sources asks whether to build a Data Vault. What do you advise?</summary>
+
+Probably not yet. Data Vault pays for itself with many volatile sources, heavy integration and strict audit needs. For five stable sources, cleaned staging models plus Kimball marts (and snapshots for history) deliver value faster with far fewer tables. Keep raw data replayable so a vault or other integration layer can be introduced later if the source landscape grows.
+
+</details>
+
+## Key takeaways
+
+- Kimball builds conformed stars per business process; Inmon builds a 3NF enterprise warehouse first and derives marts from it.
+- Data Vault 2.0 separates keys (hubs), relationships (links) and history (satellites), loads insert-only with hash keys and hash diffs, and needs marts on top.
+- Anchor modelling goes to 6NF: one table per attribute, additive-only evolution, join-heavy reads.
+- Medallion is a quality layering convention, not a modelling method; gold is usually dimensional.
+- Activity Schema puts every customer action in one stream and answers journey questions with temporal self-joins.
+- Choose by what you can afford: time to value, audit needs, source volatility and team size, not fashion.

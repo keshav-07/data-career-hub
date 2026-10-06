@@ -1,119 +1,644 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "Slowly Changing Dimensions: Type 1 vs Type 2"
-seoTitle: "Slowly Changing Dimensions: Type 1 vs Type 2"
-description: "Keep or overwrite history when dimension attributes change: SCD Type 1 and Type 2 explained with a working, rerunnable Type 2 load and point-in-time joins."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Slowly Changing Dimensions: Types 0 to 6"
+seoTitle: "Slowly Changing Dimensions: Types 0 to 6"
+description: "Every SCD type from 0 to 6 with rerunnable PostgreSQL loads: overwrite with MERGE, Type 2 versioning, point-in-time joins, mini-dimensions and hybrid Type 6."
 inventoryId: "TECH-19"
-technology: ["data-warehousing", "sql"]
+technology: ["data-warehousing", "sql", "dbt"]
 topic: ["scd", "modelling"]
 difficulty: "Intermediate"
-prerequisites: ["articles:data-warehousing/star-schema"]
-related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:data-warehousing/partitioning-clustering-data-layout"]
-previous: "articles:data-warehousing/star-schema"
-next: "articles:data-warehousing/partitioning-clustering-data-layout"
-sources: [{"label": "Kimball Group: Dimensional Modeling Techniques", "url": "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/"}]
-versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45; MERGE-based variants differ by engine"
+learningObjectives:
+  - "Choose an SCD type per attribute based on how the business wants history reported"
+  - "Write idempotent Type 1 and Type 2 loads with UPDATE, INSERT and MERGE"
+  - "Join facts to a Type 2 dimension as of the event date"
+  - "Explain Type 3, Type 4 (history tables and mini-dimensions), Type 5 and Type 6 and when each fits"
+prerequisites: ["articles:data-warehousing/dimension-tables", "articles:data-warehousing/star-schema"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:etl-elt/cdc-patterns-and-failure-modes", "articles:etl-elt/idempotency-in-data-pipelines"]
+previous: "articles:data-warehousing/bridge-tables-hierarchies"
+next: "articles:data-warehousing/modeling-methodologies"
+versionContext: "All SQL examples executed on PostgreSQL 16.14 (MERGE needs PostgreSQL 15 or later). The dbt snapshot example follows the dbt 1.9+ YAML snapshot syntax and was not executed."
+sources:
+  - { label: "Kimball Group: Design Tip #152 Slowly Changing Dimension Types 0, 4, 5, 6 and 7", url: "https://www.kimballgroup.com/2013/02/design-tip-152-slowly-changing-dimension-types-0-4-5-6-7/" }
+  - { label: "Kimball Group: Type 6, Add Type 1 Attributes to Type 2 Dimension", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/type-6/" }
+  - { label: "PostgreSQL 16 documentation: MERGE", url: "https://www.postgresql.org/docs/16/sql-merge.html" }
+  - { label: "dbt documentation: Add snapshots to your DAG", url: "https://docs.getdbt.com/docs/build/snapshots" }
+  - { label: "dbt documentation: Snapshot configurations", url: "https://docs.getdbt.com/reference/snapshot-configs" }
 ---
 
-Dimension attributes change: a customer moves city, a product changes category. A **slowly changing dimension (SCD)** strategy decides whether the warehouse forgets the old value or keeps it.
+Dimension attributes change: a customer moves city, a product changes category, a driver upgrades their vehicle. A **slowly changing dimension (SCD)** strategy decides what the warehouse does with the old value: keep it, overwrite it, or keep some of it. Getting this wrong either loses history the business needed or makes every report harder than it should be. This lesson implements every type from 0 to 6 for Kestrel Market (the fictional online shop used across this course) with SQL you can rerun safely.
 
-## Type 1: overwrite
+## Sample data and the change timeline
 
-Replace the old value. History is lost, and every fact, past or present, now reports the new value.
+Asha (C1) signs up in Pune. On 10 March 2026 she moves to Mumbai and changes her email address. On 1 June she moves again, to Hyderabad. Meera (C3) is a new customer on 10 March. Each nightly extract lands in `stg_customer`.
 
 ```sql
-UPDATE dim_customer SET city = 'Bengaluru' WHERE customer_id = 'C1';
+CREATE TABLE stg_customer (
+  customer_id   TEXT PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  email         TEXT NOT NULL,
+  city          TEXT NOT NULL,
+  signup_date   DATE NOT NULL
+);
+INSERT INTO stg_customer VALUES
+  ('C1', 'Asha Rao',   'asha@example.com', 'Pune',  '2025-11-20'),
+  ('C2', 'Ravi Menon', 'ravi@example.com', 'Delhi', '2025-12-05');
 ```
 
-Use Type 1 for corrections (a typo in a name) or attributes where history has no analytical value.
+| Date | Change in source | Which SCD question it raises |
+|---|---|---|
+| 2026-01-01 | Initial load: C1 Pune, C2 Delhi | |
+| 2026-03-10 | C1 moves to Mumbai and changes email; C3 Meera (Bengaluru) signs up | Keep the old city? Keep the old email? |
+| 2026-06-01 | C1 moves to Hyderabad | How many old values do we keep? |
 
-## Type 2: add a new version
+The type is chosen **per attribute**, not per table. Most real dimensions mix Type 0, Type 1 and Type 2 columns.
 
-Keep the old row, close its validity period, and insert a new row with a new surrogate key. Facts recorded while the old version was current keep pointing to it.
+## SCD Type 0: retain the original
+
+### What it is and why it matters
+
+A **Type 0** attribute never changes after it is first loaded, even if the source sends a new value. It suits values that are true by definition at a moment: signup date, original acquisition channel, first order date, a credit score at application. If the source later "corrects" them, that is either a real correction (handle it deliberately) or a source bug.
+
+### How it works
+
+Type 0 is enforced by leaving the column out of every update. It is shown in the Type 1 load below: `signup_date` is inserted for new customers and never appears in the `UPDATE SET` list.
+
+Two variants are worth knowing. **Durable original values** such as "first city" are often stored alongside a Type 2 history so analysts do not have to search for the earliest version. And date dimensions are effectively Type 0: 2 March 2026 is always a Monday.
+
+### Pitfalls
+
+- A Type 0 column that silently diverges from the source forever because of a one-off source typo. Keep a reconciliation report of Type 0 mismatches so real corrections can be applied by hand.
+- Calling a column Type 0 when the business actually wants the latest value. Ask.
+
+### In interviews
+
+Type 0 is rarely asked on its own, but listing it shows you know the full taxonomy. Give one example (signup date) and say it is implemented by excluding the column from updates.
+
+## SCD Type 1: overwrite
+
+### What it is and why it matters
+
+**Type 1** replaces the old value with the new one. There is one row per customer, history is lost, and every fact (past and present) reports the new value. Use it for corrections (a misspelt name) and for attributes where history has no analytical value (email, phone).
+
+### A worked example with MERGE
+
+```sql
+CREATE TABLE dim_customer_t1 (
+  customer_key  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  customer_id   TEXT NOT NULL UNIQUE,
+  customer_name TEXT NOT NULL,
+  email         TEXT NOT NULL,         -- Type 1
+  city          TEXT NOT NULL,         -- Type 1 in this table
+  signup_date   DATE NOT NULL          -- Type 0: never updated
+);
+
+-- The same statement runs every night
+MERGE INTO dim_customer_t1 d
+USING stg_customer s ON d.customer_id = s.customer_id
+WHEN MATCHED AND (d.customer_name, d.email, d.city) IS DISTINCT FROM (s.customer_name, s.email, s.city) THEN
+  UPDATE SET customer_name = s.customer_name, email = s.email, city = s.city
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, customer_name, email, city, signup_date)
+  VALUES (s.customer_id, s.customer_name, s.email, s.city, s.signup_date);
+
+-- 10 March extract: Asha moved and changed email; a source bug also changed her signup date
+TRUNCATE stg_customer;
+INSERT INTO stg_customer VALUES
+  ('C1', 'Asha Rao',   'asha.rao@example.com', 'Mumbai',    '2026-03-10'),
+  ('C2', 'Ravi Menon', 'ravi@example.com',     'Delhi',     '2025-12-05'),
+  ('C3', 'Meera Iyer', 'meera@example.com',    'Bengaluru', '2026-03-10');
+
+MERGE INTO dim_customer_t1 d
+USING stg_customer s ON d.customer_id = s.customer_id
+WHEN MATCHED AND (d.customer_name, d.email, d.city) IS DISTINCT FROM (s.customer_name, s.email, s.city) THEN
+  UPDATE SET customer_name = s.customer_name, email = s.email, city = s.city
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, customer_name, email, city, signup_date)
+  VALUES (s.customer_id, s.customer_name, s.email, s.city, s.signup_date);
+
+SELECT customer_key, customer_id, email, city, signup_date FROM dim_customer_t1 ORDER BY customer_key;
+```
+
+| customer_key | customer_id | email | city | signup_date |
+|---|---|---|---|---|
+| 1 | C1 | asha.rao@example.com | Mumbai | 2025-11-20 |
+| 2 | C2 | ravi@example.com | Delhi | 2025-12-05 |
+| 3 | C3 | meera@example.com | Bengaluru | 2026-03-10 |
+
+Asha's city and email were overwritten, her signup date (Type 0) was not, and Meera was inserted. The `IS DISTINCT FROM` condition matters for two reasons: unchanged rows are not rewritten (cheaper, and any `updated_at` column stays meaningful), and it treats NULLs correctly, where `<>` would not.
+
+The statement is idempotent: running it again with the same extract changes nothing.
+
+### Pitfalls
+
+- **Restating history unintentionally.** After this load, Asha's January orders report Mumbai. If anyone needed "revenue by the city the customer lived in at the time", Type 1 was the wrong choice.
+- **Aggregates built earlier now disagree** with a recomputation. If you keep summary tables, Type 1 changes may require rebuilding them.
+- Comparing with `<>`, which skips rows where either side is NULL.
+
+### In interviews
+
+Describe Type 1 as "overwrite, no history, use for corrections and attributes nobody analyses historically", and show a MERGE or UPDATE with a change-detection condition.
+
+## SCD Type 2: add a new row for each version
+
+### What it is and why it matters
+
+**Type 2** keeps every version. When a tracked attribute changes, the current row is closed (its `valid_to` is set and `is_current` becomes false) and a new row is inserted with a new surrogate key. Facts recorded while the old version was current keep pointing at it, so history reports exactly what was true at the time. It is the most important SCD type and the one interviewers ask about most.
+
+### The table
 
 ```sql
 CREATE TABLE dim_customer (
-  customer_key INTEGER PRIMARY KEY AUTOINCREMENT,  -- surrogate key, one per version
-  customer_id  TEXT,                               -- business key
-  city         TEXT,
-  valid_from   TEXT,
-  valid_to     TEXT,                               -- '9999-12-31' for the current row
-  is_current   INT
+  customer_key  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- one per version
+  customer_id   TEXT NOT NULL,                                 -- durable business key
+  customer_name TEXT NOT NULL,
+  email         TEXT NOT NULL,     -- Type 1: overwritten on all versions
+  city          TEXT NOT NULL,     -- Type 2: tracked
+  signup_date   DATE NOT NULL,     -- Type 0
+  valid_from    DATE NOT NULL,
+  valid_to      DATE NOT NULL,     -- exclusive; 9999-12-31 for the current row
+  is_current    BOOLEAN NOT NULL,
+  UNIQUE (customer_id, valid_from)
 );
-INSERT INTO dim_customer (customer_id, city, valid_from, valid_to, is_current) VALUES
-  ('C1', 'Pune',  '2026-01-01', '9999-12-31', 1),
-  ('C2', 'Delhi', '2026-01-01', '9999-12-31', 1);
+CREATE UNIQUE INDEX one_current_row ON dim_customer (customer_id) WHERE is_current;
 
-CREATE TABLE stg_customer (customer_id TEXT, city TEXT);
-INSERT INTO stg_customer VALUES ('C1', 'Bengaluru'), ('C2', 'Delhi'), ('C3', 'Mumbai');
+INSERT INTO dim_customer (customer_id, customer_name, email, city, signup_date, valid_from, valid_to, is_current) VALUES
+  ('C1', 'Asha Rao',   'asha@example.com', 'Pune',  '2025-11-20', '2026-01-01', '9999-12-31', true),
+  ('C2', 'Ravi Menon', 'ravi@example.com', 'Delhi', '2025-12-05', '2026-01-01', '9999-12-31', true);
 ```
 
-C1 moved city, C2 is unchanged and C3 is new. The load for 2026-10-01 runs in two steps:
+The partial unique index guarantees at most one current row per customer, so a buggy load fails loudly instead of creating duplicates.
+
+### Loading with UPDATE then INSERT
+
+The 10 March load, using the extract already in `stg_customer`, runs in one transaction so a failure cannot leave a customer with no current row:
 
 ```sql
+BEGIN;
+
 -- 1. Close current rows whose tracked attribute changed
-UPDATE dim_customer
-SET valid_to = '2026-10-01', is_current = 0
-WHERE is_current = 1
-  AND EXISTS (SELECT 1 FROM stg_customer s
-              WHERE s.customer_id = dim_customer.customer_id
-                AND s.city <> dim_customer.city);
+UPDATE dim_customer d
+SET valid_to = '2026-03-10', is_current = false
+FROM stg_customer s
+WHERE s.customer_id = d.customer_id
+  AND d.is_current
+  AND d.city IS DISTINCT FROM s.city;
 
 -- 2. Insert a current row for every key that has none (changed or new)
-INSERT INTO dim_customer (customer_id, city, valid_from, valid_to, is_current)
-SELECT s.customer_id, s.city, '2026-10-01', '9999-12-31', 1
+INSERT INTO dim_customer (customer_id, customer_name, email, city, signup_date, valid_from, valid_to, is_current)
+SELECT s.customer_id, s.customer_name, s.email, s.city, s.signup_date, '2026-03-10', '9999-12-31', true
 FROM stg_customer s
-LEFT JOIN dim_customer d ON d.customer_id = s.customer_id AND d.is_current = 1
-WHERE d.customer_id IS NULL;
+WHERE NOT EXISTS (SELECT 1 FROM dim_customer d WHERE d.customer_id = s.customer_id AND d.is_current);
+
+-- 3. Type 1 columns: overwrite on every version, so all history shows the latest email
+UPDATE dim_customer d
+SET email = s.email
+FROM stg_customer s
+WHERE s.customer_id = d.customer_id AND d.email IS DISTINCT FROM s.email;
+
+COMMIT;
+
+SELECT customer_key, customer_id, city, email, valid_from, valid_to, is_current
+FROM dim_customer ORDER BY customer_id, valid_from;
+```
+
+| customer_key | customer_id | city | email | valid_from | valid_to | is_current |
+|---|---|---|---|---|---|---|
+| 1 | C1 | Pune | asha.rao@example.com | 2026-01-01 | 2026-03-10 | f |
+| 3 | C1 | Mumbai | asha.rao@example.com | 2026-03-10 | 9999-12-31 | t |
+| 2 | C2 | Delhi | ravi@example.com | 2026-01-01 | 9999-12-31 | t |
+| 4 | C3 | Bengaluru | meera@example.com | 2026-03-10 | 9999-12-31 | t |
+
+Asha now has two versions; Ravi, unchanged, still has one; Meera is new. One detail to notice: the new Mumbai version took `signup_date` from the extract, which still carries the source bug from the Type 1 example (2026-03-10 instead of 2025-11-20). To enforce Type 0 strictly, copy Type 0 columns from the previous version rather than from staging.
+
+**Idempotency check.** Running the same three steps again changes nothing: step 1 finds no differences, step 2 finds no customer without a current row, step 3 finds no email differences.
+
+```sql
+BEGIN;
+UPDATE dim_customer d SET valid_to = '2026-03-10', is_current = false
+FROM stg_customer s
+WHERE s.customer_id = d.customer_id AND d.is_current AND d.city IS DISTINCT FROM s.city;
+INSERT INTO dim_customer (customer_id, customer_name, email, city, signup_date, valid_from, valid_to, is_current)
+SELECT s.customer_id, s.customer_name, s.email, s.city, s.signup_date, '2026-03-10', '9999-12-31', true
+FROM stg_customer s
+WHERE NOT EXISTS (SELECT 1 FROM dim_customer d WHERE d.customer_id = s.customer_id AND d.is_current);
+COMMIT;
+
+SELECT COUNT(*) AS rows_after_rerun FROM dim_customer;
+```
+
+| rows_after_rerun |
+|---|
+| 4 |
+
+### Loading with a single MERGE
+
+Many warehouses (and PostgreSQL 15+) support `MERGE`, but one `MERGE` cannot both close a row and insert its replacement from the same source row. The standard trick feeds changed customers in **twice**: once with their key, to match and close the current row, and once with a NULL merge key, which never matches and therefore inserts the new version. The 1 June extract moves Asha to Hyderabad:
+
+```sql
+TRUNCATE stg_customer;
+INSERT INTO stg_customer VALUES
+  ('C1', 'Asha Rao',   'asha.rao@example.com', 'Hyderabad', '2025-11-20'),
+  ('C2', 'Ravi Menon', 'ravi@example.com',     'Delhi',     '2025-12-05'),
+  ('C3', 'Meera Iyer', 'meera@example.com',    'Bengaluru', '2026-03-10');
+
+MERGE INTO dim_customer d
+USING (
+  SELECT s.customer_id AS merge_key, s.* FROM stg_customer s
+  UNION ALL
+  SELECT NULL, s.*                                   -- changed rows again, to insert the new version
+  FROM stg_customer s
+  JOIN dim_customer cur ON cur.customer_id = s.customer_id AND cur.is_current
+  WHERE cur.city IS DISTINCT FROM s.city
+) src
+ON d.customer_id = src.merge_key AND d.is_current
+WHEN MATCHED AND d.city IS DISTINCT FROM src.city THEN
+  UPDATE SET valid_to = DATE '2026-06-01', is_current = false
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, customer_name, email, city, signup_date, valid_from, valid_to, is_current)
+  VALUES (src.customer_id, src.customer_name, src.email, src.city, src.signup_date,
+          DATE '2026-06-01', DATE '9999-12-31', true);
+
+SELECT customer_key, customer_id, city, valid_from, valid_to, is_current
+FROM dim_customer WHERE customer_id = 'C1' ORDER BY valid_from;
 ```
 
 | customer_key | customer_id | city | valid_from | valid_to | is_current |
 |---|---|---|---|---|---|
-| 1 | C1 | Pune | 2026-01-01 | 2026-10-01 | 0 |
-| 3 | C1 | Bengaluru | 2026-10-01 | 9999-12-31 | 1 |
-| 2 | C2 | Delhi | 2026-01-01 | 9999-12-31 | 1 |
-| 4 | C3 | Mumbai | 2026-10-01 | 9999-12-31 | 1 |
+| 1 | C1 | Pune | 2026-01-01 | 2026-03-10 | f |
+| 3 | C1 | Mumbai | 2026-03-10 | 2026-06-01 | f |
+| 5 | C1 | Hyderabad | 2026-06-01 | 9999-12-31 | t |
 
-Running both steps a second time changes nothing (still four rows), because step 1 finds no remaining differences and step 2 finds no keys without a current row. That makes the load safe to retry. Wrap both steps in one transaction so a failure between them cannot leave a key with no current row.
+Rerunning the `MERGE` is safe: the UNION's second branch is empty once the current row says Hyderabad, and the first branch matches with no difference. (PostgreSQL evaluates the `USING` query before applying changes, which is why the two branches do not interfere within one run.)
 
-## Point-in-time joins
+### Point-in-time joins
 
-To report each fact with the attribute **as it was** at the time, join on the validity range:
+Facts usually store the surrogate key that was current at load time, and joining on it gives "as it was" reporting directly. When facts carry only the business key (common in lakehouse tables and late-arriving data), join on the **validity range** instead:
 
 ```sql
-SELECT f.order_id, f.order_date, d.city
-FROM fact_orders f
+CREATE TABLE fact_order (order_id TEXT PRIMARY KEY, order_date DATE NOT NULL, customer_id TEXT NOT NULL, net_amount NUMERIC(12,2) NOT NULL);
+INSERT INTO fact_order VALUES
+  ('O-1001', '2026-03-02', 'C1', 5797.00),
+  ('O-1003', '2026-03-15', 'C1', 2898.00),
+  ('O-1007', '2026-06-20', 'C1', 1499.00),
+  ('O-1002', '2026-03-02', 'C2', 8999.00);
+
+SELECT f.order_id, f.order_date, d.customer_key, d.city AS city_at_order_time
+FROM fact_order f
 JOIN dim_customer d
   ON d.customer_id = f.customer_id
  AND f.order_date >= d.valid_from
- AND f.order_date <  d.valid_to;
+ AND f.order_date <  d.valid_to
+ORDER BY f.order_date, f.order_id;
 ```
 
-A March order reports Pune; an October order reports Bengaluru. Alternatively, store the surrogate key on the fact row at load time and join on it directly, which is simpler and faster for queries.
+| order_id | order_date | customer_key | city_at_order_time |
+|---|---|---|---|
+| O-1001 | 2026-03-02 | 1 | Pune |
+| O-1002 | 2026-03-02 | 2 | Delhi |
+| O-1003 | 2026-03-15 | 3 | Mumbai |
+| O-1007 | 2026-06-20 | 5 | Hyderabad |
 
-## Which attributes to track
+Each order matched exactly one version. Joining instead with `d.is_current` would report all of Asha's orders as Hyderabad ("as it is now"), which is a valid but different question.
 
-Decide per column. Track (Type 2) the attributes analysts segment history by, such as region or customer tier. Overwrite (Type 1) corrections and attributes with no historical meaning. Many dimensions mix both.
+<Callout tone="info" title="Use half-open validity ranges">
 
-<Callout tone="info" title="Use a half-open validity range">
-
-Using `valid_from <= date < valid_to`, with the next version's `valid_from` equal to the previous `valid_to`, guarantees each date matches exactly one version, with no gaps and no overlaps.
+Use `valid_from <= date < valid_to`, with each new version's `valid_from` equal to the previous version's `valid_to`. Every date then matches exactly one version, with no gaps and no overlaps. A closed range (`BETWEEN valid_from AND valid_to`) matches two versions on the change date and duplicates facts.
 
 </Callout>
 
-## Common mistakes
+### Type 2 in dbt
 
-1. Joining facts to all versions of a Type 2 dimension (instead of the current one or the valid one), multiplying rows.
-2. Closed ranges (`BETWEEN valid_from AND valid_to`) that match two versions on the change date.
-3. Tracking every column as Type 2, creating a new version on irrelevant changes.
-4. Non-idempotent loads that create duplicate current rows when rerun.
+dbt implements Type 2 as **snapshots**. From dbt 1.9 snapshots can be configured in YAML; dbt adds `dbt_scd_id`, `dbt_valid_from`, `dbt_valid_to` and `dbt_updated_at` columns, and `dbt_valid_to_current` lets you store a far-future date instead of NULL for current rows:
 
-## Interview relevance
+{/* noexec */}
+```yaml
+# snapshots/customers_snapshot.yml
+snapshots:
+  - name: customers_snapshot
+    relation: source('shop', 'customers')
+    config:
+      unique_key: customer_id
+      strategy: check            # or 'timestamp' with updated_at: updated_at
+      check_cols: [city]
+      dbt_valid_to_current: "to_date('9999-12-31')"
+      hard_deletes: invalidate   # close the current row when the source row disappears
+```
 
-"How would you handle a customer changing address?" is the classic prompt. Explain Type 1 versus Type 2, surrogate keys, validity ranges and how the load stays idempotent.
+The `timestamp` strategy is cheaper and preferred when the source has a reliable `updated_at`; `check` compares column values when it does not. Snapshots capture changes only when they run, so two changes between runs collapse into one.
 
-## Key takeaway
+### Pitfalls
 
-Type 1 overwrites; Type 2 versions. For Type 2, use surrogate keys, half-open validity ranges and a rerunnable two-step load.
+1. **Joining facts to every version** instead of the current or the valid one, multiplying rows.
+2. **Closed ranges** that match two versions on the change date.
+3. **Tracking every column as Type 2**, creating new versions for irrelevant changes such as `last_login_at`. Choose tracked columns deliberately.
+4. **Non-idempotent loads** that create duplicate current rows when rerun. Use `NOT EXISTS` or a merge key, and a unique index on the current row.
+5. **Out-of-order or late changes.** If an older change arrives after a newer one, a simple close-and-insert load produces wrong ranges; such sources need a rebuild of the affected customer's history from the full change log.
+6. **Same-day changes.** With date granularity, two changes on one day give a zero-length version; use timestamps when sub-day changes matter.
+
+### In interviews
+
+"How would you handle a customer changing address?" is the classic. A complete answer covers: Type 1 versus Type 2 by attribute, surrogate keys per version, half-open validity ranges with a current flag, an idempotent load (close, insert, overwrite Type 1 columns, in one transaction), the point-in-time join, and how dbt snapshots do the same.
+
+## SCD Type 3: add a previous-value column
+
+### What it is and why it matters
+
+**Type 3** keeps a limited history by adding columns: `city` holds the current value and `previous_city` the one before, often with the date it changed. There is still one row per customer. It suits a known, one-off "before and after" comparison, such as a sales territory reorganisation where reports need both the old and the new territory side by side for a while.
+
+### A worked example
+
+```sql
+CREATE TABLE dim_customer_t3 (
+  customer_id     TEXT PRIMARY KEY,
+  city            TEXT NOT NULL,
+  previous_city   TEXT,
+  city_changed_on DATE
+);
+INSERT INTO dim_customer_t3 VALUES ('C1', 'Pune', NULL, NULL);
+
+-- 10 March: move to Mumbai, then 1 June: move to Hyderabad
+UPDATE dim_customer_t3 SET previous_city = city, city = 'Mumbai', city_changed_on = '2026-03-10'
+WHERE customer_id = 'C1' AND city IS DISTINCT FROM 'Mumbai';
+UPDATE dim_customer_t3 SET previous_city = city, city = 'Hyderabad', city_changed_on = '2026-06-01'
+WHERE customer_id = 'C1' AND city IS DISTINCT FROM 'Hyderabad';
+
+SELECT * FROM dim_customer_t3;
+```
+
+| customer_id | city | previous_city | city_changed_on |
+|---|---|---|---|
+| C1 | Hyderabad | Mumbai | 2026-06-01 |
+
+Pune is gone: Type 3 only remembers one step back. The `IS DISTINCT FROM` guard keeps the update idempotent; without it, a rerun would set `previous_city` to Hyderabad as well.
+
+### Pitfalls
+
+- Expecting full history from Type 3. Use Type 2 for that.
+- Facts are not tied to a version, so "revenue by city at the time" is still impossible.
+
+### In interviews
+
+Describe Type 3 as "current plus one previous value in extra columns", give the reorganisation use case, and say its limit (one step of history, no link from facts to versions).
+
+## SCD Type 4: history table and mini-dimension
+
+### What it is and why it matters
+
+"Type 4" is used for two different techniques, and it is worth saying so in an interview:
+
+- **History table** (common usage, and the meaning in many textbooks and tools): the dimension holds only current rows, and every version goes to a separate history table. Queries about "now" stay small and fast; history is available when needed.
+- **Mini-dimension** (the Kimball Group's definition): attributes that change frequently in a large dimension (age band, loyalty tier, spend band) are split into a separate small dimension of all combinations, and the **fact table** carries its key. This stops a multi-million-row customer dimension from growing a new Type 2 version every time a band changes.
+
+### History table
+
+```sql
+CREATE TABLE dim_customer_current (customer_id TEXT PRIMARY KEY, city TEXT NOT NULL, updated_on DATE NOT NULL);
+CREATE TABLE dim_customer_history (
+  customer_id TEXT NOT NULL, city TEXT NOT NULL, valid_from DATE NOT NULL, valid_to DATE NOT NULL,
+  PRIMARY KEY (customer_id, valid_from)
+);
+INSERT INTO dim_customer_current VALUES ('C1', 'Pune', '2026-01-01');
+
+-- On change: archive the outgoing version, then overwrite the current row
+INSERT INTO dim_customer_history
+SELECT customer_id, city, updated_on, '2026-03-10' FROM dim_customer_current
+WHERE customer_id = 'C1' AND city IS DISTINCT FROM 'Mumbai';
+UPDATE dim_customer_current SET city = 'Mumbai', updated_on = '2026-03-10'
+WHERE customer_id = 'C1' AND city IS DISTINCT FROM 'Mumbai';
+
+SELECT 'current' AS source, customer_id, city, updated_on AS valid_from, NULL::DATE AS valid_to FROM dim_customer_current
+UNION ALL
+SELECT 'history', customer_id, city, valid_from, valid_to FROM dim_customer_history
+ORDER BY valid_from;
+```
+
+| source | customer_id | city | valid_from | valid_to |
+|---|---|---|---|---|
+| history | C1 | Pune | 2026-01-01 | 2026-03-10 |
+| current | C1 | Mumbai | 2026-03-10 | NULL |
+
+### Mini-dimension
+
+```sql
+CREATE TABLE dim_customer_profile (
+  profile_key  INT PRIMARY KEY,
+  age_band     TEXT NOT NULL,
+  loyalty_tier TEXT NOT NULL,
+  UNIQUE (age_band, loyalty_tier)
+);
+INSERT INTO dim_customer_profile
+SELECT ROW_NUMBER() OVER (ORDER BY a, t), a, t
+FROM unnest(ARRAY['18-24', '25-34', '35-44']) AS a
+CROSS JOIN unnest(ARRAY['Bronze', 'Silver', 'Gold']) AS t;
+
+-- Each fact row records the profile in force when the order happened
+CREATE TABLE fact_order_profiled (order_id TEXT, customer_id TEXT, profile_key INT, net_amount NUMERIC(12,2));
+INSERT INTO fact_order_profiled VALUES
+  ('O-1001', 'C1', (SELECT profile_key FROM dim_customer_profile WHERE age_band = '25-34' AND loyalty_tier = 'Silver'), 5797.00),
+  ('O-1007', 'C1', (SELECT profile_key FROM dim_customer_profile WHERE age_band = '25-34' AND loyalty_tier = 'Gold'),   1499.00);
+
+SELECT p.loyalty_tier, SUM(f.net_amount) AS revenue
+FROM fact_order_profiled f JOIN dim_customer_profile p USING (profile_key)
+GROUP BY p.loyalty_tier ORDER BY p.loyalty_tier;
+```
+
+| loyalty_tier | revenue |
+|---|---|
+| Gold | 1499.00 |
+| Silver | 5797.00 |
+
+Asha's tier history lives in the facts: her March order was placed as Silver, her June order as Gold, and the customer dimension did not need a new version.
+
+### Pitfalls
+
+- With a history table, every "as it was" query needs a union or a separate join path. Make sure analysts know where history lives.
+- Mini-dimensions only work for **banded, low-cardinality** attributes. Exact ages or exact spend would make it as large as the base dimension.
+- With a mini-dimension, a customer's profile is only recorded when they have a fact. Customers with no orders this month have no profile there; a periodic snapshot or Type 5 outrigger fills the gap.
+
+### In interviews
+
+If asked about Type 4, mention both meanings and give each a use case: history tables to keep current-state queries fast, mini-dimensions to stop rapidly changing bands from bloating a huge Type 2 dimension.
+
+## SCD Type 5: mini-dimension plus a Type 1 outrigger
+
+### What it is and why it matters
+
+**Type 5** (named because 4 + 1 = 5) builds on the mini-dimension. The fact table keeps the profile key in force at the time (Type 4), and the base customer dimension gets a `current_profile_key` that is **overwritten** (Type 1) whenever the profile changes. Analysts can then report on a customer's current profile without going through any fact, and historical profile through the fact.
+
+### A worked example
+
+```sql
+CREATE TABLE dim_customer_t5 (
+  customer_id         TEXT PRIMARY KEY,
+  customer_name       TEXT NOT NULL,
+  current_profile_key INT NOT NULL REFERENCES dim_customer_profile   -- Type 1 outrigger key
+);
+INSERT INTO dim_customer_t5
+SELECT 'C1', 'Asha Rao', profile_key FROM dim_customer_profile WHERE age_band = '25-34' AND loyalty_tier = 'Gold';
+
+-- Present the outrigger with distinct column names so it is not confused with the fact's profile
+CREATE VIEW dim_customer_with_current_profile AS
+SELECT c.customer_id, c.customer_name,
+       p.age_band AS current_age_band, p.loyalty_tier AS current_loyalty_tier
+FROM dim_customer_t5 c JOIN dim_customer_profile p ON p.profile_key = c.current_profile_key;
+
+SELECT f.order_id, hist.loyalty_tier AS tier_at_order, cur.current_loyalty_tier
+FROM fact_order_profiled f
+JOIN dim_customer_profile hist ON hist.profile_key = f.profile_key
+JOIN dim_customer_with_current_profile cur ON cur.customer_id = f.customer_id
+ORDER BY f.order_id;
+```
+
+| order_id | tier_at_order | current_loyalty_tier |
+|---|---|---|
+| O-1001 | Silver | Gold |
+| O-1007 | Gold | Gold |
+
+"Revenue from customers who are Gold today, including what they spent before becoming Gold" uses `current_loyalty_tier`; "revenue placed while Gold" uses `tier_at_order`.
+
+### Pitfalls
+
+- Column names that do not distinguish current from historical profile attributes. Prefix outrigger columns with `current_`.
+- Forgetting to overwrite `current_profile_key` when the profile changes, which turns the outrigger into a stale Type 0 value.
+
+### In interviews
+
+Type 5 is uncommon in practice, so a precise definition is enough: mini-dimension key on the fact for history, plus a Type 1 current-profile key on the base dimension for current-state reporting.
+
+## SCD Type 6: hybrid of Types 1, 2 and 3
+
+### What it is and why it matters
+
+**Type 6** (1 + 2 + 3 = 6) is a Type 2 dimension that also carries a **current value column**, overwritten on every version. Each row then holds both the historical value (`city`, as it was for that version) and the current value (`current_city`, the same on all of a customer's rows). Facts joined through their Type 2 key can be grouped by either, with no extra join and no point-in-time logic. This is the most practical hybrid and the one most often asked about.
+
+### A worked example
+
+Add the Type 1 column to the Type 2 dimension built earlier and maintain it in the same load:
+
+```sql
+ALTER TABLE dim_customer ADD COLUMN current_city TEXT;
+
+-- Part of every load, after the Type 2 steps: overwrite current_city on all versions
+UPDATE dim_customer d
+SET current_city = cur.city
+FROM dim_customer cur
+WHERE cur.customer_id = d.customer_id
+  AND cur.is_current
+  AND d.current_city IS DISTINCT FROM cur.city;
+
+SELECT customer_key, customer_id, city AS historical_city, current_city, valid_from, is_current
+FROM dim_customer ORDER BY customer_id, valid_from;
+```
+
+| customer_key | customer_id | historical_city | current_city | valid_from | is_current |
+|---|---|---|---|---|---|
+| 1 | C1 | Pune | Hyderabad | 2026-01-01 | f |
+| 3 | C1 | Mumbai | Hyderabad | 2026-03-10 | f |
+| 5 | C1 | Hyderabad | Hyderabad | 2026-06-01 | t |
+| 2 | C2 | Delhi | Delhi | 2026-01-01 | t |
+| 4 | C3 | Bengaluru | Bengaluru | 2026-03-10 | t |
+
+With the facts keyed by surrogate key, one join answers both questions:
+
+```sql
+CREATE TABLE fact_order_keyed AS
+SELECT f.order_id, d.customer_key, f.net_amount
+FROM fact_order f
+JOIN dim_customer d ON d.customer_id = f.customer_id
+ AND f.order_date >= d.valid_from AND f.order_date < d.valid_to;
+
+SELECT d.city AS city_at_order_time, d.current_city, SUM(f.net_amount) AS revenue
+FROM fact_order_keyed f JOIN dim_customer d USING (customer_key)
+GROUP BY d.city, d.current_city
+ORDER BY d.current_city, d.city;
+```
+
+| city_at_order_time | current_city | revenue |
+|---|---|---|
+| Delhi | Delhi | 8999.00 |
+| Hyderabad | Hyderabad | 1499.00 |
+| Mumbai | Hyderabad | 2898.00 |
+| Pune | Hyderabad | 5797.00 |
+
+Grouping by `city_at_order_time` gives history as it happened; grouping by `current_city` restates all of Asha's revenue to Hyderabad. A full Type 6 can also add a Type 3 `previous_city` column, which is where the "3" in 1 + 2 + 3 comes from.
+
+### Type 7, briefly
+
+Kimball also describes **Type 7**: the fact table carries both the Type 2 surrogate key and the durable business key (or a durable supernatural key). Joining on the surrogate key gives history; joining the durable key to a current-rows view gives current values. It delivers the same flexibility as Type 6 without updating historical dimension rows.
+
+### Pitfalls
+
+- **The cost of Type 6 is the Type 1 update**: every change rewrites all versions of that customer. On immutable or columnar storage, large dimensions make this expensive; Type 7 avoids it.
+- Forgetting to run the current-value update after closing and inserting versions, leaving `current_city` stale.
+- Confusing analysts with two similar columns. Name them clearly (`city_at_time`, `current_city`) and document which to use.
+
+### In interviews
+
+A common follow-up after Type 2 is "the business wants to see old orders by the customer's current region as well". Type 6 (a current-value column on every version) or Type 7 (durable key on the fact plus a current view) are the answers; mention the update cost of Type 6.
+
+## Choosing a type
+
+| Type | Keeps | Rows per member | Typical use | Main cost |
+|---|---|---|---|---|
+| 0 | Original value only | 1 | Signup date, original channel | Silent divergence from source |
+| 1 | Latest value only | 1 | Corrections, contact details | History lost; reports restate |
+| 2 | Full history | 1 per version | Region, segment, anything reported historically | Bigger dimension; point-in-time logic |
+| 3 | Current plus one previous | 1 | Planned reorganisations | One step of history only |
+| 4 | Current table plus history table, or a mini-dimension | 1 (+ history rows) | Fast current lookups; rapidly changing bands | Separate paths for history |
+| 5 | Mini-dimension history plus current profile | 1 | Banded attributes reported both ways | Outrigger to maintain |
+| 6 | Full history plus current value on every row | 1 per version | "As it was" and "as it is" from one join | Rewrites all versions on change |
+
+## Practice questions
+
+<details>
+<summary>A customer changes city. Walk through what a Type 2 load does and how you keep it idempotent.</summary>
+
+In one transaction: close the current row where the tracked attribute differs (set `valid_to` to the load date and `is_current` to false); insert a new current row for every business key without one (changed and new customers), with a new surrogate key and `valid_to` of 9999-12-31; then overwrite Type 1 columns. It is idempotent because a rerun finds no differences to close and no keys without a current row. A unique index on the current row per business key guards against bugs.
+
+</details>
+
+<details>
+<summary>Why does a Type 2 MERGE need the customer twice in its source?</summary>
+
+A single MERGE applies one action per target-source match. A changed customer needs two actions: update (close) the existing current row and insert a new row. Feeding the changed customers a second time with a NULL merge key makes those rows never match, so they fall through to the insert branch, while the first copy matches and closes the old version.
+
+</details>
+
+<details>
+<summary>What is wrong with joining facts to a Type 2 dimension using BETWEEN valid_from AND valid_to?</summary>
+
+`BETWEEN` is inclusive at both ends. On the change date the old version's `valid_to` equals the new version's `valid_from`, so a fact on that date matches both and is counted twice. Use the half-open condition `date >= valid_from AND date < valid_to`.
+
+</details>
+
+<details>
+<summary>What does Type 6 add to Type 2, and what does it cost?</summary>
+
+A current-value column (Type 1) on every version, and optionally a previous-value column (Type 3). Facts joined by their Type 2 key can be grouped by either the historical or the current value without extra joins. The cost is rewriting every version of a member when the current value changes, which is expensive for large dimensions on immutable storage; Type 7 achieves the same with a durable key on the fact instead.
+
+</details>
+
+<details>
+<summary>What does "Type 4" mean?</summary>
+
+It has two common meanings. In general usage it is a current-only dimension plus a separate history table. In Kimball's definition it is a mini-dimension: rapidly changing, banded attributes split into a small dimension whose key is stored on the fact, so the base dimension does not grow a version for every band change. Say which you mean.
+
+</details>
+
+<details>
+<summary>How do dbt snapshots implement SCD Type 2, and what can they miss?</summary>
+
+Each run compares the source with the snapshot table using either the `timestamp` strategy (an `updated_at` column) or the `check` strategy (selected columns), closes changed rows and inserts new versions with `dbt_valid_from` and `dbt_valid_to`. They only see the state at run time, so several changes between runs collapse into one, and hard deletes are ignored unless `hard_deletes` is configured.
+
+</details>
+
+## Key takeaways
+
+- Choose the SCD type per attribute, from how the business wants history reported.
+- Type 0 keeps the original, Type 1 overwrites, Type 2 versions with surrogate keys and half-open validity ranges.
+- Type 2 loads must be transactional and idempotent: close, insert, overwrite Type 1 columns, with a unique current-row index.
+- Join facts to Type 2 dimensions on the stored surrogate key or on the validity range, never on all versions.
+- Type 3 keeps one previous value; Type 4 means a history table or a mini-dimension; Type 5 adds a current-profile outrigger.
+- Type 6 puts current values on every Type 2 row so one join answers "as it was" and "as it is"; Type 7 does the same with a durable key on the fact.

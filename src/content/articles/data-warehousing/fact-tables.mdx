@@ -1,0 +1,573 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Fact Tables: Measures, Snapshots and Late-Arriving Facts"
+seoTitle: "Fact Tables: Measures, Snapshots, Late Facts"
+description: "Design fact tables that sum correctly: additive and semi-additive measures, transaction, periodic and accumulating snapshots, factless facts and late data."
+technology: ["data-warehousing", "sql"]
+topic: ["modelling", "fact-tables", "snapshots"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Design a fact table with a declared grain, dimension keys, degenerate dimensions and measures"
+  - "Classify measures as additive, semi-additive or non-additive and aggregate each correctly"
+  - "Choose between transaction, periodic snapshot and accumulating snapshot fact tables"
+  - "Use factless fact tables to record coverage and events with no measure"
+  - "Handle facts that change after loading and facts that arrive late"
+prerequisites: ["articles:data-warehousing/star-schema", "articles:sql/window-functions"]
+related: ["articles:etl-elt/idempotency-in-data-pipelines", "articles:etl-elt/cdc-patterns-and-failure-modes", "articles:sql/aggregations-group-by-having"]
+previous: "articles:data-warehousing/normalization-denormalization"
+next: "articles:data-warehousing/dimension-tables"
+versionContext: "All SQL examples executed on PostgreSQL 16.14 (MERGE is available from PostgreSQL 15)."
+sources:
+  - { label: "Kimball Group: Dimensional Modeling Techniques", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/" }
+  - { label: "Kimball Group: Transaction Fact Tables", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/transaction-fact-table/" }
+  - { label: "Kimball Group: Design Tip #167 Complementary Fact Table Types", url: "https://www.kimballgroup.com/2014/06/design-tip-167-complementary-fact-table-types/" }
+  - { label: "Kimball Group: Design Tip #145 Timespan Accumulating Snapshot Fact Tables", url: "https://www.kimballgroup.com/2012/05/design-tip-145-time-stamping-accumulating-snapshot-fact-tables/" }
+  - { label: "PostgreSQL 16 documentation: MERGE", url: "https://www.postgresql.org/docs/16/sql-merge.html" }
+---
+
+Fact tables hold the numbers a business is judged on, so most reporting bugs are fact table bugs: a balance summed across days, a ratio averaged instead of recomputed, an order counted twice because it changed after loading. This lesson works through the fact table patterns a Data Engineer is expected to know, using Kestrel Market (the fictional online shop from the [star schema lesson](/data-warehousing/star-schema/)), and shows the SQL that makes each one aggregate correctly.
+
+## Sample data
+
+A small Kestrel Market warehouse. `dim_customer` is a Type 2 dimension: Asha moved from Pune to Mumbai on 10 March 2026, so she has two versions (customer keys 1 and 4).
+
+```sql
+CREATE TABLE dim_customer (
+  customer_key  INT PRIMARY KEY,
+  customer_id   TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  city          TEXT NOT NULL,
+  valid_from    DATE NOT NULL,
+  valid_to      DATE NOT NULL         -- exclusive; 9999-12-31 for the current version
+);
+INSERT INTO dim_customer VALUES
+  (0, 'UNKNOWN', 'Unknown customer', 'Unknown', '1900-01-01', '9999-12-31'),
+  (1, 'C1', 'Asha Rao',   'Pune',      '2026-01-01', '2026-03-10'),
+  (2, 'C2', 'Ravi Menon', 'Delhi',     '2026-01-01', '9999-12-31'),
+  (3, 'C3', 'Meera Iyer', 'Bengaluru', '2026-01-01', '9999-12-31'),
+  (4, 'C1', 'Asha Rao',   'Mumbai',    '2026-03-10', '9999-12-31');
+
+CREATE TABLE dim_product (
+  product_key INT PRIMARY KEY, sku TEXT NOT NULL, product_name TEXT NOT NULL, category TEXT NOT NULL
+);
+INSERT INTO dim_product VALUES
+  (1, 'SKU-RUN-01', 'Trail running shoes', 'Shoes'),
+  (2, 'SKU-SOC-02', 'Wool socks (3 pack)', 'Accessories'),
+  (3, 'SKU-ESP-03', 'Espresso maker',      'Appliances'),
+  (4, 'SKU-PAN-04', 'Cast-iron pan',       'Cookware');
+```
+
+## Fact tables
+
+### What it is and why it matters
+
+A fact table records the measurements of one **business process** at one declared **grain**. Its columns fall into four groups:
+
+| Column type | Kestrel example | Notes |
+|---|---|---|
+| Dimension foreign keys | `order_date`, `customer_key`, `product_key` | One per dimension true at the grain; never NULL (use an Unknown member) |
+| Degenerate dimensions | `order_id`, `line_number` | Identifiers with no attributes of their own, kept for grouping and tracing |
+| Measures (facts) | `quantity`, `unit_price`, `net_amount` | Numeric, ideally additive |
+| Audit columns | `loaded_at`, `source_system` | Lineage; useful for late-data and restatement handling |
+
+The primary key is normally the grain (here `order_id, line_number`), not a surrogate key, although some teams add a fact surrogate key to make updates and deduplication easier.
+
+### A worked example
+
+```sql
+CREATE TABLE fact_order_line (
+  order_id     TEXT NOT NULL,
+  line_number  INT  NOT NULL,
+  order_date   DATE NOT NULL,                 -- a date column stands in for dim_date here
+  customer_key INT  NOT NULL REFERENCES dim_customer,
+  product_key  INT  NOT NULL REFERENCES dim_product,
+  quantity     INT  NOT NULL,
+  unit_price   NUMERIC(12,2) NOT NULL,
+  net_amount   NUMERIC(12,2) NOT NULL,
+  loaded_at    TIMESTAMP NOT NULL DEFAULT '2026-04-05 01:00',
+  PRIMARY KEY (order_id, line_number)
+);
+
+INSERT INTO fact_order_line (order_id, line_number, order_date, customer_key, product_key, quantity, unit_price, net_amount) VALUES
+  ('O-1001', 1, '2026-03-02', 1, 1, 1, 4999.00, 4999.00),
+  ('O-1001', 2, '2026-03-02', 1, 2, 2,  399.00,  798.00),
+  ('O-1002', 1, '2026-03-02', 2, 3, 1, 8999.00, 8999.00),
+  ('O-1003', 1, '2026-03-15', 4, 4, 1, 2499.00, 2499.00),
+  ('O-1003', 2, '2026-03-15', 4, 2, 1,  399.00,  399.00),
+  ('O-1004', 1, '2026-04-03', 3, 3, 2, 8999.00, 17998.00);
+```
+
+Asha's March 2 order points at key 1 (Pune) and her March 15 order at key 4 (Mumbai): the fact row captures the customer version that was current when the order happened.
+
+### Pitfalls
+
+- **Text in the fact table.** Status names, product names and city names belong in dimensions.
+- **Measures that are not true at the grain**, such as an order-level shipping fee on line rows.
+- **Storing only derived values.** Keep `quantity` and `unit_price` as well as `net_amount` so new calculations remain possible.
+
+### In interviews
+
+When asked to design a fact table, list the four column groups in this order: grain, dimension keys, degenerate dimensions, measures. Then say how each measure aggregates, which leads directly into the next topic.
+
+## Additive, semi-additive and non-additive measures
+
+### What it is and why it matters
+
+Every measure has an **additivity**: the dimensions across which it can be summed.
+
+| Additivity | Can be summed across | Kestrel example | Aggregate with |
+|---|---|---|---|
+| Additive | All dimensions | `quantity`, `net_amount` | `SUM` |
+| Semi-additive | Some dimensions, not time | Wallet balance, stock on hand | `SUM` across customers or products at one point in time; over time use the closing value, `AVG`, `MIN` or `MAX` |
+| Non-additive | No dimension | `unit_price`, discount %, conversion rate | Recompute from additive parts (`SUM(net_amount) / SUM(quantity)`) |
+
+Semi-additive measures are where dashboards go wrong most often, because a BI tool's default aggregation is `SUM`.
+
+### A worked example: wallet balances
+
+Kestrel customers can hold store credit in a wallet. A **periodic snapshot** (covered in the next section) records each customer's closing balance every day:
+
+```sql
+CREATE TABLE fact_wallet_balance_daily (
+  snapshot_date   DATE NOT NULL,
+  customer_id     TEXT NOT NULL,
+  closing_balance NUMERIC(12,2) NOT NULL,   -- semi-additive
+  credits         NUMERIC(12,2) NOT NULL,   -- additive: credit added that day
+  debits          NUMERIC(12,2) NOT NULL,   -- additive: credit spent that day
+  PRIMARY KEY (snapshot_date, customer_id)
+);
+
+INSERT INTO fact_wallet_balance_daily VALUES
+  ('2026-03-29', 'C1', 500, 500,   0), ('2026-03-29', 'C2', 200, 0, 0),
+  ('2026-03-30', 'C1', 500,   0,   0), ('2026-03-30', 'C2', 200, 0, 0),
+  ('2026-03-31', 'C1', 300,   0, 200), ('2026-03-31', 'C2', 200, 0, 0);
+```
+
+Summing across customers on one day is correct: Kestrel owed customers 500 in wallet credit on 31 March.
+
+```sql
+SELECT snapshot_date, SUM(closing_balance) AS total_owed
+FROM fact_wallet_balance_daily
+WHERE snapshot_date = '2026-03-31'
+GROUP BY snapshot_date;
+```
+
+| snapshot_date | total_owed |
+|---|---|
+| 2026-03-31 | 500.00 |
+
+Summing across days is meaningless. The wrong query and three correct alternatives side by side:
+
+```sql
+SELECT customer_id,
+       SUM(closing_balance)                         AS wrong_sum_over_days,
+       (ARRAY_AGG(closing_balance ORDER BY snapshot_date DESC))[1] AS closing_at_period_end,
+       ROUND(AVG(closing_balance), 2)               AS average_daily_balance,
+       SUM(credits) - SUM(debits)                   AS net_change
+FROM fact_wallet_balance_daily
+GROUP BY customer_id
+ORDER BY customer_id;
+```
+
+| customer_id | wrong_sum_over_days | closing_at_period_end | average_daily_balance | net_change |
+|---|---|---|---|---|
+| C1 | 1300.00 | 300.00 | 433.33 | 300.00 |
+| C2 | 600.00 | 200.00 | 200.00 | 0.00 |
+
+Asha never had 1300 in her wallet. The period-end balance (300) answers "what do we owe now", the average daily balance answers "how much credit was outstanding on a typical day", and the additive flows (`credits`, `debits`) can be summed over any period. Storing flows alongside the balance gives analysts an additive alternative.
+
+Two traps with "closing balance for the period": if a customer has no row on the last day (sparse snapshots), take the latest row on or before that day, not the latest row in the group; and when summing period-end balances across customers, pick the period end first and then sum, never sum per customer per day first.
+
+### Non-additive measures
+
+Average selling price is non-additive. Averaging the line-level `unit_price` gives the wrong answer because it ignores quantities: a line selling two espresso makers should weigh twice as much as a line selling one.
+
+```sql
+SELECT ROUND(AVG(unit_price), 2)                    AS wrong_avg_of_prices,
+       ROUND(SUM(net_amount) / SUM(quantity), 2)    AS right_avg_selling_price
+FROM fact_order_line;
+```
+
+| wrong_avg_of_prices | right_avg_selling_price |
+|---|---|
+| 4382.33 | 4461.50 |
+
+The rule: store the additive numerator and denominator, and divide after aggregating. The same applies to percentages and ratios (conversion rate = orders / sessions).
+
+### Pitfalls
+
+- A BI tool summing a balance or stock level by default. Set the default aggregation in the semantic layer.
+- `COUNT(DISTINCT customer_id)` is non-additive too: daily distinct customers do not add up to monthly distinct customers.
+- Averages of averages. Recompute from sums.
+
+### In interviews
+
+"Can you sum account balances?" is a classic. Answer: across accounts at a point in time, yes; across time, no. Then give the alternatives (closing value, average daily balance, flows) and mention that non-additive measures are recomputed from their additive parts.
+
+## Transaction, periodic snapshot and accumulating snapshot fact tables
+
+### What it is and why it matters
+
+Kimball describes three fundamental fact table types. They differ in what one row represents and whether rows change:
+
+| Type | One row per | Rows updated? | Kestrel example | Answers |
+|---|---|---|---|---|
+| Transaction | Event at its atomic grain | No (insert only) | Order line | "What happened, in any slice" |
+| Periodic snapshot | Entity per regular period | No (a new row each period) | Wallet balance per customer per day; stock per SKU per day | "What was the level at the end of each period" |
+| Accumulating snapshot | Instance of a process with known milestones | Yes, as milestones complete | Order fulfilment: placed, paid, shipped, delivered | "How long do steps take, where are things stuck" |
+
+They complement each other. Kestrel's inventory, for example, needs a transaction table of stock movements (receipts, sales, returns) and a daily snapshot of stock on hand, because rebuilding the level from every movement since the warehouse opened is too slow for daily reporting.
+
+### Periodic snapshots
+
+The wallet table above is a periodic snapshot. Its rules:
+
+- One row per entity per period, **including periods with no activity** (a dense snapshot), so "balance on day X" is always one lookup. Some teams store sparse snapshots (only on change) and fill gaps at query time, which saves space but complicates every query.
+- The balance is semi-additive; the period's flows are additive.
+- It is built from transactions by a scheduled job, so a late transaction means re-running the snapshot for every affected period.
+
+### Accumulating snapshots
+
+An accumulating snapshot has one row per process instance, a date key for each milestone, and **lag measures** between milestones. Rows are updated as the process advances. Fulfilment events arrive from Kestrel's order service:
+
+```sql
+CREATE TABLE order_events (
+  order_id   TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('placed','paid','shipped','delivered')),
+  event_ts   TIMESTAMP NOT NULL
+);
+INSERT INTO order_events VALUES
+  ('O-1001', 'placed', '2026-03-02 10:00'), ('O-1001', 'paid', '2026-03-02 10:01'),
+  ('O-1001', 'shipped', '2026-03-03 16:00'), ('O-1001', 'delivered', '2026-03-06 12:00'),
+  ('O-1002', 'placed', '2026-03-02 11:00'), ('O-1002', 'paid', '2026-03-02 11:05'),
+  ('O-1004', 'placed', '2026-04-03 09:00');
+
+CREATE TABLE fact_order_fulfilment (
+  order_id          TEXT PRIMARY KEY,
+  placed_at         TIMESTAMP,
+  paid_at           TIMESTAMP,
+  shipped_at        TIMESTAMP,
+  delivered_at      TIMESTAMP,
+  hours_to_ship     NUMERIC(8,1),
+  days_to_deliver   NUMERIC(8,1),
+  current_status    TEXT
+);
+```
+
+A load pivots each order's events into one row and **merges** it into the snapshot. The `COALESCE` keeps milestones already recorded if a later batch lacks them, and the same statement inserts new orders and updates existing ones:
+
+```sql
+MERGE INTO fact_order_fulfilment t
+USING (
+  SELECT order_id,
+         MIN(event_ts) FILTER (WHERE event_type = 'placed')    AS placed_at,
+         MIN(event_ts) FILTER (WHERE event_type = 'paid')      AS paid_at,
+         MIN(event_ts) FILTER (WHERE event_type = 'shipped')   AS shipped_at,
+         MIN(event_ts) FILTER (WHERE event_type = 'delivered') AS delivered_at
+  FROM order_events
+  GROUP BY order_id
+) s ON t.order_id = s.order_id
+WHEN MATCHED THEN UPDATE SET
+  placed_at    = COALESCE(t.placed_at, s.placed_at),
+  paid_at      = COALESCE(t.paid_at, s.paid_at),
+  shipped_at   = COALESCE(t.shipped_at, s.shipped_at),
+  delivered_at = COALESCE(t.delivered_at, s.delivered_at)
+WHEN NOT MATCHED THEN INSERT (order_id, placed_at, paid_at, shipped_at, delivered_at)
+  VALUES (s.order_id, s.placed_at, s.paid_at, s.shipped_at, s.delivered_at);
+
+UPDATE fact_order_fulfilment SET
+  hours_to_ship   = ROUND(EXTRACT(EPOCH FROM shipped_at - paid_at) / 3600, 1),
+  days_to_deliver = ROUND(EXTRACT(EPOCH FROM delivered_at - placed_at) / 86400, 1),
+  current_status  = CASE WHEN delivered_at IS NOT NULL THEN 'delivered'
+                         WHEN shipped_at   IS NOT NULL THEN 'shipped'
+                         WHEN paid_at      IS NOT NULL THEN 'paid'
+                         ELSE 'placed' END;
+
+SELECT order_id, paid_at, shipped_at, hours_to_ship, days_to_deliver, current_status
+FROM fact_order_fulfilment ORDER BY order_id;
+```
+
+| order_id | paid_at | shipped_at | hours_to_ship | days_to_deliver | current_status |
+|---|---|---|---|---|---|
+| O-1001 | 2026-03-02 10:01:00 | 2026-03-03 16:00:00 | 30.0 | 4.1 | delivered |
+| O-1002 | 2026-03-02 11:05:00 | NULL | NULL | NULL | paid |
+| O-1004 | NULL | NULL | NULL | NULL | placed |
+
+The next day, O-1002 ships and O-1004 is paid. Only the new events need to arrive; rerunning the same `MERGE` and `UPDATE` fills in the gaps:
+
+```sql
+INSERT INTO order_events VALUES
+  ('O-1002', 'shipped', '2026-03-04 09:00'), ('O-1004', 'paid', '2026-04-03 09:02');
+
+MERGE INTO fact_order_fulfilment t
+USING (
+  SELECT order_id,
+         MIN(event_ts) FILTER (WHERE event_type = 'placed')    AS placed_at,
+         MIN(event_ts) FILTER (WHERE event_type = 'paid')      AS paid_at,
+         MIN(event_ts) FILTER (WHERE event_type = 'shipped')   AS shipped_at,
+         MIN(event_ts) FILTER (WHERE event_type = 'delivered') AS delivered_at
+  FROM order_events
+  GROUP BY order_id
+) s ON t.order_id = s.order_id
+WHEN MATCHED THEN UPDATE SET
+  placed_at    = COALESCE(t.placed_at, s.placed_at),
+  paid_at      = COALESCE(t.paid_at, s.paid_at),
+  shipped_at   = COALESCE(t.shipped_at, s.shipped_at),
+  delivered_at = COALESCE(t.delivered_at, s.delivered_at)
+WHEN NOT MATCHED THEN INSERT (order_id, placed_at, paid_at, shipped_at, delivered_at)
+  VALUES (s.order_id, s.placed_at, s.paid_at, s.shipped_at, s.delivered_at);
+
+UPDATE fact_order_fulfilment SET
+  hours_to_ship   = ROUND(EXTRACT(EPOCH FROM shipped_at - paid_at) / 3600, 1),
+  days_to_deliver = ROUND(EXTRACT(EPOCH FROM delivered_at - placed_at) / 86400, 1),
+  current_status  = CASE WHEN delivered_at IS NOT NULL THEN 'delivered'
+                         WHEN shipped_at   IS NOT NULL THEN 'shipped'
+                         WHEN paid_at      IS NOT NULL THEN 'paid'
+                         ELSE 'placed' END;
+
+SELECT order_id, hours_to_ship, current_status FROM fact_order_fulfilment ORDER BY order_id;
+```
+
+| order_id | hours_to_ship | current_status |
+|---|---|---|
+| O-1001 | 30.0 | delivered |
+| O-1002 | 45.9 | shipped |
+| O-1004 | NULL | paid |
+
+Because the load is a merge keyed on `order_id` and recomputes the lags from stored timestamps, running it twice gives the same table: it is idempotent. Now "average hours from payment to shipping" is a single `AVG(hours_to_ship)`, and "orders paid but not shipped" is a filter on `current_status`.
+
+### Pitfalls
+
+- **Treating an accumulating snapshot as history.** It shows the latest state; if you need to know what the pipeline looked like last Tuesday, keep the transaction events or a periodic snapshot of the accumulating table.
+- **Processes that loop** (shipped, returned, reshipped). Accumulating snapshots suit predictable workflows with a fixed set of milestones. Loops fit better as transaction events.
+- **Updates on immutable storage.** On object-store tables, frequent row updates are expensive; partition the snapshot by order month so updates touch few files, or rebuild open orders only.
+- **Gaps in periodic snapshots** that make balances look like zero. Generate a row for every entity and period.
+
+### In interviews
+
+You will often be asked to pick the type for a scenario: order pipeline timings (accumulating), monthly account balances (periodic), clickstream (transaction). Explain why, describe the load (append, scheduled snapshot, merge-update), and state the additivity of the main measure.
+
+## Factless fact tables
+
+### What it is and why it matters
+
+A **factless fact table** has dimension keys but no numeric measure. Each row records that something happened, or that a condition held. There are two kinds:
+
+- **Event tracking**: a customer viewed a product, a rider opened the app, a student attended a class. You count rows.
+- **Coverage**: which products were on promotion on which days, which riders were eligible for a voucher. Coverage tables let you ask about things that **did not** happen, which a transaction fact cannot show because it has no row for a non-event.
+
+### A worked example: promotions with no sales
+
+```sql
+CREATE TABLE fact_promotion_coverage (
+  promo_date   DATE NOT NULL,
+  product_key  INT  NOT NULL REFERENCES dim_product,
+  promotion_id TEXT NOT NULL,
+  PRIMARY KEY (promo_date, product_key, promotion_id)
+);
+INSERT INTO fact_promotion_coverage VALUES
+  ('2026-03-02', 1, 'SPRING-RUN'),
+  ('2026-03-02', 4, 'SPRING-KITCHEN'),
+  ('2026-03-15', 4, 'SPRING-KITCHEN');
+
+SELECT c.promo_date, p.product_name, c.promotion_id
+FROM fact_promotion_coverage c
+JOIN dim_product p ON p.product_key = c.product_key
+WHERE NOT EXISTS (
+  SELECT 1 FROM fact_order_line f
+  WHERE f.product_key = c.product_key AND f.order_date = c.promo_date
+)
+ORDER BY c.promo_date, p.product_name;
+```
+
+| promo_date | product_name | promotion_id |
+|---|---|---|
+| 2026-03-02 | Cast-iron pan | SPRING-KITCHEN |
+
+The pan was on promotion on 2 March and nobody bought it. Neither table alone answers that: the sales fact has no row for "did not sell", and the coverage table has no sales.
+
+### Pitfalls
+
+- **Adding a dummy measure column** (`count = 1`) is harmless but unnecessary; `COUNT(*)` does the job.
+- **Coverage tables grow fast** (every product times every day). Store date ranges and expand them only when needed if volume is a problem.
+
+### In interviews
+
+"How would you find products that were promoted but did not sell?" or "students enrolled who never attended" are coverage-table questions. Name the factless fact table and show the anti-join.
+
+## Slowly changing facts
+
+### What it is and why it matters
+
+Facts are supposed to be immutable records of events, but source systems change them: an order line's quantity is reduced before dispatch, a ride fare is adjusted after a complaint, a payment is reversed. "Slowly changing facts" is the informal name for handling these corrections. The question is the same as for dimensions: overwrite, or keep history?
+
+| Approach | How | Keeps history? | Downside |
+|---|---|---|---|
+| Overwrite in place | `UPDATE` or `MERGE` the fact row | No | Last month's report changes silently |
+| Reversal and restate | Insert a negative row cancelling the old values, then a new row | Yes | Twice the rows per change; needs a sequence column in the key |
+| Delta rows | Insert only the difference (+/-) | Yes | Readers must always `SUM`, never pick one row |
+| Versioned facts | Each version has `valid_from` / `valid_to` (or `loaded_at`) | Yes | Every query must filter to one version |
+
+Append-based approaches (reversal or delta) are popular in warehouses on immutable storage because they never update rows, and they make "as reported at the time" questions answerable from load timestamps.
+
+### A worked example: delta rows
+
+On 5 April, Asha reduces socks on order O-1001 line 2 from 2 pairs to 1. Instead of updating, the pipeline appends a delta row to an append-only fact:
+
+```sql
+CREATE TABLE fact_order_line_delta (
+  order_id    TEXT NOT NULL,
+  line_number INT  NOT NULL,
+  change_seq  INT  NOT NULL,          -- 0 for the original row, then 1, 2, ...
+  order_date  DATE NOT NULL,
+  product_key INT  NOT NULL,
+  quantity    INT  NOT NULL,
+  net_amount  NUMERIC(12,2) NOT NULL,
+  loaded_at   TIMESTAMP NOT NULL,
+  PRIMARY KEY (order_id, line_number, change_seq)
+);
+INSERT INTO fact_order_line_delta
+SELECT order_id, line_number, 0, order_date, product_key, quantity, net_amount, '2026-03-03 01:00'
+FROM fact_order_line WHERE order_date < '2026-04-01';
+
+INSERT INTO fact_order_line_delta VALUES
+  ('O-1001', 2, 1, '2026-03-02', 2, -1, -399.00, '2026-04-05 01:00');
+
+SELECT 'as known now' AS view, SUM(net_amount) AS march_revenue
+FROM fact_order_line_delta
+UNION ALL
+SELECT 'as reported on 2026-04-01', SUM(net_amount)
+FROM fact_order_line_delta WHERE loaded_at < '2026-04-01';
+```
+
+| view | march_revenue |
+|---|---|
+| as known now | 17295.00 |
+| as reported on 2026-04-01 | 17694.00 |
+
+Both numbers are correct answers to different questions. Finance can reproduce the figure they reported on 1 April, while operations sees the current truth. The change is attributed to March (`order_date`) even though it was loaded in April.
+
+### Pitfalls
+
+- **Overwriting silently.** If you do update facts in place, tell consumers that closed periods can change, or freeze closed periods.
+- **Picking "the latest row" from a delta table.** Delta rows must be summed; versioned rows must be filtered. Mixing the two conventions doubles or loses values.
+- **No change sequence in the key**, so two corrections on the same day collide.
+
+### In interviews
+
+Asked "an order is modified after it was loaded; what do you do?", lay out overwrite versus append (reversal or delta) and connect the choice to whether the business needs reports to be reproducible. Mention the `loaded_at` column that makes "as of" queries possible.
+
+## Late-arriving facts
+
+### What it is and why it matters
+
+A **late-arriving fact** reaches the warehouse well after the event happened: a cash-on-delivery payment confirmed by a courier days later, a mobile app event uploaded when the phone reconnects, a partner's sales file sent weekly. Two things go wrong if the pipeline assumes facts arrive on time:
+
+1. **Wrong dimension version.** Looking up the *current* customer row gives today's attributes, not the ones in force when the event happened.
+2. **Missed partitions.** A daily load that only processes "yesterday" never sees an event dated last week, and every snapshot or aggregate built for that week is now wrong.
+
+### A worked example: point-in-time key lookup
+
+A courier sends, on 5 April, a cash-on-delivery order Asha placed on 8 March, while she still lived in Pune:
+
+```sql
+CREATE TABLE stg_late_orders (
+  order_id TEXT, line_number INT, order_date DATE, customer_id TEXT, sku TEXT, quantity INT, unit_price NUMERIC(12,2)
+);
+INSERT INTO stg_late_orders VALUES ('O-0998', 1, '2026-03-08', 'C1', 'SKU-PAN-04', 1, 2499.00);
+
+INSERT INTO fact_order_line (order_id, line_number, order_date, customer_key, product_key, quantity, unit_price, net_amount, loaded_at)
+SELECT s.order_id, s.line_number, s.order_date,
+       COALESCE(c.customer_key, 0),            -- Unknown member if no version matches
+       p.product_key, s.quantity, s.unit_price, s.quantity * s.unit_price,
+       '2026-04-05 01:00'
+FROM stg_late_orders s
+JOIN dim_product p ON p.sku = s.sku
+LEFT JOIN dim_customer c
+       ON c.customer_id = s.customer_id
+      AND s.order_date >= c.valid_from
+      AND s.order_date <  c.valid_to
+ON CONFLICT (order_id, line_number) DO NOTHING;   -- rerunning the load adds nothing
+
+SELECT f.order_id, f.order_date, f.customer_key, c.city, f.loaded_at
+FROM fact_order_line f JOIN dim_customer c USING (customer_key)
+WHERE f.order_id = 'O-0998';
+```
+
+| order_id | order_date | customer_key | city | loaded_at |
+|---|---|---|---|---|
+| O-0998 | 2026-03-08 | 1 | Pune | 2026-04-05 01:00:00 |
+
+The lookup joins on the business key **and** the validity range, so the order is attributed to Pune, the city Asha lived in on 8 March. Joining only on `customer_id` with `valid_to = '9999-12-31'` would have attributed it to Mumbai.
+
+### Making pipelines tolerate late facts
+
+- **Partition by event date, load by arrival.** Store facts by `order_date`, but select new work by `loaded_at` (or an ingestion watermark), so late rows are picked up whenever they arrive.
+- **Reprocess a lookback window.** Incremental models commonly re-read the last few days on every run, and a merge or `ON CONFLICT` makes that safe. The [modern modelling](/data-warehousing/modern-modeling-practice/) lesson shows this pattern.
+- **Track what changed.** Record which event dates received late rows, then rebuild only the snapshots and aggregates for those dates.
+- **Decide a cut-off.** After month-end close, finance may want late facts booked to the current period instead of restating a closed one. That is a business rule, so ask.
+
+### Pitfalls
+
+- Assigning the current dimension version to an old fact.
+- An inner join to a dimension that has no matching version yet, dropping the fact. Use the Unknown member or an inferred dimension row (see [late-arriving dimensions](/data-warehousing/dimension-tables/)).
+- Snapshots that are never rebuilt after a late transaction lands in their period.
+
+### In interviews
+
+Interviewers ask how your pipeline handles data that arrives three days late. Cover the point-in-time dimension lookup, the lookback window with idempotent merges, reprocessing downstream aggregates, and the business decision about closed periods.
+
+## Practice questions
+
+<details>
+<summary>Why can you not sum daily account balances across a month, and what should a report show instead?</summary>
+
+A balance is a level, not a flow; summing 30 daily balances counts the same money 30 times. Use the closing balance at the period end, the average daily balance, or the minimum or maximum, depending on the question. If the table also stores additive flows (deposits, withdrawals), those can be summed over any period.
+
+</details>
+
+<details>
+<summary>Which fact table type would you use to measure how long orders take from payment to delivery, and how is it loaded?</summary>
+
+An accumulating snapshot: one row per order with a timestamp or date key per milestone and lag measures. It is loaded with a merge keyed on the order id that fills in milestones as events arrive, keeps already recorded milestones, and recomputes the lags. It shows the latest state, so keep the event-level transaction fact for history.
+
+</details>
+
+<details>
+<summary>How do you find products that were on promotion but did not sell?</summary>
+
+Use a coverage factless fact table recording product, date and promotion, and anti-join it to the sales fact on product and date (`NOT EXISTS`). The sales fact alone cannot show non-events because it has no row for them.
+
+</details>
+
+<details>
+<summary>A ride's fare is adjusted two days after it was loaded. How do you keep last week's finance report reproducible?</summary>
+
+Do not overwrite the fact. Append a delta or reversal-and-restate row with a change sequence and a `loaded_at` timestamp. Current reports sum all rows; a reproduction of last week's report filters `loaded_at` to before the report date.
+
+</details>
+
+<details>
+<summary>A fact for 8 March arrives on 5 April. The customer changed city on 10 March. Which dimension row should the fact use, and how do you look it up?</summary>
+
+The version valid on 8 March. Join the staging row to the Type 2 dimension on the business key and on `event_date >= valid_from AND event_date < valid_to`, falling back to the Unknown member or an inferred row if no version matches. Then rebuild any snapshots or aggregates for March that the new fact affects.
+
+</details>
+
+<details>
+<summary>Is average unit price additive? How do you report it by category?</summary>
+
+No, it is non-additive. Store the additive parts (`net_amount` and `quantity`) and compute `SUM(net_amount) / SUM(quantity)` after grouping by category. Averaging line-level prices ignores quantities and gives the wrong answer as soon as prices vary.
+
+</details>
+
+## Key takeaways
+
+- A fact table is one business process at one grain: dimension keys, degenerate dimensions, measures and audit columns.
+- Know each measure's additivity. Balances are semi-additive (not over time); ratios and prices are non-additive (recompute from sums).
+- Transaction facts record events, periodic snapshots record levels per period, accumulating snapshots track one process instance through its milestones with merge updates.
+- Factless fact tables record events and coverage, which is the only way to query non-events.
+- Corrections to facts are best appended as deltas or reversals with load timestamps, so reports can be reproduced.
+- Late facts need a point-in-time dimension lookup, a lookback window with idempotent loads, and rebuilt downstream aggregates.

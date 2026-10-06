@@ -1,0 +1,467 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Bridge Tables, Many-to-Many Relationships and Hierarchies"
+seoTitle: "Bridge Tables, Many-to-Many and Hierarchies"
+description: "Model many-to-many relationships with weighted bridge tables, and fixed or ragged hierarchies with recursive SQL and closure tables, without double counting."
+technology: ["data-warehousing", "sql"]
+topic: ["modelling", "bridge-tables", "hierarchies"]
+difficulty: "Advanced"
+learningObjectives:
+  - "Build a bridge table with allocation weights so a multivalued dimension sums correctly"
+  - "Choose between bridge tables, primary-value shortcuts, arrays and allocated facts for many-to-many relationships"
+  - "Model fixed-depth hierarchies as columns and roll them up with GROUP BY ROLLUP"
+  - "Traverse ragged hierarchies with recursive CTEs and a closure (hierarchy bridge) table"
+prerequisites: ["articles:data-warehousing/dimension-tables", "articles:sql/ctes-subqueries-temp-tables"]
+related: ["articles:data-warehousing/fact-tables", "articles:sql/window-functions"]
+previous: "articles:data-warehousing/dimension-tables"
+next: "articles:data-warehousing/slowly-changing-dimensions"
+versionContext: "All SQL examples executed on PostgreSQL 16.14 (the recursive CTE CYCLE clause needs PostgreSQL 14 or later)."
+sources:
+  - { label: "Kimball Group: Multivalued Dimensions and Bridge Tables", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/multivalued-dimension-bridge-table/" }
+  - { label: "Kimball Group: Ragged/Variable Depth Hierarchies", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/ragged-variable-depth-hierarchy/" }
+  - { label: "Kimball Group: Design Tip #166 Potential Bridge (Table) Detours", url: "https://www.kimballgroup.com/2014/05/design-tip-166-potential-bridge-table-detours/" }
+  - { label: "PostgreSQL 16 documentation: WITH Queries (Common Table Expressions)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+---
+
+A star schema assumes each fact row has exactly one value per dimension. Real businesses break that rule: one order is credited to several affiliates, one product carries several tags, one category sits inside a tree of unknown depth. This lesson shows how Kestrel Market (the fictional online shop used across this course) models those cases so totals stay correct, which is exactly what interviewers probe with "what if an order has two salespeople?".
+
+## Sample data
+
+Kestrel pays affiliate influencers a commission on orders they referred. Some orders were referred by two influencers who share the credit.
+
+```sql
+CREATE TABLE dim_influencer (
+  influencer_key  INT PRIMARY KEY,
+  influencer_name TEXT NOT NULL,
+  platform        TEXT NOT NULL
+);
+INSERT INTO dim_influencer VALUES
+  (1, 'RunWithPriya', 'Video'),
+  (2, 'HomeCafeArjun', 'Video'),
+  (3, 'KitchenKavya', 'Blog');
+
+CREATE TABLE fact_order (
+  order_id             TEXT PRIMARY KEY,
+  order_date           DATE NOT NULL,
+  influencer_group_key INT  NOT NULL,      -- points into the bridge, not at one influencer
+  net_amount           NUMERIC(12,2) NOT NULL
+);
+INSERT INTO fact_order VALUES
+  ('O-1001', '2026-03-02', 10, 5797.00),   -- referred by Priya alone
+  ('O-1002', '2026-03-02', 20, 8999.00),   -- shared by Arjun and Kavya
+  ('O-1003', '2026-03-15', 30, 2898.00),   -- shared by all three
+  ('O-1004', '2026-04-03', 20, 17998.00);  -- Arjun and Kavya again
+```
+
+## Bridge tables
+
+### What it is and why it matters
+
+A **bridge table** sits between a fact table and a dimension when one fact row relates to **several** dimension rows at once (Kimball calls this a **multivalued dimension**). The fact stores a **group key**; the bridge has one row per member of each group; the dimension is unchanged.
+
+```text
+fact_order --(influencer_group_key)--> bridge_influencer_group --(influencer_key)--> dim_influencer
+   1 row                                  N rows per group                             1 row each
+```
+
+The danger is **over-counting**: joining a fact row to three influencers turns one order into three rows, and `SUM(net_amount)` triples. The bridge solves this with an **allocation weight** per member, where the weights in each group add up to 1.
+
+### A worked example
+
+```sql
+CREATE TABLE bridge_influencer_group (
+  influencer_group_key INT NOT NULL,
+  influencer_key       INT NOT NULL REFERENCES dim_influencer,
+  allocation_weight    NUMERIC(6,4) NOT NULL CHECK (allocation_weight > 0 AND allocation_weight <= 1),
+  PRIMARY KEY (influencer_group_key, influencer_key)
+);
+INSERT INTO bridge_influencer_group VALUES
+  (10, 1, 1.0000),
+  (20, 2, 0.6000), (20, 3, 0.4000),          -- the contract gives Arjun 60%
+  (30, 1, 0.3334), (30, 2, 0.3333), (30, 3, 0.3333);
+```
+
+The weights are a business rule (equal split, contract shares, first touch gets more), so they come from the business, not from SQL. Once they exist, a **weighted report** allocates each order's revenue across its influencers:
+
+```sql
+SELECT i.influencer_name,
+       ROUND(SUM(f.net_amount * b.allocation_weight), 2) AS attributed_revenue
+FROM fact_order f
+JOIN bridge_influencer_group b ON b.influencer_group_key = f.influencer_group_key
+JOIN dim_influencer i          ON i.influencer_key       = b.influencer_key
+GROUP BY i.influencer_name
+ORDER BY attributed_revenue DESC;
+```
+
+| influencer_name | attributed_revenue |
+|---|---|
+| HomeCafeArjun | 17164.10 |
+| KitchenKavya | 11764.70 |
+| RunWithPriya | 6763.19 |
+
+These add up to 35691.99, one paisa short of the true 35692.00 only because each influencer's figure is rounded separately. Two checks belong in every load. First, every group's weights must sum to exactly 1:
+
+```sql
+SELECT influencer_group_key, SUM(allocation_weight) AS total_weight
+FROM bridge_influencer_group
+GROUP BY influencer_group_key
+HAVING SUM(allocation_weight) <> 1;
+```
+
+It returns no rows, so each group is complete (group 30 puts the rounding remainder on one member: 0.3334 + 0.3333 + 0.3333). Second, the weighted total must reconcile with the fact table:
+
+```sql
+SELECT (SELECT SUM(net_amount) FROM fact_order) AS fact_total,
+       (SELECT ROUND(SUM(f.net_amount * b.allocation_weight), 2)
+          FROM fact_order f
+          JOIN bridge_influencer_group b USING (influencer_group_key)) AS weighted_total,
+       (SELECT SUM(f.net_amount)
+          FROM fact_order f
+          JOIN bridge_influencer_group b USING (influencer_group_key)) AS unweighted_total;
+```
+
+| fact_total | weighted_total | unweighted_total |
+|---|---|---|
+| 35692.00 | 35692.00 | 68485.00 |
+
+The weighted total matches the fact table exactly. The **unweighted** total is the over-count: every shared order is counted once per influencer.
+
+Unweighted totals are not always wrong. An **impact report** ("revenue from orders each influencer touched") deliberately counts the full order for every participant. It answers a different question and must never be added up across influencers. Label it clearly.
+
+```sql
+SELECT i.influencer_name, SUM(f.net_amount) AS revenue_touched
+FROM fact_order f
+JOIN bridge_influencer_group b ON b.influencer_group_key = f.influencer_group_key
+JOIN dim_influencer i          ON i.influencer_key       = b.influencer_key
+GROUP BY i.influencer_name
+ORDER BY revenue_touched DESC;
+```
+
+| influencer_name | revenue_touched |
+|---|---|
+| HomeCafeArjun | 29895.00 |
+| KitchenKavya | 29895.00 |
+| RunWithPriya | 8695.00 |
+
+### Building groups during the load
+
+Groups should be reused: every order referred by Arjun and Kavya at 60/40 shares group 20. The load builds a canonical signature of the members (sorted ids and weights), looks it up, and creates a new group only for a new combination. A sorted `string_agg` makes a convenient signature:
+
+```sql
+CREATE TABLE stg_referral (order_id TEXT, influencer_key INT, weight NUMERIC(6,4));
+INSERT INTO stg_referral VALUES
+  ('O-1020', 3, 0.4000), ('O-1020', 2, 0.6000),   -- same pair as group 20
+  ('O-1021', 3, 1.0000);                           -- a new combination
+
+WITH new_sig AS (
+  SELECT order_id, string_agg(influencer_key || ':' || weight, ',' ORDER BY influencer_key) AS signature
+  FROM stg_referral GROUP BY order_id
+), existing_sig AS (
+  SELECT influencer_group_key, string_agg(influencer_key || ':' || allocation_weight, ',' ORDER BY influencer_key) AS signature
+  FROM bridge_influencer_group GROUP BY influencer_group_key
+)
+SELECT n.order_id, n.signature, e.influencer_group_key AS existing_group
+FROM new_sig n LEFT JOIN existing_sig e USING (signature)
+ORDER BY n.order_id;
+```
+
+| order_id | signature | existing_group |
+|---|---|---|
+| O-1020 | 2:0.6000,3:0.4000 | 20 |
+| O-1021 | 3:1.0000 | NULL |
+
+O-1020 reuses group 20; O-1021 needs a new group key and one new bridge row.
+
+### Pitfalls
+
+- **Weights that do not sum to 1**, from rounding or a missing member. Test every group on every load, and push any rounding remainder onto one member (as group 30 does with 0.3334).
+- **Summing an impact report.** Unweighted bridge results double count by design.
+- **Bridges on huge, unstable groups** (every order has a unique group). The bridge then grows as fast as the fact table, and allocating at load time may be simpler.
+- **Forgetting the bridge when a BI tool joins automatically.** Configure the relationship as many-to-many with the weight, or expose only weighted views.
+
+### In interviews
+
+Expect "an order can have several salespeople; model it". A strong answer: a bridge table keyed by group and member with an allocation weight; weighted reports for totals, unweighted impact reports clearly labelled; a test that weights sum to 1; and group reuse during the load.
+
+## Handling many-to-many relationships
+
+### What it is and why it matters
+
+A bridge with weights is one tool. Many-to-many relationships appear in several shapes, and each has a few reasonable designs:
+
+| Shape | Kestrel example | Design options |
+|---|---|---|
+| Fact to many dimension members | Order credited to several influencers | Weighted bridge (above); allocate at load; pick a primary member |
+| Dimension to dimension | Product carries several tags (`vegan`, `gift idea`, `bestseller`) | Bridge between the two dimensions; array or delimited column for display |
+| Dimension to many groups over time | Customer belongs to several households or shared wallets | Bridge with validity dates (`valid_from`, `valid_to`) |
+
+### Option comparison
+
+| Approach | How | Gains | Costs |
+|---|---|---|---|
+| Weighted bridge | Group key on fact, bridge with weights | Correct totals and per-member analysis | Extra join; weights to maintain and test |
+| Allocate at load | Split each fact row into one row per member with allocated amounts | Plain star, no bridge at query time | Fact table grows; grain changes to "order per influencer"; re-allocating means reloading facts |
+| Primary member only | Keep the "main" influencer on the fact | Simple | Loses information; the choice of primary is arbitrary |
+| Array or list column | `tags TEXT[]` on the product dimension | Easy display, easy "has tag" filters in engines with array functions | Grouping by tag needs unnesting, with the same double-count risk |
+
+### A worked example: product tags
+
+Tags are a dimension-to-dimension many-to-many with no meaningful weights. The common question is "how many orders included a product tagged X?", and the trap is counting rows instead of distinct orders:
+
+```sql
+CREATE TABLE dim_product (product_key INT PRIMARY KEY, product_name TEXT NOT NULL);
+INSERT INTO dim_product VALUES (1, 'Trail running shoes'), (2, 'Wool socks (3 pack)'), (3, 'Espresso maker');
+
+CREATE TABLE bridge_product_tag (product_key INT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (product_key, tag));
+INSERT INTO bridge_product_tag VALUES
+  (1, 'bestseller'), (1, 'outdoor'),
+  (2, 'gift idea'),  (2, 'outdoor'),
+  (3, 'bestseller'), (3, 'gift idea');
+
+CREATE TABLE fact_order_line (order_id TEXT, line_number INT, product_key INT, net_amount NUMERIC(12,2));
+INSERT INTO fact_order_line VALUES
+  ('O-1001', 1, 1, 4999.00), ('O-1001', 2, 2, 798.00),
+  ('O-1002', 1, 3, 8999.00), ('O-1003', 1, 2, 399.00);
+
+SELECT t.tag,
+       COUNT(*)                   AS line_rows,
+       COUNT(DISTINCT f.order_id) AS orders_with_tag,
+       SUM(f.net_amount)          AS revenue_of_tagged_lines
+FROM fact_order_line f
+JOIN bridge_product_tag t ON t.product_key = f.product_key
+GROUP BY t.tag
+ORDER BY t.tag;
+```
+
+| tag | line_rows | orders_with_tag | revenue_of_tagged_lines |
+|---|---|---|---|
+| bestseller | 2 | 2 | 13998.00 |
+| gift idea | 3 | 3 | 10196.00 |
+| outdoor | 3 | 2 | 6196.00 |
+
+Within one tag, each line appears once, so `revenue_of_tagged_lines` is right for that tag. But order O-1001 has two "outdoor" lines, so line rows (3) overstate orders (2). And the revenue column must not be summed across tags: the total, 30390, is far above the real 15195, because a line with two tags appears under both.
+
+### Pitfalls
+
+- Summing across members of a many-to-many without weights.
+- `COUNT(*)` where `COUNT(DISTINCT ...)` is meant.
+- A many-to-many hidden in a dimension that the designer thought was one-to-one (a "primary category" that is not actually unique). Test cardinality assumptions in the pipeline.
+
+### In interviews
+
+When a scenario hides a many-to-many (patients with several diagnoses, accounts with several holders, rides with several promo codes), say so explicitly, then pick a design from the table above and justify it. Explaining which reports may and may not be summed is what separates a strong answer.
+
+## Fixed and ragged hierarchies
+
+### What it is and why it matters
+
+A **hierarchy** is a set of levels you can drill through: department, category, product; country, state, city; or an organisation chart. How you model it depends on whether every branch has the same depth.
+
+- A **fixed-depth** hierarchy has a known, constant number of levels. Model it as **columns** in the dimension (`department`, `category`, `product_name`). Drilling is just grouping by a different column.
+- A **ragged** (variable-depth) hierarchy has branches of different lengths, or depth that changes over time: Kestrel's category tree has `Kitchen > Appliances > Coffee > Espresso machines` but `Footwear > Shoes`. Store it as a **parent-child** table, and for reporting either **flatten** it into fixed level columns or build a **hierarchy bridge** (closure table) of every ancestor-descendant pair.
+
+### Fixed depth: columns and ROLLUP
+
+```sql
+CREATE TABLE dim_product_fixed (
+  product_key INT PRIMARY KEY, product_name TEXT, category TEXT, department TEXT
+);
+INSERT INTO dim_product_fixed VALUES
+  (1, 'Trail running shoes', 'Shoes',       'Footwear'),
+  (2, 'Wool socks (3 pack)', 'Accessories', 'Footwear'),
+  (3, 'Espresso maker',      'Appliances',  'Kitchen');
+
+SELECT COALESCE(p.department, 'All departments') AS department,
+       COALESCE(p.category, 'All categories')    AS category,
+       SUM(f.net_amount) AS revenue
+FROM fact_order_line f JOIN dim_product_fixed p USING (product_key)
+GROUP BY ROLLUP (p.department, p.category)
+ORDER BY p.department NULLS LAST, p.category NULLS LAST;
+```
+
+| department | category | revenue |
+|---|---|---|
+| Footwear | Accessories | 1197.00 |
+| Footwear | Shoes | 4999.00 |
+| Footwear | All categories | 6196.00 |
+| Kitchen | Appliances | 8999.00 |
+| Kitchen | All categories | 8999.00 |
+| All departments | All categories | 15195.00 |
+
+Fixed hierarchies are the easy case. Each level column must be unique in context (two departments must not both have a category called "Accessories" unless that is intended), and labels should be stored on every row so any level can be grouped directly.
+
+### Ragged depth: parent-child and recursive SQL
+
+```sql
+CREATE TABLE dim_category_node (
+  node_id   INT PRIMARY KEY,
+  node_name TEXT NOT NULL,
+  parent_id INT REFERENCES dim_category_node   -- NULL for a root
+);
+INSERT INTO dim_category_node VALUES
+  (1, 'Footwear', NULL),
+  (2, 'Shoes', 1),
+  (3, 'Kitchen', NULL),
+  (4, 'Appliances', 3),
+  (5, 'Coffee', 4),
+  (6, 'Espresso machines', 5),
+  (7, 'Cookware', 3);
+
+CREATE TABLE product_category (product_key INT PRIMARY KEY, node_id INT NOT NULL REFERENCES dim_category_node);
+INSERT INTO product_category VALUES (1, 2), (2, 1), (3, 6);   -- socks sit directly under Footwear
+```
+
+A recursive CTE walks the tree from each root, building the path and depth. The `CYCLE` clause stops the walk if bad data ever creates a loop:
+
+```sql
+WITH RECURSIVE tree AS (
+  SELECT node_id, node_name, parent_id, 1 AS depth, node_name::TEXT AS path
+  FROM dim_category_node WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.node_id, c.node_name, c.parent_id, t.depth + 1, t.path || ' > ' || c.node_name
+  FROM dim_category_node c JOIN tree t ON c.parent_id = t.node_id
+) CYCLE node_id SET is_cycle USING visited
+SELECT node_id, depth, path FROM tree ORDER BY path;
+```
+
+| node_id | depth | path |
+|---|---|---|
+| 1 | 1 | Footwear |
+| 2 | 2 | Footwear > Shoes |
+| 3 | 1 | Kitchen |
+| 4 | 2 | Kitchen > Appliances |
+| 5 | 3 | Kitchen > Appliances > Coffee |
+| 6 | 4 | Kitchen > Appliances > Coffee > Espresso machines |
+| 7 | 2 | Kitchen > Cookware |
+
+### The hierarchy bridge (closure table)
+
+Recursive queries are fine for exploring, but BI tools cannot generate them, and running one on every dashboard query is wasteful. The Kimball answer is a **hierarchy bridge**: one row for every ancestor-descendant pair, including each node paired with itself at distance 0. Build it once per load with the same recursion:
+
+```sql
+CREATE TABLE bridge_category_hierarchy AS
+WITH RECURSIVE pairs AS (
+  SELECT node_id AS ancestor_id, node_id AS descendant_id, 0 AS distance
+  FROM dim_category_node
+  UNION ALL
+  SELECT p.ancestor_id, c.node_id, p.distance + 1
+  FROM pairs p JOIN dim_category_node c ON c.parent_id = p.descendant_id
+)
+SELECT * FROM pairs;
+
+SELECT COUNT(*) AS bridge_rows FROM bridge_category_hierarchy;
+```
+
+| bridge_rows |
+|---|
+| 15 |
+
+Now "revenue under each node, at any level" is a plain join, with no recursion at query time:
+
+```sql
+SELECT n.node_name AS rollup_node, SUM(f.net_amount) AS revenue_including_descendants
+FROM fact_order_line f
+JOIN product_category pc          ON pc.product_key   = f.product_key
+JOIN bridge_category_hierarchy b  ON b.descendant_id  = pc.node_id
+JOIN dim_category_node n          ON n.node_id        = b.ancestor_id
+GROUP BY n.node_name
+ORDER BY revenue_including_descendants DESC, n.node_name;
+```
+
+| rollup_node | revenue_including_descendants |
+|---|---|
+| Appliances | 8999.00 |
+| Coffee | 8999.00 |
+| Espresso machines | 8999.00 |
+| Kitchen | 8999.00 |
+| Footwear | 6196.00 |
+| Shoes | 4999.00 |
+
+Each node's total includes everything beneath it. As with any bridge, these totals overlap across levels (Kitchen includes Appliances), so filter to one ancestor or one `distance` before adding them up. Restricting to `distance = 0` gives revenue booked directly to each node; restricting to root ancestors gives one non-overlapping total per tree.
+
+### Flattening for BI tools
+
+The other common approach pads a ragged tree to a fixed number of level columns, repeating the last real level downwards so every product has a value at every level:
+
+```sql
+WITH RECURSIVE tree AS (
+  SELECT node_id, ARRAY[node_name] AS names
+  FROM dim_category_node WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.node_id, t.names || c.node_name
+  FROM dim_category_node c JOIN tree t ON c.parent_id = t.node_id
+)
+SELECT node_id,
+       names[1] AS level_1,
+       COALESCE(names[2], names[1]) AS level_2,
+       COALESCE(names[3], names[2], names[1]) AS level_3
+FROM tree
+WHERE node_id IN (SELECT node_id FROM product_category)
+ORDER BY node_id;
+```
+
+| node_id | level_1 | level_2 | level_3 |
+|---|---|---|---|
+| 1 | Footwear | Footwear | Footwear |
+| 2 | Footwear | Shoes | Shoes |
+| 6 | Kitchen | Appliances | Coffee |
+
+Flattening works when the maximum depth is small and known. Here level 4 ("Espresso machines") was cut off because only three columns were defined, which is the main risk: a deeper branch added later is silently truncated unless the load checks the maximum depth.
+
+### Pitfalls
+
+- **Cycles** in parent-child data (a node made its own grandparent). Use the `CYCLE` clause or a depth limit, and test for cycles on load.
+- **Multiple parents.** A node with two parents makes the tree a graph; the closure table still works, but rolled-up totals double count unless weights are added.
+- **Hierarchy changes over time.** If "Coffee" moves from Appliances to a new "Beverages" department, decide whether reports show the old or the new structure, and version the bridge (`valid_from`, `valid_to`) if history matters.
+- **Facts attached to non-leaf nodes**, like socks booked directly to Footwear. They are legal, but flattening and level-based reports must handle them.
+
+### In interviews
+
+Two classic prompts: "store an org chart and find everyone under a manager" (recursive CTE, then a closure table for performance) and "how do you report on a category tree of varying depth in a BI tool?" (hierarchy bridge or flattened levels, with their trade-offs). Mention cycle detection and how the structure changes over time.
+
+## Practice questions
+
+<details>
+<summary>An order can be credited to several sales reps. How do you model it so revenue by rep adds up to total revenue?</summary>
+
+Put a rep group key on the fact and a bridge table with one row per rep per group and an allocation weight; weights in a group sum to 1. Weighted reports multiply the measure by the weight. Test the weight sums on every load. Unweighted reports show revenue each rep touched and must be labelled as non-additive across reps.
+
+</details>
+
+<details>
+<summary>What are the alternatives to a bridge table for a many-to-many, and what does each cost?</summary>
+
+Allocate at load time (one fact row per member with allocated amounts): simple queries, but a bigger fact table, a changed grain and reloads when allocations change. Keep only a primary member: simple but loses information. Store an array or list column: easy filtering and display, but grouping by member needs unnesting with the same double-count risk.
+
+</details>
+
+<details>
+<summary>Write a query to find all employees under a given manager in an employee table with manager_id.</summary>
+
+Use a recursive CTE: the anchor selects the direct reports of the manager (`WHERE manager_id = :id`), and the recursive part joins employees whose `manager_id` is in the previous level. Add a depth column and a cycle guard (`CYCLE` clause or a maximum depth). For repeated reporting, materialise a closure table of every manager-employee pair with its distance.
+
+</details>
+
+<details>
+<summary>What is a closure table (hierarchy bridge), and why include the zero-distance rows?</summary>
+
+A table with one row per ancestor-descendant pair and the distance between them. It lets plain joins roll facts up to any level without recursion. Zero-distance rows (each node paired with itself) make a node's own facts appear in its rollup, so "everything at or under Kitchen" is one join and one filter.
+
+</details>
+
+<details>
+<summary>When would you flatten a ragged hierarchy into level columns instead of using a bridge?</summary>
+
+When the maximum depth is small and stable and the consumers are BI tools that expect fixed levels. Pad short branches by repeating the last real level. The risk is truncation when a deeper branch appears, so check the maximum depth during the load.
+
+</details>
+
+## Key takeaways
+
+- A multivalued dimension needs a bridge table: group key on the fact, one bridge row per member, and allocation weights that sum to 1.
+- Weighted reports add up to the fact total; unweighted impact reports double count by design and must not be summed.
+- Many-to-many can also be handled by allocating at load, picking a primary member or using arrays, each with clear costs.
+- Fixed-depth hierarchies are just columns; ragged ones are parent-child tables, walked with recursive CTEs and materialised as closure tables or flattened levels.
+- Guard hierarchies against cycles, multiple parents and silent truncation, and decide how structural changes affect history.

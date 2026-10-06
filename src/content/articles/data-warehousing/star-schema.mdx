@@ -1,111 +1,452 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "Fact Tables, Dimension Tables and the Star Schema"
-description: "Learn how a star schema separates facts from dimensions, why the grain of a fact table comes first, and how this design keeps analytical queries simple and fast."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Star, Snowflake and Galaxy Schemas and the Grain"
+description: "Build a star schema for an online shop, declare the grain, snowflake a dimension, and query a galaxy of fact tables without double counting. Verified SQL."
 inventoryId: "TECH-18"
-technology: ["data-warehousing"]
-topic: ["modelling", "star-schema"]
+technology: ["data-warehousing", "sql"]
+topic: ["modelling", "star-schema", "grain"]
 difficulty: "Beginner"
 featured: true
-related: ["articles:etl-elt/etl-vs-elt", "interview-questions:data-engineering/idempotent-batch-pipeline"]
-next: "articles:etl-elt/etl-vs-elt"
-sources: [{"label": "Kimball Group: Dimensional Modeling Techniques", "url": "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/"}]
-versionContext: "Conceptual; applies to any SQL warehouse or lakehouse"
+learningObjectives:
+  - "Separate facts from dimensions and build a star schema with real DDL"
+  - "Declare the grain of a fact table and spot mixed-grain bugs"
+  - "Explain when a snowflake schema is worth its extra joins"
+  - "Query two fact tables in a galaxy schema without fan-out double counting"
+prerequisites: ["articles:data-warehousing/data-warehousing-fundamentals", "articles:sql/joins"]
+related: ["articles:etl-elt/etl-vs-elt", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:sql/aggregations-group-by-having"]
+previous: "articles:data-warehousing/data-warehousing-fundamentals"
+next: "articles:data-warehousing/normalization-denormalization"
+versionContext: "All SQL examples executed on PostgreSQL 16.14. The modelling patterns apply to any SQL warehouse or lakehouse."
+sources:
+  - { label: "Kimball Group: Dimensional Modeling Techniques", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/" }
+  - { label: "Kimball Group: Grain", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/grain/" }
+  - { label: "Kimball Group: Four-Step Dimensional Design Process", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/four-4-step-design-process/" }
+  - { label: "Kimball Group: Design Tip #105 Snowflakes, Outriggers, and Bridges", url: "https://www.kimballgroup.com/2008/09/design-tip-105-snowflakes-outriggers-and-bridges/" }
 ---
 
-A **star schema** is a way of organising analytical data: one central **fact table** that records measurements, surrounded by **dimension tables** that describe them. Drawn out, the fact table sits in the middle with dimensions around it like points of a star.
+A **star schema** organises analytical data as one central **fact table** of measurements surrounded by **dimension tables** that describe them. It is the default shape for warehouse marts because every question becomes the same simple query: join the facts to a few dimensions, filter, group and aggregate. This lesson builds one for a fictional online retailer, then covers the decision that matters most (the grain), the snowflake variant, and galaxy schemas with several fact tables.
 
-## Facts and dimensions
+## The running example: Kestrel Market
 
-- A **fact** is a measurement of something that happened: an order line, a page view, a payment. Facts are numeric and usually additive, such as `quantity`, `amount` or `duration_seconds`.
-- A **dimension** is context you filter and group by: customer, product, date, store. Dimensions are descriptive and mostly text and categories.
-
-```text
-dim_date ─┐
-dim_customer ─┤
-              ├── fact_order_line (quantity, amount)
-dim_product ─┤
-dim_store ───┘
-```
-
-## Decide the grain first
-
-The **grain** is the exact meaning of one row in the fact table, for example "one row per order line" or "one row per customer per day". Decide it before anything else, because every column must be true at that grain.
-
-If you mix grains (some rows per order, some per order line), sums double count and joins misbehave. A fact table with a clear grain is easy to reason about and easy to test.
-
-## A small example
+Every lesson in this course uses the same fictional business, **Kestrel Market**, an online shop that sells footwear and kitchenware to customers in Indian cities. Customers place orders, each order has one or more lines, and some lines are later returned. The tables below are the warehouse side of that business: you can paste them into PostgreSQL and follow along.
 
 ```sql
+CREATE TABLE dim_date (
+  date_key   INT PRIMARY KEY,          -- smart key: 20260302
+  full_date  DATE NOT NULL UNIQUE,
+  month_name TEXT NOT NULL,
+  year       INT  NOT NULL
+);
+
 CREATE TABLE dim_customer (
-  customer_key INT PRIMARY KEY,   -- surrogate key
-  customer_id  TEXT,              -- business key from the source system
-  name         TEXT,
-  segment      TEXT
+  customer_key  INT PRIMARY KEY,       -- surrogate key generated by the warehouse
+  customer_id   TEXT NOT NULL,         -- business (natural) key from the shop database
+  customer_name TEXT NOT NULL,
+  city          TEXT NOT NULL,
+  segment       TEXT NOT NULL
 );
 
 CREATE TABLE dim_product (
-  product_key INT PRIMARY KEY,
-  sku         TEXT,
-  category    TEXT
+  product_key  INT PRIMARY KEY,
+  sku          TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  category     TEXT NOT NULL,          -- denormalised: category and department live here
+  department   TEXT NOT NULL
 );
 
 CREATE TABLE fact_order_line (
-  order_id     TEXT,
-  line_number  INT,
-  order_date   DATE,
-  customer_key INT,
-  product_key  INT,
-  quantity     INT,
-  amount       DECIMAL(12,2)   -- grain: one row per order line
+  order_id     TEXT NOT NULL,          -- degenerate dimension: no table of its own
+  line_number  INT  NOT NULL,
+  date_key     INT  NOT NULL REFERENCES dim_date,
+  customer_key INT  NOT NULL REFERENCES dim_customer,
+  product_key  INT  NOT NULL REFERENCES dim_product,
+  quantity     INT  NOT NULL,
+  net_amount   NUMERIC(12,2) NOT NULL, -- grain: one row per order line
+  PRIMARY KEY (order_id, line_number)
 );
+
+INSERT INTO dim_date VALUES
+  (20260302, '2026-03-02', 'March', 2026),
+  (20260315, '2026-03-15', 'March', 2026),
+  (20260403, '2026-04-03', 'April', 2026),
+  (20260410, '2026-04-10', 'April', 2026);
+
+INSERT INTO dim_customer VALUES
+  (1, 'C1', 'Asha Rao',    'Pune',      'Consumer'),
+  (2, 'C2', 'Ravi Menon',  'Delhi',     'Consumer'),
+  (3, 'C3', 'Meera Iyer',  'Bengaluru', 'Business');
+
+INSERT INTO dim_product VALUES
+  (1, 'SKU-RUN-01', 'Trail running shoes', 'Shoes',       'Footwear'),
+  (2, 'SKU-SOC-02', 'Wool socks (3 pack)', 'Accessories', 'Footwear'),
+  (3, 'SKU-ESP-03', 'Espresso maker',      'Appliances',  'Kitchen'),
+  (4, 'SKU-PAN-04', 'Cast-iron pan',       'Cookware',    'Kitchen');
+
+INSERT INTO fact_order_line VALUES
+  ('O-1001', 1, 20260302, 1, 1, 1, 4999.00),
+  ('O-1001', 2, 20260302, 1, 2, 2,  798.00),
+  ('O-1002', 1, 20260302, 2, 3, 1, 8999.00),
+  ('O-1003', 1, 20260315, 1, 4, 1, 2499.00),
+  ('O-1003', 2, 20260315, 1, 2, 1,  399.00),
+  ('O-1004', 1, 20260403, 3, 3, 2, 17998.00);
 ```
 
-A typical question joins the fact to the dimensions it needs and aggregates:
+## Star schema
+
+### What it is and why it matters
+
+A star schema splits data into two kinds of table:
+
+- A **fact table** records measurements of a business event: here, one row for each order line with `quantity` and `net_amount`. Facts are mostly numbers plus foreign keys. Fact tables are long (millions or billions of rows) and narrow.
+- **Dimension tables** hold the descriptive context you filter and group by: who bought (customer), what (product), when (date). Dimensions are wide, mostly text, and short compared with facts.
+
+Each dimension joins to the fact table with one key, and dimensions do not join to each other. Drawn out, the fact table sits in the middle and the dimensions form the points of a star:
+
+```text
+              dim_date
+                 |
+dim_customer -- fact_order_line -- dim_product
+```
+
+The design matters because it makes analytical SQL predictable for people and for query planners. Business users and BI tools learn one pattern. Warehouses optimise for it: the dimension filters are applied first (small tables), and the large fact table is scanned once.
+
+### How it works
+
+Every query has the same shape. Revenue by department and month:
 
 ```sql
-SELECT p.category, c.segment, SUM(f.amount) AS revenue
+SELECT d.year, d.month_name, p.department, SUM(f.net_amount) AS revenue
 FROM fact_order_line f
-JOIN dim_product  p ON p.product_key  = f.product_key
-JOIN dim_customer c ON c.customer_key = f.customer_key
-GROUP BY p.category, c.segment;
+JOIN dim_date    d ON d.date_key    = f.date_key
+JOIN dim_product p ON p.product_key = f.product_key
+GROUP BY d.year, d.month_name, p.department
+ORDER BY d.year, MIN(d.full_date), p.department;
 ```
 
-Every query follows the same shape: join the fact to a few dimensions, group, aggregate. That predictability is the main benefit.
+| year | month_name | department | revenue |
+|---|---|---|---|
+| 2026 | March | Footwear | 6196.00 |
+| 2026 | March | Kitchen | 11498.00 |
+| 2026 | April | Kitchen | 17998.00 |
 
-## Surrogate keys
+A few design rules keep a star healthy:
 
-Dimension tables usually have a **surrogate key**, a meaningless integer the warehouse generates, in addition to the **business key** from the source. Surrogate keys keep joins small and let you keep several versions of the same customer when attributes change (see slowly changing dimensions below).
+- **Dimension keys are surrogate keys** (meaningless integers the warehouse assigns) rather than the source system's ids. They keep joins small and let one customer have several historical versions, which the [slowly changing dimensions](/data-warehousing/slowly-changing-dimensions/) lesson relies on. The [dimension tables](/data-warehousing/dimension-tables/) lesson covers keys in depth.
+- **Dimensions are denormalised.** `dim_product` carries `category` and `department` directly, even though department repeats for every product in it. That repetition is the point: one join gets every product attribute.
+- **Descriptive text stays out of the fact table.** Values such as product names belong in the dimension, so the fact table stays narrow and the text is stored once.
+- **Every fact row has a valid key for every dimension.** Use a special "Unknown" member rather than NULL foreign keys, so inner joins do not silently drop rows.
 
-## Common fact table types
+The date dimension deserves a note: even though a database can compute the month from a date, a `dim_date` table lets you add business calendars (fiscal periods, holidays, sale events) that no function knows about.
 
-| Type | One row represents | Example |
-|------|--------------------|---------|
-| Transaction | An event | An order line |
-| Periodic snapshot | A state at regular intervals | Account balance per day |
-| Accumulating snapshot | A process with milestones, updated as it progresses | An order from placed to delivered |
+### Pitfalls
 
-## Slowly changing dimensions
+1. **Joining two fact tables directly.** This multiplies rows; see the galaxy section below.
+2. **NULL foreign keys.** An order line with no known customer disappears from inner joins. Point it at an "Unknown" dimension row instead.
+3. **Measures stored in dimensions.** A `lifetime_value` column on `dim_customer` is fine as a descriptive band, but summing it across a fact join counts it once per fact row.
+4. **Too many tiny dimensions.** Low-cardinality flags (gift wrap yes/no, payment type) are better combined into a junk dimension than given a key each.
 
-Dimension attributes change: a customer moves city. **Type 1** overwrites the old value (simple, loses history). **Type 2** adds a new row with validity dates so history is preserved, and facts keep pointing at the version that was current when they occurred.
+### In interviews
 
-## Star versus snowflake
+"Design a schema for an e-commerce company" is one of the most common data modelling prompts. A strong answer starts with the business process (orders), declares the grain (one row per order line), lists the dimensions that are true at that grain (date, customer, product, promotion), and then the numeric facts. Mention surrogate keys, an Unknown member, and that the order id stays on the fact as a degenerate dimension.
 
-A **snowflake schema** normalises dimensions into further tables (for example `product` → `category`). It saves a little storage but adds joins. In modern columnar warehouses, storage is cheap and joins cost time, so the simpler star is usually preferred.
+## Declaring the grain
 
-## Common mistakes
+### What it is and why it matters
 
-1. Not stating the grain, then mixing levels in one table.
-2. Putting descriptive text in the fact table instead of a dimension.
-3. Joining two fact tables directly on a shared dimension key, which multiplies rows. Aggregate each to the shared grain first.
-4. Using business keys as the only join key and losing history when attributes change.
+The **grain** is the precise meaning of one fact row, stated in business terms: "one row per order line", "one row per product per warehouse per day", "one row per ride". Kimball's four-step process puts it second, after choosing the business process and before choosing dimensions or facts, because every dimension and fact must be true at that grain.
 
-## Interview relevance
+If the grain is unclear, people store facts that belong to different levels in the same table, and sums silently double count. A table with a declared grain is easy to test: the grain is the table's unique key.
 
-Common prompts: "Design a schema for an e-commerce company", "What is the grain of this table?" and "How would you handle a customer changing address?". Start every answer by stating the grain.
+### How it works
 
-## Key takeaway
+Pick the **most atomic grain** the source can provide. Atomic data answers questions nobody has asked yet; you can always aggregate up, never down. For Kestrel Market that is the order line, not the order and not the day.
 
-Facts record what happened at a stated grain; dimensions describe it. Get the grain right and the rest of the model follows.
+Then check each candidate column against the grain:
+
+| Candidate | True at "one row per order line"? | Where it goes |
+|---|---|---|
+| Product | Yes, each line has one product | Dimension key on the fact |
+| Quantity, net amount | Yes | Facts |
+| Shipping fee | No, charged once per order | Separate order-grain fact, or allocate to lines |
+| Customer's lifetime orders | No, a property of the customer | Dimension attribute or a separate snapshot |
+
+### A worked example: the mixed-grain bug
+
+Suppose someone adds the order's shipping fee to every line of `fact_order_line`:
+
+```sql
+CREATE TABLE fact_order_line_bad AS
+SELECT f.*,
+       CASE f.order_id WHEN 'O-1001' THEN 99.00 WHEN 'O-1003' THEN 49.00 ELSE 0 END AS shipping_fee
+FROM fact_order_line f;
+
+SELECT SUM(shipping_fee) AS shipping_revenue FROM fact_order_line_bad;
+```
+
+| shipping_revenue |
+|---|
+| 296.00 |
+
+The shop actually charged 99 + 49 = 148. Orders O-1001 and O-1003 each have two lines, so their fees were counted twice. There are two correct fixes:
+
+1. Keep a separate fact table at order grain (`fact_order`, one row per order) for order-level charges.
+2. **Allocate** the fee down to the lines, for example in proportion to line value, so the line-level column sums to the true total:
+
+```sql
+SELECT f.order_id, f.line_number, f.net_amount,
+       ROUND(o.fee * f.net_amount / SUM(f.net_amount) OVER (PARTITION BY f.order_id), 2) AS shipping_allocated
+FROM fact_order_line f
+JOIN (VALUES ('O-1001', 99.00), ('O-1003', 49.00)) AS o(order_id, fee) ON o.order_id = f.order_id
+ORDER BY f.order_id, f.line_number;
+```
+
+| order_id | line_number | net_amount | shipping_allocated |
+|---|---|---|---|
+| O-1001 | 1 | 4999.00 | 85.37 |
+| O-1001 | 2 | 798.00 | 13.63 |
+| O-1003 | 1 | 2499.00 | 42.25 |
+| O-1003 | 2 | 399.00 | 6.75 |
+
+Each order's allocations add back to its fee (85.37 + 13.63 = 99.00). With rounding that will not always hold exactly; production code assigns the rounding remainder to one line.
+
+A simple grain test belongs in every pipeline: the declared grain columns must be unique.
+
+```sql
+SELECT order_id, line_number, COUNT(*)
+FROM fact_order_line
+GROUP BY order_id, line_number
+HAVING COUNT(*) > 1;
+```
+
+An empty result means the grain holds.
+
+### Pitfalls
+
+- **Declaring the grain in technical terms only** ("unique on id") instead of business terms. Business wording tells you which facts belong.
+- **Choosing an aggregated grain to save space**, then being unable to answer a product-level question later.
+- **Adding a dimension that is not true at the grain**, such as a single "salesperson" on an order line when several staff share a sale. That calls for a bridge table (see [bridge tables](/data-warehousing/bridge-tables-hierarchies/)).
+
+### In interviews
+
+Interviewers often hand you a table and ask "what is the grain?", or describe numbers that are too high and ask why. Start every modelling answer by stating the grain in one sentence, and say how you would test it (a uniqueness check on the grain columns).
+
+## Snowflake schema
+
+### What it is and why it matters
+
+A **snowflake schema** normalises dimensions into further tables. Instead of `dim_product` carrying `category` and `department`, the product points to a category table, which points to a department table. The diagram branches outward like a snowflake.
+
+```text
+dim_department <- dim_category <- dim_product_sf <- fact_order_line
+```
+
+Snowflaking removes repeated text and gives each level its own place to hold attributes (a category manager, a department budget code). The price is more joins and a model that is harder for analysts to read.
+
+### A worked example
+
+```sql
+CREATE TABLE dim_department (department_key INT PRIMARY KEY, department TEXT NOT NULL);
+CREATE TABLE dim_category (
+  category_key   INT PRIMARY KEY,
+  category       TEXT NOT NULL,
+  department_key INT NOT NULL REFERENCES dim_department
+);
+CREATE TABLE dim_product_sf (
+  product_key  INT PRIMARY KEY,
+  sku          TEXT NOT NULL,
+  product_name TEXT NOT NULL,
+  category_key INT NOT NULL REFERENCES dim_category
+);
+
+INSERT INTO dim_department VALUES (1, 'Footwear'), (2, 'Kitchen');
+INSERT INTO dim_category VALUES (1, 'Shoes', 1), (2, 'Accessories', 1), (3, 'Appliances', 2), (4, 'Cookware', 2);
+INSERT INTO dim_product_sf VALUES
+  (1, 'SKU-RUN-01', 'Trail running shoes', 1),
+  (2, 'SKU-SOC-02', 'Wool socks (3 pack)', 2),
+  (3, 'SKU-ESP-03', 'Espresso maker', 3),
+  (4, 'SKU-PAN-04', 'Cast-iron pan', 4);
+
+SELECT dep.department, SUM(f.net_amount) AS revenue
+FROM fact_order_line f
+JOIN dim_product_sf p   ON p.product_key     = f.product_key
+JOIN dim_category   c   ON c.category_key    = p.category_key
+JOIN dim_department dep ON dep.department_key = c.department_key
+GROUP BY dep.department
+ORDER BY dep.department;
+```
+
+| department | revenue |
+|---|---|
+| Footwear | 6196.00 |
+| Kitchen | 29496.00 |
+
+The answer matches the star, but it needs three joins instead of one.
+
+### Star or snowflake?
+
+| Concern | Star | Snowflake |
+|---|---|---|
+| Joins per query | One per dimension | One per level of each dimension |
+| Readability for analysts and BI tools | High | Lower |
+| Storage | Repeats text in dimensions | Each value stored once |
+| Updating a level attribute (rename a department) | Update many dimension rows | Update one row |
+| Fit for columnar warehouses | Very good; repeated values compress well | Works, but the saving is small |
+
+Dimensions are tiny next to facts, so the storage saving rarely matters, and columnar compression shrinks repeated values anyway. The Kimball recommendation is to present stars to users. Snowflaking is reasonable in the integration layer, for a very large dimension with a large, rarely used sub-entity, or as an **outrigger** (a secondary dimension referenced from a dimension, such as a product's launch date pointing at `dim_date`). Many teams snowflake in staging and flatten into a star in the presentation layer.
+
+### Pitfalls
+
+- Snowflaking "because it is normalised, so it must be better". Analytical tables are read far more often than they are updated.
+- Partially snowflaked dimensions where some levels are inlined and others are not, so nobody knows where an attribute lives.
+- Forgetting that each extra join is another place for a missing key to drop rows.
+
+### In interviews
+
+Expect "star versus snowflake: which and why?". Say the star is the default for presentation because of simpler, faster queries, then name the cases where snowflaking or an outrigger is justified. Mentioning that columnar compression erodes the storage argument shows current knowledge.
+
+## Galaxy schemas (fact constellations)
+
+### What it is and why it matters
+
+Real warehouses have many business processes: orders, returns, inventory, web sessions. Each process gets its own fact table at its own grain, and they **share conformed dimensions** (the same `dim_product`, `dim_date` and `dim_customer`). Several stars sharing dimensions is called a **galaxy schema** or **fact constellation**. In Kimball's terms the shared dimensions form the enterprise **bus architecture**, which is what lets you compare processes side by side.
+
+```text
+             dim_date   dim_customer
+              |    \     /     |
+fact_order_line     \   /    fact_return_line
+              \     dim_product     /
+```
+
+### A worked example: drilling across without double counting
+
+Add a returns process to Kestrel Market:
+
+```sql
+CREATE TABLE fact_return_line (
+  return_id         TEXT NOT NULL,
+  order_id          TEXT NOT NULL,
+  line_number       INT  NOT NULL,
+  return_date_key   INT  NOT NULL REFERENCES dim_date,
+  customer_key      INT  NOT NULL REFERENCES dim_customer,
+  product_key       INT  NOT NULL REFERENCES dim_product,
+  quantity_returned INT  NOT NULL,
+  refund_amount     NUMERIC(12,2) NOT NULL,  -- grain: one row per returned order line
+  PRIMARY KEY (return_id, order_id, line_number)
+);
+
+INSERT INTO fact_return_line VALUES
+  ('R-501', 'O-1001', 2, 20260315, 1, 2, 1, 399.00),
+  ('R-502', 'O-1004', 1, 20260410, 3, 3, 1, 8999.00);
+```
+
+The tempting query joins both fact tables through `product_key`:
+
+```sql
+SELECT p.category, SUM(o.net_amount) AS revenue, SUM(r.refund_amount) AS refunds
+FROM fact_order_line o
+JOIN dim_product p ON p.product_key = o.product_key
+LEFT JOIN fact_return_line r ON r.product_key = o.product_key
+GROUP BY p.category
+ORDER BY p.category;
+```
+
+| category | revenue | refunds |
+|---|---|---|
+| Accessories | 1197.00 | 798.00 |
+| Appliances | 26997.00 | 17998.00 |
+| Cookware | 2499.00 | NULL |
+| Shoes | 4999.00 | NULL |
+
+The refunds are wrong. The espresso maker (Appliances) was sold on two order lines and returned once, so the join pairs the single return with both order lines and the refund is counted twice (17998 instead of 8999). The socks (Accessories) show the same doubling. Revenue only looks right because each product has at most one return so far: the first time a product is returned twice, its revenue doubles too. This is **fan-out**: joining two tables that each have many rows per key produces every combination of them.
+
+The correct pattern, called **drilling across**, aggregates each fact table to the shared grain first, then joins the small results on the conformed dimension attribute:
+
+```sql
+WITH sales AS (
+  SELECT p.category, SUM(f.net_amount) AS revenue
+  FROM fact_order_line f JOIN dim_product p ON p.product_key = f.product_key
+  GROUP BY p.category
+), refunds AS (
+  SELECT p.category, SUM(r.refund_amount) AS refunds
+  FROM fact_return_line r JOIN dim_product p ON p.product_key = r.product_key
+  GROUP BY p.category
+)
+SELECT s.category, s.revenue, COALESCE(r.refunds, 0) AS refunds,
+       s.revenue - COALESCE(r.refunds, 0) AS net_after_refunds
+FROM sales s
+LEFT JOIN refunds r ON r.category = s.category
+ORDER BY s.category;
+```
+
+| category | revenue | refunds | net_after_refunds |
+|---|---|---|---|
+| Accessories | 1197.00 | 399.00 | 798.00 |
+| Appliances | 26997.00 | 8999.00 | 17998.00 |
+| Cookware | 2499.00 | 0 | 2499.00 |
+| Shoes | 4999.00 | 0 | 4999.00 |
+
+A `FULL OUTER JOIN` is safer still when a category might have refunds but no sales in the period. BI tools that support several fact tables generate this pattern for you, provided the dimensions are conformed.
+
+### Pitfalls
+
+- **Non-conformed dimensions.** If orders use one product table and returns another with different category names, drilling across silently mismatches. Conformed dimensions are covered in the [dimension tables](/data-warehousing/dimension-tables/) lesson.
+- **Joining facts on a shared key instead of aggregating first**, as shown above.
+- **Merging two processes into one fact table** with many NULL columns because "they share dimensions". Different processes have different grains; keep them separate.
+
+### In interviews
+
+A common follow-up after you design the orders star is "now add returns" or "now add inventory". The strong answer is a second fact table at its own grain sharing the conformed dimensions, plus the drill-across query pattern. If you are shown a report with inflated totals across two facts, name fan-out and fix it by aggregating before joining.
+
+## Practice questions
+
+<details>
+<summary>What is the difference between a fact and a dimension? Give an example of each for a ride-hailing company.</summary>
+
+A fact is a measurement of a business event at a stated grain, mostly numeric and usually additive: for a ride-hailing company, `fare_amount`, `distance_km` and `duration_seconds` in a `fact_ride` table with one row per completed ride. A dimension is descriptive context you filter or group by: `dim_driver` (rating band, vehicle type), `dim_rider`, `dim_city`, `dim_date`. The fact table holds foreign keys to each dimension.
+
+</details>
+
+<details>
+<summary>A fact table has one row per order line, and someone adds an order-level discount column to it. What goes wrong and how do you fix it?</summary>
+
+The discount repeats on every line of a multi-line order, so `SUM(discount)` counts it once per line. Fix it by moving order-level measures to an order-grain fact table, or by allocating the discount to lines (for example in proportion to line value) so the line-level values add up to the order total. Add a test that line allocations sum to the order amount.
+
+</details>
+
+<details>
+<summary>Why are star schemas usually preferred over snowflake schemas in modern cloud warehouses?</summary>
+
+Queries need fewer joins and are easier for analysts and BI tools to write. The storage saving from snowflaking is small because dimensions are small relative to facts and columnar formats compress repeated values well. Snowflaking still makes sense for outriggers, very large dimensions with rarely used sub-entities, or in an integration layer that is flattened before presentation.
+
+</details>
+
+<details>
+<summary>How do you test that a fact table respects its declared grain?</summary>
+
+Group by the grain columns and assert no group has more than one row (or put a unique constraint or primary key on them where the engine enforces it). Also reconcile totals with the source: the sum of `net_amount` should match the source system for the same period. Many teams run both as automated tests on every load.
+
+</details>
+
+<details>
+<summary>You join fact_orders to fact_shipments on order_id and revenue doubles. Why, and what is the fix?</summary>
+
+An order with several shipments matches every shipment row, so each order row repeats (fan-out). Aggregate each fact table to a common grain first (for example per order or per day and product), then join the aggregates, or use separate subqueries in the select list. Never join two many-row fact tables directly on a shared key.
+
+</details>
+
+<details>
+<summary>What is a galaxy schema, and what makes it work?</summary>
+
+Several fact tables, one per business process, sharing dimension tables. It works only if the shared dimensions are conformed: the same keys, attribute names and values across processes. That lets you compare processes (sales against returns, orders against inventory) by drilling across on the shared attributes.
+
+</details>
+
+## Key takeaways
+
+- A star schema puts measurements in a narrow fact table and descriptive context in denormalised dimension tables, joined by surrogate keys.
+- Declare the grain first, in business terms, and choose the most atomic grain available. Every column must be true at that grain.
+- Mixed grains cause double counting; move the fact to its own table or allocate it down.
+- Snowflaking normalises dimensions; it saves little in columnar warehouses and costs joins, so present stars to users.
+- A galaxy schema is several stars sharing conformed dimensions. Aggregate each fact table before joining them.

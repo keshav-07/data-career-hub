@@ -1,0 +1,538 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Dimension Tables: Keys, Conformed, Junk, Degenerate and Role-Playing Dimensions"
+seoTitle: "Dimension Tables: Keys and Dimension Patterns"
+description: "Design dimension tables that join reliably: surrogate and natural keys, conformed, degenerate, junk and role-playing dimensions, and inferred members for late data."
+technology: ["data-warehousing", "sql"]
+topic: ["modelling", "dimension-tables", "surrogate-keys"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Design a dimension table with readable attributes and special members for unknown values"
+  - "Generate surrogate keys and explain when natural keys are not enough"
+  - "Use conformed and shrunken dimensions to compare business processes"
+  - "Apply degenerate, junk and role-playing dimension patterns"
+  - "Load facts whose dimension rows have not arrived yet using inferred members"
+prerequisites: ["articles:data-warehousing/star-schema", "articles:data-warehousing/fact-tables"]
+related: ["articles:data-warehousing/slowly-changing-dimensions", "articles:sql/joins"]
+previous: "articles:data-warehousing/fact-tables"
+next: "articles:data-warehousing/bridge-tables-hierarchies"
+versionContext: "All SQL examples executed on PostgreSQL 16.14. Key generation in other warehouses is described from their documentation, not executed."
+sources:
+  - { label: "Kimball Group: Dimensional Modeling Techniques", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/" }
+  - { label: "Kimball Group: Fact Tables and Dimension Tables", url: "https://www.kimballgroup.com/2003/01/fact-tables-and-dimension-tables/" }
+  - { label: "PostgreSQL 16 documentation: INSERT (ON CONFLICT)", url: "https://www.postgresql.org/docs/16/sql-insert.html" }
+---
+
+Dimensions are what analysts actually touch: every filter, every group-by and every report label comes from a dimension column. Their keys decide whether facts join correctly and whether history survives. This lesson covers how Kestrel Market (the fictional online shop used across this course) builds its dimensions, from key generation to the special patterns interviewers like to ask about.
+
+## Dimension tables
+
+### What it is and why it matters
+
+A dimension table describes the "who, what, where, when and how" of a business event. Each row is one member (a customer, a product, a day), identified by a surrogate key, with many descriptive attributes. Good dimensions are:
+
+- **Wide and descriptive.** Dozens of attributes are normal. If an analyst might filter on it, it belongs here.
+- **Readable.** Decode source codes into words (`'Express delivery'`, not `'E'`), and turn booleans into labels (`'Gift wrapped'` / `'Not gift wrapped'`) so reports are self-explanatory.
+- **Complete.** Every fact row must find a dimension row, so the dimension includes special members for missing or inapplicable values.
+- **Hierarchical without extra tables.** Product, category and department live as columns in one row, giving drill-down paths.
+
+### A worked example
+
+```sql
+CREATE TABLE dim_customer (
+  customer_key   INT GENERATED ALWAYS AS IDENTITY (START WITH 1) PRIMARY KEY,
+  source_system  TEXT NOT NULL,       -- part of the natural key
+  customer_id    TEXT NOT NULL,       -- natural key in that source
+  customer_name  TEXT NOT NULL,
+  city           TEXT NOT NULL,
+  loyalty_tier   TEXT NOT NULL,       -- decoded: 'Gold', not 'G'
+  is_inferred    BOOLEAN NOT NULL DEFAULT false,
+  UNIQUE (source_system, customer_id)
+);
+
+-- Special members with fixed negative keys, so they are stable across rebuilds
+INSERT INTO dim_customer OVERRIDING SYSTEM VALUE VALUES
+  (-1, 'n/a', 'UNKNOWN', 'Unknown customer', 'Unknown', 'Unknown', false),
+  (-2, 'n/a', 'GUEST',   'Guest checkout',   'Not applicable', 'Not applicable', false);
+
+INSERT INTO dim_customer (source_system, customer_id, customer_name, city, loyalty_tier) VALUES
+  ('shop', 'C1', 'Asha Rao',   'Mumbai',    'Gold'),
+  ('shop', 'C2', 'Ravi Menon', 'Delhi',     'Silver'),
+  ('shop', 'C3', 'Meera Iyer', 'Bengaluru', 'Silver');
+
+SELECT customer_key, source_system, customer_id, customer_name, loyalty_tier
+FROM dim_customer ORDER BY customer_key;
+```
+
+| customer_key | source_system | customer_id | customer_name | loyalty_tier |
+|---|---|---|---|---|
+| -2 | n/a | GUEST | Guest checkout | Not applicable |
+| -1 | n/a | UNKNOWN | Unknown customer | Unknown |
+| 1 | shop | C1 | Asha Rao | Gold |
+| 2 | shop | C2 | Ravi Menon | Silver |
+| 3 | shop | C3 | Meera Iyer | Silver |
+
+The two special rows distinguish "we do not know who this was" (a data problem to investigate) from "there is no customer by design" (a guest checkout). Both keep fact rows visible in inner joins.
+
+### Pitfalls
+
+- **NULL attributes.** `GROUP BY city` puts NULLs in an unlabelled bucket. Replace them with `'Unknown'` during the load.
+- **Cryptic codes** that only the source team understands.
+- **Measures disguised as attributes.** A continuously changing number (account balance) belongs in a fact table; a banded version (`'0-1000'`) can live in the dimension.
+
+### In interviews
+
+Describe a dimension as "wide, flat, descriptive, with a surrogate key and special members". Mentioning Unknown and Not applicable rows, and decoding flags into readable labels, signals that you have built real dimensions.
+
+## Surrogate keys
+
+### What it is and why it matters
+
+A **surrogate key** is a meaningless integer (or hash) generated by the warehouse to identify a dimension row. Facts store it instead of the source system's id. It exists because the warehouse needs things the source key cannot provide:
+
+- several rows for the same customer when history is tracked (Type 2), each with its own key;
+- one key space across several source systems;
+- special members (-1, -2) for unknown and inapplicable values;
+- insulation from source key changes, reuse and format changes;
+- compact integer joins on very large fact tables.
+
+### How it works
+
+There are two common generation methods:
+
+| Method | How | Strengths | Weaknesses |
+|---|---|---|---|
+| Sequence or identity | Database assigns the next integer (`GENERATED ... AS IDENTITY` in PostgreSQL, identity or autoincrement columns in most warehouses) | Small, fast to join | Not deterministic: a rebuild assigns different numbers; parallel loaders need the database to coordinate; some engines do not guarantee gap-free or ordered values |
+| Hash of the natural key | `md5(source_system || '|' || customer_id)` (plus `valid_from` for Type 2) | Deterministic, can be computed in parallel or before the dimension is loaded; rebuilds give the same keys | Wider (16 to 32 bytes), tiny collision risk, joins slightly slower |
+
+The fact load replaces natural keys with surrogate keys by joining to the dimension (the **surrogate key pipeline**):
+
+```sql
+CREATE TABLE stg_order_line (
+  order_id TEXT, line_number INT, order_date DATE, source_system TEXT, customer_id TEXT, net_amount NUMERIC(12,2)
+);
+INSERT INTO stg_order_line VALUES
+  ('O-1001', 1, '2026-03-02', 'shop', 'C1',   4999.00),
+  ('O-1005', 1, '2026-04-12', 'shop', NULL,    649.00),   -- guest checkout
+  ('O-1006', 1, '2026-04-12', 'shop', 'C404',  299.00);   -- id not in the dimension
+
+SELECT s.order_id,
+       CASE WHEN s.customer_id IS NULL THEN -2
+            ELSE COALESCE(d.customer_key, -1) END AS customer_key,
+       md5(s.source_system || '|' || COALESCE(s.customer_id, 'GUEST')) AS hashed_customer_key,
+       s.net_amount
+FROM stg_order_line s
+LEFT JOIN dim_customer d
+       ON d.source_system = s.source_system AND d.customer_id = s.customer_id
+ORDER BY s.order_id;
+```
+
+| order_id | customer_key | hashed_customer_key | net_amount |
+|---|---|---|---|
+| O-1001 | 1 | c4cdcd53f8066a48dd905392c69ff439 | 4999.00 |
+| O-1005 | -2 | 6abca6dccdff3318e2e25e9dbe065495 | 649.00 |
+| O-1006 | -1 | 08222ba89cc0709cc5a3b6377931ff50 | 299.00 |
+
+The `LEFT JOIN` plus `COALESCE` is what keeps O-1006 in the warehouse: an inner join would have dropped it silently. Mapping it to -1 is the minimum; the late-arriving dimensions section shows a better option.
+
+### Pitfalls
+
+- **Assuming identity values are consecutive or ordered by time.** They are not guaranteed to be, especially in distributed warehouses; never use them to infer load order.
+- **Rebuilding a dimension with a sequence** and getting new keys while old facts still hold the old ones. Either never rebuild dimensions from scratch, or use deterministic hash keys.
+- **Hashing without a delimiter**: `'AB' || 'C'` and `'A' || 'BC'` hash identically. Always separate parts and normalise case and whitespace first.
+
+### In interviews
+
+Be ready to list why surrogate keys exist (history, integration, special members, insulation, join performance) and to compare sequences with hash keys. Saying that hash keys make loads deterministic and parallel (the reason Data Vault uses them) is a strong addition.
+
+## Natural keys versus surrogate keys
+
+### What it is and why it matters
+
+A **natural key** (business key) identifies something in the real world or in a source system: a customer id, a SKU, an email address, a GSTIN. A surrogate key identifies a **row in the warehouse**. A dimension needs both: the natural key to match incoming data, the surrogate key for facts to join on.
+
+### How they compare
+
+| Concern | Natural key | Surrogate key |
+|---|---|---|
+| Meaning | Business meaning; people search by it | None |
+| Stability | Can change (email), be reused (recycled phone numbers) or be reformatted | Stable for the row's lifetime |
+| Uniqueness across sources | Two systems can both have customer `C1` | Unique across the warehouse |
+| History (Type 2) | Same value on every version | One value per version |
+| Join width | Often text, sometimes composite | Integer or fixed-width hash |
+
+When several sources feed one dimension, the natural key becomes composite: `(source_system, customer_id)`. Kestrel's marketplace sellers system also has a customer `C1`, a different person:
+
+```sql
+INSERT INTO dim_customer (source_system, customer_id, customer_name, city, loyalty_tier)
+VALUES ('marketplace', 'C1', 'Kiran Shah', 'Ahmedabad', 'None');
+
+SELECT customer_key, source_system, customer_id, customer_name
+FROM dim_customer WHERE customer_id = 'C1' ORDER BY customer_key;
+```
+
+| customer_key | source_system | customer_id | customer_name |
+|---|---|---|---|
+| 1 | shop | C1 | Asha Rao |
+| 4 | marketplace | C1 | Kiran Shah |
+
+The composite natural key keeps the two apart, and the facts never see the collision because they join on the surrogate key.
+
+### Pitfalls
+
+- Using email or phone as the only identifier. They change and get reused.
+- Dropping the natural key from the dimension once the surrogate exists. You need it for every future lookup and for debugging.
+- Assuming the natural key is unique without testing it.
+
+### In interviews
+
+The question "why not just use the customer id?" deserves the table above in a sentence or two: natural keys change, collide across sources, and cannot distinguish history versions. Keep both, with a unique constraint on the natural key plus version.
+
+## Conformed dimensions
+
+### What it is and why it matters
+
+A **conformed dimension** means the same thing everywhere it is used: the same keys, the same attribute names and the same values. If orders, returns and marketing spend all use one `dim_product` with one definition of "category", you can compare them. If each team builds its own product table, "Kitchen revenue" and "Kitchen returns" may describe different sets of products.
+
+Conformed dimensions are the backbone of the **enterprise bus matrix**: rows are business processes, columns are dimensions, and a tick means "this process uses this conformed dimension".
+
+| Business process | Date | Customer | Product | Courier |
+|---|---|---|---|---|
+| Orders | Yes | Yes | Yes | No |
+| Returns | Yes | Yes | Yes | Yes |
+| Monthly sales targets | Yes (month) | No | Yes (category) | No |
+
+### Shrunken dimensions
+
+A process at a coarser grain uses a **shrunken** conformed dimension: a subset of rows or columns with identical values. Targets are set per category per month, so they need a category dimension whose values match `dim_product.category` exactly:
+
+```sql
+CREATE TABLE dim_product (
+  product_key INT PRIMARY KEY, sku TEXT NOT NULL, product_name TEXT NOT NULL, category TEXT NOT NULL
+);
+INSERT INTO dim_product VALUES
+  (1, 'SKU-RUN-01', 'Trail running shoes', 'Shoes'),
+  (2, 'SKU-SOC-02', 'Wool socks (3 pack)', 'Accessories'),
+  (3, 'SKU-ESP-03', 'Espresso maker',      'Appliances');
+
+-- Shrunken dimension derived from the base dimension, so the values cannot drift
+CREATE TABLE dim_category AS
+SELECT ROW_NUMBER() OVER (ORDER BY category)::INT AS category_key, category
+FROM (SELECT DISTINCT category FROM dim_product) c;
+
+CREATE TABLE fact_sales_target (
+  target_month DATE NOT NULL, category_key INT NOT NULL, target_amount NUMERIC(12,2) NOT NULL
+);
+INSERT INTO fact_sales_target
+SELECT '2026-03-01', category_key,
+       CASE category WHEN 'Appliances' THEN 15000 WHEN 'Shoes' THEN 6000 ELSE 1000 END
+FROM dim_category;
+
+CREATE TABLE fact_order_line (
+  order_id TEXT, line_number INT, order_date DATE, product_key INT, net_amount NUMERIC(12,2)
+);
+INSERT INTO fact_order_line VALUES
+  ('O-1001', 1, '2026-03-02', 1, 4999.00), ('O-1001', 2, '2026-03-02', 2, 798.00),
+  ('O-1002', 1, '2026-03-02', 3, 8999.00), ('O-1003', 2, '2026-03-15', 2, 399.00);
+
+WITH actuals AS (
+  SELECT date_trunc('month', f.order_date)::DATE AS month, p.category, SUM(f.net_amount) AS actual
+  FROM fact_order_line f JOIN dim_product p USING (product_key)
+  GROUP BY 1, 2
+), targets AS (
+  SELECT t.target_month AS month, c.category, t.target_amount
+  FROM fact_sales_target t JOIN dim_category c USING (category_key)
+)
+SELECT COALESCE(a.month, t.month) AS month, COALESCE(a.category, t.category) AS category,
+       a.actual, t.target_amount
+FROM actuals a FULL JOIN targets t ON t.month = a.month AND t.category = a.category
+ORDER BY category;
+```
+
+| month | category | actual | target_amount |
+|---|---|---|---|
+| 2026-03-01 | Accessories | 1197.00 | 1000.00 |
+| 2026-03-01 | Appliances | 8999.00 | 15000.00 |
+| 2026-03-01 | Shoes | 4999.00 | 6000.00 |
+
+The drill-across works because `category` is conformed: both sides use the same spelling from the same source.
+
+### Pitfalls
+
+- **Conformed in name only**: two `category` columns with different spellings or groupings. Derive shrunken dimensions from the base dimension rather than typing them separately.
+- **Political ownership.** Conforming means agreeing definitions across teams. That is a governance task, not a SQL task, and it is usually the hard part.
+
+### In interviews
+
+Expect "how do you make metrics consistent across teams?". Conformed dimensions (and a shared semantic layer on top) are the answer. Mention the bus matrix and shrunken dimensions for coarser-grained processes.
+
+## Degenerate dimensions
+
+### What it is and why it matters
+
+A **degenerate dimension** is a dimension key with no dimension table: usually a transaction identifier such as an order number, invoice number or ride id stored on the fact. All of its descriptive context (date, customer, payment method) already lives in other dimensions, so a table with one column would add a join and nothing else.
+
+It is still very useful: it groups lines into orders and links the warehouse back to the source system.
+
+```sql
+SELECT COUNT(DISTINCT order_id)                             AS orders,
+       ROUND(SUM(net_amount) / COUNT(DISTINCT order_id), 2) AS avg_order_value,
+       ROUND(COUNT(*)::NUMERIC / COUNT(DISTINCT order_id), 2) AS lines_per_order
+FROM fact_order_line;
+```
+
+| orders | avg_order_value | lines_per_order |
+|---|---|---|
+| 3 | 5065.00 | 1.33 |
+
+Average order value and basket size are computed from the degenerate `order_id`, with no extra join.
+
+### Pitfalls
+
+- Creating a `dim_order` table that only holds the order id.
+- Order-level attributes (payment method, channel) that **do** need a home: put them in proper dimensions or a junk dimension, not in a one-off order dimension that grows as fast as the fact.
+
+### In interviews
+
+If asked "where is the order number in your star?", answer "on the fact table as a degenerate dimension" and explain why it has no table.
+
+## Junk dimensions
+
+### What it is and why it matters
+
+Orders have several low-cardinality flags: payment method, gift wrap, express delivery. Giving each its own dimension adds three keys to every fact row; leaving them as text on the fact bloats it. A **junk dimension** combines unrelated low-cardinality attributes into one table with one row per combination, and the fact stores a single key.
+
+### A worked example
+
+```sql
+CREATE TABLE dim_order_profile (
+  order_profile_key INT PRIMARY KEY,
+  payment_method    TEXT NOT NULL,
+  gift_wrap         TEXT NOT NULL,
+  delivery_speed    TEXT NOT NULL,
+  UNIQUE (payment_method, gift_wrap, delivery_speed)
+);
+
+INSERT INTO dim_order_profile
+SELECT ROW_NUMBER() OVER (ORDER BY pm, gw, ds), pm, gw, ds
+FROM unnest(ARRAY['Card', 'UPI', 'Cash on delivery']) AS pm
+CROSS JOIN unnest(ARRAY['Gift wrapped', 'Not gift wrapped']) AS gw
+CROSS JOIN unnest(ARRAY['Standard', 'Express']) AS ds;
+
+SELECT COUNT(*) AS combinations FROM dim_order_profile;
+
+SELECT order_profile_key FROM dim_order_profile
+WHERE payment_method = 'UPI' AND gift_wrap = 'Gift wrapped' AND delivery_speed = 'Express';
+```
+
+| combinations |
+|---|
+| 12 |
+
+| order_profile_key |
+|---|
+| 9 |
+
+All 3 × 2 × 2 = 12 combinations are generated up front, so every order finds its row. The fact load looks up the key with an equality join on the three flags. When the possible combinations are numerous but sparse, build the dimension from the combinations that actually occur and insert new ones as they appear.
+
+### Pitfalls
+
+- Combining attributes that are **not** low cardinality (a free-text note) explodes the table.
+- Combining attributes that change independently over time, so the junk dimension needs history. Keep junk dimensions to flags and codes.
+
+### In interviews
+
+Junk dimensions are a favourite definition question. Give the order-flags example, explain the one-row-per-combination design and why it beats several tiny dimensions or text columns on the fact.
+
+## Role-playing dimensions
+
+### What it is and why it matters
+
+One physical dimension can play several roles in the same fact table. An accumulating snapshot of orders has an order date, a ship date and a delivery date, all pointing at `dim_date`. A ride has a pickup location and a drop-off location, both pointing at `dim_location`. That is a **role-playing dimension**.
+
+### A worked example
+
+Each role is exposed as a view with role-specific column names, so queries and BI tools are unambiguous:
+
+```sql
+CREATE TABLE dim_date (
+  date_key INT PRIMARY KEY, full_date DATE NOT NULL, day_name TEXT NOT NULL, is_weekend BOOLEAN NOT NULL
+);
+INSERT INTO dim_date
+SELECT to_char(d, 'YYYYMMDD')::INT, d, to_char(d, 'FMDay'), EXTRACT(ISODOW FROM d) IN (6, 7)
+FROM generate_series(DATE '2026-03-01', DATE '2026-03-10', INTERVAL '1 day') AS g(d);
+
+CREATE VIEW dim_order_date AS
+SELECT date_key AS order_date_key, full_date AS order_date, day_name AS order_day, is_weekend AS order_on_weekend
+FROM dim_date;
+CREATE VIEW dim_ship_date AS
+SELECT date_key AS ship_date_key, full_date AS ship_date, day_name AS ship_day, is_weekend AS shipped_on_weekend
+FROM dim_date;
+
+CREATE TABLE fact_shipment (order_id TEXT, order_date_key INT, ship_date_key INT);
+INSERT INTO fact_shipment VALUES
+  ('O-1001', 20260302, 20260303),
+  ('O-1002', 20260306, 20260309),
+  ('O-1003', 20260307, 20260307);
+
+SELECT f.order_id, od.order_day, sd.ship_day, sd.ship_date - od.order_date AS days_to_ship
+FROM fact_shipment f
+JOIN dim_order_date od ON od.order_date_key = f.order_date_key
+JOIN dim_ship_date  sd ON sd.ship_date_key  = f.ship_date_key
+ORDER BY f.order_id;
+```
+
+| order_id | order_day | ship_day | days_to_ship |
+|---|---|---|---|
+| O-1001 | Monday | Tuesday | 1 |
+| O-1002 | Friday | Monday | 3 |
+| O-1003 | Saturday | Saturday | 0 |
+
+The same table is joined twice, once per role. Without role views you would write `JOIN dim_date od ... JOIN dim_date sd ...` and rename columns in every query.
+
+### Pitfalls
+
+- Joining one alias for both roles, so every shipment appears to ship on the order date.
+- Copying the date table into separate physical tables per role. They drift apart; use views (or aliases in the semantic layer).
+
+### In interviews
+
+"How do you model order date and ship date?" Answer: one date dimension, two foreign keys on the fact, and role-playing views or aliases. Ride-hailing pickup and drop-off locations are the same pattern.
+
+## Late-arriving dimensions
+
+### What it is and why it matters
+
+A **late-arriving dimension** (also called an early-arriving fact) is the reverse of a late fact: a fact references a dimension member the warehouse has not seen yet. A new customer places an order and the order event streams in within seconds, but the customer record comes from a CRM extract that runs nightly.
+
+The options are:
+
+| Option | What happens | Problem |
+|---|---|---|
+| Drop or hold the fact until the dimension arrives | Revenue is missing or delayed | Totals are wrong in the meantime; held facts need a retry queue |
+| Map to the Unknown member (-1) | Revenue is counted | The fact must be updated later to the real key, which means finding and rewriting it |
+| **Insert an inferred member** | A placeholder dimension row is created with the natural key and default attributes, and the fact gets its real surrogate key straight away | Attributes are placeholders until the real record arrives |
+
+Inferred members are usually the best choice, because the fact never needs to be touched again.
+
+### A worked example: inferred members
+
+An order for new customer C9 arrives before C9's customer record:
+
+```sql
+CREATE TABLE stg_new_orders (order_id TEXT, source_system TEXT, customer_id TEXT, net_amount NUMERIC(12,2));
+INSERT INTO stg_new_orders VALUES ('O-1010', 'shop', 'C9', 1299.00), ('O-1011', 'shop', 'C2', 399.00);
+
+-- 1. Create inferred members for natural keys the dimension has not seen
+INSERT INTO dim_customer (source_system, customer_id, customer_name, city, loyalty_tier, is_inferred)
+SELECT DISTINCT s.source_system, s.customer_id, 'Not yet known', 'Not yet known', 'Not yet known', true
+FROM stg_new_orders s
+WHERE s.customer_id IS NOT NULL
+ON CONFLICT (source_system, customer_id) DO NOTHING;
+
+-- 2. Load the facts: every natural key now has a surrogate key
+CREATE TABLE fact_order (order_id TEXT PRIMARY KEY, customer_key INT NOT NULL, net_amount NUMERIC(12,2));
+INSERT INTO fact_order
+SELECT s.order_id, d.customer_key, s.net_amount
+FROM stg_new_orders s
+JOIN dim_customer d ON d.source_system = s.source_system AND d.customer_id = s.customer_id;
+
+SELECT f.order_id, f.customer_key, d.customer_id, d.city, d.is_inferred
+FROM fact_order f JOIN dim_customer d USING (customer_key) ORDER BY f.order_id;
+```
+
+| order_id | customer_key | customer_id | city | is_inferred |
+|---|---|---|---|---|
+| O-1010 | 6 | C9 | Not yet known | t |
+| O-1011 | 2 | C2 | Delhi | f |
+
+C9 received key 6, not 5. The `ON CONFLICT DO NOTHING` insert drew a sequence value for the C2 row before discovering the conflict, and that value is never reused. Gaps like this are normal, which is one more reason never to read meaning into surrogate key values.
+
+That night the CRM extract delivers C9's real record. The dimension load **updates the inferred row in place** (even for attributes that would normally create a Type 2 version, because the placeholder was never true history) and clears the flag:
+
+```sql
+CREATE TABLE stg_customer (source_system TEXT, customer_id TEXT, customer_name TEXT, city TEXT, loyalty_tier TEXT);
+INSERT INTO stg_customer VALUES ('shop', 'C9', 'Farah Khan', 'Hyderabad', 'Bronze');
+
+MERGE INTO dim_customer d
+USING stg_customer s
+   ON d.source_system = s.source_system AND d.customer_id = s.customer_id
+WHEN MATCHED AND d.is_inferred THEN UPDATE SET
+  customer_name = s.customer_name, city = s.city, loyalty_tier = s.loyalty_tier, is_inferred = false
+WHEN NOT MATCHED THEN INSERT (source_system, customer_id, customer_name, city, loyalty_tier)
+  VALUES (s.source_system, s.customer_id, s.customer_name, s.city, s.loyalty_tier);
+
+SELECT f.order_id, f.customer_key, d.customer_name, d.city, d.is_inferred
+FROM fact_order f JOIN dim_customer d USING (customer_key) ORDER BY f.order_id;
+```
+
+| order_id | customer_key | customer_name | city | is_inferred |
+|---|---|---|---|---|
+| O-1010 | 6 | Farah Khan | Hyderabad | f |
+| O-1011 | 2 | Ravi Menon | Delhi | f |
+
+The fact row never changed: key 6 now simply carries real attributes. (In a full Type 2 dimension the `MERGE` would also handle changed non-inferred rows; the [slowly changing dimensions](/data-warehousing/slowly-changing-dimensions/) lesson shows that logic.)
+
+### Pitfalls
+
+- **Inferred rows that never resolve**, because the source never sends them (test accounts, deleted users). Monitor the count and age of `is_inferred = true` rows.
+- **Creating a Type 2 version on resolution**, which leaves a meaningless "Not yet known" version in history.
+- **Race conditions** when several loaders insert the same inferred member at once. A unique constraint on the natural key plus `ON CONFLICT DO NOTHING` (or a `MERGE`) makes it safe.
+
+### In interviews
+
+"A fact arrives for a customer who is not in the dimension yet" is a standard scenario. The strong answer names inferred members, explains the flag and the in-place update on arrival, and compares it with Unknown-member mapping and holding facts back.
+
+## Practice questions
+
+<details>
+<summary>Give four reasons a warehouse uses surrogate keys instead of source system ids.</summary>
+
+They allow several historical versions of one member (Type 2), one key space across sources whose ids collide, special members such as Unknown and Not applicable, insulation from source key changes and reuse, and compact joins on large fact tables. Hash-based surrogate keys add deterministic, parallel key generation.
+
+</details>
+
+<details>
+<summary>What is a conformed dimension, and what is a shrunken dimension?</summary>
+
+A conformed dimension has the same keys, attribute names and values wherever it is used, so different business processes can be compared. A shrunken dimension is a conformed subset (fewer rows or columns, such as month from date or category from product) used by facts at a coarser grain. It should be derived from the base dimension so values cannot drift.
+
+</details>
+
+<details>
+<summary>Where does the order number go in an order-line star schema, and why?</summary>
+
+On the fact table as a degenerate dimension. It has no descriptive attributes of its own (they are in the date, customer and other dimensions), so a separate table would add a join and nothing else. It is still used for grouping lines into orders and tracing back to the source.
+
+</details>
+
+<details>
+<summary>You have six yes/no and short-code flags on each order. How do you model them?</summary>
+
+Combine them into a junk dimension with one row per combination of values (all combinations if the product is small, otherwise the observed ones), decode the codes into readable labels, and store one key on the fact. This beats six tiny dimensions or six text columns on the fact.
+
+</details>
+
+<details>
+<summary>A ride has a pickup city and a drop-off city. How many location dimensions do you build?</summary>
+
+One physical location dimension used in two roles. The fact has `pickup_location_key` and `dropoff_location_key`, and you expose role-playing views (or semantic-layer aliases) with role-specific column names so queries are unambiguous.
+
+</details>
+
+<details>
+<summary>An order arrives for a customer id that is not in the customer dimension. What are your options and which do you prefer?</summary>
+
+Hold the fact until the customer arrives (delays revenue), map it to the Unknown member (counts revenue but needs a later fact update), or insert an inferred member with the natural key and placeholder attributes. Inferred members are usually best: the fact gets its final key immediately, and when the real record arrives the inferred row is updated in place and its flag cleared. Monitor inferred rows that never resolve.
+
+</details>
+
+## Key takeaways
+
+- Dimensions are wide, flat and readable, with special members (Unknown, Not applicable) so no fact row is lost in a join.
+- Surrogate keys enable history, integration and special members; generate them with identity columns or deterministic hashes, and keep the natural key too.
+- Conformed dimensions, including shrunken ones, are what make different business processes comparable.
+- Degenerate dimensions (order numbers) live on the fact; junk dimensions combine low-cardinality flags; role-playing dimensions reuse one table in several roles through views.
+- Late-arriving dimension members are best handled with inferred rows that are updated in place when the real record arrives.

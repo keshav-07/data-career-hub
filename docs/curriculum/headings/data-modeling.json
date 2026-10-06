@@ -1,0 +1,170 @@
+{
+ "Star Schema": {
+  "ref": "articles:data-warehousing/star-schema",
+  "heading": "Star schema"
+ },
+ "Snowflake Schema": {
+  "ref": "articles:data-warehousing/star-schema",
+  "heading": "Snowflake schema"
+ },
+ "Galaxy / Fact Constellation": {
+  "ref": "articles:data-warehousing/star-schema",
+  "heading": "Galaxy schemas (fact constellations)"
+ },
+ "Grain definition": {
+  "ref": "articles:data-warehousing/star-schema",
+  "heading": "Declaring the grain"
+ },
+ "Normalization (1NF-3NF/BCNF)": {
+  "ref": "articles:data-warehousing/normalization-denormalization",
+  "heading": "Normal forms from 1NF to BCNF"
+ },
+ "Denormalization trade-offs": {
+  "ref": "articles:data-warehousing/normalization-denormalization",
+  "heading": "Denormalisation trade-offs"
+ },
+ "Dimensional vs wide tables": {
+  "ref": "articles:data-warehousing/normalization-denormalization",
+  "heading": "Dimensional models versus wide tables"
+ },
+ "One Big Table (OBT)": {
+  "ref": "articles:data-warehousing/normalization-denormalization",
+  "heading": "One Big Table (OBT)"
+ },
+ "Fact tables": {
+  "ref": "articles:data-warehousing/fact-tables",
+  "heading": "Fact tables"
+ },
+ "Additive/semi-additive/non-additive measures": {
+  "ref": "articles:data-warehousing/fact-tables",
+  "heading": "Additive, semi-additive and non-additive measures"
+ },
+ "Transaction vs periodic snapshot vs accumulating snapshot": {
+  "ref": "articles:data-warehousing/fact-tables",
+  "heading": "Transaction, periodic snapshot and accumulating snapshot fact tables"
+ },
+ "Factless fact tables": {
+  "ref": "articles:data-warehousing/fact-tables",
+  "heading": "Factless fact tables"
+ },
+ "Slowly changing facts": {
+  "ref": "articles:data-warehousing/fact-tables",
+  "heading": "Slowly changing facts"
+ },
+ "Late arriving facts": {
+  "ref": "articles:data-warehousing/fact-tables",
+  "heading": "Late-arriving facts"
+ },
+ "Dimension tables": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Dimension tables"
+ },
+ "Surrogate keys": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Surrogate keys"
+ },
+ "Natural vs surrogate keys": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Natural keys versus surrogate keys"
+ },
+ "Conformed dimensions": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Conformed dimensions"
+ },
+ "Degenerate dimensions": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Degenerate dimensions"
+ },
+ "Junk dimensions": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Junk dimensions"
+ },
+ "Role-playing dimensions": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Role-playing dimensions"
+ },
+ "Late arriving dimensions": {
+  "ref": "articles:data-warehousing/dimension-tables",
+  "heading": "Late-arriving dimensions"
+ },
+ "Bridge tables": {
+  "ref": "articles:data-warehousing/bridge-tables-hierarchies",
+  "heading": "Bridge tables"
+ },
+ "Handling many-to-many": {
+  "ref": "articles:data-warehousing/bridge-tables-hierarchies",
+  "heading": "Handling many-to-many relationships"
+ },
+ "Hierarchies (fixed/ragged)": {
+  "ref": "articles:data-warehousing/bridge-tables-hierarchies",
+  "heading": "Fixed and ragged hierarchies"
+ },
+ "SCD Type 0": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 0: retain the original"
+ },
+ "SCD Type 1 (overwrite)": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 1: overwrite"
+ },
+ "SCD Type 2 (history)": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 2: add a new row for each version"
+ },
+ "SCD Type 3 (limited history)": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 3: add a previous-value column"
+ },
+ "SCD Type 4 (history table)": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 4: history table and mini-dimension"
+ },
+ "SCD Type 5": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 5: mini-dimension plus a Type 1 outrigger"
+ },
+ "SCD Type 6 (hybrid 1+2+3)": {
+  "ref": "articles:data-warehousing/slowly-changing-dimensions",
+  "heading": "SCD Type 6: hybrid of Types 1, 2 and 3"
+ },
+ "Kimball dimensional modeling": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Kimball dimensional modelling"
+ },
+ "Inmon (3NF/CIF)": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Inmon and the Corporate Information Factory"
+ },
+ "Data Vault 2.0 (Hubs/Links/Satellites)": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Data Vault 2.0: hubs, links and satellites"
+ },
+ "Anchor Modeling": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Anchor modelling"
+ },
+ "Medallion architecture (bronze/silver/gold)": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Medallion architecture: bronze, silver and gold"
+ },
+ "Activity Schema / event modeling": {
+  "ref": "articles:data-warehousing/modeling-methodologies",
+  "heading": "Activity Schema and event modelling"
+ },
+ "Data modeling for streaming": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Data modelling for streaming"
+ },
+ "Semantic layer / metrics layer": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Semantic layer and metrics layer"
+ },
+ "Modeling in dbt": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Modelling in dbt"
+ },
+ "Idempotent incremental models": {
+  "ref": "articles:data-warehousing/modern-modeling-practice",
+  "heading": "Idempotent incremental models"
+ }
+}
