@@ -128,6 +128,7 @@ def evaluate(req, identity=(), boundary=None, session=None, resource=None, scps=
 
 This trust policy lets the Glue service assume the job's role:
 
+{/* noexec */}
 ```json
 {
   "Version": "2012-10-17",
@@ -166,6 +167,7 @@ To attach a role to a Glue job, Lambda function or EMR cluster, the person or pi
 
 **How it works.** Identity-based policies come as AWS managed policies (written by AWS, broad), customer managed policies (yours, reusable and versioned) and inline policies (embedded in one identity). Prefer customer managed policies for pipelines. A typical job policy:
 
+{/* noexec */}
 ```json
 {
   "Version": "2012-10-17",
@@ -290,6 +292,7 @@ s3 = boto3.client(
 )
 ```
 
+{/* noexec */}
 ```bash
 aws sts get-caller-identity
 aws sts assume-role --role-arn arn:aws:iam::111122223333:role/lake-reader \
@@ -344,6 +347,7 @@ no identity policy  : DENY (cross-account: caller's identity policy does not all
 
 For a third party (a vendor ingesting into your bucket), the trust policy should require an **external ID**, which protects against the "confused deputy" problem, where the vendor is tricked into using your role on behalf of another customer:
 
+{/* noexec */}
 ```json
 {
   "Version": "2012-10-17",
@@ -389,6 +393,7 @@ For a third party (a vendor ingesting into your bucket), the trust policy should
 
 **How it works.** The main use is **safe delegation**. A platform team lets data engineers create roles for their own Glue jobs, but only if every new role carries the team boundary, so nobody can create a role more powerful than the boundary allows:
 
+{/* noexec */}
 ```json
 {
   "Version": "2012-10-17",

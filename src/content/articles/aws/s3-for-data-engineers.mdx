@@ -77,6 +77,7 @@ print(list_objects("raw/sales/", "/"))
 - Performance scales with prefixes. S3 documents a baseline of at least 3,500 PUT/COPY/POST/DELETE and 5,500 GET/HEAD requests per second per partitioned prefix, and scales further as load grows, so spreading heavy request traffic across prefixes raises the ceiling.
 - Objects can be very large. The maximum object size is now 50 TB (raised from 5 TB in December 2025), uploaded with multipart upload.
 
+{/* noexec */}
 ```bash
 aws s3 mb s3://example-lake-111122223333 --region eu-west-1
 aws s3 cp sales.parquet s3://example-lake-111122223333/raw/sales/dt=2026-10-01/part-0000.parquet
@@ -141,6 +142,7 @@ DEEP_ARCHIVE deleted after 200 days -> billed for 200 days
 
 **How it works.** Each rule has a filter (prefix, object tags or object size), a status, and actions. Days count from object creation (or from becoming noncurrent, for version rules). S3 runs lifecycle asynchronously, so an object can live a little past its rule date. This configuration archives raw sales data and keeps the bucket tidy:
 
+{/* noexec */}
 ```json
 {
   "Rules": [
@@ -165,6 +167,7 @@ DEEP_ARCHIVE deleted after 200 days -> billed for 200 days
 }
 ```
 
+{/* noexec */}
 ```bash
 aws s3api put-bucket-lifecycle-configuration \
   --bucket example-lake-111122223333 \
@@ -186,6 +189,7 @@ aws s3api put-bucket-lifecycle-configuration \
 
 **How it works.** A bucket is in one of three states: unversioned (the default), versioning-enabled or versioning-suspended. Once enabled, you can suspend versioning but never return to unversioned. A GET without a version ID returns the latest version, or a 404 if the latest is a delete marker. Restoring an object is just deleting the delete marker or copying an old version back.
 
+{/* noexec */}
 ```bash
 aws s3api put-bucket-versioning --bucket example-lake-111122223333 \
   --versioning-configuration Status=Enabled
@@ -281,6 +285,7 @@ for event in resp["Payload"]:
 
 **How it works.** A notification configuration lists destinations, the event types and optional prefix and suffix filters. Turning on EventBridge sends all bucket events to EventBridge, where rules can filter on any field and fan out to many targets, including SQS FIFO queues and Step Functions, which plain notifications cannot target.
 
+{/* noexec */}
 ```json
 {
   "QueueConfigurations": [
@@ -302,6 +307,7 @@ for event in resp["Payload"]:
 }
 ```
 
+{/* noexec */}
 ```bash
 aws s3api put-bucket-notification-configuration --bucket example-lake-111122223333 \
   --notification-configuration file://notification.json
@@ -330,6 +336,7 @@ aws s3api put-bucket-notification-configuration --bucket example-lake-1111222233
 
 **How it works.** Since 5 January 2023, S3 applies SSE-S3 to every new object in every bucket that has no other default, and you cannot turn encryption off for new uploads. Data platforms usually set **SSE-KMS with a customer managed key** as the bucket default, because reading then needs both S3 permissions *and* `kms:Decrypt` on the key, which gives a second, auditable control. Turn on **S3 Bucket Keys** with SSE-KMS: S3 uses a short-lived bucket-level key, which greatly reduces the number of KMS requests and their cost.
 
+{/* noexec */}
 ```json
 {
   "Rules": [
@@ -346,6 +353,7 @@ aws s3api put-bucket-notification-configuration --bucket example-lake-1111222233
 
 A bucket policy can also refuse unencrypted connections and wrong encryption headers. In the second statement, the `Null` condition makes the deny apply only when a client *sends* an encryption header with another value, so uploads without the header still get the bucket default:
 
+{/* noexec */}
 ```json
 {
   "Version": "2012-10-17",
@@ -391,12 +399,14 @@ A bucket policy can also refuse unencrypted connections and wrong encryption hea
 
 **How it works.** Each access point has an ARN and an alias that you can use wherever a bucket name is expected. Requests through it must be allowed by both the access point policy and the bucket policy, so the usual pattern is to delegate: the bucket policy allows any access through access points owned by your account, and each access point policy grants the detail.
 
+{/* noexec */}
 ```bash
 aws s3control create-access-point --account-id 111122223333 \
   --name finance-analysts --bucket example-lake-111122223333 \
   --vpc-configuration VpcId=vpc-0abc1234def567890
 ```
 
+{/* noexec */}
 ```json
 {
   "Version": "2012-10-17",
