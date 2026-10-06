@@ -14,6 +14,7 @@ reviewedDate: "2026-10-05"
 shortAnswer: "Repeatedly clear the lowest set bit with n &= n - 1 and count how many times you can do it before n reaches 0. Subtracting 1 flips the lowest 1 bit and every 0 below it, so the AND removes exactly that bit. The loop runs once per set bit, at most 32 times for a 32-bit value, so it is O(1) for fixed-width input and O(k) for k set bits in general."
 followUps: ["Why does n & (n - 1) remove exactly the lowest set bit?", "How would you count bits for every number from 0 to n in O(n)?", "How would you handle a negative number in Python, where integers have no fixed width?"]
 previous: "interview-questions:dsa/single-number"
+next: "interview-questions:dsa/reverse-bits"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
