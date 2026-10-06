@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Cloud Data Warehouse for a SaaS Product"
 seoTitle: "Design a Data Warehouse for a SaaS Product"
-description: "A system-design case study for a SaaS company's warehouse: ELT from product, billing and CRM, tenant-aware modelling, MRR metrics, workload isolation, access and cost."
+description: "A system-design case study for a SaaS warehouse: ELT from product, billing and CRM, tenant-aware modelling, MRR metrics, workload isolation and cost control."
 inventoryId: "SYS-05"
 technology: ["data-engineering", "snowflake", "data-warehousing"]
 topic: ["warehouse", "architecture", "saas-metrics"]
