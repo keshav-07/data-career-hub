@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Schema Registry and Data Contract System"
 seoTitle: "Design a Schema Registry and Data Contracts"
-description: "A system-design case study for schema governance: a schema registry, compatibility modes, data contracts with owners and SLAs, CI checks, enforcement and safe migrations."
+description: "A system-design case study for schema governance: a schema registry, compatibility modes, data contracts with owners and SLAs, CI checks and safe migrations."
 technology: ["data-engineering", "kafka", "etl-elt"]
 topic: ["governance", "schema-evolution", "data-contracts", "architecture"]
 tags: ["schema-registry", "data-contracts", "avro", "protobuf", "compatibility", "ci-checks"]
@@ -251,7 +251,7 @@ Assumptions: 3,500 datasets; average 15 versions each over a few years; schemas 
 
 - **Registry storage**: 3,500 × 15 × 5 KB ≈ 260 MB: trivial.
 - **Lookup load**: with caching, lookups happen only at client start-up and on new ids, so even thousands of clients generate a low request rate; without caching, every message would hit the registry, which is the classic misconfiguration.
-- **Message overhead**: a schema id adds about 5 bytes per message (a magic byte plus a 4-byte id in Confluent's wire format), far less than embedding field names as JSON does.
+- **Message overhead**: in Confluent's classic wire format a schema id adds 5 bytes per message (a magic byte plus a 4-byte id), far less than embedding field names as JSON does. Recent serialiser versions can also carry the schema id in a Kafka record header instead; check what your client libraries support.
 - **CI checks**: about 50 schema changes a week, each one or a few compatibility requests.
 
 ## What a strong answer includes
