@@ -1,0 +1,187 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Interleaving String: Can Two Strings Merge into a Third? 2D DP"
+seoTitle: "Interleaving String: 2D Boolean DP"
+description: "Decide whether a string is an order-preserving merge of two others with a 2D boolean DP over prefix lengths, memoised, bottom-up and one-row versions, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "First check that the lengths add up. Let ok(i, j) mean the first i characters of a and the first j of b can form the first i + j characters of c. Then ok(i, j) is true if ok(i - 1, j) and a[i - 1] == c[i + j - 1], or ok(i, j - 1) and b[j - 1] == c[i + j - 1], with ok(0, 0) true. Filling the table takes O(m * n) time; one row of length n + 1 is enough, giving O(n) space."
+followUps: ["Why does a greedy two-pointer merge fail?", "How would you reconstruct which characters came from which string?", "How does BFS over (i, j) states solve the same problem?"]
+previous: "interview-questions:dsa/target-sum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given three strings `a`, `b` and `c`, decide whether `c` can be formed by interleaving `a` and `b`: taking all
+characters of both, keeping the order within each string, and merging them in any way.
+
+This is widely known as LeetCode 97, "Interleaving String".
+
+Assume `a` and `b` have up to 100 characters each.
+
+## Examples
+
+```text
+a "ab", b "xy", c "axby"   -> True    (a, x, b, y)
+a "ab", b "xy", c "abyx"   -> False   (y before x breaks b's order)
+a "aab", b "ac", c "aacab" -> True    (a from a, then a and c from b, then a and b from a)
+a "", b "", c ""           -> True
+a "a", b "", c "b"         -> False
+```
+
+The third example is a good reason not to merge greedily: when both strings offer an `a`, the wrong choice leads to a
+dead end, and you cannot know which is right without exploring.
+
+## Approach 1: plain recursion
+
+```python
+def is_interleave_recursive(a, b, c):
+    if len(a) + len(b) != len(c):
+        return False
+
+    def go(i, j):
+        if i == len(a) and j == len(b):
+            return True
+        k = i + j
+        if i < len(a) and a[i] == c[k] and go(i + 1, j):
+            return True
+        if j < len(b) and b[j] == c[k] and go(i, j + 1):
+            return True
+        return False
+
+    return go(0, 0)
+```
+
+Branches twice whenever both strings match the next character, so it is exponential in the worst case (for example
+long runs of the same letter).
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `ok[i][j]` = whether `a[:i]` and `b[:j]` interleave to form `c[:i + j]`.
+- **Recurrence:** `ok[i][j] = (ok[i - 1][j] and a[i - 1] == c[i + j - 1]) or (ok[i][j - 1] and b[j - 1] == c[i + j - 1])`.
+- **Base cases:** `ok[0][0] = True`; the first row and column use only one of the two terms.
+- **Answer:** the bottom-right cell.
+
+### Filled table for a = "aab", b = "ac", c = "aacab"
+
+Rows are prefixes of a, columns prefixes of b (T = possible).
+
+| a \ b | "" | a | ac |
+|---|---|---|---|
+| "" | T | T | F |
+| a | T | T | T |
+| aa | T | F | T |
+| aab | F | F | T |
+
+`ok[3][2]` is true because `ok[2][2]` is true and the last character of `a` (`b`) matches the last character of
+`c`. `ok[3][1]` is false, so the final character could not have come from `b`.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def is_interleave_memo(a, b, c):
+    if len(a) + len(b) != len(c):
+        return False
+
+    @lru_cache(maxsize=None)
+    def go(i, j):
+        if i == len(a) and j == len(b):
+            return True
+        k = i + j
+        return (i < len(a) and a[i] == c[k] and go(i + 1, j)) or \
+               (j < len(b) and b[j] == c[k] and go(i, j + 1))
+
+    return go(0, 0)
+```
+
+### Bottom-up 2D
+
+```python
+def is_interleave_table(a, b, c):
+    rows, cols = len(a), len(b)
+    if rows + cols != len(c):
+        return False
+    ok = [[False] * (cols + 1) for _ in range(rows + 1)]
+    for i in range(rows + 1):
+        for j in range(cols + 1):
+            if i == 0 and j == 0:
+                ok[i][j] = True
+                continue
+            k = i + j - 1
+            from_a = i > 0 and ok[i - 1][j] and a[i - 1] == c[k]
+            from_b = j > 0 and ok[i][j - 1] and b[j - 1] == c[k]
+            ok[i][j] = from_a or from_b
+    return ok[rows][cols]
+```
+
+### Space optimised (one row)
+
+`row[j]` holds `ok[i - 1][j]` before it is overwritten, and `row[j - 1]` already holds `ok[i][j - 1]`.
+
+```python
+def is_interleave(a, b, c):
+    if len(a) + len(b) != len(c):
+        return False
+    row = [False] * (len(b) + 1)
+    for i in range(len(a) + 1):
+        for j in range(len(b) + 1):
+            if i == 0 and j == 0:
+                row[j] = True
+            else:
+                k = i + j - 1
+                from_a = i > 0 and row[j] and a[i - 1] == c[k]
+                from_b = j > 0 and row[j - 1] and b[j - 1] == c[k]
+                row[j] = from_a or from_b
+    return row[-1]
+```
+
+### Complexity
+
+O(m * n) time; O(m * n) space for 2D, O(n) for one row.
+
+## Tests
+
+```python
+for fn in (is_interleave, is_interleave_table, is_interleave_memo, is_interleave_recursive):
+    assert fn("ab", "xy", "axby")
+    assert not fn("ab", "xy", "abyx")            # order within b broken
+    assert fn("aab", "ac", "aacab")
+    assert fn("", "", "")                        # all empty
+    assert not fn("a", "", "b")
+    assert fn("", "abc", "abc")                  # one side empty
+    assert not fn("abc", "d", "abcde")           # length mismatch
+    assert fn("a", "b", "ba")                     # single characters, b first
+
+import random
+random.seed(22)
+for _ in range(150):
+    a = "".join(random.choice("ab") for _ in range(random.randint(0, 4)))
+    b = "".join(random.choice("ab") for _ in range(random.randint(0, 4)))
+    c = "".join(random.choice("ab") for _ in range(len(a) + len(b)))
+    assert is_interleave(a, b, c) == is_interleave_recursive(a, b, c) == is_interleave_table(a, b, c)
+```
+
+## Edge cases and pitfalls
+
+- **Length check first.** Without it the DP may report True for a `c` with extra characters.
+- **Greedy merging** (take from `a` whenever it matches) fails when both strings offer the same character.
+- **Index of c.** The next character of `c` is at `i + j - 1` in the bottom-up table (prefix lengths), or `i + j` in
+  the forward recursion (indices).
+- **First row and column** depend on one string only.
+
+## Where this shows up in data engineering
+
+Checking whether a merged event log is a valid interleaving of two per-source logs, with each source's order
+preserved, is exactly this problem. It is a useful mental model for verifying that a merge of two ordered Kafka
+partitions into one stream kept per-partition order.
