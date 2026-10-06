@@ -105,7 +105,7 @@ release_blockers:
   - P6-10 screen-reader smoke test and P6-13 cross-browser matrix need a human tester
   - P7: 136 of 138 items drafted or consolidated, 2 blocked (Visa, Akamai); all need human technical, editorial and SEO review (P7-11) before PUBLISHED
 notes:
-  - Repository: github.com/keshav-07/data-career-hub (branch main)
+  - Repository: github.com/keshav-07/datadank (branch main; renamed from data-career-hub on 2026-10-06)
   - Decisions and deviations are recorded in docs/DECISIONS.md (D-001..D-023)
   - Owner design rounds 1 and 2 implemented; see section 0.12 for full history
 ```
