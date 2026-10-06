@@ -62,5 +62,29 @@
   "Temp views & global views": {
     "ref": "articles:pyspark/aggregations-pivot-views",
     "heading": "Temporary views and global temporary views"
+  },
+  "Joins in Spark SQL": {
+    "ref": "articles:pyspark/joins-and-join-strategy",
+    "heading": "Joins in Spark SQL"
+  },
+  "Broadcast hash join": {
+    "ref": "articles:pyspark/joins-and-join-strategy",
+    "heading": "Broadcast hash join"
+  },
+  "Sort-merge join tuning": {
+    "ref": "articles:pyspark/joins-and-join-strategy",
+    "heading": "Sort-merge join and how to tune it"
+  },
+  "Join strategy selection": {
+    "ref": "articles:pyspark/joins-and-join-strategy",
+    "heading": "How Spark selects a join strategy"
+  },
+  "Bucketing in Spark": {
+    "ref": "articles:pyspark/joins-and-join-strategy",
+    "heading": "Bucketing in Spark"
+  },
+  "Bucketed joins": {
+    "ref": "articles:pyspark/joins-and-join-strategy",
+    "heading": "Bucketed joins"
   }
 }
