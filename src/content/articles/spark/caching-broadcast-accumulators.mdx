@@ -1,0 +1,523 @@
+---
+title: "Spark Caching, Checkpointing, Broadcast Variables and Accumulators"
+seoTitle: "Spark Caching, Checkpoints, Broadcasts, Accumulators"
+description: "When to cache or persist in Spark and at which storage level, how checkpointing cuts lineage, and how broadcast variables and accumulators share data safely."
+technology: ["spark", "pyspark"]
+topic: ["caching", "performance", "shared-variables"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Choose a storage level for cache and persist, and know the defaults for RDDs and DataFrames"
+  - "Decide when caching pays off and when recomputing is cheaper"
+  - "Use reliable and local checkpoints to cut long lineage, and know how they differ from caching"
+  - "Share read-only lookup data with broadcast variables and release it afterwards"
+  - "Use accumulators for counters without double-counting on retries"
+prerequisites: ["articles:spark/partitions-shuffles-skew"]
+related: ["articles:spark/rdd-fundamentals", "interview-questions:pyspark/broadcast-join", "articles:pyspark/joins-and-join-strategy"]
+previous: "articles:spark/partitions-shuffles-skew"
+sources:
+  - { label: "Apache Spark documentation: RDD programming guide (persistence, shared variables)", url: "https://spark.apache.org/docs/latest/rdd-programming-guide.html" }
+  - { label: "PySpark API reference: DataFrame.persist", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.persist.html" }
+  - { label: "PySpark API reference: StorageLevel", url: "https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.StorageLevel.html" }
+  - { label: "Apache Spark documentation: Tuning", url: "https://spark.apache.org/docs/latest/tuning.html" }
+  - { label: "Apache Spark documentation: Web UI (Storage tab)", url: "https://spark.apache.org/docs/latest/web-ui.html" }
+versionContext: "All examples run on PySpark 4.2.0 in local mode (local[2]). Cache sizes come from the Spark UI REST API during that run and vary by machine."
+---
+
+Spark recomputes a dataset from its source every time an action needs it, unless you tell it otherwise. This lesson covers the four tools that change how data is kept and shared: **caching** (keep a result to reuse), **checkpointing** (save a result and forget how it was made), **broadcast variables** (send read-only data to every executor once) and **accumulators** (send counts back to the driver). Each saves real time when used well and causes subtle bugs or memory pressure when used carelessly.
+
+## Sample data
+
+Two hundred thousand orders, a SparkSession and the same Spark UI helper as the earlier lessons.
+
+```python
+import json, tempfile, urllib.request
+from pyspark import StorageLevel
+from pyspark.accumulators import AccumulatorParam
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("caching-broadcast-accumulators")
+         .config("spark.sql.shuffle.partitions", "4")
+         .getOrCreate())
+sc = spark.sparkContext
+
+_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def api(path):
+    port = sc.uiWebUrl.rsplit(":", 1)[1]
+    url = f"http://localhost:{port}/api/v1/applications/{sc.applicationId}/{path}"
+    return json.load(_opener.open(url))
+
+orders = spark.range(0, 200_000, numPartitions=4).select(
+    F.col("id").alias("order_id"),
+    (F.col("id") % 1000).alias("customer_id"),
+    ((F.col("id") * 7) % 500).cast("double").alias("amount"))
+```
+
+## Persistence and storage levels
+
+### What it is
+
+`cache()` and `persist()` mark a dataset to be **kept after it is first computed**, so later actions read the stored partitions instead of replaying the lineage. Both are lazy: nothing is stored until an action computes the data. `cache()` is `persist()` with the default storage level; `persist(level)` lets you choose.
+
+```python
+print("before:", orders.storageLevel)
+orders.cache()
+print("after cache():", orders.storageLevel, "| is_cached:", orders.is_cached)
+print(orders.count())   # the action that actually fills the cache
+
+for r in api("storage/rdd"):
+    print(r["storageLevel"], "| cached partitions:", r["numCachedPartitions"], "of", r["numPartitions"],
+          "| memory bytes:", r["memoryUsed"], "| disk bytes:", r["diskUsed"])
+```
+
+```text
+before: Serialized 1x Replicated
+after cache(): Disk Memory Deserialized 1x Replicated | is_cached: True
+200000
+Disk Memory Deserialized 1x Replicated | cached partitions: 4 of 4 | memory bytes: 2011336 | disk bytes: 0
+```
+
+The "before" value is `StorageLevel.NONE` (not stored). After the count, all four partitions sit in memory, about 2 MB, which is what the **Storage tab** of the Spark UI shows.
+
+### The storage levels
+
+| Level | Where | Format | Notes |
+|-------|-------|--------|-------|
+| `MEMORY_ONLY` | Memory | Deserialized objects (JVM) | Partitions that do not fit are recomputed when needed. RDD default in Scala and Java |
+| `MEMORY_AND_DISK` | Memory, spilling to disk | Deserialized in memory | Partitions that do not fit are written to local disk |
+| `MEMORY_AND_DISK_DESER` | Memory, spilling to disk | Deserialized | The **DataFrame default** for `cache()` and `persist()` |
+| `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER` | As above | Serialized bytes | Smaller, more CPU to read (Scala and Java API) |
+| `DISK_ONLY`, `DISK_ONLY_2`, `DISK_ONLY_3` | Local disk | Serialized | Survives memory pressure; still lost with the executor |
+| `*_2` variants | Two executors | Same as base | Replicated, so losing one executor does not force recomputation |
+| `OFF_HEAP` | Off-heap memory | Serialized | Needs `spark.memory.offHeap.enabled` and a size |
+
+Two PySpark details:
+
+- **Python RDDs are always stored serialized** (pickled), so the serialized and deserialized variants behave the same, and `rdd.cache()` gives `MEMORY_ONLY` shown as "Memory Serialized".
+- **DataFrames are cached in Spark's compressed columnar in-memory format**, not as Python objects, so the "deserialized" label refers to that columnar format and caching a DataFrame is far more compact than caching an RDD of rows.
+
+```python
+orders.unpersist()
+
+rdd = sc.parallelize(range(10)).cache()
+print("RDD cache():", rdd.getStorageLevel())
+
+on_disk = orders.persist(StorageLevel.DISK_ONLY)
+on_disk.count()
+for r in api("storage/rdd"):
+    print(r["storageLevel"], "| memory bytes:", r["memoryUsed"], "| disk bytes:", r["diskUsed"])
+on_disk.unpersist()
+```
+
+```text
+RDD cache(): Memory Serialized 1x Replicated
+Disk Serialized 1x Replicated | memory bytes: 0 | disk bytes: 147275
+```
+
+The same 200,000 rows took about 2 MB in memory and about 147 KB on disk because the disk copy is serialized and compressed.
+
+### Caching from SQL
+
+`CACHE TABLE name` caches a table or view (eagerly by default; `CACHE LAZY TABLE` waits for first use), `UNCACHE TABLE` releases it, and `spark.catalog.clearCache()` drops everything.
+
+```python
+spark.sql("CACHE TABLE small_lookup AS SELECT 1 AS id, 'uk' AS country")
+print(spark.catalog.isCached("small_lookup"))
+spark.sql("UNCACHE TABLE small_lookup")
+```
+
+```text
+True
+```
+
+### Pitfalls
+
+- **Caching without an action.** `df.cache()` alone stores nothing. The first action fills it, and if that action is `take(1)` or `show()`, only the partitions needed for it are cached.
+- **Caching a different object.** `df.cache(); df2 = df.filter(...)` reuses the cache for `df2`, but `df.filter(...).cache()` on a new chain each time creates new cache entries that are never reused.
+- **Assuming the cache is permanent.** Cached blocks are evicted (least recently used first) under memory pressure and lost with their executor; Spark recomputes them from lineage.
+- **Forgetting to unpersist.** Cached data occupies storage memory until you call `unpersist()` or the application ends.
+
+### In interviews
+
+"What is the difference between cache and persist, and what are the defaults?" `cache()` is `persist()` with the default level: `MEMORY_AND_DISK_DESER` for DataFrames in current versions, `MEMORY_ONLY` for RDDs. Both are lazy. Mention the `_2` replicated levels and that the Storage tab shows how much actually got cached.
+
+## Caching strategy
+
+### When caching pays off
+
+Cache a dataset when **all** of these hold:
+
+1. It is **reused**: two or more actions, or several branches of a job, read it.
+2. It is **expensive to recompute**: it comes after a shuffle, a costly join, a slow source (a JDBC read, an API, wide JSON parsing) or heavy Python UDFs.
+3. It is **reasonably small** compared with storage memory, or you accept disk.
+
+Typical cases: iterative algorithms (machine learning loops, graph algorithms), interactive exploration of one prepared dataset, and pipelines that write the same intermediate result to several outputs.
+
+### What Spark does with a cached DataFrame
+
+Spark replaces the cached part of any later plan with an `InMemoryTableScan`, and pushes simple filters into it, so later queries skip the work underneath:
+
+```python
+totals = orders.groupBy("customer_id").agg(F.sum("amount").alias("total")).cache()
+totals.count()
+totals.filter("total > 50000").explain()
+```
+
+```text
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- Filter (isnotnull(total#240) AND (total#240 > 50000.0))
+   +- InMemoryTableScan [customer_id#2L, total#240], [isnotnull(total#240), (total#240 > 50000.0)]
+         +- InMemoryRelation [customer_id#2L, total#240], StorageLevel(disk, memory, deserialized, 1 replicas)
+               +- AdaptiveSparkPlan isFinalPlan=true
+                  (trimmed: the aggregation plan that filled the cache)
+```
+
+The aggregation and its shuffle no longer run; the filter reads the cached columns. Matching is by plan, so a query that builds the same DataFrame again from scratch also hits the cache.
+
+### A caching routine
+
+- Cache **after** filters and column pruning, never the raw input "just in case".
+- Trigger it deliberately with `count()` (or a write) right after `cache()`, so the cache is complete.
+- Check the **Storage tab**: "Fraction Cached" below 100% means partitions did not fit and will be recomputed or read from disk.
+- `unpersist()` as soon as the reuse is over, especially in long notebooks and loops.
+- When the reused result is large, consider **writing it to Parquet or a table** instead: it survives executor loss and the application ending, and it can be read by other jobs.
+
+### In interviews
+
+"When would you cache?" Give the three conditions (reused, expensive, fits) and a concrete example. Add that you verify it in the Storage tab and unpersist afterwards. A strong candidate also mentions when *not* to cache.
+
+## Caching versus recomputing
+
+### The trade-off
+
+Caching is not free. It costs:
+
+- **Memory taken from execution.** Storage and execution share one unified memory region (see the [memory lesson](/spark/memory-executors-tuning/)). Cached blocks can push joins and aggregations into spilling.
+- **The cost of writing the cache.** Converting to the columnar cache format (or serializing to disk) on the first pass takes time; if the data is used once, that is pure overhead.
+- **Lost optimisations.** A cached DataFrame is a fixed result. Later queries cannot push filters or column pruning into the *source* below the cache; a query that needs one column of a wide cached table still reads it from the cache rather than from a columnar file with pruning.
+- **Garbage collection pressure** with large deserialized caches.
+
+Recomputing costs the lineage again. The deciding question is simply which is cheaper: one more pass through the lineage, or holding the data.
+
+### Seeing the difference
+
+An accumulator counts how often a parsing function runs. Two actions without a cache run it twice per record; with a cache, once:
+
+```python
+calls = sc.accumulator(0)
+
+def parse(x):
+    calls.add(1)
+    return x * 2
+
+no_cache = sc.parallelize(range(1000), 4).map(parse)
+no_cache.count()
+no_cache.sum()
+print("parse calls without cache:", calls.value)
+
+calls.value = 0
+with_cache = sc.parallelize(range(1000), 4).map(parse).cache()
+with_cache.count()
+with_cache.sum()
+print("parse calls with cache:   ", calls.value)
+with_cache.unpersist()
+```
+
+```text
+parse calls without cache: 2000
+parse calls with cache:    1000
+```
+
+### Rules of thumb
+
+| Situation | Cache? |
+|-----------|--------|
+| Used once | No |
+| Cheap to recompute (a filter over a Parquet scan) | Usually no; the scan with pushdown is fast |
+| Reused after a shuffle or expensive join | Yes |
+| Reused in an iterative loop | Yes, and unpersist the previous iteration's cache |
+| Larger than cluster memory | `MEMORY_AND_DISK`, or write to storage instead |
+| Needed by another job or after the application ends | Write to a table, not cache |
+
+### In interviews
+
+"Can caching make a job slower?" Yes: when data is used once, when it evicts execution memory and causes spills, when it is cheap to recompute from a pruned columnar source, or when GC pressure rises. Explain that you measure both ways rather than caching by habit.
+
+## Checkpointing
+
+### What it is
+
+**Checkpointing** saves a dataset's partitions and then **truncates its lineage**: from then on, Spark treats the saved copy as the source. There are two kinds:
+
+- **Reliable checkpoint** (`rdd.checkpoint()`, `df.checkpoint()`): written to a fault-tolerant directory set with `sc.setCheckpointDir()` (HDFS or object storage on a cluster). Survives executor loss.
+- **Local checkpoint** (`localCheckpoint()`): stored in executor storage. Faster, but if an executor dies the data is gone and cannot be recomputed, because the lineage was cut.
+
+### Why you need it
+
+- **Very long lineage**, typical of iterative algorithms that loop hundreds of times: plans and lineage graphs grow until planning slows down or the driver hits a stack overflow.
+- **Expensive recovery**: when losing a partition would mean replaying a long chain of shuffles.
+- **Structured Streaming**: a different but related feature; stateful streaming queries store offsets and state in a checkpoint location so they can restart exactly where they stopped.
+
+### RDD checkpoint
+
+For RDDs, `checkpoint()` is lazy and the data is computed twice (once for the action, once to write the checkpoint) unless you cache it first.
+
+```python
+sc.setCheckpointDir(tempfile.mkdtemp())
+
+x = sc.parallelize(range(100), 2)
+for _ in range(3):
+    x = x.map(lambda v: v + 1)
+
+x.checkpoint()
+print("checkpointed before action:", x.isCheckpointed())
+x.count()
+print("checkpointed after action: ", x.isCheckpointed())
+print(x.toDebugString().decode())
+```
+
+```text
+checkpointed before action: False
+checkpointed after action:  True
+(2) PythonRDD[...] at RDD at PythonRDD.scala:59 []
+ |  ReliableCheckpointRDD[...] at count at <block 8>:8 []
+```
+
+(RDD ids trimmed.) The three `map` steps have disappeared from the lineage; the RDD now starts from the `ReliableCheckpointRDD`.
+
+### DataFrame checkpoint
+
+`df.checkpoint()` is **eager by default**: it runs a job immediately and returns a new DataFrame whose plan is just a scan of the saved data.
+
+```python
+checkpointed = totals.checkpoint()
+checkpointed.explain()
+
+local_cp = totals.localCheckpoint()
+local_cp.explain()
+```
+
+```text
+== Physical Plan ==
+*(1) Scan ExistingRDD[customer_id#2L,total#240]
+
+
+== Physical Plan ==
+*(1) Scan ExistingRDD[customer_id#2L,total#240]
+```
+
+The plans look the same; the difference is where the data lives and whether it survives executor loss.
+
+### Checkpoint versus cache
+
+| | Cache / persist | Checkpoint |
+|---|---|---|
+| Lineage | Kept, so lost blocks are recomputed | Cut |
+| Storage | Executor memory or local disk | Reliable directory (or executor storage for local) |
+| Survives executor loss | Recomputed from lineage | Reliable: yes. Local: no |
+| Cost | Cheap to write | Writes to storage (plus a recompute for lazy RDD checkpoints) |
+| Cleaned up | `unpersist()` or end of application | Files stay unless `spark.cleaner.referenceTracking.cleanCheckpoints` is enabled; clean the directory yourself |
+
+### In interviews
+
+"Cache or checkpoint?" Cache to speed up reuse; checkpoint to cut lineage for long iterative jobs or to make a costly intermediate result recovery-safe. Mention that RDD checkpoints should be cached first to avoid computing twice, and that local checkpoints trade safety for speed.
+
+## Broadcast variables
+
+### What it is
+
+A **broadcast variable** ships a read-only value (a lookup dictionary, a small model, a set of allowed ids) to **each executor once**, instead of inside every task's closure. Spark uses a BitTorrent-like protocol: executors fetch pieces from the driver and from each other, so the driver is not a bottleneck. Tasks read it through `.value`.
+
+```python
+rates = {"GBP": 1.0, "USD": 0.79, "EUR": 0.85}
+b_rates = sc.broadcast(rates)
+
+payments = sc.parallelize([(1, 100.0, "USD"), (2, 50.0, "EUR"), (3, 20.0, "GBP"), (4, 10.0, "JPY")], 2)
+in_gbp = payments.map(lambda p: (p[0], round(p[1] * b_rates.value.get(p[2], 0.0), 2)))
+print(in_gbp.collect())
+```
+
+```text
+[(1, 79.0), (2, 42.5), (3, 20.0), (4, 0.0)]
+```
+
+Without `broadcast`, the dictionary would be serialized into the closure of every task. With 10,000 tasks and a 50 MB lookup, that is half a terabyte of serialization; broadcast sends it once per executor.
+
+### Broadcast variables and broadcast joins
+
+They are related but not the same:
+
+- A **broadcast variable** is a value you use in your own code (RDD functions, UDFs).
+- A **broadcast hash join** is a join strategy the optimiser chooses (or you hint with `F.broadcast(df)`) when one side is below `spark.sql.autoBroadcastJoinThreshold` (10 MB by default). Spark collects the small table to the driver, broadcasts it, and builds a hash table on each executor. See [Joins and join strategy](/pyspark/joins-and-join-strategy/) and the [broadcast join question](/interview/pyspark/broadcast-join/).
+
+For DataFrames, prefer a broadcast join over a broadcast variable used inside a Python UDF: it stays in the JVM and keeps the optimiser involved.
+
+### Releasing a broadcast
+
+- `unpersist()` removes the copies from executors; if a later task uses the variable, it is re-sent.
+- `destroy()` removes it everywhere, including the driver. Using it afterwards fails:
+
+```python
+b_rates.destroy()
+try:
+    payments.map(lambda p: b_rates.value["GBP"]).first()
+except Exception as e:
+    print([line.strip() for line in str(e).splitlines() if "destroyed" in line][0][-120:])
+```
+
+```text
+OUTPUT_DESTROY
+```
+
+### Pitfalls
+
+- **Broadcasting something large.** The value must fit in the driver's memory and in every executor's memory. Hundreds of megabytes can cause out-of-memory errors; gigabytes usually will.
+- **Mutating the value.** Changes made on an executor are local to it; changes on the driver after broadcasting are not sent. Create a new broadcast instead.
+- **Broadcasting in a loop without destroying old ones.** Each iteration leaks executor memory until garbage collection cleans unreferenced broadcasts.
+- **Broadcasting a DataFrame object.** You broadcast data (for example `dict(df.collect())`), never a DataFrame or SparkSession.
+
+### In interviews
+
+"Why use a broadcast variable instead of a normal variable?" Because a closure is serialized with every task, a broadcast is sent once per executor and cached there, reducing network and serialization cost. Distinguish it from the broadcast hash join, and state the size limits.
+
+## Accumulators
+
+### What they are
+
+An **accumulator** is a variable that tasks can only **add to** and only the driver can **read**. It is the safe way to count things across a distributed job: bad records, rows skipped, API calls made. Built-in accumulators handle numbers; you can define others with `AccumulatorParam`.
+
+Tasks cannot read the value; they can only add:
+
+```python
+bad = sc.accumulator(0)
+try:
+    payments.map(lambda p: bad.value).collect()
+except Exception as e:
+    print([line for line in str(e).splitlines() if "VALUE_NOT_ACCESSIBLE" in line][0].split(": ", 1)[1])
+```
+
+```text
+[VALUE_NOT_ACCESSIBLE] Value `Accumulator.value` cannot be accessed inside tasks.
+```
+
+### The double-counting trap
+
+Spark guarantees that each task's update is applied **exactly once only for updates made inside actions** (`foreach`, `foreachPartition`). Updates made inside **transformations** are applied every time the transformation runs: once per action that recomputes it, again when a task is retried or speculatively duplicated, and again when a lost partition is recomputed.
+
+```python
+rates_b = sc.broadcast(rates)
+unknown_ccy = sc.accumulator(0)
+
+def check(p):
+    if p[2] not in rates_b.value:
+        unknown_ccy.add(1)
+    return p
+
+checked = payments.map(check)
+checked.count()
+print("after one action:", unknown_ccy.value)
+checked.count()
+print("after two actions:", unknown_ccy.value)
+
+safe = sc.accumulator(0)
+payments.foreach(lambda p: safe.add(1) if p[2] not in rates_b.value else None)
+print("counted in foreach:", safe.value)
+```
+
+```text
+after one action: 1
+after two actions: 2
+counted in foreach: 1
+```
+
+There is one unknown currency, but the transformation-based counter says two after a second action.
+
+### Custom accumulators
+
+An `AccumulatorParam` defines the zero value and how to merge. This one collects the distinct unknown currency codes:
+
+```python
+class SetParam(AccumulatorParam):
+    def zero(self, value):
+        return set()
+    def addInPlace(self, a, b):
+        a |= b
+        return a
+
+unknown_codes = sc.accumulator(set(), SetParam())
+payments.foreach(lambda p: unknown_codes.add({p[2]}) if p[2] not in rates_b.value else None)
+print(unknown_codes.value)
+```
+
+```text
+{'JPY'}
+```
+
+Keep the merged value small: every task's partial value is sent to the driver.
+
+### Pitfalls
+
+- **Using accumulators for business results.** They are for metrics and diagnostics. A total that drives a decision should come from an aggregation, which is exact.
+- **Reading the value before an action.** Transformations are lazy, so the accumulator is still zero until an action runs.
+- **Counting inside a cached transformation** and expecting the count to change on later actions: cached partitions are not recomputed, so they add nothing.
+- **Order-dependent merges.** The merge function must be commutative and associative.
+
+### In interviews
+
+"What are accumulators and what is the catch?" Write-only from tasks, read-only on the driver, guaranteed exactly-once only inside actions; in transformations they can over-count due to recomputation, retries and speculative execution. Suggest using them for monitoring, and DataFrame aggregations (`count`, `sum` with `when`) for anything that must be exact.
+
+## Practice questions
+
+<details>
+<summary>You call df.cache() and then df.show(). Later queries on df are still slow. Why?</summary>
+
+`cache()` is lazy, and `show()` only computes enough partitions to display 20 rows, so most partitions were never cached. Run a full action such as `count()` after `cache()`, then check the Storage tab for "Fraction Cached" at 100%. Also confirm the later queries use the same DataFrame (or an identical plan); a new chain built differently will not match the cache.
+
+</details>
+
+<details>
+<summary>What are the default storage levels of cache() for RDDs and DataFrames?</summary>
+
+RDD `cache()` uses `MEMORY_ONLY` (in PySpark the data is pickled, so it shows as serialized). DataFrame `cache()` and `persist()` use `MEMORY_AND_DISK_DESER` in current versions: compressed columnar blocks in memory, spilling to local disk when memory is short.
+
+</details>
+
+<details>
+<summary>An iterative job with 300 loop iterations slows down every iteration and finally fails with a StackOverflowError on the driver. What is happening and how do you fix it?</summary>
+
+Each iteration extends the lineage and the logical plan, so planning and task serialization grow until the driver's recursive plan handling overflows the stack. Checkpoint every N iterations (`df.checkpoint()` or `localCheckpoint()`, or cache plus RDD `checkpoint()`), which truncates the lineage so each iteration starts from a short plan. Unpersist the previous iteration's cache as you go.
+
+</details>
+
+<details>
+<summary>When is a local checkpoint a bad idea?</summary>
+
+When losing an executor is likely and recomputation must be possible: the local checkpoint is stored only in executor storage and the lineage is cut, so a lost executor means lost data and a failed job. It is fine for short-lived iterative work on a stable cluster; use a reliable checkpoint for long jobs or with dynamic allocation removing executors.
+
+</details>
+
+<details>
+<summary>Why might an accumulator report 2,000 bad records when there are only 1,000?</summary>
+
+The accumulator is updated inside a transformation that ran twice: a second action recomputed the uncached lineage, or tasks were retried or speculatively duplicated. Spark only guarantees exactly-once updates for accumulators used inside actions such as `foreach`. Move the counting into an action, cache the dataset, or compute the count with an aggregation.
+
+</details>
+
+<details>
+<summary>What is the difference between a broadcast variable and a broadcast join?</summary>
+
+A broadcast variable is a read-only value you create with `sc.broadcast()` and read in your own functions; it is sent once per executor instead of with every task. A broadcast join is a physical join strategy in which Spark sends the small table to every executor and builds a hash table there, avoiding a shuffle of the large table; it is chosen automatically below `spark.sql.autoBroadcastJoinThreshold` or requested with a hint.
+
+</details>
+
+## Key takeaways
+
+- `cache()` and `persist()` are lazy; fill the cache with a full action and verify it in the Storage tab.
+- DataFrames default to `MEMORY_AND_DISK_DESER` in a compressed columnar format; RDDs default to `MEMORY_ONLY`.
+- Cache only what is reused and expensive to recompute, and unpersist when done; caching takes memory from execution.
+- Checkpointing cuts lineage: use reliable checkpoints for long iterative jobs, and local checkpoints only when losing data is acceptable.
+- Broadcast variables send read-only data once per executor; keep them small and destroy them when finished.
+- Accumulators are write-only for tasks and exactly-once only inside actions; use aggregations for numbers that must be exact.
