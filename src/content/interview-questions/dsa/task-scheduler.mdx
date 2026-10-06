@@ -1,0 +1,161 @@
+---
+title: "Task Scheduler: Cooldowns with a Max-Heap or a Counting Formula"
+seoTitle: "Task Scheduler with Cooldowns in Python"
+description: "Find the fewest time slots to run tasks when equal tasks need a cooldown gap: a max-heap plus cooldown queue simulation and the counting formula, with tests."
+technology: ["dsa"]
+topic: ["heaps-priority-queues"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "Greedily run the task type with the most remaining copies that is not cooling down. Simulate with a max-heap of remaining counts and a queue of (count, time it becomes available) for tasks in cooldown; idle when the heap is empty. Or use the closed form: with the highest frequency f and m task types sharing it, the answer is max(total tasks, (f - 1) * (n + 1) + m). The formula is O(T) time to count and O(1) extra space for a fixed alphabet."
+followUps: ["Why is running the most frequent task first optimal?", "How would you output an actual schedule, not just its length?", "What changes if tasks must run in the given order?", "How does this relate to rate limiting per key?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+sources:
+  - { label: "Python documentation: heapq - Heap queue algorithm", url: "https://docs.python.org/3/library/heapq.html" }
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/kth-largest-element-in-an-array"
+---
+
+## Problem
+
+You have a list of tasks, each labelled with an uppercase letter; equal letters are copies of the same kind of task. A single processor runs one task per time slot, or stays idle. Two copies of the same task must be separated by at least `n` slots in which that task does not run. You may run tasks in any order. Return the minimum number of slots needed to finish all tasks.
+
+This is widely known as LeetCode 621 (Task Scheduler). It can be solved by simulation with a heap or by a counting argument; knowing both is ideal.
+
+Constraints for this version: 1 to 10,000 tasks, letters `A` to `Z`, `0 <= n <= 100`.
+
+## Examples
+
+| Tasks | `n` | Result | One optimal schedule |
+|---|---|---|---|
+| `A A A B B C` | `2` | `7` | `A B C A B _ A` |
+| `A A A B B C` | `0` | `6` | no gaps needed |
+| `A A A A B C` | `2` | `10` | `A B C A _ _ A _ _ A` |
+| `A B C D E F` | `3` | `6` | all different, no idling |
+
+(`_` is an idle slot.)
+
+## Approach 1: brute force
+
+A natural simulation: at each time slot, scan all task types, and among those that are allowed to run (their last run was more than `n` slots ago), run the one with the most remaining copies. If none is allowed, idle.
+
+```python
+from collections import Counter
+
+def least_interval_scan(tasks, n):
+    remaining = Counter(tasks)
+    last_run = {}
+    time = 0
+    while remaining:
+        time += 1
+        ready = [t for t in remaining if time - last_run.get(t, -10**9) > n]
+        if not ready:
+            continue                                   # idle slot
+        best = max(ready, key=lambda t: remaining[t])
+        remaining[best] -= 1
+        last_run[best] = time
+        if remaining[best] == 0:
+            del remaining[best]
+    return time
+```
+
+This scans up to 26 types per slot, so it is O(T * 26) here, but for a general alphabet of size `A` it is O(slots * A).
+
+## Approach 2: optimal
+
+### Max-heap with a cooldown queue
+
+**Key insight.** Always running the available task with the most copies left is optimal: the most frequent task is the one most likely to force idle time later, so it should start its cooldowns as early as possible. A max-heap gives that task in O(log A). Tasks that have just run wait in a FIFO queue with the time they become available again; since every task waits exactly `n` slots, the queue stays ordered by availability.
+
+**Walkthrough** for `A A A B B C`, `n = 2` (heap shows remaining counts):
+
+| Time | Heap before | Run | Cooldown queue after |
+|---|---|---|---|
+| 1 | A3 B2 C1 | A | A2 until 4 |
+| 2 | B2 C1 | B | A2@4, B1@5 |
+| 3 | C1 | C | A2@4, B1@5 |
+| 4 | A2 (released) | A | B1@5, A1@7 |
+| 5 | B1 (released) | B | A1@7 |
+| 6 | empty | idle | A1@7 |
+| 7 | A1 (released) | A | done |
+
+```python
+import heapq
+from collections import Counter, deque
+
+def least_interval(tasks, n):
+    heap = [-count for count in Counter(tasks).values()]
+    heapq.heapify(heap)
+    cooldown = deque()                    # (negative remaining count, time it is available)
+    time = 0
+    while heap or cooldown:
+        time += 1
+        if cooldown and cooldown[0][1] == time:
+            heapq.heappush(heap, cooldown.popleft()[0])
+        if heap:
+            count = heapq.heappop(heap) + 1          # one copy runs (counts are negative)
+            if count:
+                cooldown.append((count, time + n + 1))
+    return time
+```
+
+When the heap is empty but tasks are cooling down, the loop still advances time by one slot per iteration, which counts the idle slots. (If `n` is huge, you can jump `time` straight to `cooldown[0][1] - 1` to skip idle stretches.)
+
+### Counting formula
+
+**Key insight.** Let `f` be the highest frequency, and `m` the number of task types that occur `f` times. Lay out the most frequent task with gaps: `f - 1` full "frames" of length `n + 1`, followed by one final frame containing just the `m` most frequent tasks. All other tasks fit into the gaps. If there are more tasks than gap slots, no idling is needed at all, and the answer is simply the number of tasks.
+
+```python
+def least_interval_formula(tasks, n):
+    counts = Counter(tasks)
+    f = max(counts.values())
+    m = sum(1 for c in counts.values() if c == f)
+    return max(len(tasks), (f - 1) * (n + 1) + m)
+```
+
+For `A A A A B C`, `n = 2`: `f = 4`, `m = 1`, so `(4 - 1) * 3 + 1 = 10`, larger than 6 tasks.
+
+**Complexity.** The heap simulation runs in O(S log A) for `S` total slots and `A` task types. The formula is O(T) to count, O(A) to scan the counts, and O(A) space.
+
+## Tests
+
+```python
+import random
+
+cases = [
+    ("AAABBC", 2, 7),
+    ("AAABBC", 0, 6),
+    ("AAAABC", 2, 10),
+    ("ABCDEF", 3, 6),
+    ("A", 5, 1),
+    ("AA", 5, 7),
+    ("AAABBB", 2, 8),                 # two types share the top frequency
+    ("AAABBBCCCDD", 2, 11),           # enough variety: no idling
+]
+fns = (least_interval_scan, least_interval, least_interval_formula)
+for fn in fns:
+    for tasks, n, want in cases:
+        assert fn(list(tasks), n) == want, (fn.__name__, tasks, n)
+
+rng = random.Random(25)
+for _ in range(400):
+    tasks = [rng.choice("ABCDE") for _ in range(rng.randint(1, 25))]
+    n = rng.randint(0, 6)
+    results = {fn(tasks, n) for fn in fns}
+    assert len(results) == 1, (tasks, n, results)
+print("all task scheduler tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **`n = 0`** means no cooldown: the answer is the number of tasks.
+- **Several types tied for the top frequency** add to the final frame (`m`), which is the most commonly missed term in the formula.
+- **Forgetting the `max(len(tasks), ...)`.** With many distinct tasks the frame formula undercounts; you can never finish in fewer slots than there are tasks.
+- **Cooldown off by one.** A task run at time `t` may run again at `t + n + 1`, not `t + n`.
+
+## Where this shows up in data engineering
+
+Cooldowns per key are rate limits: an API that allows one call per customer every few seconds, or a warehouse that throttles repeated refreshes of the same table. Schedulers that respect per-key limits use the same structure, a priority queue of ready work plus a queue of work waiting for its window, to keep the processor busy with other keys instead of idling.
