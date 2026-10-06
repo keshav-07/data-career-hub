@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Video Streaming Analytics Pipeline"
-description: "A system-design case study for video analytics: player heartbeats, playback sessions, quality-of-experience metrics, live concurrency, CDN logs and content reporting."
+description: "A system-design case study for video analytics: player heartbeats, playback sessions, quality-of-experience metrics, live concurrency, CDN logs and royalties."
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["analytics", "streaming", "architecture"]
 tags: ["video-analytics", "heartbeats", "sessionisation", "quality-of-experience", "concurrency", "cdn-logs"]
@@ -69,6 +69,7 @@ sources:
   - { label: "PySpark API: session_window", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.session_window.html" }
   - { label: "PostgreSQL 16: SELECT (DISTINCT ON)", url: "https://www.postgresql.org/docs/16/sql-select.html" }
 previous: "system-designs:social-media-feed-analytics-system"
+next: "system-designs:e-commerce-inventory-sync-system"
 ---
 
 ## Approach
