@@ -378,5 +378,45 @@
  "Well-Architected for data": {
   "ref": "articles:aws/aws-data-services-landscape",
   "heading": "Well-Architected for data"
+ },
+ "S3 Tables / Iceberg on AWS": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "S3 Tables and Iceberg on AWS"
+ },
+ "Glue Data Quality": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "Glue Data Quality"
+ },
+ "Glue DataBrew": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "Glue DataBrew"
+ },
+ "AWS AppFlow": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "AWS AppFlow"
+ },
+ "AWS Batch": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "AWS Batch"
+ },
+ "Amazon OpenSearch": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "Amazon OpenSearch"
+ },
+ "QuickSight for DE": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "QuickSight for data engineers"
+ },
+ "Secrets Manager": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "Secrets Manager"
+ },
+ "Infrastructure as Code (CDK/CFN)": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "Infrastructure as code: CloudFormation and CDK"
+ },
+ "Cost allocation tags": {
+  "ref": "articles:aws/modern-aws-data-services",
+  "heading": "Cost allocation tags"
  }
 }

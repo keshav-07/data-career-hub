@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:aws/iam-for-data-engineers"]
 related: ["articles:etl-elt/cdc-patterns-and-failure-modes", "system-designs:change-data-capture-platform", "articles:kafka/kafka-vs-message-queues", "interview-questions:data-engineering/design-cdc-pipeline"]
 previous: "articles:aws/lake-formation"
+next: "articles:aws/modern-aws-data-services"
 versionContext: "Service facts checked against the AWS documentation in October 2026, including the SQS and SNS 1 MiB payload limits. The subnet calculation and SQS redrive model run on Python 3.11, and the CDC merge runs on PostgreSQL 16 (a stand-in for applying DMS change files in a warehouse or lake table). CLI commands and JSON configurations were written from the AWS documentation and not executed; JSON documents were checked to parse."
 sources:
   - { label: "Amazon SQS Developer Guide: Message quotas", url: "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/quotas-messages.html" }
