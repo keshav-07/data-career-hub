@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design an E-Commerce Inventory Sync System"
-description: "A system-design case study for multi-channel inventory: CDC from warehouse systems, available-to-promise, reservations, channel sync, oversell prevention and drift checks."
+description: "A system-design case study for multi-channel inventory: CDC from warehouses, available-to-promise, reservations, channel sync and oversell prevention."
 technology: ["data-engineering", "kafka", "sql"]
 topic: ["cdc", "ingestion", "architecture"]
 tags: ["inventory", "cdc", "available-to-promise", "oversell", "reconciliation", "rate-limits"]
