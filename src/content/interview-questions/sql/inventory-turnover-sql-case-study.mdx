@@ -23,6 +23,7 @@ followUps:
 prerequisites: ["articles:sql/aggregations-group-by-having", "articles:sql/joins"]
 related: ["interview-questions:sql/monthly-revenue-sql-case-study", "articles:sql/joins", "articles:sql/aggregations-group-by-having", "articles:sql/window-functions", "articles:sql/query-optimization-fundamentals"]
 previous: "interview-questions:sql/top-selling-products-sql-case-study"
+next: "interview-questions:sql/employee-hierarchy-sql-case-study"
 versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine. The statistics examples use tables small enough that ANALYZE reads every row, so estimates are reproducible."
 sources:
   - { label: "PostgreSQL 16 documentation: Statistics used by the planner", url: "https://www.postgresql.org/docs/16/planner-stats.html" }
@@ -460,7 +461,7 @@ Aggregate (actual rows=1 loops=1)
               Index Cond: ((snapshot_date >= '2026-01-01'::date) AND (snapshot_date < '2026-04-01'::date))
 ```
 
-The table is now read through a bitmap of 576 block ranges' worth of pages (`Heap Blocks: lossy=576`) instead of every page. "Lossy" means BRIN only knows which block ranges *might* contain matching dates, so every row in those blocks is rechecked, and 13,760 rows just outside the range are discarded. That is the trade: a slightly imprecise index that is tiny. The size difference against a B-tree on the same column is the reason to choose BRIN for this pattern:
+The plan now reads 576 table pages (`Heap Blocks: lossy=576`) instead of every page. "Lossy" means BRIN only knows which block ranges *might* contain matching dates, so every row in those blocks is rechecked, and 13,760 rows just outside the range are discarded. That is the trade: a slightly imprecise index that is tiny. The size difference against a B-tree on the same column is the reason to choose BRIN for this pattern:
 
 ```sql
 CREATE INDEX snapshots_big_btree ON snapshots_big (snapshot_date);
