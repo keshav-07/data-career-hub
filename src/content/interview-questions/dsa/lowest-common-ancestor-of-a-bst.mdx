@@ -1,0 +1,166 @@
+---
+title: "Lowest Common Ancestor of a BST: Follow the Split Point"
+seoTitle: "Lowest Common Ancestor of a BST"
+description: "Use binary search tree ordering to find the lowest common ancestor of two nodes by walking down until their values split. Python iterative and recursive code with tests."
+technology: ["dsa"]
+topic: ["binary-search-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Start at the root. If both p and q are smaller than the current value, the ancestor is in the left subtree; if both are larger, it is in the right subtree. Otherwise they split here (or one of them is the current node), so the current node is the lowest common ancestor. This follows a single root-to-node path: O(h) time and O(1) space iteratively, which is O(log n) for a balanced tree."
+followUps: ["How does this differ from the general binary tree version?", "What if p or q might be missing from the tree?", "How would you find the distance between two nodes in a BST?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/kth-smallest-element-in-a-bst"
+---
+
+## Problem
+
+You are given the root of a binary search tree with distinct values and two different nodes `p` and `q` that are in the tree. Return their lowest common ancestor: the deepest node that has both as descendants, where a node is a descendant of itself.
+
+This is widely known as LeetCode 235 (Lowest Common Ancestor of a Binary Search Tree). Compared with the general binary tree version, the ordering lets you avoid searching both subtrees.
+
+Constraints for this version: 2 to 100,000 nodes, distinct values, `p` and `q` both present.
+
+## Examples
+
+BST built by inserting `30, 15, 45, 8, 22, 40, 60, 19, 25`:
+
+```text
+            30
+          /    \
+        15      45
+       /  \    /  \
+      8   22  40   60
+         /  \
+        19   25
+```
+
+| `p` | `q` | LCA | Why |
+|---|---|---|---|
+| 19 | 25 | 22 | they split at 22 |
+| 8 | 25 | 15 | 8 is left of 15, 25 is right of 15 |
+| 22 | 25 | 22 | 22 is an ancestor of 25 |
+| 19 | 60 | 30 | they split at the root |
+
+## Approach 1: brute force
+
+Ignore the ordering and use the general binary tree method: recurse into both subtrees and return the node where both sides report a match.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def lca_general(root, p, q):
+    if root is None or root is p or root is q:
+        return root
+    left = lca_general(root.left, p, q)
+    right = lca_general(root.right, p, q)
+    if left and right:
+        return root
+    return left or right
+```
+
+O(n) time because it may visit every node, and O(h) stack.
+
+## Approach 2: optimal
+
+**Key insight.** In a BST, all values in the left subtree of a node are smaller than it and all in the right subtree are larger. Walking from the root, as long as both targets are on the same side, their common ancestors continue on that side. The first node where they are not on the same side (one is smaller and one larger, or one equals the node) is the lowest common ancestor.
+
+**Walkthrough** for `p = 19`, `q = 25`:
+
+| Node | Both smaller? | Both larger? | Action |
+|---|---|---|---|
+| 30 | yes | no | go left |
+| 15 | no | yes | go right |
+| 22 | no (19 is smaller, 25 larger) | no | split: answer 22 |
+
+### Iterative
+
+```python
+def lowest_common_ancestor(root, p, q):
+    node = root
+    while node:
+        if p.val < node.val and q.val < node.val:
+            node = node.left
+        elif p.val > node.val and q.val > node.val:
+            node = node.right
+        else:
+            return node
+    return None
+```
+
+### Recursive
+
+```python
+def lowest_common_ancestor_recursive(root, p, q):
+    if p.val < root.val and q.val < root.val:
+        return lowest_common_ancestor_recursive(root.left, p, q)
+    if p.val > root.val and q.val > root.val:
+        return lowest_common_ancestor_recursive(root.right, p, q)
+    return root
+```
+
+**Complexity.** O(h) time: O(log n) for a balanced tree, O(n) for a skewed one. The iterative version uses O(1) space; the recursive one uses O(h) stack.
+
+## Tests
+
+```python
+import random
+
+def bst_from_inserts(values):
+    root, nodes = None, {}
+    for v in values:
+        new = TreeNode(v)
+        nodes[v] = new
+        if root is None:
+            root = new
+            continue
+        node = root
+        while True:
+            side = "left" if v < node.val else "right"
+            child = getattr(node, side)
+            if child is None:
+                setattr(node, side, new)
+                break
+            node = child
+    return root, nodes
+
+root, nodes = bst_from_inserts([30, 15, 45, 8, 22, 40, 60, 19, 25])
+cases = [(19, 25, 22), (8, 25, 15), (22, 25, 22), (19, 60, 30), (40, 60, 45), (30, 8, 30)]
+for fn in (lca_general, lowest_common_ancestor, lowest_common_ancestor_recursive):
+    for a, b, want in cases:
+        assert fn(root, nodes[a], nodes[b]).val == want, (fn.__name__, a, b)
+        assert fn(root, nodes[b], nodes[a]).val == want
+
+chain, chain_nodes = bst_from_inserts(list(range(1, 200)))        # right-skewed
+assert lowest_common_ancestor(chain, chain_nodes[50], chain_nodes[150]) is chain_nodes[50]
+
+pair, pair_nodes = bst_from_inserts([5, 3])
+assert lowest_common_ancestor(pair, pair_nodes[5], pair_nodes[3]) is pair
+
+rng = random.Random(15)
+for _ in range(200):
+    vals = rng.sample(range(1000), rng.randint(2, 50))
+    r, ns = bst_from_inserts(vals)
+    a, b = rng.sample(vals, 2)
+    assert lowest_common_ancestor(r, ns[a], ns[b]) is lca_general(r, ns[a], ns[b])
+print("all BST LCA tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Strict comparisons.** Use `<` and `>` so that the case "one target equals the current node" falls into the split branch and returns the node.
+- **Assuming a balanced tree.** State the complexity as O(h) and mention that it degrades to O(n) for a skewed BST.
+- **Missing targets.** The walk returns the split point even if one value is absent. If presence is not guaranteed, search for both values separately afterwards.
+- **Using the general algorithm** is correct but misses what the interviewer is testing: using the BST ordering.
+
+## Where this shows up in data engineering
+
+The split-point walk is how range queries descend an ordered index: a B-tree search for a key range `[low, high]` follows a single path until the two bounds diverge, then branches. Knowing that is useful when you reason about why range scans on an indexed or sorted column are cheap and why they degrade when the structure is unbalanced.
