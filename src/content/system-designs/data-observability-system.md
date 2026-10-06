@@ -103,7 +103,7 @@ Data quality checks test what you expected to go wrong. **Observability** watche
 <figcaption>Collect metadata cheaply, detect anomalies against learned baselines, and use lineage to turn symptoms into one root cause.</figcaption>
 </figure>
 
-At 05:40 the monitor engine sees that  normally updates by 05:15 on weekdays and has not updated. It also sees that 38 downstream tables and 12 dashboards depend on it. Lineage shows the job writing  succeeded, but its input  stopped receiving data at 01:10, and the CDC connector run reported a failure. The incident service opens one incident, "bronze.orders_cdc ingestion stopped", assigns it to the ingestion team, links the 38 stale tables as impact, and posts a notice to the owners of the affected dashboards. When the connector recovers and  refreshes, the incident auto-resolves and its duration counts against the orders SLO.
+At 05:40 the monitor engine sees that `silver.orders` normally updates by 05:15 on weekdays and has not updated. It also sees that 38 downstream tables and 12 dashboards depend on it. Lineage shows the job writing `silver.orders` succeeded, but its input `bronze.orders_cdc` stopped receiving data at 01:10, and the CDC connector run reported a failure. The incident service opens one incident, "`bronze.orders_cdc` ingestion stopped", assigns it to the ingestion team, links the 38 stale tables as impact, and posts a notice to the owners of the affected dashboards. When the connector recovers and `silver.orders` refreshes, the incident auto-resolves and its duration counts against the orders SLO.
 
 ## Signals to collect
 
