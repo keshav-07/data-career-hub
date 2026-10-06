@@ -69,6 +69,7 @@ related:
   - "articles:kafka/kafka-real-time-data-engineering"
   - "articles:delta-lake/json-vs-parquet"
 previous: "system-designs:iot-sensor-data-pipeline"
+next: "system-designs:real-time-analytics-pipeline"
 versionContext: "Design discussion; the lifecycle policy JSON is illustrative and was not executed."
 sources:
   - { label: "Elastic: data tiers (hot, warm, cold, frozen)", url: "https://www.elastic.co/docs/manage-data/lifecycle/data-tiers" }
