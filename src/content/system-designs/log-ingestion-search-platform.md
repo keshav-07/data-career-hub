@@ -1,6 +1,6 @@
 ---
 title: "Design a Log Ingestion and Search Platform"
-description: "A system-design case study for centralised logging: collection agents, Kafka buffering, parsing and redaction, indexing with lifecycle tiers, archive search and cost control."
+description: "A system-design case study for centralised logging: agents, Kafka buffering, parsing and redaction, lifecycle-tiered indexing, archive search and cost control."
 technology: ["data-engineering", "kafka", "cloud"]
 topic: ["logging", "observability", "search"]
 difficulty: "Advanced"
