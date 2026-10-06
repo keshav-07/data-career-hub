@@ -1,0 +1,173 @@
+---
+title: "Kth Largest Element in an Array: Heap, Quickselect and Counting"
+seoTitle: "Kth Largest Element in an Array"
+description: "Find the k-th largest value in an unsorted array with a size-k min-heap, quickselect with three-way partitioning, or counting. Python code, trade-offs and tests."
+technology: ["dsa"]
+topic: ["heaps-priority-queues"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Keep a min-heap of the k largest values seen: push each value and pop the smallest whenever the heap exceeds k; at the end heap[0] is the answer, in O(n log k) time and O(k) space. Quickselect partitions around a random pivot and recurses only into the side containing the target position, giving O(n) average time; three-way partitioning keeps it fast with many duplicates. If values lie in a small range, counting them gives O(n + range)."
+followUps: ["Why does quickselect need a random pivot?", "How does three-way partitioning help with duplicates?", "Which approach would you use if the data did not fit in memory?", "How would you find the median with the same technique?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+sources:
+  - { label: "Python documentation: heapq - Heap queue algorithm", url: "https://docs.python.org/3/library/heapq.html" }
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/k-closest-points-to-origin"
+next: "interview-questions:dsa/task-scheduler"
+---
+
+## Problem
+
+Given an unsorted list of integers and an integer `k`, return the `k`-th largest value: the value that would sit at position `k` (counting from 1) if the list were sorted in descending order. Duplicates count separately, so in `[5, 5, 3]` the second largest is 5. Try to do better than sorting.
+
+This is widely known as LeetCode 215 (Kth Largest Element in an Array). It is the classic place to compare a heap with quickselect.
+
+Constraints for this version: `1 <= k <= len(nums) <= 100,000`; values between -10,000 and 10,000.
+
+## Examples
+
+| `nums` | `k` | Result |
+|---|---|---|
+| `[7, 2, 9, 4, 11, 6]` | `2` | `9` |
+| `[7, 2, 9, 4, 11, 6]` | `6` | `2` (the minimum) |
+| `[5, 5, 3, 8, 8, 8]` | `4` | `5` |
+| `[-4]` | `1` | `-4` |
+
+## Approach 1: brute force
+
+Sort descending and index.
+
+```python
+def kth_largest_sort(nums, k):
+    return sorted(nums, reverse=True)[k - 1]
+```
+
+O(n log n) time and O(n) space for the sorted copy. Perfectly reasonable in practice; the interviewer will ask for something faster in theory.
+
+## Approach 2: optimal
+
+### Min-heap of size k
+
+**Key insight.** The k-th largest is the smallest of the k largest values. Keep those k values in a min-heap; anything smaller than the heap's minimum can be ignored.
+
+```python
+import heapq
+
+def kth_largest_heap(nums, k):
+    heap = nums[:k]
+    heapq.heapify(heap)
+    for value in nums[k:]:
+        if value > heap[0]:
+            heapq.heapreplace(heap, value)
+    return heap[0]
+```
+
+O(n log k) time, O(k) space, and it works on a stream or on data read in chunks.
+
+### Quickselect
+
+**Key insight.** Partitioning around a pivot puts every value larger than the pivot on one side and smaller on the other, so you learn exactly which side the k-th largest is on and can discard the rest. With a random pivot, the expected work is `n + n/2 + n/4 + ...`, which is O(n).
+
+Using **three-way partitioning** (greater than, equal to, less than the pivot) keeps it linear when many values are equal; a two-way partition degrades towards O(n^2) on input such as all-equal values.
+
+**Walkthrough** for `[7, 2, 9, 4, 11, 6]`, `k = 2`, with pivot 7:
+
+| Group | Values | Size |
+|---|---|---|
+| greater | 9, 11 | 2 |
+| equal | 7 | 1 |
+| less | 2, 4, 6 | 3 |
+
+`k = 2` is within the "greater" group (size 2), so the answer is the 2nd largest of `[9, 11]`. Next round, pivot 9: greater is `[11]` (size 1), equal is `[9]`, and `k = 2` falls into the equal group, so the answer is 9.
+
+```python
+import random
+
+def kth_largest_quickselect(nums, k, rng=random.Random(0)):
+    values = list(nums)
+    while True:
+        pivot = rng.choice(values)
+        greater = [v for v in values if v > pivot]
+        equal_count = sum(1 for v in values if v == pivot)
+        if k <= len(greater):
+            values = greater                        # answer is among the larger values
+        elif k <= len(greater) + equal_count:
+            return pivot                            # answer equals the pivot
+        else:
+            k -= len(greater) + equal_count
+            values = [v for v in values if v < pivot]
+```
+
+This list-building version is the clearest to explain. An in-place version with index swaps uses O(1) extra space, which you can mention; the logic is the same.
+
+### Counting (bounded values)
+
+When values lie in a small known range, count them and walk down from the largest value.
+
+```python
+def kth_largest_counting(nums, k):
+    low, high = min(nums), max(nums)
+    counts = [0] * (high - low + 1)
+    for v in nums:
+        counts[v - low] += 1
+    for offset in range(len(counts) - 1, -1, -1):
+        k -= counts[offset]
+        if k <= 0:
+            return offset + low
+```
+
+**Complexity summary.**
+
+| Method | Time | Extra space | Notes |
+|---|---|---|---|
+| Sort | O(n log n) | O(n) | simplest |
+| Size-k heap | O(n log k) | O(k) | streams, external data |
+| Quickselect | O(n) average, O(n^2) worst | O(n) here, O(1) in place | random pivot essential |
+| Counting | O(n + range) | O(range) | small integer ranges only |
+
+## Tests
+
+```python
+fns = (kth_largest_sort, kth_largest_heap, kth_largest_quickselect, kth_largest_counting)
+cases = [
+    ([7, 2, 9, 4, 11, 6], 2, 9),
+    ([7, 2, 9, 4, 11, 6], 6, 2),
+    ([7, 2, 9, 4, 11, 6], 1, 11),
+    ([5, 5, 3, 8, 8, 8], 4, 5),
+    ([-4], 1, -4),
+    ([0, 0, 0, 0], 3, 0),                          # all equal
+    ([-10_000, 10_000], 2, -10_000),
+]
+for fn in fns:
+    for nums, k, want in cases:
+        original = list(nums)
+        assert fn(nums, k) == want, (fn.__name__, nums, k)
+        assert nums == original, "input was modified"
+
+rng = random.Random(24)
+for _ in range(400):
+    nums = [rng.randint(-15, 15) for _ in range(rng.randint(1, 40))]
+    k = rng.randint(1, len(nums))
+    want = sorted(nums, reverse=True)[k - 1]
+    for fn in fns:
+        assert fn(nums, k) == want, (fn.__name__, nums, k)
+
+same = [7] * 100_000                                # many duplicates: three-way partition stays fast
+assert kth_largest_quickselect(same, 50_000) == 7
+print("all kth largest tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **k-th largest versus k-th smallest.** The k-th largest is the `(n - k + 1)`-th smallest. Off-by-one errors here are common.
+- **Duplicates count.** Do not deduplicate; `[5, 5, 3]` has 5 as its second largest.
+- **Fixed pivots.** Always choosing the first or last element makes quickselect quadratic on sorted input. Randomise.
+- **Two-way partitions with many equal values** also go quadratic; use three-way partitioning.
+
+## Where this shows up in data engineering
+
+Selection without a full sort is how engines compute top-k and percentiles efficiently: a `LIMIT k` after `ORDER BY` runs as a bounded heap per partition, and exact median or percentile functions benefit from selection rather than sorting everything. For very large data, approximate structures (such as the t-digest and KLL sketches behind many approximate percentile functions) trade a small error for bounded memory.
