@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/indexes", "articles:sql/query-optimization-fundamentals"]
 related: ["articles:data-warehousing/partitioning-clustering-data-layout", "articles:snowflake/micro-partitions-clustering-pruning", "articles:delta-lake/parquet-vs-avro-vs-orc", "articles:spark/partitions-shuffles-skew"]
 previous: "articles:sql/indexes"
+next: "articles:sql/query-optimizer-internals"
 versionContext: "PostgreSQL examples run on PostgreSQL 16.14 with declarative partitioning; Python simulations run on Python 3. Snowflake, BigQuery and Citus snippets were written from documentation and not executed. Plan costs vary by machine."
 sources:
   - { label: "PostgreSQL 16 documentation: Materialized views", url: "https://www.postgresql.org/docs/16/rules-materializedviews.html" }

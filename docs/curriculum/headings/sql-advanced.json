@@ -110,5 +110,25 @@
   "Sharding & distributed SQL": {
     "ref": "articles:sql/partitioning-materialized-views-storage",
     "heading": "Sharding and distributed SQL"
+  },
+  "Join algorithms (hash, merge, nested loop)": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Join algorithms: hash, merge and nested loop"
+  },
+  "Statistics & the optimizer": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Statistics and the optimizer"
+  },
+  "Cardinality estimation": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Cardinality estimation"
+  },
+  "CTE materialization trade-offs": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "CTE materialization trade-offs"
+  },
+  "Spilling & memory management": {
+    "ref": "articles:sql/query-optimizer-internals",
+    "heading": "Spilling and memory management"
   }
 }
