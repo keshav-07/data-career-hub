@@ -1,0 +1,247 @@
+---
+title: "Delete Node in a BST: Leaf, One Child and Two Children Cases"
+seoTitle: "Delete a Node in a Binary Search Tree"
+description: "Remove a key from a binary search tree while keeping it valid: the three deletion cases, in-order successor replacement, Python code and property-based tests."
+technology: ["dsa"]
+topic: ["binary-search-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "Search for the key using the BST ordering. A leaf is simply removed; a node with one child is replaced by that child. A node with two children takes the value of its in-order successor (the smallest node in its right subtree), and then that successor, which has no left child, is deleted from the right subtree. The search and the successor walk follow one path each, so the cost is O(h) time and O(h) stack recursively."
+followUps: ["Why is the in-order successor guaranteed to have no left child?", "Could you use the in-order predecessor instead, and does it matter?", "How would you delete without copying values, by relinking nodes?", "What does a balanced tree do after deletion?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/insert-into-a-bst"
+---
+
+## Problem
+
+Given the root of a binary search tree with distinct values and a key, remove the node holding that key, if there is one, and return the root of the resulting tree, which must still be a valid BST. If the key is not present, return the tree unchanged.
+
+This is widely known as LeetCode 450 (Delete Node in a BST). It is the hardest of the basic BST operations because a node with two children cannot simply be cut out.
+
+Constraints for this version: 0 to 10,000 nodes, distinct integer values.
+
+## Examples
+
+Starting tree (inserted in the order `50, 30, 70, 20, 40, 60, 80, 65`):
+
+```text
+            50
+          /    \
+        30      70
+       /  \    /  \
+      20  40  60   80
+                \
+                 65
+```
+
+| Delete | Case | Result (level order) |
+|---|---|---|
+| 20 | leaf | `[50, 30, 70, None, 40, 60, 80, None, None, None, 65]` |
+| 60 | one child (65) | `[50, 30, 70, 20, 40, 65, 80]` |
+| 70 | two children: successor is 80 | `[50, 30, 80, 20, 40, 60, None, None, None, None, None, None, 65]` |
+| 50 | two children at the root: successor is 60 | `[60, 30, 70, 20, 40, 65, 80]` |
+| 99 | not present | unchanged |
+
+## Approach 1: brute force
+
+Collect all values except the key, then rebuild a balanced BST from the sorted remainder.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def delete_by_rebuild(root, key):
+    values = []
+
+    def inorder(node):
+        if node:
+            inorder(node.left)
+            if node.val != key:
+                values.append(node.val)
+            inorder(node.right)
+
+    inorder(root)
+
+    def build(lo, hi):
+        if lo > hi:
+            return None
+        mid = (lo + hi) // 2
+        return TreeNode(values[mid], build(lo, mid - 1), build(mid + 1, hi))
+
+    return build(0, len(values) - 1)
+```
+
+O(n) time and memory per deletion, and every node is replaced.
+
+## Approach 2: optimal
+
+**Key insight.** After finding the node, there are three cases:
+
+1. **No children**: return `None` to the parent.
+2. **One child**: return that child to the parent; the whole subtree moves up one level, and its ordering relative to the ancestors is unchanged.
+3. **Two children**: the replacement value must be larger than everything on the left and smaller than everything else on the right. The in-order successor, the leftmost node of the right subtree, has exactly that property. Copy its value into the node, then delete the successor from the right subtree. The successor has no left child (otherwise it would not be leftmost), so that second deletion is case 1 or 2.
+
+**Walkthrough** deleting 70:
+
+| Step | Detail |
+|---|---|
+| Search | 70 is larger than 50, go right; found 70 |
+| Case | children 60 and 80, so case 3 |
+| Successor | leftmost node of the right subtree (80) is 80 itself |
+| Replace | node 70 now holds 80 |
+| Clean up | delete 80 from the right subtree: it is a leaf, removed |
+
+### Recursive
+
+```python
+def delete_node(root, key):
+    if root is None:
+        return None
+    if key < root.val:
+        root.left = delete_node(root.left, key)
+    elif key > root.val:
+        root.right = delete_node(root.right, key)
+    else:
+        if root.left is None:            # cases 1 and 2 (no left child)
+            return root.right
+        if root.right is None:           # case 2 (no right child)
+            return root.left
+        successor = root.right           # case 3
+        while successor.left:
+            successor = successor.left
+        root.val = successor.val
+        root.right = delete_node(root.right, successor.val)
+    return root
+```
+
+### Iterative, relinking nodes instead of copying values
+
+Copying values is fine in an interview, but if nodes carry other data or are referenced elsewhere, relink the successor node into the deleted node's position instead.
+
+```python
+def delete_node_iterative(root, key):
+    parent, node = None, root
+    while node and node.val != key:
+        parent = node
+        node = node.left if key < node.val else node.right
+    if node is None:
+        return root                                  # key not present
+
+    if node.left and node.right:                     # two children: splice in the successor
+        succ_parent, succ = node, node.right
+        while succ.left:
+            succ_parent, succ = succ, succ.left
+        if succ_parent is not node:
+            succ_parent.left = succ.right            # detach successor, keep its right subtree
+            succ.right = node.right
+        succ.left = node.left
+        replacement = succ
+    else:
+        replacement = node.left or node.right        # zero or one child
+
+    if parent is None:
+        return replacement
+    if parent.left is node:
+        parent.left = replacement
+    else:
+        parent.right = replacement
+    return root
+```
+
+**Complexity.** O(h) time for both: one walk to find the node, one to find the successor. O(h) stack for the recursive version, O(1) extra space for the iterative one.
+
+## Tests
+
+```python
+from collections import deque
+import random
+
+def insert(root, val):
+    if root is None:
+        return TreeNode(val)
+    if val < root.val:
+        root.left = insert(root.left, val)
+    else:
+        root.right = insert(root.right, val)
+    return root
+
+def bst(values):
+    root = None
+    for v in values:
+        root = insert(root, v)
+    return root
+
+def to_level_list(root):
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
+        if node:
+            out.append(node.val)
+            queue.extend([node.left, node.right])
+        else:
+            out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+def inorder_values(root):
+    out, stack, node = [], [], root
+    while stack or node:
+        while node:
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        out.append(node.val)
+        node = node.right
+    return out
+
+def is_bst(root, low=float("-inf"), high=float("inf")):
+    if root is None:
+        return True
+    return low < root.val < high and is_bst(root.left, low, root.val) and is_bst(root.right, root.val, high)
+
+start = [50, 30, 70, 20, 40, 60, 80, 65]
+expected = {
+    20: [50, 30, 70, None, 40, 60, 80, None, None, None, 65],
+    60: [50, 30, 70, 20, 40, 65, 80],
+    70: [50, 30, 80, 20, 40, 60, None, None, None, None, None, None, 65],
+    50: [60, 30, 70, 20, 40, 65, 80],
+    99: [50, 30, 70, 20, 40, 60, 80, None, None, None, None, None, 65],
+}
+for fn in (delete_node, delete_node_iterative):
+    for key, want in expected.items():
+        assert to_level_list(fn(bst(start), key)) == want, (fn.__name__, key)
+    assert fn(None, 5) is None
+    assert fn(bst([5]), 5) is None                    # delete the only node
+    assert to_level_list(fn(bst([1, 2, 3, 4]), 1)) == [2, None, 3, None, 4]   # skewed root
+
+rng = random.Random(17)
+for _ in range(300):
+    vals = rng.sample(range(100), rng.randint(1, 30))
+    key = rng.choice(vals + [1000])
+    for fn in (delete_node, delete_node_iterative, delete_by_rebuild):
+        result = fn(bst(vals), key)
+        assert is_bst(result)
+        assert inorder_values(result) == sorted(v for v in vals if v != key), (fn.__name__, vals, key)
+print("all BST delete tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Deleting the root** must return the new root; callers who ignore the return value keep a pointer to the removed node.
+- **Key not present** should leave the tree untouched, not raise.
+- **Forgetting the second deletion** in case 3 leaves the successor's value in the tree twice.
+- **Successor with a right child.** When splicing nodes, the successor's right subtree must be reattached to the successor's old parent.
+- **Predecessor versus successor.** Using the largest node of the left subtree is equally valid. Always picking one side can unbalance the tree over many deletions; some implementations alternate.
+
+## Where this shows up in data engineering
+
+Databases rarely delete physically in place right away. B-tree indexes may merge or leave under-filled pages, and many systems mark rows as deleted (tombstones in LSM stores such as Cassandra and RocksDB, deletion vectors or rewritten files in table formats such as Delta Lake) and clean up later during compaction. The reason is visible in this problem: real deletion inside an ordered structure means restructuring, which is more expensive than marking.
