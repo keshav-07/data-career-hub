@@ -1,0 +1,145 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Maximum Product Subarray: Track Both the Largest and Smallest Product"
+seoTitle: "Maximum Product Subarray: Min/Max DP"
+description: "Find the contiguous subarray with the largest product by tracking the maximum and minimum product ending at each index, handling negatives and zeros, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "A negative number turns the smallest product into the largest, so keep two values for the subarray ending at each index: the maximum and the minimum product. For each new value x, the candidates are x, x times the previous maximum and x times the previous minimum; the new maximum and minimum are the largest and smallest of those three. The answer is the largest maximum seen. That is O(n) time and O(1) space."
+followUps: ["Why is Kadane's algorithm for maximum sum not enough here?", "How would you return the subarray's start and end indices?", "What is the prefix and suffix product approach, and why does it also work?"]
+previous: "interview-questions:dsa/coin-change"
+next: "interview-questions:dsa/word-break"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a non-empty list of integers, find the contiguous, non-empty subarray whose product is largest, and return that
+product.
+
+This is widely known as LeetCode 152, "Maximum Product Subarray".
+
+Assume up to 20,000 values between -10 and 10, and that every subarray product fits in a 64-bit integer.
+
+## Examples
+
+```text
+[3, -1, 4]       -> 4    ([4]; including -1 makes it negative)
+[-2, 5, -3]      -> 30   (the whole array: two negatives cancel)
+[0, -4, 0]       -> 0
+[-6]             -> -6   (the subarray must be non-empty)
+[2, -5, -2, -4, 3] -> 24 ([-2, -4, 3])
+```
+
+## Approach 1: every subarray
+
+```python
+def max_product_brute(nums):
+    best = nums[0]
+    for i in range(len(nums)):
+        prod = 1
+        for j in range(i, len(nums)):
+            prod *= nums[j]
+            best = max(best, prod)
+    return best
+```
+
+Extending the product as `j` grows avoids an inner loop, giving O(n^2) time and O(1) space.
+
+## Approach 2: optimal, dynamic programming on max and min
+
+### State, recurrence and base cases
+
+- **State:** `hi[i]` and `lo[i]` = the largest and smallest product of a subarray that ends exactly at index i.
+- **Recurrence:** with `x = nums[i]`,
+  `hi[i] = max(x, x * hi[i - 1], x * lo[i - 1])` and `lo[i] = min(x, x * hi[i - 1], x * lo[i - 1])`.
+  Choosing `x` alone means starting a new subarray, which is how zeros reset the products.
+- **Base case:** `hi[0] = lo[0] = nums[0]`.
+- **Answer:** the maximum of all `hi[i]`.
+
+### Filled table for [2, -5, -2, -4, 3]
+
+| i | 0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| x | 2 | -5 | -2 | -4 | 3 |
+| hi | 2 | -5 | 20 | 8 | 24 |
+| lo | 2 | -10 | -2 | -80 | -240 |
+| best so far | 2 | 2 | 20 | 20 | 24 |
+
+At i = 2, `-2 * lo[1] = -2 * -10 = 20`: the minimum turned into the maximum.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def max_product_memo(nums):
+    @lru_cache(maxsize=None)
+    def ending_at(i):                  # returns (hi, lo) for subarrays ending at i
+        x = nums[i]
+        if i == 0:
+            return x, x
+        hi, lo = ending_at(i - 1)
+        cands = (x, x * hi, x * lo)
+        return max(cands), min(cands)
+    return max(ending_at(i)[0] for i in range(len(nums)))
+```
+
+### Bottom-up, space optimised
+
+```python
+def max_product(nums):
+    hi = lo = best = nums[0]
+    for x in nums[1:]:
+        cands = (x, x * hi, x * lo)
+        hi, lo = max(cands), min(cands)
+        best = max(best, hi)
+    return best
+```
+
+Compute both new values from the old pair at once; updating `hi` first and then using it for `lo` is a classic bug.
+
+### Complexity
+
+O(n) time and O(1) space for the optimised version (O(n) for the memoised one).
+
+## Tests
+
+```python
+for fn in (max_product, max_product_memo, max_product_brute):
+    assert fn([3, -1, 4]) == 4
+    assert fn([-2, 5, -3]) == 30
+    assert fn([0, -4, 0]) == 0
+    assert fn([-6]) == -6                        # single negative element
+    assert fn([7]) == 7                          # single element
+    assert fn([2, -5, -2, -4, 3]) == 24
+    assert fn([-1, -1]) == 1
+    assert fn([-3, 0, -2]) == 0                  # zero beats any negative
+    assert fn([0, 0]) == 0
+
+import random
+random.seed(15)
+for _ in range(200):
+    a = [random.randint(-4, 4) for _ in range(random.randint(1, 9))]
+    assert max_product(a) == max_product_brute(a) == max_product_memo(a)
+```
+
+## Edge cases and pitfalls
+
+- **Only tracking the maximum** fails as soon as two negatives should cancel.
+- **Zeros** must reset both products; including `x` alone among the candidates handles it.
+- **All negative, single element**: the answer can be negative; do not initialise `best` to 0.
+- **Simultaneous update** of `hi` and `lo`.
+- **Overflow** in fixed-width languages if values are large; Python integers do not overflow.
+
+## Where this shows up in data engineering
+
+Compounded growth rates multiply, so the best run of consecutive periods for a metric expressed as growth factors is
+a maximum product subarray. In SQL you would usually take logarithms and turn it into a sum, which only works when all
+factors are positive; this algorithm handles signs and zeros directly.
