@@ -65,8 +65,8 @@ related:
   - "articles:data-warehousing/star-schema"
 versionContext: "The metric and SRM SQL was run on PostgreSQL 16 with scripts/verify-examples.py. Statistical methods are described conceptually; check your experimentation tool's documentation for its exact tests."
 sources:
-  - { label: "GrowthBook documentation: statistics overview (SRM, multiple exposures, guardrails)", url: "https://docs.growthbook.io/statistics/overview" }
-  - { label: "GrowthBook documentation: CUPED", url: "https://docs.growthbook.io/statistics/cuped" }
+  - { label: "GrowthBook documentation: statistics overview (SRM, multiple exposures, guardrails)", url: "https://github.com/growthbook/growthbook/blob/main/docs/statistics/overview.mdx" }
+  - { label: "GrowthBook documentation: CUPED", url: "https://github.com/growthbook/growthbook/blob/main/docs/statistics/cuped.mdx" }
   - { label: "PostgreSQL 16: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
 previous: "system-designs:near-zero-downtime-migration"
 next: "system-designs:marketing-attribution-pipeline"

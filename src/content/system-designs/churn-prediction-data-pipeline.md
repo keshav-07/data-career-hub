@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Churn Prediction Data Pipeline"
-description: "A system-design case study for churn prediction data: label definition, point-in-time features, training snapshots, batch scoring, CRM write-back and drift monitoring."
+description: "A system-design case study for churn prediction data: label definition, point-in-time features, training snapshots, batch scoring, CRM write-back and drift checks."
 technology: ["data-engineering", "sql", "spark"]
 topic: ["ml-data", "feature-engineering", "architecture"]
 tags: ["churn", "feature-store", "point-in-time", "data-leakage", "batch-scoring", "model-monitoring"]

@@ -65,8 +65,8 @@ related:
   - "articles:etl-elt/batch-vs-streaming"
 versionContext: "H3 cell areas taken from the H3 resolution tables. The pricing curve and smoothing simulation is illustrative (not any company's real formula) and was run with Python 3 via scripts/verify-examples.py."
 sources:
-  - { label: "H3 documentation: overview of the H3 indexing system", url: "https://h3geo.org/docs/core-library/overview" }
-  - { label: "H3 documentation: tables of cell statistics across resolutions", url: "https://h3geo.org/docs/core-library/restable" }
+  - { label: "H3 documentation: overview of the H3 indexing system", url: "https://github.com/uber/h3/blob/master/website/docs/core-library/overview.md" }
+  - { label: "H3 documentation: tables of cell statistics across resolutions", url: "https://github.com/uber/h3/blob/master/website/docs/library/restable.md" }
   - { label: "Apache Spark: Structured Streaming programming guide", url: "https://spark.apache.org/docs/4.0.0/streaming/apis-on-dataframes-and-datasets.html" }
 previous: "system-designs:payment-events-pipeline-exactly-once"
 next: "system-designs:social-media-feed-analytics-system"
