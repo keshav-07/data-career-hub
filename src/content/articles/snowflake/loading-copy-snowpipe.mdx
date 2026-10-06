@@ -1,0 +1,425 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Loading Data into Snowflake: Stages, COPY INTO and Snowpipe"
+seoTitle: "Snowflake Loading: Stages, COPY INTO, Snowpipe"
+description: "Load files into Snowflake with file formats, internal and external stages and COPY INTO, then automate it with Snowpipe auto-ingest, the REST API and Snowpipe Streaming."
+technology: ["snowflake", "etl-elt"]
+topic: ["data-loading", "snowpipe", "ingestion"]
+difficulty: "Beginner"
+learningObjectives:
+  - "Create file formats and choose between user, table, named internal and external stages"
+  - "Load files with COPY INTO, including error handling, validation and transformations"
+  - "Explain how load metadata prevents duplicate loads, and when it does not"
+  - "Set up Snowpipe auto-ingest from cloud storage event notifications"
+  - "Compare bulk COPY, Snowpipe, the Snowpipe REST API and Snowpipe Streaming"
+prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
+related: ["articles:delta-lake/parquet-vs-avro-vs-orc", "articles:delta-lake/json-vs-parquet", "articles:etl-elt/batch-vs-streaming", "articles:kafka/kafka-real-time-data-engineering"]
+previous: "articles:snowflake/streams-and-tasks"
+next: "articles:snowflake/time-travel-fail-safe-cloning"
+sources:
+  - { label: "Snowflake documentation: COPY INTO table", url: "https://docs.snowflake.com/en/sql-reference/sql/copy-into-table" }
+  - { label: "Snowflake documentation: CREATE STAGE", url: "https://docs.snowflake.com/en/sql-reference/sql/create-stage" }
+  - { label: "Snowflake documentation: Snowpipe", url: "https://docs.snowflake.com/en/user-guide/data-load-snowpipe-intro" }
+  - { label: "Snowflake documentation: Automating Snowpipe for Amazon S3", url: "https://docs.snowflake.com/en/user-guide/data-load-snowpipe-auto-s3" }
+  - { label: "Snowflake documentation: Snowpipe REST API", url: "https://docs.snowflake.com/en/user-guide/data-load-snowpipe-rest-apis" }
+  - { label: "Snowflake documentation: Snowpipe Streaming", url: "https://docs.snowflake.com/en/user-guide/snowpipe-streaming/data-load-snowpipe-streaming-overview" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. Snowpipe moved to per-GB pricing in 2025 and Snowpipe Streaming has two architectures with different billing; check your account's documentation for current rates."
+---
+
+Almost every Snowflake pipeline starts with files: CSV exports, JSON events, Parquet from a lake. Snowflake loads them in two steps: put the files in a **stage**, then copy them into a table with **COPY INTO**. Snowpipe automates the second step as files arrive, and Snowpipe Streaming skips files altogether for row-level, low-latency ingestion. This lesson covers each step, the options that matter in production, and a full Snowpipe auto-ingest setup.
+
+All SQL is Snowflake SQL written from the documentation and was not executed.
+
+## File formats and staging
+
+A **file format** object describes how to parse files: type, delimiters, header, compression, how NULLs are written. Define it once and reuse it in stages, `COPY` statements and pipes.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE FILE FORMAT raw.csv_orders
+  TYPE = CSV
+  FIELD_DELIMITER = ','
+  SKIP_HEADER = 1
+  FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+  NULL_IF = ('', 'NULL')
+  EMPTY_FIELD_AS_NULL = TRUE
+  COMPRESSION = AUTO;
+
+CREATE OR REPLACE FILE FORMAT raw.json_events
+  TYPE = JSON
+  STRIP_OUTER_ARRAY = TRUE;   -- a file containing one big [ ... ] array becomes one row per element
+
+CREATE OR REPLACE FILE FORMAT raw.parquet_fmt
+  TYPE = PARQUET;
+```
+
+Supported types are CSV (any delimited text), JSON, Avro, ORC, Parquet and XML. Semi-structured formats load into a `VARIANT` column or, for Parquet, Avro and ORC, can be mapped to columns by name.
+
+**Staging** means putting files where Snowflake can read them. Practical advice from the documentation:
+
+- **File size**: aim for compressed files of roughly 100 to 250 MB. Many tiny files add per-file overhead; one huge file cannot be split across a warehouse's threads.
+- **Compression**: gzip and other common codecs are detected automatically with `COMPRESSION = AUTO`.
+- **Paths**: organise by date or source (`s3://bucket/orders/2026/10/05/`) so `COPY` and pipes can target a prefix, and so you can reload a day.
+
+**Pitfalls**
+
+- CSV files with embedded commas or newlines and no enclosing quotes. Set `FIELD_OPTIONALLY_ENCLOSED_BY` and check the source export.
+- Relying on `SKIP_HEADER` when files may arrive without headers. For schema detection, Snowflake also offers `PARSE_HEADER` with `INFER_SCHEMA`.
+
+**In interviews**
+
+Mention file format objects, the size guideline and why it matters (parallelism), and the choice of a columnar format such as Parquet for large data.
+
+## Internal versus external stages
+
+A **stage** is a named location of files. There are four kinds:
+
+| Stage | Reference | Where files live | Typical use |
+|-------|-----------|------------------|-------------|
+| User stage | `@~` | Snowflake storage, one per user | Personal, ad hoc files |
+| Table stage | `@%orders` | Snowflake storage, one per table | Files that only ever load into that table |
+| Named internal stage | `@raw.landing` | Snowflake storage | Shared landing area managed in Snowflake |
+| Named external stage | `@raw.s3_orders` | Your S3 bucket, Azure container or GCS bucket | Data already in a lake; most production pipelines |
+
+**Internal stages** hold files in Snowflake-managed storage, encrypted, and billed as Snowflake storage. You upload with the `PUT` command from a client such as SnowSQL, the Snowflake CLI or a driver; `PUT` compresses files by default.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE STAGE raw.landing FILE_FORMAT = raw.csv_orders;
+
+-- From a client session (SnowSQL / Snowflake CLI), not a Snowsight worksheet:
+PUT file:///data/orders_2026-10-05.csv @raw.landing/orders/;
+
+LIST @raw.landing/orders/;
+```
+
+**External stages** point at your cloud storage. The secure way to grant access is a **storage integration**: an account-level object that holds an IAM role (AWS), service principal (Azure) or service account (GCP) identity, so no keys are stored in the stage.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE STORAGE INTEGRATION s3_lake_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'S3'
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = 'arn:aws:iam::123456789012:role/snowflake-lake-reader'
+  STORAGE_ALLOWED_LOCATIONS = ('s3://acme-lake/orders/');
+
+-- Shows the IAM user and external ID to put in the role's trust policy
+DESC INTEGRATION s3_lake_int;
+
+CREATE OR REPLACE STAGE raw.s3_orders
+  URL = 's3://acme-lake/orders/'
+  STORAGE_INTEGRATION = s3_lake_int
+  FILE_FORMAT = raw.parquet_fmt;
+```
+
+(The ARN and bucket above are placeholders for illustration.)
+
+**Pitfalls**
+
+- Putting cloud access keys directly in `CREATE STAGE ... CREDENTIALS = (...)`. Keys leak into scripts and history; use a storage integration.
+- Assuming internal stage files are free. They count as storage until removed (use `PURGE = TRUE` or `REMOVE`).
+
+**In interviews**
+
+List the four stage types, say why external stages with storage integrations are standard in production, and how internal stages are loaded (`PUT`).
+
+## The COPY INTO command
+
+`COPY INTO <table>` loads staged files into a table using a running warehouse.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+COPY INTO raw.orders
+FROM @raw.landing/orders/
+FILE_FORMAT = (FORMAT_NAME = 'raw.csv_orders')
+PATTERN = '.*orders_.*[.]csv[.]gz'
+ON_ERROR = 'ABORT_STATEMENT';
+```
+
+The output has one row per file: file name, status (`LOADED`, `LOAD_FAILED`, `PARTIALLY_LOADED`), rows parsed and loaded, and the first error.
+
+### Load metadata and duplicate protection
+
+Snowflake records which files each table has loaded (name, size and checksum) for **64 days**. Re-running the same `COPY` skips files already loaded, which makes `COPY` safe to retry.
+
+- `FORCE = TRUE` loads files again regardless of metadata (and creates duplicates if they were loaded before).
+- Files older than 64 days whose load status is unknown are skipped by default; `LOAD_UNCERTAIN_FILES = TRUE` loads them.
+- A file with the same name but changed contents (different checksum) is treated as new.
+
+### Options you will use
+
+| Option | Purpose |
+|--------|---------|
+| `ON_ERROR` | `ABORT_STATEMENT` (default for bulk `COPY`), `CONTINUE`, `SKIP_FILE`, `SKIP_FILE_<n>` or `SKIP_FILE_<n>%` |
+| `VALIDATION_MODE = RETURN_ERRORS` | Dry run: report errors without loading |
+| `PURGE = TRUE` | Delete files from the stage after a successful load |
+| `MATCH_BY_COLUMN_NAME` | Map Parquet/Avro/ORC (or headed CSV) columns to table columns by name |
+| `FILES = ('a.csv', 'b.csv')` / `PATTERN` | Choose files explicitly |
+| `FORCE` | Reload already loaded files |
+
+### Transforming while loading
+
+A `COPY` can select from the stage, reorder or cast columns, and add file metadata:
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+COPY INTO raw.orders (order_id, customer_id, amount, order_ts, source_file)
+FROM (
+  SELECT $1, $2, $3::NUMBER(12,2), TO_TIMESTAMP_NTZ($4), METADATA$FILENAME
+  FROM @raw.landing/orders/
+)
+FILE_FORMAT = (FORMAT_NAME = 'raw.csv_orders');
+
+-- Parquet straight into named columns
+COPY INTO raw.orders_pq
+FROM @raw.s3_orders
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;
+```
+
+Supported transformations are deliberately simple (column selection, casts, a set of functions); joins and aggregations belong after loading. Check load results later with the `COPY_HISTORY` table function or the `ACCOUNT_USAGE.COPY_HISTORY` view.
+
+**Pitfalls**
+
+- `ON_ERROR = CONTINUE` in production without checking `PARTIALLY_LOADED` results. Bad rows disappear silently.
+- Using `FORCE = TRUE` to "fix" a failed load. It reloads the good files too.
+- Truncating and reloading a table: `TRUNCATE` clears the table's load metadata, but `DELETE` does not, so a reload after `DELETE` skips every file.
+
+**In interviews**
+
+Explain the 64-day load metadata and why `COPY` is idempotent, list the `ON_ERROR` choices with the default, and show a transformation with `METADATA$FILENAME` for lineage.
+
+## Snowpipe continuous ingestion
+
+**Snowpipe** loads files continuously as they arrive, using a **pipe**: a named object that wraps a `COPY INTO` statement. It runs on Snowflake-managed serverless compute, so no warehouse is needed.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE PIPE raw.orders_pipe
+  AUTO_INGEST = TRUE
+AS
+  COPY INTO raw.orders
+  FROM @raw.s3_orders
+  FILE_FORMAT = (FORMAT_NAME = 'raw.parquet_fmt')
+  MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;
+```
+
+How it differs from bulk `COPY`:
+
+| | Bulk `COPY INTO` | Snowpipe |
+|--|------------------|----------|
+| Trigger | You run it (or a task does) | Cloud event notifications or REST calls |
+| Compute | Your warehouse | Serverless, managed by Snowflake |
+| Latency | Your schedule | Usually within minutes of a file arriving |
+| Load metadata | 64 days, on the table | 14 days, on the pipe |
+| `ON_ERROR` default | `ABORT_STATEMENT` | `SKIP_FILE` (`ABORT_STATEMENT` is not supported) |
+| Order of loading | Within one statement | Not guaranteed; files may load in any order |
+| Billing | Warehouse time | Per GB ingested (see below) |
+
+**Cost**: Snowflake moved Snowpipe to a fixed number of credits per GB ingested: text formats such as CSV and JSON are measured uncompressed, binary formats such as Parquet by their observed size. This reached Business Critical and VPS accounts in August 2025 and Standard and Enterprise accounts in December 2025. The rate is in the Service Consumption Table; check your account's documentation.
+
+Managing a pipe:
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT SYSTEM$PIPE_STATUS('raw.orders_pipe');              -- execution state, pending files
+ALTER PIPE raw.orders_pipe SET PIPE_EXECUTION_PAUSED = TRUE;  -- pause
+ALTER PIPE raw.orders_pipe REFRESH;   -- queue files staged in the last 7 days that were missed
+
+SELECT *
+FROM TABLE(INFORMATION_SCHEMA.COPY_HISTORY(
+  TABLE_NAME => 'RAW.ORDERS',
+  START_TIME => DATEADD('hour', -24, CURRENT_TIMESTAMP())));
+```
+
+**Pitfalls**
+
+- Recreating a pipe (`CREATE OR REPLACE PIPE`) discards its load history; a later `REFRESH` can load files a second time. Pause, recreate, then refresh carefully, or deduplicate downstream.
+- Expecting ordered loading. If order matters, carry a timestamp or sequence in the data and use it downstream.
+- Using Snowpipe for a few huge files per day. Bulk `COPY` on a schedule may be simpler; Snowpipe shines with a steady flow of files.
+
+**In interviews**
+
+Compare Snowpipe with bulk `COPY` on trigger, compute, latency, metadata retention (14 versus 64 days), error default and billing. Mention that ordering is not guaranteed.
+
+## Auto-ingest with cloud notifications
+
+With `AUTO_INGEST = TRUE`, your cloud storage tells Snowpipe when files land:
+
+| Cloud | Notification path |
+|-------|-------------------|
+| Amazon S3 | S3 event notifications to an SQS queue that Snowflake provides (optionally through SNS) |
+| Google Cloud Storage | Pub/Sub subscription, referenced through a notification integration |
+| Azure Blob / ADLS Gen2 | Event Grid to a storage queue, referenced through a notification integration |
+
+### Playbook: Snowpipe auto-ingest from Amazon S3
+
+**Goal:** load every Parquet file that lands under `s3://acme-lake/orders/` into `raw.orders` within minutes, without a warehouse.
+
+1. **Create the storage integration and stage** (as in the stages section): `s3_lake_int` and `raw.s3_orders`, and add the integration's IAM user and external ID to the IAM role's trust policy so Snowflake can read the bucket.
+
+2. **Create the target table and the pipe.**
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE TABLE raw.orders (
+  order_id     VARCHAR,
+  customer_id  VARCHAR,
+  amount       NUMBER(12,2),
+  order_ts     TIMESTAMP_NTZ,
+  _source_file VARCHAR,
+  _loaded_at   TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP()
+);
+
+CREATE OR REPLACE PIPE raw.orders_pipe
+  AUTO_INGEST = TRUE
+AS
+  COPY INTO raw.orders (order_id, customer_id, amount, order_ts, _source_file)
+  FROM (
+    SELECT $1:order_id::VARCHAR, $1:customer_id::VARCHAR, $1:amount::NUMBER(12,2),
+           $1:order_ts::TIMESTAMP_NTZ, METADATA$FILENAME
+    FROM @raw.s3_orders
+  )
+  FILE_FORMAT = (FORMAT_NAME = 'raw.parquet_fmt');
+```
+
+3. **Find the queue.** `SHOW PIPES` returns a `notification_channel` column containing the ARN of the SQS queue Snowflake created for this stage location.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SHOW PIPES LIKE 'ORDERS_PIPE' IN SCHEMA raw;
+```
+
+4. **Configure the S3 bucket's event notification** (in AWS, not Snowflake): for "object created" events on the `orders/` prefix, send notifications to that SQS ARN. If the bucket already sends events for that prefix to SNS, subscribe the Snowflake queue to the SNS topic instead, because S3 does not allow overlapping notification rules for the same prefix.
+
+5. **Load the backlog and test.** Files that landed before the notification was configured are not loaded automatically; `ALTER PIPE raw.orders_pipe REFRESH;` queues files from the last 7 days. Drop a test file and watch `SYSTEM$PIPE_STATUS` and `COPY_HISTORY`.
+
+6. **Monitor.** Track `COPY_HISTORY` for `LOAD_FAILED` files, configure Snowpipe error notifications (they work with the default `ON_ERROR = SKIP_FILE`), and check `PIPE_USAGE_HISTORY` for cost.
+
+**Pitfalls**
+
+- Pointing two pipes at the same files: both load them.
+- Forgetting step 5: files that arrived during setup or an outage stay unloaded until you refresh (or load them with `COPY`).
+
+**In interviews**
+
+Walk through integration, stage, pipe, the `notification_channel` queue and the bucket event, and say how you would backfill and monitor.
+
+## The Snowpipe REST API
+
+When you cannot (or do not want to) use cloud notifications, your own code can tell Snowpipe which files to load through REST endpoints on a pipe created **without** auto-ingest:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `insertFiles` | Submit a list of staged file paths to the pipe. Success means the list was recorded, not that the files are loaded yet |
+| `insertReport` | Recent load events for files submitted to the pipe (the documentation describes it as keeping the 10,000 most recent events for up to 10 minutes) |
+| `loadHistoryScan` | Load history between two points in time, up to 10,000 items per call |
+
+Authentication is **key-pair authentication with a JWT**, because the ingestion service does not keep sessions: generate an RSA key pair, assign the public key to the user (`ALTER USER ... SET RSA_PUBLIC_KEY = '...'`), and sign requests with the private key. Snowflake's Java and Python ingest SDKs handle the JWT for you. The calling role needs `OPERATE` on the pipe to submit files and `MONITOR` to read reports.
+
+Typical uses: an application or Lambda function that writes a file and immediately calls `insertFiles`; environments where configuring bucket notifications is not allowed.
+
+**Pitfalls**
+
+- Treating an `insertFiles` success as "loaded". Poll `insertReport` or `loadHistoryScan` (or query `COPY_HISTORY`).
+- Re-submitting the same file names after a pipe is recreated: its 14-day history is gone, so they load again.
+
+**In interviews**
+
+Name the three endpoints, the key-pair/JWT authentication, and when you would choose REST over auto-ingest.
+
+## Snowpipe Streaming
+
+**Snowpipe Streaming** ingests **rows**, not files. A client (your application, the Snowflake Kafka connector, or a tool such as Openflow) sends rows through an SDK over **channels**, and Snowflake writes them to the table, typically within seconds. There is no stage and no file.
+
+Snowflake now documents two architectures:
+
+| | Classic architecture | High-performance architecture (generally available since September 2025) |
+|--|---------------------|---------------------------------------------------------------------------|
+| Client | `snowflake-ingest-java` SDK | Newer Snowpipe Streaming SDKs |
+| Server-side object | Writes directly to the table | Data flows through a **PIPE** object, which holds transformations and schema validation |
+| Billing | Serverless compute time plus active client connections | Flat rate per uncompressed GB ingested |
+
+Both keep an **offset token** per channel: the client records the position of the last row committed (for example a Kafka offset), and on restart reads the token from Snowflake to resume without duplicates or gaps. That is how the Kafka connector achieves exactly-once delivery into a table.
+
+Choosing an ingestion method:
+
+| Need | Choose |
+|------|--------|
+| Daily or hourly batch files, large volumes | Bulk `COPY INTO` on a schedule (task or orchestrator) |
+| Files landing continuously, minutes of latency acceptable | Snowpipe with auto-ingest |
+| Files landing, cannot configure notifications | Snowpipe REST API |
+| Events from Kafka or an application, seconds of latency | Snowpipe Streaming |
+
+**Pitfalls**
+
+- Building a "micro-file" pipeline (one tiny file per event) to imitate streaming with Snowpipe. Per-file overhead makes it slow and costly; use Snowpipe Streaming.
+- Mixing up the architectures when estimating cost. Check which SDK and billing model your connector uses.
+
+**In interviews**
+
+The common question is "Snowpipe or Snowpipe Streaming?". Answer: Snowpipe loads files on notification with minutes of latency; Snowpipe Streaming writes rows through an SDK with seconds of latency, uses offset tokens for exactly-once, and has its own billing.
+
+## Practice questions
+
+<details>
+<summary>A COPY INTO ran at 09:00 and loaded 20 files. It is run again at 09:05 with no new files. What happens?</summary>
+
+Nothing is loaded. Snowflake keeps load metadata on the table for 64 days and skips files it has already loaded with the same name and checksum. The output reports the files as skipped or returns no rows loaded. Only `FORCE = TRUE` would load them again.
+
+</details>
+
+<details>
+<summary>What is the difference between ON_ERROR defaults for COPY and Snowpipe, and why?</summary>
+
+Bulk `COPY` defaults to `ABORT_STATEMENT`: one bad record fails the statement, which suits batch jobs that someone is watching. Snowpipe defaults to `SKIP_FILE` (and does not support `ABORT_STATEMENT`) because it processes a continuous stream of independent files: one bad file should not block the others. Skipped files show in `COPY_HISTORY` and can trigger error notifications.
+
+</details>
+
+<details>
+<summary>You recreated a pipe with CREATE OR REPLACE and ran ALTER PIPE REFRESH. Row counts doubled. Why?</summary>
+
+Snowpipe's load history lives on the pipe. Replacing the pipe discarded it, so `REFRESH` treated files staged in the last 7 days as new and loaded them again. Prevent it by not recreating pipes casually (use `ALTER PIPE` where possible), refreshing with a path prefix or `MODIFIED_AFTER` to limit files, and deduplicating downstream on a natural key or `METADATA$FILENAME`.
+
+</details>
+
+<details>
+<summary>Set up Snowpipe auto-ingest from S3 in five steps.</summary>
+
+1) Create a storage integration with the IAM role ARN and allowed locations, and add its IAM user and external ID to the role's trust policy. 2) Create an external stage on the bucket path using the integration. 3) Create the target table and a pipe with `AUTO_INGEST = TRUE` wrapping a `COPY INTO`. 4) Copy the SQS ARN from the `notification_channel` column of `SHOW PIPES` and configure an S3 event notification (or SNS subscription) for object-created events on the prefix. 5) Backfill with `ALTER PIPE ... REFRESH` and monitor with `SYSTEM$PIPE_STATUS` and `COPY_HISTORY`.
+
+</details>
+
+<details>
+<summary>A team writes one JSON file per event to S3 for Snowpipe, around 200 files per second. What would you suggest?</summary>
+
+Per-file overhead dominates with tiny files, increasing latency and cost. Either batch events into larger files (aim for roughly 100 to 250 MB compressed, or at least much larger than one event) before writing, or switch to Snowpipe Streaming (directly or through the Kafka connector), which ingests rows without files and is built for this pattern.
+
+</details>
+
+<details>
+<summary>Why should production external stages use a storage integration?</summary>
+
+The integration stores a cloud identity (an IAM role, service principal or service account) at account level, so no access keys appear in stage definitions, scripts or query history. Access is limited to `STORAGE_ALLOWED_LOCATIONS`, can be granted to roles with `USAGE`, and keys do not need rotating in Snowflake.
+
+</details>
+
+## Key takeaways
+
+- Define reusable file formats, stage files of roughly 100 to 250 MB compressed, and prefer external stages with storage integrations in production.
+- `COPY INTO` loads with a warehouse, keeps 64 days of load metadata so retries do not duplicate, and defaults to `ON_ERROR = ABORT_STATEMENT`.
+- Snowpipe wraps a `COPY` in a pipe, runs serverless on file notifications, keeps 14 days of history, defaults to `SKIP_FILE`, does not guarantee order and is billed per GB.
+- Auto-ingest uses SQS/SNS on AWS, Pub/Sub on GCP and Event Grid on Azure; backfill with `ALTER PIPE ... REFRESH` and avoid recreating pipes.
+- The REST API (`insertFiles`, `insertReport`, `loadHistoryScan`) uses key-pair JWT authentication for application-driven loads.
+- Snowpipe Streaming ingests rows in seconds through an SDK with offset tokens; the classic and high-performance architectures are billed differently.

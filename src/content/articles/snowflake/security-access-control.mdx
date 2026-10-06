@@ -1,0 +1,413 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Security: RBAC, Masking, Row Access Policies and Network Policies"
+seoTitle: "Snowflake Security: RBAC, Masking, Row Access"
+description: "Design Snowflake access control with roles and ownership, protect data with masking, row access policies and secure views, and lock down network access."
+technology: ["snowflake", "data-warehousing"]
+topic: ["security", "rbac", "governance", "masking"]
+difficulty: "Advanced"
+learningObjectives:
+  - "Explain Snowflake's RBAC and DAC model, system-defined roles and how privileges are inherited"
+  - "Design a role hierarchy with access roles and functional roles"
+  - "Describe object ownership, managed access schemas and future grants"
+  - "Write masking and row access policies and explain when each is evaluated"
+  - "Explain secure views, network policies and rules, encryption and authentication options"
+prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
+related: ["articles:databricks/unity-catalog-governance", "articles:etl-elt/data-quality-checks-contracts"]
+previous: "articles:snowflake/table-types-semi-structured"
+next: "articles:snowflake/cost-optimization"
+sources:
+  - { label: "Snowflake documentation: Overview of access control", url: "https://docs.snowflake.com/en/user-guide/security-access-control-overview" }
+  - { label: "Snowflake documentation: Access control best practices", url: "https://docs.snowflake.com/en/user-guide/security-access-control-considerations" }
+  - { label: "Snowflake documentation: Using Dynamic Data Masking", url: "https://docs.snowflake.com/en/user-guide/security-column-ddm-use" }
+  - { label: "Snowflake documentation: Use row access policies", url: "https://docs.snowflake.com/en/user-guide/security-row-using" }
+  - { label: "Snowflake documentation: Controlling network traffic with network policies", url: "https://docs.snowflake.com/en/user-guide/network-policies" }
+  - { label: "Snowflake documentation: Understanding encryption key management", url: "https://docs.snowflake.com/en/user-guide/security-encryption-manage" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. Masking and row access policies need Enterprise Edition or higher; authentication requirements (MFA, password deprecation) were being phased in during 2025 and 2026, so check your account's documentation for the current state."
+---
+
+Security questions in Snowflake interviews are rarely about cryptography. They are about **who can see what**: how roles and privileges are structured, how sensitive columns and rows are protected for some users and not others, and how access to the account itself is restricted. This lesson covers the access control model, role design, ownership, masking and row access policies, secure views, network policies, encryption and authentication.
+
+All SQL is Snowflake SQL written from the documentation and was not executed.
+
+## The RBAC model
+
+Snowflake combines two models:
+
+- **Role-based access control (RBAC)**: privileges on objects are granted to **roles**, and roles are granted to **users** (or to other roles). Users never hold object privileges directly in the normal model.
+- **Discretionary access control (DAC)**: every object has an **owner**, the role that holds `OWNERSHIP` on it, and the owner can grant privileges on it to other roles.
+
+The key terms:
+
+| Term | Meaning |
+|------|---------|
+| Securable object | Anything privileges can be granted on: account, warehouse, database, schema, table, view, stage, pipe, task, and so on |
+| Privilege | A permitted action on an object: `USAGE`, `SELECT`, `INSERT`, `CREATE TABLE`, `OPERATE`, `MONITOR`, `OWNERSHIP` |
+| Role | A container of privileges, granted to users and other roles |
+| User | A person or service identity that authenticates and activates roles |
+
+Objects are arranged in a hierarchy (account, database, schema, object), and access needs privileges at **every level**: to read a table you need `USAGE` on its database, `USAGE` on its schema and `SELECT` on the table, plus `USAGE` on a warehouse to run the query.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+GRANT USAGE ON DATABASE analytics TO ROLE analyst;
+GRANT USAGE ON SCHEMA analytics.marts TO ROLE analyst;
+GRANT SELECT ON ALL TABLES IN SCHEMA analytics.marts TO ROLE analyst;
+GRANT USAGE ON WAREHOUSE bi_wh TO ROLE analyst;
+GRANT ROLE analyst TO USER asha;
+```
+
+In a session, a user has a **primary role** (set with `USE ROLE`) and can activate **secondary roles** (`USE SECONDARY ROLES ALL`), so privileges from all their granted roles apply to queries. Object creation is always owned by the primary role.
+
+**Pitfalls**
+
+- Granting `SELECT` on a table but forgetting `USAGE` on the schema or database: the user gets "object does not exist or not authorized".
+- Expecting `GRANT ... ON ALL TABLES` to cover tables created later. It covers existing tables only; use future grants (below).
+
+**In interviews**
+
+Describe RBAC plus DAC, the container hierarchy that needs `USAGE` at each level, and primary versus secondary roles.
+
+## Roles and the role hierarchy
+
+Snowflake has **system-defined roles** that cannot be dropped:
+
+| Role | Purpose |
+|------|---------|
+| `ORGADMIN` / `GLOBALORGADMIN` | Organisation-level tasks: managing accounts and viewing organisation usage (`ORGADMIN` is being phased out in favour of `GLOBALORGADMIN` in the organisation account) |
+| `ACCOUNTADMIN` | Top-level role in an account; includes `SYSADMIN` and `SECURITYADMIN` |
+| `SECURITYADMIN` | Manages grants globally (`MANAGE GRANTS`); inherits `USERADMIN` |
+| `USERADMIN` | Creates and manages users and roles |
+| `SYSADMIN` | Creates warehouses, databases and other objects |
+| `PUBLIC` | Granted to every user automatically |
+
+Roles inherit privileges from the roles granted to them. Snowflake's recommended structure:
+
+- Create **custom roles** for your objects and grant the top of that custom hierarchy to `SYSADMIN`, so system administrators can manage all objects while user and role management stays with `USERADMIN`/`SECURITYADMIN`.
+- Separate **access roles** (hold privileges on objects, for example `marts_read`, `marts_write`) from **functional roles** (map to jobs, for example `analyst`, `data_engineer`), and grant access roles to functional roles. Changes to what a job can do then become one grant.
+- Limit `ACCOUNTADMIN` to a few people, require MFA for them, assign it to at least two users, never make it a default role and do not use it to create objects.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+USE ROLE USERADMIN;
+CREATE ROLE marts_read;
+CREATE ROLE marts_write;
+CREATE ROLE analyst;
+CREATE ROLE data_engineer;
+
+GRANT ROLE marts_read  TO ROLE analyst;
+GRANT ROLE marts_read  TO ROLE data_engineer;
+GRANT ROLE marts_write TO ROLE data_engineer;
+GRANT ROLE analyst       TO ROLE SYSADMIN;   -- keep custom roles under SYSADMIN
+GRANT ROLE data_engineer TO ROLE SYSADMIN;
+
+USE ROLE SECURITYADMIN;
+GRANT USAGE ON DATABASE analytics TO ROLE marts_read;
+GRANT USAGE ON SCHEMA analytics.marts TO ROLE marts_read;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA analytics.marts TO ROLE marts_read;
+```
+
+**Database roles** are roles that live inside a database. They are useful for grouping privileges on that database's objects, and they travel with the database when it is shared or replicated.
+
+**Pitfalls**
+
+- Granting object privileges directly to functional roles everywhere: dozens of grants to change for each new team.
+- Custom roles not connected to `SYSADMIN`: objects they own become invisible to administrators.
+
+**In interviews**
+
+Name the system roles and their split of duties, explain inheritance, and propose access roles plus functional roles. Mention the `ACCOUNTADMIN` best practices.
+
+## Object ownership
+
+Every object is owned by exactly one role, the one that created it (the primary role at the time) unless ownership is transferred. The owner has all privileges on the object, can grant them to others, and can drop it.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+GRANT OWNERSHIP ON TABLE analytics.marts.orders TO ROLE data_engineer COPY CURRENT GRANTS;
+GRANT OWNERSHIP ON ALL TABLES IN SCHEMA analytics.marts TO ROLE data_engineer COPY CURRENT GRANTS;
+```
+
+`COPY CURRENT GRANTS` keeps existing grants on the object; without it (`REVOKE CURRENT GRANTS`), outbound grants are removed as ownership moves.
+
+Two tools make ownership manageable at scale:
+
+- **Managed access schemas** (`CREATE SCHEMA ... WITH MANAGED ACCESS`): object owners in the schema lose the ability to grant access; only the schema owner or a role with `MANAGE GRANTS` can. This centralises grant decisions.
+- **Future grants**: `GRANT ... ON FUTURE TABLES IN SCHEMA ...` applies a grant automatically to objects created later. Schema-level future grants take precedence over database-level ones for the same object type.
+
+**Pitfalls**
+
+- Pipelines that create tables with a personal role: the tables are owned by that person's role, and a deployment with a different role cannot replace them. Use a dedicated deployment role.
+- `CREATE OR REPLACE` re-creates the object, so grants on it are lost unless future grants or `COPY GRANTS` cover it.
+
+**In interviews**
+
+Explain DAC ownership, how to transfer it safely, and why managed access schemas plus future grants are the standard in production.
+
+## Column-level security with masking policies
+
+A **masking policy** (Dynamic Data Masking, Enterprise Edition or higher) is a schema-level object that decides, **at query time**, what value a user sees for a column. The data is stored unmasked; the policy rewrites the value on read based on context such as the role.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE MASKING POLICY governance.email_mask
+  AS (val STRING) RETURNS STRING ->
+  CASE
+    WHEN IS_ROLE_IN_SESSION('PII_READER') THEN val
+    WHEN IS_ROLE_IN_SESSION('SUPPORT') THEN REGEXP_REPLACE(val, '.+@', '*****@')
+    ELSE '*** masked ***'
+  END;
+
+ALTER TABLE crm.customers MODIFY COLUMN email SET MASKING POLICY governance.email_mask;
+
+-- Remove later
+ALTER TABLE crm.customers MODIFY COLUMN email UNSET MASKING POLICY;
+```
+
+How it behaves:
+
+- The policy's input and output types must match the column's type.
+- `IS_ROLE_IN_SESSION('ROLE')` returns true if the current primary or secondary roles include or inherit that role, which respects role hierarchies. `CURRENT_ROLE()` only checks the primary role by name, so it can surprise users who rely on inherited roles. Snowflake recommends `IS_ROLE_IN_SESSION` (or `IS_DATABASE_ROLE_IN_SESSION`) for hierarchy-aware policies.
+- Policies apply wherever the column is used: queries, views, joins, `COPY INTO <location>` unloads.
+- **Tag-based masking**: attach a policy to a tag (for example `pii = 'email'`) and the policy applies to every column with that tag, which scales far better than column-by-column assignment.
+- **Centralised management**: a separate governance role can own policies, so table owners cannot remove protection.
+
+Other options: **external tokenization** (values tokenised before loading and detokenised by an external function in the policy) and **projection policies** (prevent a column from being selected at all while still allowing it in filters).
+
+**Pitfalls**
+
+- Masking a column that is used as a join key: masked values no longer match. Mask in a way that keeps joinability (for example a deterministic hash) or join on another key.
+- A policy that does expensive work (lookups in big tables) per row slows every query on the column.
+
+**In interviews**
+
+Explain that masking is applied at query time without changing stored data, write a `CASE` policy with `IS_ROLE_IN_SESSION`, mention tag-based masking and that it needs Enterprise Edition.
+
+## Row access policies
+
+A **row access policy** (Enterprise Edition or higher) decides which **rows** a query can see. It is a function returning `BOOLEAN`, attached to a table or view on one or more columns; rows for which it returns false are filtered out.
+
+The common pattern uses a **mapping table** of who may see what:
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE TABLE governance.region_access (role_name STRING, region STRING);
+INSERT INTO governance.region_access VALUES ('SALES_EMEA', 'EMEA'), ('SALES_APAC', 'APAC');
+
+CREATE OR REPLACE ROW ACCESS POLICY governance.sales_region_policy
+  AS (sales_region STRING) RETURNS BOOLEAN ->
+  IS_ROLE_IN_SESSION('SALES_EXEC')
+  OR EXISTS (
+    SELECT 1
+    FROM governance.region_access m
+    WHERE IS_ROLE_IN_SESSION(m.role_name)
+      AND m.region = sales_region
+  );
+
+ALTER TABLE sales.orders ADD ROW ACCESS POLICY governance.sales_region_policy ON (region);
+```
+
+Rules:
+
+- A table or view can have only one row access policy at a time; combine conditions inside it.
+- Row access policies are evaluated before masking policies.
+- The mapping table should be owned by the governance role, not readable or writable by the users the policy restricts.
+- Policies follow the data into views and, with care, into shares (consumers' account or roles can be referenced with functions such as `CURRENT_ACCOUNT()`).
+
+**Pitfalls**
+
+- Forgetting a role in the mapping table: users see zero rows and report "missing data", not an error.
+- Subqueries over large mapping tables in the policy: keep the mapping table small and indexed by role.
+
+**In interviews**
+
+Write a mapping-table policy, state one policy per object and evaluation before masking, and contrast with secure views filtered by `CURRENT_ROLE()` (policies are centrally managed and attach to the table itself).
+
+## Secure views
+
+A **secure view** (`CREATE SECURE VIEW`) hides its definition from users who are not the owner and turns off optimiser behaviours that could leak data from rows the view filters out (for example, evaluating a user's function on hidden rows before the filter).
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE OR REPLACE SECURE VIEW sales.v_my_region_orders AS
+SELECT order_id, region, amount
+FROM sales.orders
+WHERE region IN (SELECT region FROM governance.region_access
+                 WHERE IS_ROLE_IN_SESSION(role_name));
+```
+
+Use secure views when:
+
+- the view enforces access rules and the definition itself is sensitive;
+- you share data with other accounts: views in a share must be secure views (unless the share is configured otherwise);
+- you need protection on Standard Edition, where masking and row access policies are not available.
+
+Trade-off: secure views can be slower, because some optimisations are disabled. Do not make every view secure.
+
+**Pitfalls**
+
+- Using a normal view for access control: a clever user can infer filtered data through the optimiser, and anyone with access can read the definition.
+
+**In interviews**
+
+Explain what "secure" adds (hidden definition, no leaking optimisations), why sharing requires them, and the performance cost.
+
+## Network policies
+
+A **network policy** restricts which network locations can connect to Snowflake. It allows or blocks requests based on their origin.
+
+The current recommended design uses **network rules**: schema-level objects that group identifiers (IPv4 ranges, AWS VPC endpoint IDs, Azure private link IDs). A network policy references rules in `ALLOWED_NETWORK_RULE_LIST` and `BLOCKED_NETWORK_RULE_LIST`. The older `ALLOWED_IP_LIST` / `BLOCKED_IP_LIST` parameters still exist.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+CREATE NETWORK RULE governance.corp_vpn
+  MODE = INGRESS
+  TYPE = IPV4
+  VALUE_LIST = ('203.0.113.0/24');
+
+CREATE NETWORK RULE governance.etl_vpce
+  MODE = INGRESS
+  TYPE = AWSVPCEID
+  VALUE_LIST = ('vpce-0123456789abcdef0');
+
+CREATE NETWORK POLICY corp_access
+  ALLOWED_NETWORK_RULE_LIST = ('governance.corp_vpn', 'governance.etl_vpce');
+
+ALTER ACCOUNT SET NETWORK_POLICY = corp_access;          -- account level
+ALTER USER etl_service SET NETWORK_POLICY = etl_only;   -- user level overrides account
+```
+
+(The addresses and IDs are documentation-style placeholders.)
+
+Precedence and behaviour:
+
+- A policy can be attached to the **account**, to a **user**, or to a **security integration** (for example an OAuth integration). If both the account and the authenticating user have policies, the **user-level** policy applies.
+- Only one network policy can be attached to the account at a time.
+- If an address is in both the allowed and blocked lists, **blocked wins**.
+- Private connectivity rules (VPC endpoint or private link IDs) take precedence over IPv4 rules for requests arriving over private connectivity.
+- Network policies are checked before authentication policies.
+
+**Pitfalls**
+
+- Locking yourself out: activating an account policy that does not include your own address. Test with a user-level policy first, and keep an administrator path.
+- Forgetting SaaS tools (BI, ingestion services) that connect from their own addresses.
+
+**In interviews**
+
+Describe allow and block lists through network rules, the account/user/integration levels with user overriding account, "blocked wins", and how you would roll one out safely.
+
+## Data encryption
+
+Snowflake encrypts all customer data, in every edition, with no configuration:
+
+- **At rest**: AES-256 encryption of table data, stage files (internal stages) and temporary results.
+- **In transit**: TLS for client connections.
+- **Hierarchical key model**: a root key (in a cloud hardware security module), account master keys, table master keys and file keys, each layer encrypting the one below, so each key protects a limited amount of data.
+- **Key rotation**: Snowflake-managed keys are rotated automatically when they are more than 30 days old; retired keys still decrypt older data until it is re-encrypted.
+- **Periodic rekeying** (Enterprise and higher, enabled by `ACCOUNTADMIN` with `PERIODIC_DATA_REKEYING`): data encrypted with retired keys is re-encrypted with new keys, so old keys can be destroyed.
+- **Tri-Secret Secure** (Business Critical and higher): a customer-managed key in your cloud key management service combines with Snowflake's key into a composite master key. Revoking your key makes the data unreadable to Snowflake.
+- **Client-side encryption** for external stages is supported when you encrypt files yourself.
+
+**Pitfalls**
+
+- Treating encryption as access control. Encryption protects against storage theft; RBAC and policies decide who reads data through Snowflake.
+
+**In interviews**
+
+Summarise: always-on AES-256, hierarchical keys, 30-day rotation, periodic rekeying on Enterprise, Tri-Secret Secure on Business Critical.
+
+## OAuth and SSO
+
+Snowflake supports several authentication methods, configured mostly through **security integrations**:
+
+| Method | How it works | Typical use |
+|--------|--------------|-------------|
+| Federated authentication (SSO) | SAML 2.0 (or OpenID Connect) with an identity provider such as Okta or Microsoft Entra ID; Snowflake is the service provider | People logging in to Snowsight and desktop tools |
+| Snowflake OAuth | Snowflake is the authorisation server; a client application gets tokens via the OAuth authorisation code flow | Partner tools (BI, notebooks) acting on behalf of users |
+| External OAuth | Your identity provider issues OAuth tokens that Snowflake accepts | Organisations that centralise tokens in their IdP |
+| Key-pair authentication | RSA key pair; the private key signs a JWT | Service users: pipelines, connectors, the Snowpipe REST API |
+| Programmatic access tokens | Tokens issued for a user for API and driver access | Automation where key pairs are impractical |
+| Password plus MFA | Password with a second factor | Human users without SSO |
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- A service user for pipelines, with no password
+CREATE USER etl_service TYPE = SERVICE DEFAULT_ROLE = data_engineer;
+ALTER USER etl_service SET RSA_PUBLIC_KEY = 'MIIBIjANBgkqh...';
+```
+
+**Authentication policies** restrict which methods, clients and security integrations a user or the account may use, and can require MFA.
+
+Snowflake has been **phasing out single-factor password sign-ins**: the documented plan required MFA for human users of Snowsight first and then for all password-based sign-ins in later phases scheduled through 2026, while service users are expected to use key pairs, OAuth or tokens rather than passwords. Check your account's documentation for which phase applies to you.
+
+**Pitfalls**
+
+- Pipelines authenticating as a human user with a password: they break when MFA is enforced. Use a `TYPE = SERVICE` user with key-pair auth.
+- SSO without SCIM provisioning: users removed from the IdP keep their Snowflake users and roles.
+
+**In interviews**
+
+Distinguish SSO (people, SAML/OIDC), OAuth (applications acting for users, Snowflake or external authorisation server) and key pairs (services). Mention the move away from single-factor passwords.
+
+## Practice questions
+
+<details>
+<summary>An analyst has SELECT on a table but gets "Object does not exist or not authorized". What do you check?</summary>
+
+Container privileges: `USAGE` on the database and the schema for the analyst's role (or a role it inherits). Then that the right role is active (`USE ROLE`, or secondary roles), that they have `USAGE` on a warehouse, and whether a row access policy is involved (that would return zero rows rather than an error).
+
+</details>
+
+<details>
+<summary>Design roles for a team with analysts, data engineers and a BI service account.</summary>
+
+Access roles per data area and level, such as `marts_read`, `marts_write`, `raw_write`, holding object privileges and future grants. Functional roles `analyst` (gets `marts_read`), `data_engineer` (gets `raw_write`, `marts_write`, `marts_read`) and `bi_service` (gets `marts_read`), each with `USAGE` on its own warehouse. Grant functional roles to `SYSADMIN`. Create roles with `USERADMIN`, manage grants with `SECURITYADMIN`, and use a managed access schema for marts. The BI service user is a `TYPE = SERVICE` user with key-pair or OAuth authentication.
+
+</details>
+
+<details>
+<summary>Why prefer IS_ROLE_IN_SESSION over CURRENT_ROLE() in a masking policy?</summary>
+
+`CURRENT_ROLE()` returns only the primary role's name, so a user whose role inherits `PII_READER` (or who has it as a secondary role) would be masked even though they should see the data. `IS_ROLE_IN_SESSION('PII_READER')` checks the active roles and their hierarchy.
+
+</details>
+
+<details>
+<summary>A user can query the table but sees zero rows, and no error. What could cause it?</summary>
+
+A row access policy on the table that returns false for all rows in their context, often because their role is missing from the mapping table or the policy checks `CURRENT_ROLE()` while they use an inherited role. Check `POLICY_REFERENCES` for the table and the mapping table entries.
+
+</details>
+
+<details>
+<summary>The account has a network policy allowing only the office VPN. A cloud ETL service must connect from fixed IPs. How do you allow it without opening the account?</summary>
+
+Create a network policy (with a network rule for the ETL service's IPs or its VPC endpoint) and attach it to the ETL service user. A user-level policy overrides the account-level one for that user, so only that user can connect from those addresses.
+
+</details>
+
+<details>
+<summary>Secure view or row access policy: how do you choose?</summary>
+
+Row access policies (Enterprise) attach to the table itself, apply everywhere the table is used, are managed centrally by a governance role, and can be tag-driven. Secure views protect only access through that view, but work on Standard Edition, hide their definition and are required for sharing views. Many designs use both: policies on base tables and secure views for sharing.
+
+</details>
+
+## Key takeaways
+
+- Snowflake combines RBAC (privileges to roles, roles to users) with DAC (each object has an owning role); access needs `USAGE` at every container level.
+- Keep custom roles under `SYSADMIN`, separate access roles from functional roles, and limit and protect `ACCOUNTADMIN`.
+- Use managed access schemas and future grants so ownership and grants stay consistent as objects are created.
+- Masking policies (columns) and row access policies (rows) are Enterprise features evaluated at query time; use `IS_ROLE_IN_SESSION` and tag-based policies to scale.
+- Secure views hide definitions and leaking optimisations and are needed for sharing views.
+- Network policies with network rules restrict origins (user overrides account, blocked wins); data is always encrypted, with rekeying on Enterprise and Tri-Secret Secure on Business Critical; use SSO for people and key pairs or OAuth for services.

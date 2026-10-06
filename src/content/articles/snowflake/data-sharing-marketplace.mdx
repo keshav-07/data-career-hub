@@ -1,0 +1,300 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Data Sharing, Reader Accounts and the Marketplace"
+seoTitle: "Snowflake Data Sharing and the Marketplace"
+description: "Share live Snowflake data without copying it: shares and grants, reader accounts, Marketplace listings, exchanges, and sharing across regions and clouds."
+technology: ["snowflake", "data-warehousing"]
+topic: ["data-sharing", "marketplace", "collaboration"]
+difficulty: "Advanced"
+learningObjectives:
+  - "Explain how Secure Data Sharing gives consumers live, read-only access without copying data"
+  - "Create a share, grant objects to it and consume it as another account"
+  - "Decide when to use a reader account and who pays for it"
+  - "Distinguish direct shares, private listings, public Marketplace listings and exchanges"
+  - "Share data with consumers in other regions and clouds using replication or auto-fulfillment"
+prerequisites: ["articles:snowflake/security-access-control"]
+related: ["articles:snowflake/architecture-virtual-warehouses", "articles:snowflake/table-types-semi-structured"]
+previous: "articles:snowflake/cost-optimization"
+sources:
+  - { label: "Snowflake documentation: About Secure Data Sharing", url: "https://docs.snowflake.com/en/user-guide/data-sharing-intro" }
+  - { label: "Snowflake documentation: Create and configure shares", url: "https://docs.snowflake.com/en/user-guide/data-sharing-provider" }
+  - { label: "Snowflake documentation: Manage reader accounts", url: "https://docs.snowflake.com/en/user-guide/data-sharing-reader-create" }
+  - { label: "Snowflake documentation: Auto-fulfillment for listings", url: "https://docs.snowflake.com/en/collaboration/provider-listings-auto-fulfillment" }
+  - { label: "Snowflake documentation: Share data securely across regions and cloud platforms", url: "https://docs.snowflake.com/en/user-guide/secure-data-sharing-across-regions-platforms" }
+  - { label: "Snowflake documentation: Share data protected by a policy", url: "https://docs.snowflake.com/en/user-guide/data-sharing-policy-protected-data" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. Listing types and auto-fulfillment options evolve quickly; check your account's documentation before designing a cross-region data product."
+---
+
+Snowflake can give another account access to your tables **without copying them**. The consumer queries your live micro-partitions with its own compute, sees changes as soon as you commit them, and cannot modify anything. That capability, Secure Data Sharing, underpins reader accounts, private and public listings, the Snowflake Marketplace and cross-region sharing. Data Engineers meet it when delivering data to customers or partners, when consuming third-party data, and when sharing between business units that run separate accounts.
+
+All SQL is Snowflake SQL written from the documentation and was not executed.
+
+## Secure Data Sharing
+
+**Secure Data Sharing** lets a **provider** account expose selected databases, schemas, tables, secure views and other objects to one or more **consumer** accounts.
+
+How it works:
+
+- No data moves. The share is metadata in the cloud services layer that grants the consumer access to the provider's micro-partitions. This is the same storage and compute separation that lets many warehouses share one table.
+- The consumer **creates a database from the share** and queries it with its own warehouses. The provider pays for storage; the consumer pays for the compute it uses.
+- Data is **live**: committed changes on the provider side are visible to consumers immediately.
+- Shared objects are **read-only** for the consumer. Consumers cannot re-share data they receive.
+- Access can be revoked by the provider at any time.
+
+| Option | Data copied? | Freshness | Who pays compute |
+|--------|--------------|-----------|------------------|
+| Direct share (same region) | No | Live | Consumer |
+| Reader account | No | Live | Provider |
+| Listing with auto-fulfillment to other regions | Replicated by Snowflake to the consumer's region | Refreshed on a schedule the provider sets | Consumer queries; provider pays replication |
+| Export files (CSV/Parquet) | Yes | As of the export | Whoever processes the files |
+
+**Pitfalls**
+
+- Assuming sharing is free for the provider: storage is theirs, and cross-region replication adds transfer and compute costs.
+- Expecting consumers to be able to write back. For two-way collaboration, each side shares its own data, or use a purpose-built solution such as clean rooms.
+
+**In interviews**
+
+Explain "zero-copy, live, read-only, consumer pays compute", and connect it to the storage and compute separation.
+
+## Shares and grants
+
+A **share** is a named object that holds grants. The provider creates it, grants privileges on objects to it, then adds consumer accounts.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here) -- provider account
+USE ROLE ACCOUNTADMIN;   -- or a role with CREATE SHARE
+
+CREATE SHARE sales_share COMMENT = 'Daily sales for partner analytics';
+
+GRANT USAGE ON DATABASE sales_db TO SHARE sales_share;
+GRANT USAGE ON SCHEMA sales_db.shared TO SHARE sales_share;
+GRANT SELECT ON TABLE sales_db.shared.daily_sales TO SHARE sales_share;
+GRANT SELECT ON VIEW sales_db.shared.v_partner_orders TO SHARE sales_share;  -- must be a secure view
+
+ALTER SHARE sales_share ADD ACCOUNTS = partnerorg.partner_account;
+
+SHOW SHARES;
+DESC SHARE sales_share;
+```
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here) -- consumer account
+CREATE DATABASE partner_sales FROM SHARE providerorg.provider_account.sales_share;
+
+GRANT IMPORTED PRIVILEGES ON DATABASE partner_sales TO ROLE analyst;
+
+SELECT * FROM partner_sales.shared.daily_sales LIMIT 10;
+```
+
+(Account and organisation names are placeholders.)
+
+Rules worth knowing:
+
+- Views in a share must be **secure views** (secure materialized views and secure UDFs are also shareable). A secure view that references objects in **another** database needs `REFERENCE_USAGE` on that database granted to the share.
+- **Database roles** can be granted to a share, so the consumer can grant different subsets of the shared objects to different roles instead of all-or-nothing `IMPORTED PRIVILEGES`.
+- **Policies travel with the data**: masking and row access policies on shared tables are enforced in the consumer account. A row access policy can use `CURRENT_ACCOUNT()` to return each consumer only its own rows, which lets one share serve many customers.
+- Use a dedicated schema of secure views for each audience, rather than sharing raw tables, so the contract with the consumer is explicit and stable.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- One share, many customers: each consumer account sees only its rows
+CREATE OR REPLACE SECURE VIEW sales_db.shared.v_partner_orders AS
+SELECT o.order_id, o.order_date, o.amount
+FROM sales_db.core.orders AS o
+JOIN sales_db.core.partner_accounts AS p
+  ON o.partner_id = p.partner_id
+WHERE p.snowflake_account = CURRENT_ACCOUNT();
+```
+
+**Pitfalls**
+
+- Sharing a normal view: it is rejected (or must be explicitly allowed); use secure views.
+- Changing a shared view's columns without warning consumers, which breaks their pipelines. Version shared views like an API.
+- Forgetting that `CURRENT_ACCOUNT()` in the consumer returns the consumer's locator in the format the documentation specifies; test the mapping with a real consumer account.
+
+**In interviews**
+
+Write the provider and consumer sides, mention secure views, `REFERENCE_USAGE`, database roles and the `CURRENT_ACCOUNT()` multi-tenant pattern.
+
+## Reader accounts
+
+A **reader account** (a **managed account** of type `READER`) is a Snowflake account the provider creates for a consumer who does **not** have Snowflake. The provider owns and administers it.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here) -- provider account
+CREATE MANAGED ACCOUNT acme_reader
+  ADMIN_NAME = 'acme_admin',
+  ADMIN_PASSWORD = '<strong password set by the provider>',
+  TYPE = READER;
+
+SHOW MANAGED ACCOUNTS;   -- returns the reader account's locator and URL
+
+ALTER SHARE sales_share ADD ACCOUNTS = <reader account locator>;
+```
+
+Then, inside the reader account, an administrator creates a warehouse, users and roles, and creates a database from the share as any consumer would.
+
+What to know:
+
+- **The provider pays** for all compute used in the reader account. Warehouses there can consume credits without limit unless the provider controls them, so set **resource monitors** and small warehouses with short auto-suspend.
+- Reader accounts are **read-only**: users can query shared data but cannot load data, insert, update or create their own tables of data.
+- They can only consume shares from the provider that created them.
+- The provider is responsible for managing users and security in the account.
+
+When to use one: small partners or customers without Snowflake who need SQL or BI access. When not to: consumers who already have Snowflake (use a direct share or listing, so they pay their own compute), or large consumers whose compute you do not want to fund.
+
+**Pitfalls**
+
+- No resource monitor on a reader account's warehouse: one consumer's heavy queries appear on the provider's bill.
+
+**In interviews**
+
+Answer "how do you share with a company that does not use Snowflake?" with reader accounts, and immediately add who pays and how you cap it.
+
+## The Snowflake Marketplace
+
+The **Snowflake Marketplace** is where providers publish data products as **public listings** that any Snowflake customer can discover and get. Consumers search the Marketplace in Snowsight, request or get a listing, and receive a database in their own account, usually without moving data.
+
+Listing offers include:
+
+- **Free** listings: immediate access.
+- **Limited trial** listings: sample or time-limited access, with full access on request.
+- **Paid** listings: charged through Snowflake, under pricing plans the provider defines.
+
+Typical Marketplace products: reference data (calendars, geographies), weather, financial and economic data, and data enrichment services. Products can include not only tables and views but also **Snowflake Native Apps** (code plus data).
+
+Why it matters to Data Engineers:
+
+- Third-party data arrives as a live, queryable database: no ingestion pipeline, no files to parse, and updates appear when the provider publishes them.
+- You still need to model it: join keys, data quality checks, and a plan for schema changes on the provider side.
+
+**Pitfalls**
+
+- Building production models directly on a Marketplace database without tests. Treat it as an external source with a contract.
+
+**In interviews**
+
+Describe what the Marketplace is, the free, trial and paid models, and how consuming a listing differs from a traditional data feed (no ingestion, live updates, but an external dependency).
+
+## Listings and exchanges
+
+A **listing** wraps a share (or a Native App) with metadata: a title, description, sample queries, data dictionary, terms, and the regions where it is available. Listings are the recommended way to distribute data products beyond a few direct shares.
+
+| Mechanism | Audience | Discoverable by | Cross-region |
+|-----------|----------|-----------------|--------------|
+| Direct share | Named accounts in the same region | Not discoverable | No (needs replication) |
+| Private listing | Named consumer accounts | Only those consumers | Yes, with auto-fulfillment |
+| Public listing on the Marketplace | Any Snowflake customer | Everyone on the Marketplace | Yes, with auto-fulfillment |
+| Organizational listing | Accounts within your Snowflake organisation | Members of the organisation | Yes |
+| Data Exchange (private exchange) | Members of an invite-only group the exchange administrator manages | Exchange members | Depends on configuration |
+
+A **Data Exchange** is a private hub for a defined group (for example a company and its suppliers) where members can publish and discover listings. For most new designs within one organisation, organizational listings and private listings cover the same ground; check which your account supports.
+
+Listings can be managed in Snowsight or with SQL (`CREATE LISTING` with a YAML manifest), which suits CI/CD for data products.
+
+**Pitfalls**
+
+- Using dozens of direct shares to reach consumers in many regions, each with its own replication setup. Listings with auto-fulfillment are designed for this.
+
+**In interviews**
+
+Explain that a listing is a share plus product metadata and distribution options, and contrast private listings, public Marketplace listings, organizational listings and exchanges by audience.
+
+## Cross-region and cross-cloud sharing
+
+A direct share works only between accounts in the **same region** of the **same cloud**, because the consumer reads the provider's storage directly. To reach consumers elsewhere, the data must be copied to their region. There are two ways:
+
+**1. Replication plus a local share (manual).** The provider creates (or uses) an account in the consumer's region, replicates the database there with database replication or replication groups, and shares from that account.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- In the source account: allow replication of a group to the target account
+CREATE REPLICATION GROUP sales_rg
+  OBJECT_TYPES = DATABASES, SHARES
+  ALLOWED_DATABASES = sales_db
+  ALLOWED_SHARES = sales_share
+  ALLOWED_ACCOUNTS = myorg.sales_eu
+  REPLICATION_SCHEDULE = '60 MINUTE';
+
+-- In the target account (myorg.sales_eu), create the secondary and refresh
+CREATE REPLICATION GROUP sales_rg AS REPLICA OF myorg.sales_us.sales_rg;
+ALTER REPLICATION GROUP sales_rg REFRESH;
+```
+
+**2. Listings with Cross-Cloud Auto-Fulfillment (managed).** The provider publishes a listing and enables auto-fulfillment; Snowflake replicates the data product to the regions where consumers request it, on the refresh schedule the provider sets, and the provider pays only for regions with demand.
+
+- For **private listings** to accounts in other regions, Snowflake enables auto-fulfillment automatically, and those listings cannot be replicated manually.
+- **Paid** Marketplace listings must use auto-fulfillment; free and trial listings may use either auto-fulfillment or manual replication.
+- Auto-fulfillment can also deliver open table formats such as Iceberg tables across clouds.
+
+Costs to plan for on the provider side: storage in each target region, compute for replication refreshes, and data transfer between regions or clouds. Consumers in the remote region see data as of the last refresh, not live.
+
+**Pitfalls**
+
+- Promising "real-time" data to consumers in other regions: they see the replica's last refresh.
+- Overlooking egress costs when replicating large, frequently changing tables to many regions.
+
+**In interviews**
+
+State the same-region rule for direct shares, then give the two options (manual replication and a share in a local account, or listings with auto-fulfillment), with their costs and freshness.
+
+## Practice questions
+
+<details>
+<summary>How can a partner query your Snowflake data without you copying it, and who pays?</summary>
+
+If they have a Snowflake account in the same region: create a share, grant `USAGE` on the database and schema and `SELECT` on tables or secure views, and add their account. They create a database from the share and query it with their own warehouses: you pay storage, they pay compute. If they have no Snowflake account, create a reader account; then you also pay their compute, so add resource monitors.
+
+</details>
+
+<details>
+<summary>You want to share one orders view with 50 customers, each seeing only their own orders. How?</summary>
+
+Create a secure view (or a row access policy on the table) that filters on a mapping from customer to Snowflake account using `CURRENT_ACCOUNT()`, add it to one share (or listing), and add all 50 consumer accounts. Each consumer's queries return only rows mapped to their account. Test with a real consumer account to confirm the account identifier format matches the mapping.
+
+</details>
+
+<details>
+<summary>Why must shared views be secure views?</summary>
+
+A secure view hides its definition from consumers and disables optimisations that could expose rows filtered out by the view (for example through user functions evaluated before the filter). Without that, a consumer could learn about the provider's underlying tables or infer data they should not see.
+
+</details>
+
+<details>
+<summary>A consumer in a different cloud region cannot see your direct share. What are your options?</summary>
+
+Direct shares only work within one region. Either replicate the database to an account you own in the consumer's region (database replication or a replication group) and share from there, or publish a private listing to that consumer, which uses Cross-Cloud Auto-Fulfillment to replicate the product to their region automatically. Both copy data, add storage, transfer and refresh compute costs, and deliver data as of the last refresh.
+
+</details>
+
+<details>
+<summary>What can users in a reader account not do?</summary>
+
+They cannot load data or run DML that changes data (insert, update, delete, `COPY INTO` a table), and they can only consume shares from the provider that created the account. They can query shared data with warehouses in the reader account, which the provider pays for.
+
+</details>
+
+<details>
+<summary>How is getting a dataset from the Marketplace different from buying a CSV feed?</summary>
+
+The Marketplace listing arrives as a database in your account, usually shared live without copying, so there is no ingestion pipeline, parsing or file handling, and provider updates appear automatically. You still need to treat it as an external source: test it, document the contract, and plan for provider schema changes. A CSV feed needs ingestion and storage on your side but you control when changes land.
+
+</details>
+
+## Key takeaways
+
+- Secure Data Sharing grants live, read-only access to the provider's data without copying it; consumers pay for their own compute.
+- A share holds grants: `USAGE` on database and schema, `SELECT` on tables and secure views, plus `REFERENCE_USAGE` for cross-database secure views; consumers create a database from it.
+- Masking and row access policies travel with shared data; `CURRENT_ACCOUNT()` enables one share for many tenants.
+- Reader accounts serve consumers without Snowflake; the provider pays their compute, so cap it with resource monitors.
+- Listings add product metadata and distribution: private listings, public Marketplace listings (free, trial, paid), organizational listings and exchanges.
+- Direct shares are same-region only; reach other regions and clouds with replication or listings with Cross-Cloud Auto-Fulfillment, accepting refresh lag and extra cost.

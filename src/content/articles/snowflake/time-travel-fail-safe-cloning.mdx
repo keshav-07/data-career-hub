@@ -1,0 +1,357 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Snowflake Time Travel, Fail-safe and Zero-Copy Cloning"
+seoTitle: "Snowflake Time Travel, Fail-safe and Cloning"
+description: "Query and restore past data with Snowflake Time Travel, set retention by edition, understand the 7-day Fail-safe and use zero-copy clones safely."
+technology: ["snowflake", "data-warehousing"]
+topic: ["time-travel", "fail-safe", "cloning", "data-recovery"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Query historical data with AT and BEFORE using a timestamp, offset or statement ID"
+  - "Restore dropped tables, schemas and databases with UNDROP"
+  - "Configure retention periods within each edition's limits and predict the storage cost"
+  - "Explain what Fail-safe is for and why it is not a backup you can query"
+  - "Create zero-copy clones, including clones at a point in time, and know what they do and do not copy"
+prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
+related: ["articles:snowflake/cost-optimization", "articles:etl-elt/pipeline-reliability-and-retries"]
+previous: "articles:snowflake/loading-copy-snowpipe"
+next: "articles:snowflake/table-types-semi-structured"
+sources:
+  - { label: "Snowflake documentation: Understanding and using Time Travel", url: "https://docs.snowflake.com/en/user-guide/data-time-travel" }
+  - { label: "Snowflake documentation: Understanding and viewing Fail-safe", url: "https://docs.snowflake.com/en/user-guide/data-failsafe" }
+  - { label: "Snowflake documentation: Storage costs for Time Travel and Fail-safe", url: "https://docs.snowflake.com/en/user-guide/data-cdp-storage-costs" }
+  - { label: "Snowflake documentation: CREATE ... CLONE", url: "https://docs.snowflake.com/en/sql-reference/sql/create-clone" }
+  - { label: "Snowflake documentation: Cloning considerations", url: "https://docs.snowflake.com/en/user-guide/object-clone" }
+  - { label: "Snowflake documentation: Working with temporary and transient tables", url: "https://docs.snowflake.com/en/user-guide/tables-temp-transient" }
+versionContext: "Written against the current Snowflake documentation (October 2026). The Snowflake SQL examples were not executed, because no Snowflake account is available in this environment. Retention limits depend on edition and table type; confirm them in your account's documentation."
+---
+
+Because Snowflake never modifies micro-partitions in place, it can keep the old ones for a while after data changes. Three features build on that: **Time Travel** lets you query or restore data as it was, **Fail-safe** gives Snowflake a last-resort recovery window after Time Travel ends, and **zero-copy cloning** creates a full copy of a table, schema or database in seconds without duplicating storage. Data Engineers use them daily for debugging, recovery from bad loads and safe testing.
+
+All SQL is Snowflake SQL written from the documentation and was not executed.
+
+## Time Travel basics
+
+**Time Travel** lets you access data that has been changed or deleted, as it existed at any point within a **retention period**. With it you can:
+
+- query a table as of an earlier time (to compare before and after a bad `MERGE`);
+- restore tables, schemas and databases that were dropped;
+- create clones of objects as they were at a point in time.
+
+How it works: when DML changes a table, the micro-partitions it replaced are not deleted immediately. They move into the Time Travel state and stay there for the retention period, then move into Fail-safe (for permanent tables), then are purged.
+
+```text
+ change or drop          retention period ends          7 days later
+      |------- Time Travel -------|-------- Fail-safe --------|  purged
+      (you can query, clone, undrop) (Snowflake support only)
+```
+
+Time Travel storage is billed like any other storage. A table that is completely rewritten every day keeps a full extra copy for each day of retention.
+
+**Pitfalls**
+
+- Treating Time Travel as a backup strategy on its own. It is bounded by retention, follows the table's lifecycle and lives in the same account; for long-term or cross-account protection use replication or exports.
+- Forgetting the cost on high-churn tables. See `TIME_TRAVEL_BYTES` in `TABLE_STORAGE_METRICS`.
+
+**In interviews**
+
+Describe the lifecycle (current, Time Travel, Fail-safe, purged), say what you can do during Time Travel, and connect it to immutable micro-partitions.
+
+## The AT and BEFORE clauses
+
+Time Travel queries add an `AT` or `BEFORE` clause after a table name, in `SELECT` statements and in `CREATE ... CLONE`. Each takes one of three parameters:
+
+| Parameter | Meaning | Example |
+|-----------|---------|---------|
+| `TIMESTAMP => <timestamp>` | A point in time | `AT(TIMESTAMP => '2026-10-05 09:00:00'::TIMESTAMP_LTZ)` |
+| `OFFSET => <seconds>` | Seconds before now (negative number) | `AT(OFFSET => -60*30)` (30 minutes ago) |
+| `STATEMENT => '<query id>'` | Relative to a specific statement | `BEFORE(STATEMENT => '01b2c3d4-...')` |
+
+`AT` includes the changes made by a statement that completed at that point; `BEFORE` refers to the state immediately before it. `BEFORE(STATEMENT => ...)` is the most precise way to see data just before a bad statement.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- How did the table look 30 minutes ago?
+SELECT COUNT(*) FROM analytics.orders AT(OFFSET => -60*30);
+
+-- Rows that a bad UPDATE changed: compare before and after the statement
+SELECT b.order_id, b.status AS status_before, a.status AS status_after
+FROM analytics.orders BEFORE(STATEMENT => '01b2c3d4-0000-1111-2222-333344445555') AS b
+JOIN analytics.orders AS a USING (order_id)
+WHERE b.status IS DISTINCT FROM a.status;
+
+-- Restore those rows in place
+UPDATE analytics.orders AS t
+SET status = b.status
+FROM analytics.orders BEFORE(STATEMENT => '01b2c3d4-0000-1111-2222-333344445555') AS b
+WHERE t.order_id = b.order_id
+  AND t.status IS DISTINCT FROM b.status;
+```
+
+(The query ID is a placeholder; find real ones in Query History or `QUERY_HISTORY`.)
+
+If the requested point is beyond the retention period, or before the object existed, the query fails with an error instead of returning partial data.
+
+**Pitfalls**
+
+- Time zones: a timestamp string without a type is interpreted in the session time zone. Cast explicitly (`::TIMESTAMP_LTZ` or `::TIMESTAMP_TZ`) to avoid restoring the wrong hour.
+- Using `OFFSET` in a script that runs later than expected: the offset is relative to execution time. Prefer `STATEMENT` or an absolute timestamp for recovery.
+
+**In interviews**
+
+Name the three parameters and the `AT` versus `BEFORE` difference, and show how you would recover from a bad update using the statement ID.
+
+## UNDROP
+
+When you drop a table, schema or database, it is not deleted immediately: it is retained for its Time Travel period and can be restored with `UNDROP`.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+DROP TABLE analytics.orders;
+
+SHOW TABLES HISTORY LIKE 'ORDERS' IN SCHEMA analytics;   -- shows dropped_on for dropped versions
+
+UNDROP TABLE analytics.orders;
+UNDROP SCHEMA analytics;
+UNDROP DATABASE prod;
+```
+
+Rules:
+
+- `UNDROP` fails if an object with the same name already exists. Rename the existing one first, then undrop.
+- If an object was dropped and recreated several times, `UNDROP` restores the **most recently dropped** version. To reach an older one, rename the current object, undrop, rename, and repeat.
+- Undropping a schema or database restores the objects it contained when it was dropped.
+- The object is restored with its data and its state as at the drop, under the same name, so grants on it come back too.
+
+A common accident and its fix:
+
+{/* noexec */}
+```sql
+-- Someone ran CREATE OR REPLACE TABLE orders ... and replaced the real table.
+-- The old table counts as dropped, so:
+ALTER TABLE analytics.orders RENAME TO analytics.orders_bad;
+UNDROP TABLE analytics.orders;
+```
+
+**Pitfalls**
+
+- `CREATE OR REPLACE` is a drop plus create. It is recoverable within retention, but only if someone notices.
+- Undropping after the retention period: the object is in Fail-safe or gone, and `UNDROP` fails.
+
+**In interviews**
+
+Explain the name-conflict rule and the `CREATE OR REPLACE` recovery: this is a very common practical question.
+
+## Configuring the retention period
+
+The retention period is set by the `DATA_RETENTION_TIME_IN_DAYS` parameter. The default is **1 day**.
+
+| Object | Standard Edition | Enterprise Edition and higher |
+|--------|------------------|-------------------------------|
+| Permanent databases, schemas, tables | 0 or 1 day | 0 to 90 days |
+| Transient tables (and transient schemas and databases) | 0 or 1 day | 0 or 1 day |
+| Temporary tables | 0 or 1 day, ending when the session ends | 0 or 1 day, ending when the session ends |
+
+The parameter can be set on the account, database, schema and table; the most specific setting wins. Setting 0 effectively disables Time Travel for that object.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+ALTER DATABASE prod SET DATA_RETENTION_TIME_IN_DAYS = 7;
+ALTER TABLE prod.analytics.orders SET DATA_RETENTION_TIME_IN_DAYS = 30;  -- Enterprise
+CREATE TABLE staging.tmp_load (id INT) DATA_RETENTION_TIME_IN_DAYS = 0;
+
+SHOW PARAMETERS LIKE 'DATA_RETENTION_TIME_IN_DAYS' IN TABLE prod.analytics.orders;
+```
+
+Behaviour when you change it:
+
+- **Increasing** retention extends the time that data currently in Time Travel is kept.
+- **Decreasing** retention means data that falls outside the new period moves on to Fail-safe (or is purged for transient objects); this happens in the background.
+- An account administrator can set `MIN_DATA_RETENTION_TIME_IN_DAYS` at account level to enforce a minimum effective retention, which protects against someone setting 0 on an important table.
+- Snowflake may extend retention temporarily for tables with unconsumed streams, up to `MAX_DATA_EXTENSION_TIME_IN_DAYS` (default 14 days), so streams do not go stale.
+- When a database or schema is dropped, the documentation describes how the retention of the parent applies to the children; check it before relying on a child's longer setting.
+
+**Pitfalls**
+
+- Setting 90 days everywhere "for safety". On high-churn tables, Time Travel storage can exceed the table itself many times over.
+- Setting 0 on staging tables that feed streams: there is no history for streams to read.
+
+**In interviews**
+
+State the default (1 day), the edition limits (1 day on Standard, up to 90 days on Enterprise for permanent objects, 0 or 1 for transient and temporary), the parameter name and the inheritance order.
+
+## Fail-safe and its 7 days
+
+**Fail-safe** is a further **7-day** period that starts when Time Travel ends, for **permanent** tables only. During Fail-safe:
+
+- you **cannot** query, clone or undrop the data yourself;
+- only Snowflake can recover it, on a **best-effort** basis, after extreme operational failures, by contacting Snowflake Support;
+- the period is **not configurable**;
+- the storage is **billed** to you.
+
+| Table type | Time Travel | Fail-safe | Maximum recoverable window |
+|-----------|-------------|-----------|----------------------------|
+| Permanent (Enterprise, 90-day retention) | Up to 90 days | 7 days | 97 days, the last 7 only through Support |
+| Permanent (Standard) | Up to 1 day | 7 days | 8 days |
+| Transient | 0 or 1 day | None | 1 day |
+| Temporary | 0 or 1 day, ends with the session | None | Session only |
+
+Because Fail-safe is not under your control, plan recovery around Time Travel, replication and your own pipelines, and treat Fail-safe as disaster insurance.
+
+Fail-safe is also why **transient tables** exist: large, easily rebuilt staging data does not need 7 extra days of billed storage.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+SELECT table_catalog, table_schema, table_name,
+       active_bytes, time_travel_bytes, failsafe_bytes, retained_for_clone_bytes
+FROM snowflake.account_usage.table_storage_metrics
+WHERE deleted = FALSE
+ORDER BY failsafe_bytes DESC
+LIMIT 20;
+```
+
+**Pitfalls**
+
+- Describing Fail-safe as "7 more days of Time Travel". You cannot access it.
+- Truncating and reloading a big permanent table every day: each reload pushes a full copy through Time Travel and then Fail-safe. Make the table transient if it can be rebuilt.
+
+**In interviews**
+
+Say "7 days, non-configurable, permanent tables only, recovery by Snowflake Support on a best-effort basis, billed". Then explain why transient tables are cheaper for staging.
+
+## Cloning with Time Travel
+
+`CREATE ... CLONE` accepts the same `AT` and `BEFORE` clauses, so you can create a copy of a table, schema or database **as it was** at a point in time. This is the cleanest recovery tool when only part of the data was damaged or when you want to inspect the past without touching production.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- A copy of the table just before the bad statement
+CREATE TABLE analytics.orders_restore
+  CLONE analytics.orders
+  BEFORE(STATEMENT => '01b2c3d4-0000-1111-2222-333344445555');
+
+-- The whole schema as it was at 06:00 today
+CREATE SCHEMA analytics_0600
+  CLONE analytics
+  AT(TIMESTAMP => '2026-10-05 06:00:00'::TIMESTAMP_LTZ);
+
+-- Swap the restored table in, atomically
+ALTER TABLE analytics.orders SWAP WITH analytics.orders_restore;
+```
+
+Behaviour to know:
+
+- The clone takes the **data** as at the point in time, but **metadata** such as comments and clustering keys as they are now.
+- Time Travel clones are supported for databases, schemas and non-temporary tables. If the point in time is before a child object existed, that object is not in the clone.
+- Some objects inside a cloned database or schema follow their own rules regardless of `AT`/`BEFORE`: for example, internal stages are cloned in their current state.
+- `ALTER TABLE ... SWAP WITH` exchanges two tables in one metadata operation, so readers never see a missing table.
+
+**Pitfalls**
+
+- Restoring by cloning and then forgetting the clone: it keeps referencing old micro-partitions, which stay billed (as `RETAINED_FOR_CLONE_BYTES` on the source) until the clone is dropped.
+
+**In interviews**
+
+Walk through "a job corrupted a table at 03:00, it is now 09:00": find the statement, clone `BEFORE` it, validate, then swap or merge the good rows back. Mention that Time Travel must still cover 03:00.
+
+## Zero-copy cloning
+
+A **zero-copy clone** is a new object whose metadata points at the source's existing micro-partitions. Creating it copies no data, so it is fast and initially costs no extra storage. After cloning, the two objects are independent: changes to either write new micro-partitions owned (and billed) by the object that changed.
+
+{/* noexec */}
+```sql
+-- Snowflake SQL (not executed here)
+-- A full development copy of production in seconds
+CREATE DATABASE dev_feature_x CLONE prod;
+
+-- A table copy to test a risky migration
+CREATE TABLE analytics.orders_test CLONE analytics.orders;
+ALTER TABLE analytics.orders_test ADD COLUMN channel VARCHAR;
+```
+
+Objects that can be cloned include databases, schemas, tables, streams, stages, file formats, sequences and tasks. What happens to the parts that are not plain data:
+
+| Item | In a clone |
+|------|-----------|
+| Data | Shared micro-partitions until either side changes |
+| Grants | A cloned **database or schema** copies the privileges on the objects inside it; a cloned **table** does not copy its own grants unless you add `COPY GRANTS` |
+| Tasks | Cloned tasks are suspended |
+| Pipes | Only pipes that reference external stages are cloned (internal-stage pipes are not); cloned pipes may be paused |
+| Streams | Cloned with the container, but unconsumed changes from before the clone may not be readable in the clone |
+| Load metadata | Not cloned: a cloned table may load files the source already loaded |
+
+Common uses:
+
+- **Development and testing** on production-sized data, without copying it.
+- **Backups before risky changes**: clone, run the migration, drop the clone when satisfied.
+- **Blue-green deployments**: build a new version as a clone, validate, then `SWAP`.
+- **Point-in-time snapshots** for audits (clone at month end), beyond the Time Travel window, at the cost of retaining the old micro-partitions.
+
+**Pitfalls**
+
+- Assuming a clone is free forever. As the source changes, the micro-partitions the clone still references are kept for it; over months a clone can cost as much as a full copy.
+- Running pipelines against a cloned database without checking tasks and pipes: tasks are suspended, and a resumed task in dev could write to the wrong place if it uses fully qualified names pointing at prod.
+
+**In interviews**
+
+Explain "zero-copy" (metadata pointers to immutable micro-partitions, copy-on-write afterwards), list two or three uses, and mention what is not copied (table grants without `COPY GRANTS`, load history) and that tasks are suspended.
+
+## Practice questions
+
+<details>
+<summary>Someone ran `CREATE OR REPLACE TABLE customers AS SELECT ...` on production by mistake. How do you recover?</summary>
+
+The original table counts as dropped and is in Time Travel. Rename the new table (`ALTER TABLE customers RENAME TO customers_bad`), then `UNDROP TABLE customers` to restore the original with its data and grants. Verify, then drop `customers_bad`. This works only within the table's retention period.
+
+</details>
+
+<details>
+<summary>A MERGE at 03:00 corrupted 2% of rows in a 5 TB table. Writes have continued since. What do you do?</summary>
+
+Find the query ID of the bad `MERGE` in query history. Create a clone `BEFORE(STATEMENT => '<id>')` (or query the table with `BEFORE`) to get the correct values, identify the affected rows by comparing with the current table, and update just those rows from the historical version. Restoring the whole table would lose the legitimate writes since 03:00. Then fix the cause and drop the restore clone.
+
+</details>
+
+<details>
+<summary>Your company is on Standard Edition. How far back can you recover a permanent table yourself, and what happens after that?</summary>
+
+One day of Time Travel at most (retention 0 or 1 on Standard). After that, data spends 7 days in Fail-safe, which only Snowflake Support can recover from, on a best-effort basis. Beyond that it is purged.
+
+</details>
+
+<details>
+<summary>Why are staging tables often created as transient?</summary>
+
+Transient tables have no Fail-safe and at most 1 day of Time Travel, so data that is rewritten frequently does not accumulate 7 extra days of billed Fail-safe storage. Staging data can be rebuilt from source files, so the extra protection is not needed.
+
+</details>
+
+<details>
+<summary>You cloned a 10 TB production database for testing three months ago. Storage costs have risen. Why?</summary>
+
+The clone shares micro-partitions with production. As production changed, the micro-partitions it replaced could not be purged, because the clone still references them; they are billed (shown as `RETAINED_FOR_CLONE_BYTES` on the source tables). Any changes made in the clone also add storage. Drop the clone, or refresh it periodically, when it is no longer needed.
+
+</details>
+
+<details>
+<summary>What is the difference between AT and BEFORE with STATEMENT?</summary>
+
+`AT(STATEMENT => id)` returns the data including the changes made by that statement; `BEFORE(STATEMENT => id)` returns the data as it was immediately before the statement ran. For recovering from a bad statement, `BEFORE` is the one you want.
+
+</details>
+
+## Key takeaways
+
+- Time Travel keeps replaced micro-partitions for `DATA_RETENTION_TIME_IN_DAYS` (default 1) so you can query with `AT`/`BEFORE`, `UNDROP` and clone at a point in time.
+- Retention is 0 or 1 day on Standard Edition and up to 90 days on Enterprise and higher for permanent objects; transient and temporary tables are limited to 0 or 1 day.
+- Fail-safe adds 7 non-configurable days for permanent tables only, recoverable solely by Snowflake Support, and is billed.
+- `CREATE OR REPLACE` is a drop: recover with rename plus `UNDROP` within retention.
+- Zero-copy clones share micro-partitions and are billed for divergence; table grants need `COPY GRANTS`, tasks are suspended and load history is not copied.
+- Use transient tables for rebuildable staging data, and watch `TIME_TRAVEL_BYTES`, `FAILSAFE_BYTES` and `RETAINED_FOR_CLONE_BYTES`.
