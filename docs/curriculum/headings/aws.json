@@ -322,5 +322,29 @@
  "Monitoring pipelines": {
   "ref": "articles:aws/cloudwatch-monitoring",
   "heading": "Monitoring pipelines"
+ },
+ "Lake Formation basics": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Lake Formation basics"
+ },
+ "Fine-grained access control": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Fine-grained access control"
+ },
+ "LF-Tags": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "LF-Tags"
+ },
+ "Governed tables": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Governed tables"
+ },
+ "Blueprints": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Blueprints"
+ },
+ "Cross-account data sharing": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Cross-account data sharing"
  }
 }

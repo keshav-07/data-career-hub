@@ -1,0 +1,316 @@
+---
+title: "AWS Lake Formation: Data Lake Governance and Fine-Grained Access"
+seoTitle: "AWS Lake Formation: Governance and Access"
+description: "Govern an S3 data lake with AWS Lake Formation: permissions over the Glue Data Catalog, column, row and cell filters, LF-Tags, blueprints and cross-account sharing."
+technology: ["aws", "data-lakes"]
+topic: ["lake-formation", "governance", "access-control"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain how Lake Formation permissions sit on top of IAM and the Glue Data Catalog"
+  - "Grant table, column, row and cell-level access with data filters"
+  - "Design LF-Tags and tag expressions for scalable access control"
+  - "Know what happened to governed tables and what replaced them"
+  - "Share catalogue data across accounts with Lake Formation and AWS RAM"
+prerequisites: ["articles:aws/iam-for-data-engineers", "articles:aws/glue-catalog-crawlers-etl"]
+related: ["articles:databricks/unity-catalog-governance", "articles:aws/athena", "articles:delta-lake/data-lakes-lakehouse-delta"]
+previous: "articles:aws/cloudwatch-monitoring"
+versionContext: "Lake Formation behaviour and LF-Tag limits checked against the AWS Lake Formation documentation in October 2026. Lake Formation needs an AWS account, so CLI commands were written from the documentation and not executed. The LF-Tag model runs on Python 3.11, and the row and column security analogue runs on PostgreSQL 16, which implements the same ideas with its own row-level security and column privileges, not Lake Formation."
+sources:
+  - { label: "AWS Lake Formation: Tag-based access control", url: "https://docs.aws.amazon.com/lake-formation/latest/dg/tag-based-access-control.html" }
+  - { label: "AWS Lake Formation: LF-Tag best practices and considerations", url: "https://docs.aws.amazon.com/lake-formation/latest/dg/lf-tag-considerations.html" }
+  - { label: "AWS Lake Formation: Tag-based access control notes and restrictions", url: "https://docs.aws.amazon.com/lake-formation/latest/dg/TBAC-notes.html" }
+  - { label: "AWS Lake Formation: Data sharing using tag-based access control", url: "https://docs.aws.amazon.com/lake-formation/latest/dg/cross-account-TBAC.html" }
+  - { label: "AWS Big Data Blog: Deprecation of Lake Formation governed tables", url: "https://aws.amazon.com/blogs/big-data/deprecation-of-lake-formations-governed-tables-feature/" }
+---
+
+IAM and bucket policies control access to S3 objects, but analysts think in databases, tables and columns. AWS Lake Formation adds a permissions layer on the Glue Data Catalog, so you can grant "analysts may read `sales.orders` except the email column, and only rows for their country" once, and have Athena, Redshift Spectrum, EMR and Glue all enforce it. This lesson covers how that works, how to scale it with LF-Tags, and how to share data across accounts.
+
+## Sample data
+
+Lake Formation needs an AWS account, so its commands are shown but not executed. Two runnable stand-ins illustrate the ideas: a Python model of LF-Tag inheritance and tag expressions, and a PostgreSQL 16 analogue of row and column filtering using PostgreSQL's own row-level security and column privileges (the same concepts, implemented differently).
+
+```sql
+-- PostgreSQL analogue table
+CREATE TABLE customers (customer_id int, country text, segment text, email text);
+INSERT INTO customers VALUES
+  (1, 'GB', 'retail', 'a@example.com'),
+  (2, 'DE', 'retail', 'b@example.com'),
+  (3, 'GB', 'business', 'c@example.com');
+```
+
+## Lake Formation basics
+
+**What it is.** Lake Formation is a governance service for data lakes on S3. It manages permissions on Data Catalog resources (databases, tables, columns, rows) and on the S3 locations behind them, audits access, and shares data across accounts.
+
+**How it works.**
+
+1. A **data lake administrator** is designated. Administrators can grant any permission.
+2. S3 locations are **registered** with Lake Formation, with a role it uses to access them (the service-linked role `AWSServiceRoleForLakeFormationDataAccess` or a custom role).
+3. Principals receive Lake Formation **grants** such as `SELECT`, `INSERT`, `DESCRIBE`, `ALTER`, `CREATE_TABLE` and `DATA_LOCATION_ACCESS`, optionally grantable to others.
+4. When an integrated engine (Athena, Redshift Spectrum, EMR, Glue) queries a governed table, Lake Formation checks the grants and **vends temporary credentials** scoped to the table's S3 location. The user does not need S3 permissions on the bucket.
+
+The principal still needs IAM permissions to call the services (for example `athena:StartQueryExecution` and `lakeformation:GetDataAccess`), but data access comes from Lake Formation grants.
+
+**The IAM compatibility default.** For backward compatibility, new catalogue resources can be created with "Use only IAM access control", which gives the special `IAMAllowedPrincipals` group full access, so IAM policies alone decide. To enforce Lake Formation, turn off those defaults and revoke `IAMAllowedPrincipals` on the resources, or use **hybrid access mode** to move principals over gradually.
+
+{/* noexec */}
+```bash
+aws lakeformation register-resource \
+  --resource-arn arn:aws:s3:::example-lake/curated \
+  --use-service-linked-role
+aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=arn:aws:iam::111122223333:role/analyst \
+  --resource '{"Table": {"DatabaseName": "sales", "Name": "orders"}}' \
+  --permissions SELECT DESCRIBE
+```
+
+**Pitfalls.**
+
+- Grants that seem to do nothing because `IAMAllowedPrincipals` still has access, so IAM decides. Check the catalogue settings and resource permissions.
+- Jobs that start failing after a location is registered, because their role has no Lake Formation grants. Grant the ETL roles before switching enforcement on.
+- Engines or access paths that are not integrated with Lake Formation (for example reading S3 directly with boto3) bypass table permissions; keep bucket policies restrictive.
+
+**In interviews.** Explain the layering: IAM to call services, Lake Formation grants for catalogue data, credential vending for S3. Mention `IAMAllowedPrincipals` as the reason permissions often "do not work" during migration.
+
+## Fine-grained access control
+
+**What it is.** Lake Formation can restrict access below table level:
+
+| Level | Mechanism | Example |
+|---|---|---|
+| Column | Grant on specific columns, or all columns except some | Hide `email` and `phone` |
+| Row | Data filter with a row filter expression | Only `country = 'GB'` |
+| Cell | Data filter with both a row filter and column restrictions | GB rows, without `email` |
+
+**How it works.** A **data filter** is defined on a table with a row filter expression (a SQL-like predicate) and a column list or exclusion list, then granted like a table. Integrated engines apply the filter when reading.
+
+{/* noexec */}
+```bash
+aws lakeformation create-data-cells-filter --table-data '{
+  "TableCatalogId": "111122223333",
+  "DatabaseName": "sales",
+  "TableName": "customers",
+  "Name": "gb_without_email",
+  "RowFilter": {"FilterExpression": "country = '\''GB'\''"},
+  "ColumnWildcard": {"ExcludedColumnNames": ["email"]}
+}'
+aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=arn:aws:iam::111122223333:role/uk-analyst \
+  --resource '{"DataCellsFilter": {"TableCatalogId": "111122223333", "DatabaseName": "sales", "TableName": "customers", "Name": "gb_without_email"}}' \
+  --permissions SELECT
+```
+
+The PostgreSQL analogue applies the same rule with a column grant and a row-level security policy. It is labelled as an analogue: PostgreSQL enforces it inside one database, while Lake Formation enforces it across engines reading S3.
+
+```sql
+CREATE ROLE uk_analyst NOLOGIN;
+GRANT SELECT (customer_id, country, segment) ON customers TO uk_analyst;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY gb_only ON customers FOR SELECT TO uk_analyst USING (country = 'GB');
+SET ROLE uk_analyst;
+SELECT customer_id, country, segment FROM customers ORDER BY customer_id;
+```
+
+```text
+ customer_id | country | segment
+-------------+---------+----------
+           1 | GB      | retail
+           3 | GB      | business
+```
+
+{/* expect-error */}
+```sql
+SET ROLE uk_analyst;
+SELECT email FROM customers;   -- ERROR:  permission denied for table customers
+```
+
+**Pitfalls.**
+
+- Row filter expressions support a limited SQL subset; test them in the console before relying on them.
+- Fine-grained filters only apply in engines that support them for the table format in use. Check the integration matrix for the engine and format (for example Iceberg on EMR) before promising row-level security.
+- Data filters multiply quickly (one per country per team). Prefer LF-Tags for column-level policies and keep row filters few.
+
+**In interviews.** Distinguish column, row and cell-level security, show a data filter, and mention that enforcement depends on integrated engines.
+
+## LF-Tags
+
+**What it is.** LF-Tags are key-value labels on databases, tables and columns, such as `domain=sales` or `sensitivity=pii`. Instead of granting on named tables, you grant on **tag expressions**: "SELECT on everything where `domain` is `sales` and `sensitivity` is `internal`". New tables that get the right tags are covered automatically. This is **tag-based access control (LF-TBAC)**.
+
+**How it works.**
+
+- An LF-Tag key has a list of allowed values. Documented limits include up to 1,000 values per key and 10,000 LF-Tags (soft limits), keys and values of at most 50 characters, and up to 50 LF-Tags per resource. Each resource can have only one value for a given key.
+- Tags are **inherited**: a table gets its database's tags and a column its table's, unless overridden with a different value at the lower level.
+- An expression matches when, for every key in it, the resource's value is one of the listed values (AND across keys, OR within a key's values).
+- Who may create tags, assign them, and grant on them is itself controlled by LF-Tag permissions (LF-Tag creators, `ASSOCIATE`, `DESCRIBE`, and grantable permissions).
+
+This model shows inheritance and an override: `customer_email` is tagged `pii`, so a grant on `sensitivity=internal` excludes it, and the `returns` table is `confidential`:
+
+```python
+# Catalogue resources and the LF-Tags assigned to them. Tables and columns inherit tags from
+# their database and table; a tag assigned lower down overrides the inherited value for that key.
+catalog = {
+    "sales": {"tags": {"domain": "sales", "sensitivity": "internal"},
+              "tables": {
+                  "orders": {"tags": {}, "columns": {"order_id": {}, "amount": {}, "customer_email": {"sensitivity": "pii"}}},
+                  "returns": {"tags": {"sensitivity": "confidential"}, "columns": {"order_id": {}, "reason": {}}},
+              }},
+    "marketing": {"tags": {"domain": "marketing", "sensitivity": "internal"},
+                  "tables": {"campaigns": {"tags": {}, "columns": {"campaign_id": {}, "budget": {}}}}},
+}
+
+def effective_tags(db, table, column):
+    tags = dict(catalog[db]["tags"])
+    tags.update(catalog[db]["tables"][table]["tags"])
+    tags.update(catalog[db]["tables"][table]["columns"][column])
+    return tags
+
+def visible_columns(expression):
+    """Grant SELECT on an LF-Tag expression: key -> allowed values (AND across keys, OR within)."""
+    out = []
+    for db, d in catalog.items():
+        for table, t in d["tables"].items():
+            for col in t["columns"]:
+                tags = effective_tags(db, table, col)
+                if all(tags.get(k) in allowed for k, allowed in expression.items()):
+                    out.append(f"{db}.{table}.{col}")
+    return out
+
+analyst_grant = {"domain": ["sales"], "sensitivity": ["internal"]}
+print("sales analyst sees:", visible_columns(analyst_grant))
+print("finance sees      :", visible_columns({"domain": ["sales"], "sensitivity": ["internal", "confidential"]}))
+```
+
+```text
+sales analyst sees: ['sales.orders.order_id', 'sales.orders.amount']
+finance sees      : ['sales.orders.order_id', 'sales.orders.amount', 'sales.returns.order_id', 'sales.returns.reason']
+```
+
+{/* noexec */}
+```bash
+aws lakeformation create-lf-tag --tag-key sensitivity --tag-values internal confidential pii
+aws lakeformation create-lf-tag --tag-key domain --tag-values sales marketing finance
+aws lakeformation add-lf-tags-to-resource \
+  --resource '{"Database": {"Name": "sales"}}' \
+  --lf-tags TagKey=domain,TagValues=sales TagKey=sensitivity,TagValues=internal
+aws lakeformation add-lf-tags-to-resource \
+  --resource '{"TableWithColumns": {"DatabaseName": "sales", "Name": "orders", "ColumnNames": ["customer_email"]}}' \
+  --lf-tags TagKey=sensitivity,TagValues=pii
+aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=arn:aws:iam::111122223333:role/sales-analyst \
+  --resource '{"LFTagPolicy": {"ResourceType": "TABLE", "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}, {"TagKey": "sensitivity", "TagValues": ["internal"]}]}}' \
+  --permissions SELECT DESCRIBE
+```
+
+**Design tips.** Keep a small, stable vocabulary (a domain key, a sensitivity key, maybe an environment key), tag at the database level and override only where needed, have the pipeline that creates a table also tag it, and treat tag changes like permission changes (reviewed, audited).
+
+**Pitfalls.**
+
+- Too many keys and values, so nobody can predict what an expression covers.
+- Forgetting that a column override changes access: tagging a column `pii` silently removes it from every `internal` grant, which is the point, but it can break dashboards without warning.
+- Mixing named-resource grants and tag grants on the same tables makes access hard to reason about.
+
+**In interviews.** Explain why tag-based access scales (grants on attributes, not on a growing list of tables), describe inheritance and overrides, and give a concrete vocabulary such as domain plus sensitivity.
+
+## Governed tables
+
+**What it was.** Governed tables were a Lake Formation table type that added ACID transactions, automatic compaction and time travel to S3 tables, with Lake Formation's own transaction APIs.
+
+**Status.** AWS ended support for governed tables on 31 December 2024 to focus on open table formats (Apache Iceberg, Apache Hudi and Delta Lake). After that date, new transactions and writes stopped and Athena could no longer query them; the remaining governed-table APIs stopped working after 17 February 2025. Metadata stays in the Data Catalog and data stays in S3. AWS's migration path is to copy governed tables into Iceberg, for example with an Athena CTAS statement.
+
+**What to use now.** Iceberg tables registered in the Glue Data Catalog (or in S3 Tables), governed by Lake Formation permissions like any other table, with compaction handled by Glue's table optimisers or by S3 Tables.
+
+**In interviews.** If asked about governed tables, say they are retired and that transactional lake tables on AWS are now Iceberg (or Hudi or Delta) with Lake Formation for access control. Knowing the status is better than describing the old feature as current.
+
+## Blueprints
+
+**What it is.** A blueprint is a template that generates a Glue **workflow** (crawlers, jobs and triggers) to ingest data into the lake. Lake Formation offers blueprints for **database snapshots** (full copy of a relational database through JDBC), **incremental database** loads (new rows based on bookmark columns), and **log files** such as AWS CloudTrail and load balancer logs.
+
+**How it works.** You choose the source connection, the target S3 path and database, the schedule and the format (for example Parquet). Lake Formation creates the workflow, which you then run and monitor as a normal Glue workflow.
+
+**Where it fits.** Blueprints are a quick start for simple, standard ingestion. Production pipelines usually need more control (CDC with updates and deletes, data quality, custom partitioning), which points to AWS DMS for databases, Glue or EMR jobs you write, and an orchestrator.
+
+**Pitfalls.** Incremental blueprints only pick up new rows by increasing keys, so updates and deletes in the source are missed; use CDC for those.
+
+**In interviews.** Describe blueprints as generated Glue workflows for common ingestion patterns, and explain their limits compared with DMS-based CDC.
+
+## Cross-account data sharing
+
+**What it is.** A producer account shares catalogue databases and tables with consumer accounts (or an organisation or OU) without copying data. This is the basis of a **data mesh** on AWS, where domain accounts own and publish data products and a central or consumer account queries them.
+
+**How it works.**
+
+1. The producer's data lake administrator grants permissions to the consumer **account** (or organisation), using either named resources or LF-Tag expressions. Lake Formation uses **AWS Resource Access Manager (RAM)** to share the resources.
+2. If the accounts are not in the same organisation, the consumer accepts the RAM invitation.
+3. The consumer's administrator creates **resource links** (local catalogue entries pointing to the shared database or table) so engines can find the tables, and grants access to principals in the consumer account.
+4. Queries in the consumer account read data from the producer's S3, with credentials vended by Lake Formation. Fine-grained filters still apply.
+
+{/* noexec */}
+```bash
+# Producer account 111122223333: share sales tables tagged internal with the analytics account
+aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=444455556666 \
+  --resource '{"LFTagPolicy": {"CatalogId": "111122223333", "ResourceType": "TABLE", "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}, {"TagKey": "sensitivity", "TagValues": ["internal"]}]}}' \
+  --permissions SELECT DESCRIBE \
+  --permissions-with-grant-option SELECT DESCRIBE
+
+# Consumer account 444455556666: create a resource link to the shared database
+aws glue create-database --database-input '{"Name": "sales_shared", "TargetDatabase": {"CatalogId": "111122223333", "DatabaseName": "sales"}}'
+```
+
+**Pitfalls.**
+
+- Forgetting the resource links, so the shared tables "do not exist" in the consumer's Athena.
+- The consumer administrator must re-grant to their own principals; the share is to the account, not to individuals.
+- KMS: if the producer's data uses customer managed keys, the key policy must allow the access path used for credential vending.
+- Lake Formation has cross-account version settings that change how sharing works; check which version your account uses before following an older guide.
+
+**In interviews.** Walk through producer grant, RAM share, consumer resource link and consumer grant, and contrast this with bucket-policy sharing: table and column-level control, tag-based scaling and a single audit point.
+
+## Practice questions
+
+<details>
+<summary>You granted SELECT on a table in Lake Formation, but a user without the grant can still query it. Why?</summary>
+
+The table probably still has the `IAMAllowedPrincipals` permission from the "Use only IAM access control" default, so IAM policies alone decide access. Revoke `IAMAllowedPrincipals` on the table and database (and change the default for new resources), or use hybrid access mode deliberately.
+
+</details>
+
+<details>
+<summary>How would you hide PII columns from most analysts across hundreds of tables?</summary>
+
+Use LF-Tags: tag PII columns `sensitivity=pii` (overriding the inherited `internal`), and grant analysts SELECT on the expression `sensitivity=internal` (plus their domain). New tables and columns are covered as soon as the creating pipeline tags them. Only a small group gets a grant that includes `pii`.
+
+</details>
+
+<details>
+<summary>What is the difference between a column grant, a row filter and a cell-level filter?</summary>
+
+A column grant limits which columns are visible. A row filter limits which rows are returned using a predicate. A cell-level filter combines both, so the user sees only some columns of some rows. In Lake Formation the last two are implemented as data filters granted like tables.
+
+</details>
+
+<details>
+<summary>What happened to Lake Formation governed tables, and what do you use instead?</summary>
+
+AWS ended support on 31 December 2024 (APIs stopped working after 17 February 2025) to focus on open table formats. Use Apache Iceberg (or Hudi or Delta Lake) tables in the Glue Data Catalog or S3 Tables, governed by Lake Formation permissions; migrate old governed tables with Athena CTAS into Iceberg.
+
+</details>
+
+<details>
+<summary>Describe how a central analytics account reads tables owned by a domain account.</summary>
+
+The domain account grants SELECT and DESCRIBE (with grant option if needed) on named tables or an LF-Tag expression to the analytics account; Lake Formation shares them through AWS RAM. The analytics account accepts the share if needed, creates resource links in its catalogue, and grants its analysts access to the links and targets. Queries read the domain's S3 data with credentials vended by Lake Formation, and the domain keeps control and audit.
+
+</details>
+
+## Key takeaways
+
+- Lake Formation adds catalogue-level permissions on top of IAM, and vends scoped S3 credentials to integrated engines.
+- Remove the `IAMAllowedPrincipals` defaults (or use hybrid mode) or Lake Formation grants will not restrict anything.
+- Data filters give column, row and cell-level security; enforcement depends on engine support.
+- LF-Tags scale access control with inherited tags and expressions; keep the vocabulary small.
+- Governed tables were retired at the end of 2024; use Iceberg tables governed by Lake Formation.
+- Cross-account sharing uses grants to accounts, AWS RAM, and resource links in the consumer catalogue.
