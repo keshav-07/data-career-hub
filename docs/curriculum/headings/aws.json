@@ -246,5 +246,105 @@
  "Cost optimization on EMR": {
   "ref": "articles:aws/emr",
   "heading": "Cost optimisation on EMR"
+ },
+ "Kinesis Data Streams": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Kinesis Data Streams"
+ },
+ "Shards & throughput": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Shards and throughput"
+ },
+ "KCL/KPL": {
+  "ref": "articles:aws/kinesis",
+  "heading": "KCL and KPL"
+ },
+ "Enhanced fan-out": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Enhanced fan-out"
+ },
+ "Kinesis Firehose": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Amazon Data Firehose"
+ },
+ "Kinesis Data Analytics": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Kinesis Data Analytics (now Managed Service for Apache Flink)"
+ },
+ "Kinesis vs Kafka": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Kinesis vs Kafka"
+ },
+ "State machines": {
+  "ref": "articles:aws/step-functions",
+  "heading": "State machines"
+ },
+ "Standard vs Express": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Standard vs Express"
+ },
+ "Map & Parallel states": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Map and Parallel states"
+ },
+ "Error handling & retries": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Error handling and retries"
+ },
+ "Integration with Glue/Lambda": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Integration with Glue and Lambda"
+ },
+ "Orchestration patterns": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Orchestration patterns"
+ },
+ "Metrics & alarms": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Metrics and alarms"
+ },
+ "Custom metrics": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Custom metrics"
+ },
+ "Logs & Log Insights": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Logs and Logs Insights"
+ },
+ "Dashboards": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Dashboards"
+ },
+ "EventBridge rules": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "EventBridge rules"
+ },
+ "Monitoring pipelines": {
+  "ref": "articles:aws/cloudwatch-monitoring",
+  "heading": "Monitoring pipelines"
+ },
+ "Lake Formation basics": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Lake Formation basics"
+ },
+ "Fine-grained access control": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Fine-grained access control"
+ },
+ "LF-Tags": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "LF-Tags"
+ },
+ "Governed tables": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Governed tables"
+ },
+ "Blueprints": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Blueprints"
+ },
+ "Cross-account data sharing": {
+  "ref": "articles:aws/lake-formation",
+  "heading": "Cross-account data sharing"
  }
 }
