@@ -1,15 +1,66 @@
 {
-  "DataFrame API basics": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "DataFrame API basics" },
-  "Dataset vs DataFrame": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "Dataset vs DataFrame" },
-  "Schema definition (StructType)": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "Defining a schema with StructType" },
-  "select / withColumn / filter": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "select, withColumn and filter" },
-  "Column expressions": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "Column expressions" },
-  "Handling nulls (na.fill/drop)": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "Handling nulls with na.fill and na.drop" },
-  "Type casting & schema evolution": { "ref": "articles:pyspark/dataframes-and-schemas", "heading": "Type casting and schema evolution" },
-  "Reading/writing Parquet": { "ref": "articles:pyspark/reading-writing-data", "heading": "Reading and writing Parquet" },
-  "Reading/writing JSON & CSV": { "ref": "articles:pyspark/reading-writing-data", "heading": "Reading and writing CSV and JSON" },
-  "ORC & Avro formats": { "ref": "articles:pyspark/reading-writing-data", "heading": "ORC and Avro" },
-  "Handling corrupt records (badRecordsPath)": { "ref": "articles:pyspark/reading-writing-data", "heading": "Handling corrupt records" },
-  "Reading from JDBC sources": { "ref": "articles:pyspark/reading-writing-data", "heading": "Reading from JDBC sources" },
-  "Partition discovery": { "ref": "articles:pyspark/reading-writing-data", "heading": "Partition discovery" }
+  "DataFrame API basics": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "DataFrame API basics"
+  },
+  "Dataset vs DataFrame": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "Dataset vs DataFrame"
+  },
+  "Schema definition (StructType)": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "Defining a schema with StructType"
+  },
+  "select / withColumn / filter": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "select, withColumn and filter"
+  },
+  "Column expressions": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "Column expressions"
+  },
+  "Handling nulls (na.fill/drop)": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "Handling nulls with na.fill and na.drop"
+  },
+  "Type casting & schema evolution": {
+    "ref": "articles:pyspark/dataframes-and-schemas",
+    "heading": "Type casting and schema evolution"
+  },
+  "Reading/writing Parquet": {
+    "ref": "articles:pyspark/reading-writing-data",
+    "heading": "Reading and writing Parquet"
+  },
+  "Reading/writing JSON & CSV": {
+    "ref": "articles:pyspark/reading-writing-data",
+    "heading": "Reading and writing CSV and JSON"
+  },
+  "ORC & Avro formats": {
+    "ref": "articles:pyspark/reading-writing-data",
+    "heading": "ORC and Avro"
+  },
+  "Handling corrupt records (badRecordsPath)": {
+    "ref": "articles:pyspark/reading-writing-data",
+    "heading": "Handling corrupt records"
+  },
+  "Reading from JDBC sources": {
+    "ref": "articles:pyspark/reading-writing-data",
+    "heading": "Reading from JDBC sources"
+  },
+  "Partition discovery": {
+    "ref": "articles:pyspark/reading-writing-data",
+    "heading": "Partition discovery"
+  },
+  "groupBy & aggregations": {
+    "ref": "articles:pyspark/aggregations-pivot-views",
+    "heading": "Grouping and aggregating with groupBy"
+  },
+  "pivot in Spark": {
+    "ref": "articles:pyspark/aggregations-pivot-views",
+    "heading": "Pivoting and unpivoting"
+  },
+  "Temp views & global views": {
+    "ref": "articles:pyspark/aggregations-pivot-views",
+    "heading": "Temporary views and global temporary views"
+  }
 }
