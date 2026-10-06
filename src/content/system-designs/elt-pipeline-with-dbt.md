@@ -158,7 +158,7 @@ Key points:
 
 - **Filter on load time, not event time**, so a late event loaded today is picked up even if its event date is last week.
 - **Lookback window** plus `unique_key` merge makes reruns idempotent and absorbs late data within the window.
-- **Microbatch** (dbt 1.9+): set `incremental_strategy='microbatch'` with `event_time`, `batch_size` (for example `day`), `begin` and `lookback`. dbt splits the work into independent time batches, filters inputs that declare an `event_time`, and lets you rerun specific batches (`--event-time-start`, `--event-time-end`), which makes backfills and retries far easier.
+- **Microbatch** (dbt 1.9+): set `incremental_strategy` to `'microbatch'` with `event_time`, `batch_size` (for example `day`), `begin` and `lookback`. dbt splits the work into independent time batches, filters inputs that declare an `event_time`, and lets you rerun specific batches (`--event-time-start`, `--event-time-end`), which makes backfills and retries far easier.
 - **Full refreshes** periodically (or after logic changes) to correct drift, run off-peak.
 - **Schema changes**: set `on_schema_change` (for example `append_new_columns` or `fail`) deliberately.
 
