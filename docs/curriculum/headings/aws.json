@@ -274,5 +274,29 @@
  "Kinesis vs Kafka": {
   "ref": "articles:aws/kinesis",
   "heading": "Kinesis vs Kafka"
+ },
+ "State machines": {
+  "ref": "articles:aws/step-functions",
+  "heading": "State machines"
+ },
+ "Standard vs Express": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Standard vs Express"
+ },
+ "Map & Parallel states": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Map and Parallel states"
+ },
+ "Error handling & retries": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Error handling and retries"
+ },
+ "Integration with Glue/Lambda": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Integration with Glue and Lambda"
+ },
+ "Orchestration patterns": {
+  "ref": "articles:aws/step-functions",
+  "heading": "Orchestration patterns"
  }
 }
