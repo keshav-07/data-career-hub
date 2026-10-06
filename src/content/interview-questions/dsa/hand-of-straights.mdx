@@ -1,0 +1,124 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Hand of Straights: Group Cards into Consecutive Runs Greedily"
+seoTitle: "Hand of Straights: Greedy with a Counter"
+description: "Decide whether cards can be split into groups of consecutive values of a fixed size by always starting a run at the smallest remaining card, with tests."
+technology: ["dsa"]
+topic: ["greedy"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "Medium"
+shortAnswer: "If the number of cards is not a multiple of the group size, answer false. Otherwise count each value and process values in increasing order. The smallest remaining value can only be the start of a run, so if it has c copies left, you must start c runs there: each of the next size - 1 values needs at least c copies, and you subtract c from each. If any is short, answer false. Sorting the distinct values makes it O(n log n) time with O(n) space."
+followUps: ["Why must the smallest card start a group?", "How would you return the groups themselves?", "How does this relate to splitting an array into consecutive subsequences of length at least 3?"]
+previous: "interview-questions:dsa/gas-station"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You hold a list of integer card values and a group size. Decide whether you can rearrange all the cards into groups of
+exactly that size, where each group is a run of consecutive values (for example 4, 5, 6).
+
+This is widely known as LeetCode 846, "Hand of Straights" (the same as LeetCode 1296).
+
+Assume up to 10,000 cards.
+
+## Examples
+
+```text
+cards [5, 3, 4, 7, 6, 8], size 3   -> True    (3,4,5 and 6,7,8)
+cards [2, 2, 3, 3, 4, 4], size 3   -> True    (2,3,4 twice)
+cards [1, 2, 4, 5], size 2         -> True    (1,2 and 4,5)
+cards [1, 2, 3, 5], size 2         -> False   (3 needs a 4, or 5 needs a 4 or 6)
+cards [1, 2, 3], size 2            -> False   (3 cards cannot form groups of 2)
+```
+
+## Approach 1: sort and repeatedly remove a run
+
+```python
+def is_straight_hand_brute(cards, size):
+    if len(cards) % size:
+        return False
+    remaining = sorted(cards)
+    while remaining:
+        start = remaining[0]
+        for value in range(start, start + size):
+            if value in remaining:
+                remaining.remove(value)          # O(n) each
+            else:
+                return False
+    return True
+```
+
+Each removal scans the list, so this is O(n^2).
+
+## Approach 2: optimal, greedy with counts
+
+### Why the greedy is safe
+
+The smallest remaining card cannot be in the middle or the end of a run, because that run would need a smaller card.
+So it must start a run, and every copy of it must start its own run. Starting all those runs at once is forced, not a
+choice, which is why greedy is correct.
+
+### Python solution
+
+```python
+from collections import Counter
+
+def is_n_straight_hand(cards, size):
+    if len(cards) % size:
+        return False
+    counts = Counter(cards)
+    for value in sorted(counts):
+        runs = counts[value]
+        if runs == 0:
+            continue
+        for nxt in range(value, value + size):
+            if counts[nxt] < runs:
+                return False
+            counts[nxt] -= runs
+    return True
+```
+
+### Complexity
+
+O(n log n) for sorting the distinct values, plus O(n) for the count updates (each card is subtracted once per
+group it joins). Space O(n).
+
+## Tests
+
+```python
+for fn in (is_n_straight_hand, is_straight_hand_brute):
+    assert fn([5, 3, 4, 7, 6, 8], 3)
+    assert fn([2, 2, 3, 3, 4, 4], 3)
+    assert fn([1, 2, 4, 5], 2)
+    assert not fn([1, 2, 3, 5], 2)
+    assert not fn([1, 2, 3], 2)               # size does not divide count
+    assert fn([], 3)                           # empty hand: zero groups
+    assert fn([9], 1)                          # groups of one always work
+    assert not fn([1, 1, 2, 3], 2)             # duplicates without partners
+    assert fn([-2, -1, 0, 1], 2)               # negative values
+
+import random
+random.seed(29)
+for _ in range(200):
+    hand = [random.randint(0, 6) for _ in range(random.randint(0, 9))]
+    k = random.randint(1, 4)
+    assert is_n_straight_hand(hand, k) == is_straight_hand_brute(hand, k)
+```
+
+## Edge cases and pitfalls
+
+- **Group size 1** is always true.
+- **Divisibility check first** avoids wasted work.
+- **Starting runs at arbitrary cards** instead of the smallest can strand cards.
+- **Iterating a Counter while modifying it** is fine here because you iterate over a sorted copy of its keys.
+
+## Where this shows up in data engineering
+
+The pattern is gap detection with multiplicities: checking that consecutive sequence numbers or daily partitions form
+complete runs. A count per value plus a sorted sweep is also how you verify that every expected batch in a window
+arrived the expected number of times.
