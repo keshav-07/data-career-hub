@@ -1,6 +1,6 @@
 ---
 title: "Design a Data Quality Framework"
-description: "A system-design case study for a data quality framework: checks as code, severity and gating, quarantine, contracts with producers, results storage, ownership and alerting."
+description: "A system-design case study for a data quality framework: checks as code, severity and gating, quarantine, producer contracts, results storage and alert routing."
 technology: ["data-engineering", "etl-elt", "dbt"]
 topic: ["data-quality", "governance", "architecture"]
 difficulty: "Advanced"
