@@ -1,0 +1,54 @@
+{
+  "Spark architecture (driver/executor)": {
+    "ref": "articles:spark/apache-spark-architecture",
+    "heading": "Spark architecture: the driver and executors"
+  },
+  "Cluster managers (YARN/K8s/Standalone)": {
+    "ref": "articles:spark/apache-spark-architecture",
+    "heading": "Cluster managers: standalone, YARN and Kubernetes"
+  },
+  "SparkSession & SparkContext": {
+    "ref": "articles:spark/apache-spark-architecture",
+    "heading": "SparkSession and SparkContext"
+  },
+  "RDD fundamentals": {
+    "ref": "articles:spark/rdd-fundamentals",
+    "heading": "RDD fundamentals"
+  },
+  "RDD transformations vs actions": {
+    "ref": "articles:spark/rdd-fundamentals",
+    "heading": "RDD transformations versus actions"
+  },
+  "map vs flatMap": {
+    "ref": "articles:spark/rdd-fundamentals",
+    "heading": "map versus flatMap"
+  },
+  "reduceByKey vs groupByKey": {
+    "ref": "articles:spark/rdd-fundamentals",
+    "heading": "reduceByKey versus groupByKey"
+  },
+  "mapPartitions": {
+    "ref": "articles:spark/rdd-fundamentals",
+    "heading": "mapPartitions"
+  },
+  "Closures & serialization": {
+    "ref": "articles:spark/rdd-fundamentals",
+    "heading": "Closures and serialization"
+  },
+  "Lazy evaluation & DAG": {
+    "ref": "articles:spark/execution-model-jobs-stages-tasks",
+    "heading": "Lazy evaluation and the DAG"
+  },
+  "Narrow vs wide transformations": {
+    "ref": "articles:spark/execution-model-jobs-stages-tasks",
+    "heading": "Narrow and wide transformations"
+  },
+  "Job/stage/task hierarchy": {
+    "ref": "articles:spark/execution-model-jobs-stages-tasks",
+    "heading": "Job, stage and task hierarchy"
+  },
+  "Spark UI & stages/tasks": {
+    "ref": "articles:spark/execution-model-jobs-stages-tasks",
+    "heading": "The Spark UI: finding slow stages and tasks"
+  }
+}
