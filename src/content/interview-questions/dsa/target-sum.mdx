@@ -1,0 +1,154 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Target Sum: Count Sign Assignments with Subset-Sum DP"
+seoTitle: "Target Sum: Signs as Subset Sum"
+description: "Count the ways to put plus or minus before each number to reach a target, from memoised search over running sums to the subset-count reduction, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "knapsack"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Split the numbers into those with a plus sign (sum P) and a minus sign (sum N). Then P - N = target and P + N = total, so P = (total + target) / 2. If that is not a non-negative integer, the answer is 0. Otherwise count subsets that sum to P with 0/1 knapsack counting: ways[s] += ways[s - v], looping s downwards for each number, starting from ways[0] = 1. Time O(n * P), space O(P). A memoised search over (index, running sum) also works in O(n * total)."
+followUps: ["Why do zeros double the count?", "How would you list the expressions rather than count them?", "What happens if the target is larger than the total?"]
+previous: "interview-questions:dsa/coin-change-ii"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of non-negative integers and a target. Put either `+` or `-` in front of every number, then add
+everything up. Count how many sign assignments give exactly the target.
+
+This is widely known as LeetCode 494, "Target Sum".
+
+Assume up to 20 numbers, a total of at most 1,000, and a target between -1,000 and 1,000.
+
+## Examples
+
+```text
+[2, 2, 2], target 2      -> 3    (+2 +2 -2, +2 -2 +2, -2 +2 +2)
+[4, 1, 3], target 0      -> 2    (+4 -1 -3, -4 +1 +3)
+[5], target 3            -> 0    (only +5 or -5)
+[0, 1], target 1         -> 2    (+0 +1, -0 +1: the zero's sign still counts)
+```
+
+## Approach 1: try every sign
+
+```python
+def find_target_brute(nums, target):
+    def go(i, total):
+        if i == len(nums):
+            return 1 if total == target else 0
+        return go(i + 1, total + nums[i]) + go(i + 1, total - nums[i])
+    return go(0, 0)
+```
+
+2^n assignments, so about a million calls for 20 numbers.
+
+## Approach 2: memoise the running sum
+
+The running sum can only take values between -total and +total, so there are at most n * (2 * total + 1) states.
+
+```python
+from functools import lru_cache
+
+def find_target_memo(nums, target):
+    @lru_cache(maxsize=None)
+    def go(i, total):
+        if i == len(nums):
+            return 1 if total == target else 0
+        return go(i + 1, total + nums[i]) + go(i + 1, total - nums[i])
+    return go(0, 0)
+```
+
+## Approach 3: optimal, reduce to counting subsets
+
+### The algebra
+
+Let P be the sum of numbers given `+` and N the sum given `-`. Then:
+
+- P - N = target
+- P + N = total
+
+Adding the two: 2P = total + target, so P = (total + target) / 2. The problem becomes "how many subsets sum to P",
+which is 0/1 knapsack counting. If `total + target` is odd or negative, or the target's absolute value exceeds the
+total, no assignment works.
+
+### State, recurrence and base cases
+
+- **State:** `ways[i][s]` = number of subsets of the first i numbers with sum s.
+- **Recurrence:** `ways[i][s] = ways[i - 1][s] + (ways[i - 1][s - v] if s >= v else 0)` with `v = nums[i - 1]`.
+- **Base case:** `ways[0][0] = 1`.
+- **Answer:** `ways` at the last row, column P.
+
+### Filled table for [2, 2, 2], target 2 (total 6, P = 4)
+
+| numbers used | s=0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| none | 1 | 0 | 0 | 0 | 0 |
+| 2 | 1 | 0 | 1 | 0 | 0 |
+| 2, 2 | 1 | 0 | 2 | 0 | 1 |
+| 2, 2, 2 | 1 | 0 | 3 | 0 | 3 |
+
+Three subsets sum to 4 (any two of the three 2s), so 3 assignments.
+
+### Bottom-up, one array
+
+```python
+def find_target_sum_ways(nums, target):
+    total = sum(nums)
+    if abs(target) > total or (total + target) % 2:
+        return 0
+    goal = (total + target) // 2
+    ways = [1] + [0] * goal
+    for v in nums:
+        for s in range(goal, v - 1, -1):       # downwards: each number once
+            ways[s] += ways[s - v]
+    return ways[goal]
+```
+
+A zero is handled correctly: with v = 0 the loop runs over every s and doubles `ways[s]`, matching the fact that +0
+and -0 are different assignments.
+
+### Complexity
+
+- Brute force: O(2^n).
+- Memoised running sum: O(n * total) time and space.
+- Subset counting: O(n * P) time, O(P) space.
+
+## Tests
+
+```python
+for fn in (find_target_sum_ways, find_target_memo, find_target_brute):
+    assert fn([2, 2, 2], 2) == 3
+    assert fn([4, 1, 3], 0) == 2
+    assert fn([5], 3) == 0                        # unreachable
+    assert fn([5], -5) == 1                       # single element, negative target
+    assert fn([0, 1], 1) == 2                     # zero doubles the count
+    assert fn([0, 0, 0], 0) == 8                  # 2^3 assignments all give 0
+    assert fn([], 0) == 1                         # empty: one (empty) assignment
+    assert fn([1, 2], 10) == 0                    # target beyond the total
+
+import random
+random.seed(21)
+for _ in range(100):
+    a = [random.randint(0, 5) for _ in range(random.randint(0, 8))]
+    t = random.randint(-10, 10)
+    assert find_target_sum_ways(a, t) == find_target_brute(a, t) == find_target_memo(a, t)
+```
+
+## Edge cases and pitfalls
+
+- **Parity and range checks.** Skipping them leads to a non-integer or negative P and index errors.
+- **Zeros** must double the count; check that your loop runs for v = 0 (the range down to `v - 1 = -1` includes 0).
+- **Negative targets** are fine with the formula, as long as the absolute value check is done.
+- **Upward loop** reuses numbers and over-counts.
+
+## Where this shows up in data engineering
+
+Choosing a sign for each amount is the same as deciding which ledger lines are debits and which are credits so that a
+batch balances to a known net figure. Counting the possibilities tells you whether a reconciliation is uniquely
+determined or ambiguous, which is worth knowing before automating it.
