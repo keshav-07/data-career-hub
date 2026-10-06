@@ -1,0 +1,200 @@
+---
+title: "Validate Binary Search Tree: Bounds Recursion and Inorder Check"
+seoTitle: "Validate a Binary Search Tree in Python"
+description: "Check that every node in a tree respects the BST ordering against all its ancestors, using min/max bounds or an inorder traversal. Python code, traps and tests."
+technology: ["dsa"]
+topic: ["binary-search-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Comparing each node only with its children is not enough, because a value deep in a left subtree must also be smaller than every ancestor it sits to the left of. Pass an open interval (low, high) down the tree: the root allows anything, going left lowers the upper bound to the parent's value and going right raises the lower bound. Alternatively, an inorder traversal of a valid BST is strictly increasing, so compare each value with the previous one. Both are O(n) time and O(h) space."
+followUps: ["How would you allow duplicate values on one side?", "Why does checking only parent and child fail?", "How would you find the two swapped nodes in a BST that was broken by one swap?", "How would you validate without recursion?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/lowest-common-ancestor-of-binary-tree"
+---
+
+## Problem
+
+Given the root of a binary tree, decide whether it is a valid **binary search tree**: for every node, all values in its left subtree are strictly smaller than the node's value, all values in its right subtree are strictly larger, and both subtrees are themselves valid BSTs. An empty tree is valid.
+
+This is widely known as LeetCode 98 (Validate Binary Search Tree). It is the standard test of whether a candidate understands that the BST property is about whole subtrees, not just children.
+
+Constraints for this version: 0 to 10,000 nodes; values are any integers, including very large and very small ones; duplicates make a tree invalid.
+
+## Examples
+
+| Tree (level order) | Valid? | Why |
+|---|---|---|
+| `[50, 30, 70, 20, 40, 60, 80]` | `True` | every subtree is ordered |
+| `[50, 30, 70, 20, 55]` | `False` | 55 is in the left subtree of 50 but larger than 50 |
+| `[50, 50]` | `False` | duplicates are not allowed |
+| `[]` | `True` | empty tree |
+
+The second example is the classic trap. Node 55 is a valid right child of 30, so a parent-child check passes, but it violates the rule against the root:
+
+```text
+        50
+       /  \
+      30   70
+     /  \
+    20   55    <- larger than 50, yet in 50's left subtree
+```
+
+## Approach 1: brute force
+
+For every node, check that the maximum of its left subtree is smaller than it and the minimum of its right subtree is larger.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def subtree_values(node):
+    if node is None:
+        return []
+    return subtree_values(node.left) + [node.val] + subtree_values(node.right)
+
+def is_valid_bst_naive(root):
+    if root is None:
+        return True
+    if root.left and max(subtree_values(root.left)) >= root.val:
+        return False
+    if root.right and min(subtree_values(root.right)) <= root.val:
+        return False
+    return is_valid_bst_naive(root.left) and is_valid_bst_naive(root.right)
+```
+
+Correct, but each node's subtree is scanned by every ancestor: O(n^2) on a skewed tree.
+
+## Approach 2: optimal
+
+### Bounds passed down
+
+**Key insight.** Each node's value must lie in an open interval determined by its ancestors. The root may be anything. A left child inherits the parent's lower bound and gets the parent's value as its upper bound; a right child gets the parent's value as its lower bound. One comparison per node is then enough.
+
+**Walkthrough** for the invalid tree above:
+
+| Node | Allowed interval | OK? |
+|---|---|---|
+| 50 | (-inf, +inf) | yes |
+| 30 | (-inf, 50) | yes |
+| 20 | (-inf, 30) | yes |
+| 55 | (30, 50) | **no**: 55 is not below 50 |
+
+```python
+def is_valid_bst(root):
+    def check(node, low, high):
+        if node is None:
+            return True
+        if not (low < node.val < high):
+            return False
+        return check(node.left, low, node.val) and check(node.right, node.val, high)
+
+    return check(root, float("-inf"), float("inf"))
+```
+
+Using `None` as "no bound" instead of infinities avoids any doubt with very large integers, and an explicit stack avoids the recursion limit:
+
+```python
+def is_valid_bst_iterative(root):
+    stack = [(root, None, None)]
+    while stack:
+        node, low, high = stack.pop()
+        if node is None:
+            continue
+        if (low is not None and node.val <= low) or (high is not None and node.val >= high):
+            return False
+        stack.append((node.left, low, node.val))
+        stack.append((node.right, node.val, high))
+    return True
+```
+
+### Inorder traversal
+
+**Key insight.** An inorder traversal of a BST lists values in sorted order. So the tree is valid exactly when each inorder value is strictly greater than the previous one.
+
+```python
+def is_valid_bst_inorder(root):
+    prev = None
+    stack, node = [], root
+    while stack or node:
+        while node:                      # go as far left as possible
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        if prev is not None and node.val <= prev:
+            return False
+        prev = node.val
+        node = node.right
+    return True
+```
+
+**Complexity.** O(n) time for all optimal versions, with O(h) space for the recursion or stack.
+
+## Tests
+
+```python
+from collections import deque
+import random
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([50, 30, 70, 20, 40, 60, 80], True),
+    ([50, 30, 70, 20, 55], False),
+    ([50, 30, 70, None, None, 45], False),        # 45 in the right subtree of 50
+    ([50, 50], False),
+    ([50, None, 50], False),
+    ([], True),
+    ([7], True),
+    ([1, None, 2, None, 3, None, 4], True),        # right-skewed
+    ([4, 3, None, 2, None, 1], True),              # left-skewed
+    ([2**63, 2**62, 2**64], True),                 # huge integers
+    ([-(2**70), None, 0], True),
+]
+fns = (is_valid_bst_naive, is_valid_bst, is_valid_bst_iterative, is_valid_bst_inorder)
+for fn in fns:
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+
+rng = random.Random(2)
+for _ in range(400):
+    values = [rng.choice([None, rng.randint(0, 9)]) for _ in range(rng.randint(1, 12))]
+    values[0] = values[0] if values[0] is not None else 5
+    tree = build_tree(values)
+    results = {fn(tree) for fn in fns}
+    assert len(results) == 1, values
+print("all validate BST tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Parent-child only checks** accept the 55 example. Bounds must come from all ancestors.
+- **Sentinel values.** Initial bounds such as `-2**31` and `2**31 - 1` fail when a node holds exactly that value. Use infinities or `None`.
+- **Duplicates.** Decide the rule with the interviewer. With strict inequalities, any duplicate is invalid; some definitions allow equal values on one side, which changes `<` to `<=` on that side only.
+- **Inorder with a stored list** works but uses O(n) memory; tracking only the previous value is enough.
+
+## Where this shows up in data engineering
+
+Validating an ordering invariant is a common data quality check: confirming that a file or table is actually sorted by its declared sort key, that event timestamps never go backwards within a partition, or that range partition boundaries are strictly increasing. The inorder version is exactly a "compare each row with the previous one" check, which in SQL is `LAG(key) OVER (ORDER BY position)`.
