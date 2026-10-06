@@ -263,7 +263,7 @@ ORDER BY customer_id, order_date DESC, order_id DESC;
 | 4 | 106 | 2025-06-07 |
 | 5 | 107 | 2025-06-07 |
 
-`DISTINCT ON` is not standard SQL (DuckDB supports it too). The portable version uses `ROW_NUMBER()`, covered in the top-N per group and deduplication lesson later in this course.
+`DISTINCT ON` is not standard SQL (DuckDB supports it too). The portable version uses `ROW_NUMBER()`, covered in [top-N per group and deduplication](/sql/top-n-deduplication-scd-queries/).
 
 ### Pitfalls
 
@@ -433,15 +433,22 @@ Here the third row has no tie, so three rows come back. Ask for the top 1 and yo
 
 These clauses are the frame that everything else hangs on. The rest of the course adds the pieces in this order:
 
-| Next topic | What it adds |
+| Lesson | What it adds |
 |---|---|
-| [Operators, NULLs and CASE](/sql/operators-nulls-case/) | Richer `WHERE` conditions and correct `NULL` logic |
+| [Operators, NULLs and CASE](/sql/operators-nulls-case/) | Richer `WHERE` conditions, three-valued logic and conditional expressions |
+| [Functions: strings, dates, casting, arithmetic](/sql/functions-strings-dates-types/) | Cleaning and converting values row by row |
 | [Aggregations, GROUP BY and HAVING](/sql/aggregations-group-by-having/) | Summarising rows into metrics at a chosen grain |
+| [Set operations](/sql/set-operations/) | Stacking and comparing results, and reconciling loads |
 | [Joins](/sql/joins/) | Combining tables while predicting the row count |
-| [Window functions](/sql/window-functions/) | Rankings, running totals and previous-row comparisons |
-| [Query optimisation](/sql/query-optimization-fundamentals/) | Reading plans and reducing the data scanned |
+| [Semi-joins, anti-joins and LATERAL](/sql/semi-anti-lateral-joins/) | "Has a match", "has no match" and per-row subqueries |
+| [Subqueries and CTEs](/sql/ctes-subqueries-temp-tables/) | Building answers in named, testable steps |
+| [PIVOT, UNPIVOT and GROUPING SETS](/sql/pivot-unpivot-grouping-sets/) | Reshaping data and producing subtotals |
+| [Window functions](/sql/window-functions/) | Rankings, previous-row comparisons and group context per row |
+| [Window frames](/sql/window-frames-running-totals/) | Running totals, moving averages and percentiles |
+| [Time-series SQL](/sql/dates-calendars-time-series/) | Date buckets, calendars, MoM, YoY and rolling metrics |
+| [Top-N, deduplication and SCD queries](/sql/top-n-deduplication-scd-queries/) | The three patterns behind most pipeline SQL |
 
-The [SQL cheat sheet](/resources/cheat-sheets/sql-data-engineering/) summarises syntax for revision.
+When you have finished these, [query optimisation](/sql/query-optimization-fundamentals/) shows how to read plans and reduce the data scanned. The [SQL cheat sheet](/resources/cheat-sheets/sql-data-engineering/) summarises syntax for revision.
 
 ## Practice questions
 

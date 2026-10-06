@@ -230,5 +230,17 @@
   "Rolling 7/30 day metrics": {
     "ref": "articles:sql/dates-calendars-time-series",
     "heading": "Rolling 7 and 30 day metrics"
+  },
+  "Top-N per group": {
+    "ref": "articles:sql/top-n-deduplication-scd-queries",
+    "heading": "Top-N per group"
+  },
+  "Deduplicate keeping latest record": {
+    "ref": "articles:sql/top-n-deduplication-scd-queries",
+    "heading": "Deduplicate keeping the latest record"
+  },
+  "Slowly changing dimension queries": {
+    "ref": "articles:sql/top-n-deduplication-scd-queries",
+    "heading": "Slowly changing dimension queries"
   }
 }
