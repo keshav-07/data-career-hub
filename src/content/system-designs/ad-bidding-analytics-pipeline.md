@@ -69,6 +69,7 @@ sources:
   - { label: "Apache Spark: Structured Streaming programming guide", url: "https://spark.apache.org/docs/4.0.0/streaming/apis-on-dataframes-and-datasets.html" }
   - { label: "PostgreSQL 16: SELECT (DISTINCT ON)", url: "https://www.postgresql.org/docs/16/sql-select.html" }
 previous: "system-designs:geospatial-analytics-pipeline"
+next: "system-designs:backfill-late-data-handling-system"
 ---
 
 ## Approach
