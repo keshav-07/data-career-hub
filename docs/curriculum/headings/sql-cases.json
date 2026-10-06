@@ -190,5 +190,37 @@
   "Anti-pattern detection → Conversion Funnel": {
     "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
     "heading": "Approach: anti-pattern detection"
+  },
+  "Graph traversal in SQL → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: graph traversal to resolve identities"
+  },
+  "Scalar subqueries → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: scalar subqueries for the first order"
+  },
+  "Window function performance tuning → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: window function performance tuning"
+  },
+  "JSON parsing in SQL → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: JSON parsing to extract identity keys"
+  },
+  "Date truncation & bucketing → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: date truncation and bucketing"
+  },
+  "Join algorithms (hash, merge, nested loop) → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: join algorithms (hash, merge, nested loop)"
+  },
+  "Detecting consecutive streaks → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: detecting consecutive-month streaks"
+  },
+  "PARTITION BY clause → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: PARTITION BY for per-customer context"
   }
 }

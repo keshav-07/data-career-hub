@@ -23,6 +23,7 @@ followUps:
 prerequisites: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions"]
 related: ["interview-questions:sql/average-order-value-sql-case-study", "interview-questions:sql/daily-active-users-sql-case-study", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
 previous: "interview-questions:sql/average-order-value-sql-case-study"
+next: "interview-questions:sql/new-vs-returning-customers-sql-case-study"
 versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
 sources:
   - { label: "PostgreSQL 16 documentation: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
@@ -430,7 +431,7 @@ HashAggregate (actual rows=50000 loops=1)
         Heap Fetches: 0
         Buffers: shared hit=1 read=304
 Planning:
-  Buffers: shared hit=40
+  Buffers: shared hit=38
 ```
 
 `Index Only Scan` and `Heap Fetches: 0` mean the table was not read. If the query also selected a column outside the index (for example `device`), PostgreSQL would have to visit the table for every matching row:
