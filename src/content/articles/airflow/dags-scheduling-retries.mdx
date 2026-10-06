@@ -1,109 +1,543 @@
 ---
-seoTitle: "Airflow DAGs, Scheduling and Retries"
+seoTitle: "Airflow Scheduling, Logical Dates and Assets"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "Airflow DAGs, Scheduling, Retries and Task Dependencies"
-description: "Learn how Airflow DAGs define task order, how scheduling intervals really work, and why retries are only safe when each task is idempotent."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Airflow Scheduling: Intervals, Logical Dates, Catchup, Timetables and Assets"
+description: "How the Airflow 3 scheduler creates runs: cron and presets, logical dates and data intervals, catchup pitfalls, timetables, asset-aware scheduling and deadline alerts."
 inventoryId: "TECH-30"
 technology: ["airflow"]
-topic: ["orchestration", "scheduling", "retries"]
+topic: ["orchestration", "scheduling", "assets", "timetables"]
 difficulty: "Intermediate"
 featured: false
-related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:python/idempotent-csv-loader"]
+learningObjectives:
+  - "Describe what the scheduler, DAG processor and executor each do in a scheduling loop"
+  - "Predict when a cron, preset or timedelta schedule creates runs, and what their logical dates and data intervals are"
+  - "Explain why execution_date became logical_date and how Airflow 3 changed cron data intervals"
+  - "Avoid catchup and start_date pitfalls, and choose a built-in timetable for unusual calendars"
+  - "Schedule DAGs on assets (formerly datasets) and replace SLAs with deadline alerts"
+prerequisites: ["articles:airflow/dag-fundamentals-taskflow"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:python/idempotent-csv-loader", "articles:etl-elt/idempotency-in-data-pipelines"]
 previous: "articles:airflow/sensors-deferrable-operators"
-sources: [{"label": "Apache Airflow documentation", "url": "https://airflow.apache.org/docs/apache-airflow/stable/"}, {"label": "Apache Airflow documentation: DAG runs and data intervals", "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dag-run.html"}]
-versionContext: "Concepts apply to Airflow 2.x and 3.x. Import paths and some defaults changed in Airflow 3, so follow the migration guide for your version"
+next: "articles:airflow/xcom-variables-connections"
+sources:
+  - { label: "Apache Airflow documentation: Dag runs", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/dag-run.html" }
+  - { label: "Apache Airflow documentation: Timetables", url: "https://airflow.apache.org/docs/apache-airflow/stable/authoring-and-scheduling/timetable.html" }
+  - { label: "Apache Airflow documentation: Upgrading to Airflow 3", url: "https://airflow.apache.org/docs/apache-airflow/stable/installation/upgrading_to_airflow3.html" }
+  - { label: "Apache Airflow documentation: Deadline Alerts", url: "https://airflow.apache.org/docs/apache-airflow/stable/howto/deadline-alerts.html" }
+  - { label: "Apache Airflow documentation: Migrating from SLA to Deadline Alerts", url: "https://airflow.apache.org/docs/apache-airflow/stable/howto/sla-to-deadlines.html" }
+versionContext: "Examples run on Apache Airflow 3.3.2 (Task SDK 1.3.2) with Python 3.11 and a SQLite metadata database. Timetable outputs come from the scheduler-side timetable classes; Airflow 2 behaviour is described where it differs. The scheduler and HA configuration is described from the documentation, not executed."
 ---
 
-Airflow is a **workflow orchestrator**. You describe a workflow as a **DAG** (directed acyclic graph) of tasks in Python, and Airflow decides when each task runs, in what order, and what to do when one fails. Airflow orchestrates; the heavy data processing should happen in the tools it triggers (Spark, a warehouse, a container), not inside Airflow workers.
+Most Airflow confusion is about time: why a run labelled 1 March started on 2 March, why turning a DAG on created 300 runs, or why a DAG that "should have run" never did. This lesson explains how the scheduler decides when to create runs, what the logical date and data interval mean (and how Airflow 3 changed them), and the alternatives to time-based scheduling: timetables and assets. It ends with deadline alerts, the Airflow 3 replacement for SLAs.
 
-## A DAG
+## Running the examples
+
+The examples use Airflow 3.3 with a metadata database created by `airflow db migrate`. `run_dag` registers an in-memory DAG and runs it once with `dag.test()`, as in the earlier lessons. `next_runs` asks a timetable which runs it would create, using the same timetable classes the scheduler uses.
 
 ```python
+import contextlib, io, tempfile, warnings
 from datetime import datetime, timedelta
-from airflow.sdk import dag, task   # Airflow 2.x: from airflow.decorators import dag, task
+import pendulum
+from airflow.dag_processing.bundles.manager import DagBundlesManager
+from airflow.dag_processing.dagbag import DagBag, sync_bag_to_db
+from airflow.models.xcom import XComModel
+from airflow.timetables.base import TimeRestriction
+from airflow.utils.session import create_session
 
-@dag(
-    dag_id="daily_orders",
-    schedule="@daily",
+def run_dag(dag, **test_kwargs):
+    """Register an in-memory DAG, run it once with dag.test(), return (run state, task states, return values)."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        DagBundlesManager().sync_bundles_to_db()
+        bag = DagBag(dag_folder=tempfile.mkdtemp())
+        bag.dags[dag.dag_id] = dag
+        sync_bag_to_db(bag, "dags-folder", None)
+        dr = dag.test(**test_kwargs)
+    states, values = {}, {}
+    with create_session() as session:
+        for ti in dr.get_task_instances(session=session):
+            states[ti.task_id] = str(ti.state)
+        for x in session.query(XComModel).filter_by(dag_id=dag.dag_id, run_id=dr.run_id, key="return_value"):
+            values[x.task_id] = XComModel.deserialize_value(x)
+    return str(dr.state), states, values
+
+def next_runs(timetable, start, n=3):
+    """The first n runs a timetable would create from start, as (logical date, data interval, run after)."""
+    last, out = None, []
+    for _ in range(n):
+        info = timetable.next_dagrun_info(
+            last_automated_data_interval=last,
+            restriction=TimeRestriction(earliest=start, latest=None, catchup=True),
+        )
+        if info is None:
+            break
+        fmt = lambda d: d.strftime("%m-%d %H:%M")
+        out.append(f"logical {fmt(info.logical_date)} | interval {fmt(info.data_interval.start)} -> "
+                   f"{fmt(info.data_interval.end)} | runs after {fmt(info.run_after)}")
+        last = info.data_interval
+    return out
+```
+
+## Scheduler internals
+
+### What it is
+
+The **scheduler** is the component that turns DAG definitions into work. It decides when a DAG run should exist, which task instances are ready, and hands ready tasks to an **executor**, which runs them on workers. It does not run your task code.
+
+### How it works
+
+An Airflow 3 deployment has several cooperating processes, all sharing the **metadata database**:
+
+| Component | Job |
+|---|---|
+| DAG processor (`airflow dag-processor`) | Parses DAG files from DAG bundles, serialises DAGs into the database, records import errors. In Airflow 3 it is always a separate process from the scheduler. |
+| Scheduler (`airflow scheduler`) | Creates DAG runs from timetables and asset events, sets task instances to scheduled and queued, enforces concurrency, sends work to the executor. |
+| Executor (runs inside the scheduler) | Local, Celery, Kubernetes, or several at once. Starts each queued task somewhere. |
+| Workers | Run task code. In Airflow 3 they talk to the API server through the Task Execution API rather than connecting to the metadata database directly. |
+| Triggerer (`airflow triggerer`) | Runs async triggers for deferred tasks. |
+| API server (`airflow api-server`) | Serves the UI, the REST API (`/api/v2`) and the Task Execution API. |
+
+Each scheduler loop (simplified):
+
+1. **Create DAG runs** for DAGs whose next run is due (`run_after` has passed), up to `max_active_runs` per DAG, and for DAGs whose asset conditions are met.
+2. **Examine running DAG runs**: evaluate each task instance's dependencies (upstream states, trigger rules, `depends_on_past`) and move ready ones to **scheduled**.
+3. **Critical section**: pick scheduled task instances in priority order while respecting `[core] parallelism`, pool slots, `max_active_tasks` per DAG and per-task limits, and move them to **queued**.
+4. **Executor heartbeat**: send queued tasks to the executor and collect state changes.
+5. Housekeeping: time out stuck queued tasks, detect tasks whose heartbeats stopped, update the next run dates.
+
+You can run **more than one scheduler** for high availability and throughput. They coordinate through row-level locks in the database (`SELECT ... FOR UPDATE SKIP LOCKED`), so the database must support that: PostgreSQL, or MySQL 8. SQLite supports only one scheduler and is for local development.
+
+### Pitfalls
+
+- "My DAG doesn't appear" is usually a DAG processor problem (import error, file not in the bundle, parse timeout), not a scheduler problem. Check import errors first.
+- Slow parsing delays scheduling, because the scheduler works from what the DAG processor has serialised.
+- A busy metadata database slows every component. It is the most common bottleneck at scale.
+- Tasks stuck in **queued** usually mean the executor has no free capacity (workers down, pool full, Kubernetes quota), not that the scheduler is broken.
+
+### In interviews
+
+"Walk me through what happens between writing a DAG file and a task running." Cover parsing and serialisation by the DAG processor, DAG run creation from the timetable, dependency checks, the critical section with pools and concurrency limits, the executor, and the worker. Mentioning the Airflow 3 split (separate DAG processor, workers going through the API server) and HA schedulers with row locks shows depth.
+
+## Schedule intervals and cron
+
+### What it is
+
+The `schedule` argument tells the scheduler when to create runs. Airflow 2.4 merged the old `schedule_interval` and `timetable` arguments into `schedule`, and Airflow 3 removed the old names.
+
+### How it works
+
+`schedule` accepts several kinds of value, and Airflow turns each into a **timetable**:
+
+```python
+from airflow.sdk import DAG, Asset
+from airflow.providers.standard.operators.empty import EmptyOperator
+
+for schedule in ["@daily", "0 6 * * *", timedelta(hours=4), None, "@once", "@continuous", [Asset("s3://lake/orders/")]]:
+    extra = {"max_active_runs": 1} if schedule == "@continuous" else {}
+    d = DAG(f"schedule_{abs(hash(str(schedule)))}", schedule=schedule, start_date=datetime(2026, 1, 1), **extra)
+    label = "[Asset('s3://lake/orders/')]" if isinstance(schedule, list) else str(schedule)
+    print(f"{label:30} -> {type(d.timetable).__name__}")
+```
+
+```text
+@daily                         -> CronTriggerTimetable
+0 6 * * *                      -> CronTriggerTimetable
+4:00:00                        -> DeltaTriggerTimetable
+None                           -> NullTimetable
+@once                          -> OnceTimetable
+@continuous                    -> ContinuousTimetable
+[Asset('s3://lake/orders/')]   -> AssetTriggeredTimetable
+```
+
+| Value | Meaning |
+|---|---|
+| Cron string, e.g. `"0 6 * * *"` | minute hour day-of-month month day-of-week; here 06:00 every day |
+| Presets | `@hourly`, `@daily`, `@weekly`, `@monthly`, `@quarterly`, `@yearly` (cron shortcuts at midnight / the start of the period) |
+| `timedelta` | a fixed frequency measured from the previous run |
+| `None` | never scheduled; manual, API or asset-driven triggers only |
+| `"@once"` | one run, then never again |
+| `"@continuous"` | start the next run as soon as the previous one finishes (requires `max_active_runs=1`) |
+| asset or asset expression | run when upstream data is updated (see data-aware scheduling) |
+| a timetable object | full control, see Timetables |
+
+Cron times are interpreted in the timezone of the DAG's `start_date` (UTC unless you pass a timezone-aware date; `[core] default_timezone` is `utc` by default). With a non-UTC timezone, cron follows local wall-clock time across daylight-saving changes.
+
+### Pitfalls
+
+- Reading cron fields in the wrong order; `0 6 * * 1` is 06:00 on Mondays, not "every 6 minutes".
+- Timezone-naive `start_date` while the business thinks in local time: the job runs an hour off for half the year.
+- `timedelta(days=1)` and `@daily` are not the same: the timedelta is relative to the previous run, cron is aligned to the clock.
+- Using `schedule_interval=` in Airflow 3 code; it is no longer accepted.
+
+### In interviews
+
+Be able to read and write cron expressions quickly ("every 15 minutes on weekdays between 8 and 18" is `*/15 8-18 * * 1-5`), list the presets and explain that `None` means externally triggered only. Mention timezone-aware start dates.
+
+## Execution date vs logical date
+
+### What it is
+
+Every scheduled DAG run has a **logical date**: the timestamp that identifies which period of data it is responsible for. Airflow 1 and early Airflow 2 called it the **execution date**, a name that misled almost everyone into thinking it was when the run executes. Airflow 2.2 introduced `logical_date` and **data intervals**, and Airflow 3 removed `execution_date` (and related context names such as `next_execution_date`, `prev_execution_date`, `tomorrow_ds`, `yesterday_ds`) entirely.
+
+### How it works
+
+A run also has a **data interval** (`data_interval_start`, `data_interval_end`) and a `run_after` time, the earliest moment the scheduler may start it. How these relate depends on the timetable, and Airflow 3 changed the default for cron schedules:
+
+- **Airflow 2 default, `CronDataIntervalTimetable`**: a daily run covers the *previous* day. The run with logical date 1 March has the interval 1 March 00:00 to 2 March 00:00 and starts *after the interval ends*, on 2 March. This is the famous "the run labelled 1 March runs on 2 March".
+- **Airflow 3 default, `CronTriggerTimetable`**: a cron schedule simply fires at the cron time. The run that fires at 1 March 06:00 has logical date 1 March 06:00 and an empty data interval (start = end = 1 March 06:00).
+
+```python
+from airflow.timetables.interval import CronDataIntervalTimetable
+from airflow.timetables.trigger import CronTriggerTimetable
+
+start = pendulum.datetime(2026, 3, 1, tz="UTC")
+print("Airflow 3 default: CronTriggerTimetable")
+print(*next_runs(CronTriggerTimetable("0 6 * * *", timezone="UTC"), start), sep="\n")
+print("Airflow 2 default: CronDataIntervalTimetable")
+print(*next_runs(CronDataIntervalTimetable("0 6 * * *", timezone="UTC"), start), sep="\n")
+print("CronTriggerTimetable with interval=1 day")
+print(*next_runs(CronTriggerTimetable("0 6 * * *", timezone="UTC", interval=timedelta(days=1)), start), sep="\n")
+```
+
+```text
+Airflow 3 default: CronTriggerTimetable
+logical 03-01 06:00 | interval 03-01 06:00 -> 03-01 06:00 | runs after 03-01 06:00
+logical 03-02 06:00 | interval 03-02 06:00 -> 03-02 06:00 | runs after 03-02 06:00
+logical 03-03 06:00 | interval 03-03 06:00 -> 03-03 06:00 | runs after 03-03 06:00
+Airflow 2 default: CronDataIntervalTimetable
+logical 03-01 06:00 | interval 03-01 06:00 -> 03-02 06:00 | runs after 03-02 06:00
+logical 03-02 06:00 | interval 03-02 06:00 -> 03-03 06:00 | runs after 03-03 06:00
+logical 03-03 06:00 | interval 03-03 06:00 -> 03-04 06:00 | runs after 03-04 06:00
+CronTriggerTimetable with interval=1 day
+logical 02-28 06:00 | interval 02-28 06:00 -> 03-01 06:00 | runs after 03-01 06:00
+logical 03-01 06:00 | interval 03-01 06:00 -> 03-02 06:00 | runs after 03-02 06:00
+logical 03-02 06:00 | interval 03-02 06:00 -> 03-03 06:00 | runs after 03-03 06:00
+```
+
+Read the three blocks carefully:
+
+1. Airflow 3's default fires at 06:00 each day; logical date and run time are the same.
+2. The Airflow 2 behaviour labels each run with the *start* of the day it processes and runs it a day later.
+3. `CronTriggerTimetable(..., interval=...)` keeps "fire at the cron time" but gives the run a data interval ending at the fire time (here the previous 24 hours), with the logical date at the interval start.
+
+If your tasks rely on `data_interval_start`/`data_interval_end` (or on `ds` meaning "the day being processed"), either set `[scheduler] create_cron_data_intervals = True` to get the Airflow 2 behaviour for every cron string, or pass the timetable explicitly on the DAGs that need it. Timedelta schedules have the matching switch `[scheduler] create_delta_data_intervals`. Both are `False` by default in Airflow 3.
+
+Manual and API-triggered runs can have no logical date at all in Airflow 3 (`logical_date=None` when you trigger without one), so code that assumes it is always set should handle `None`.
+
+### Pitfalls
+
+- Migrating a DAG from Airflow 2 to 3 without checking data intervals: a query using `ds` suddenly processes "today" instead of "yesterday". Decide explicitly.
+- Using `datetime.now()` instead of the run's dates: backfills and reruns process the wrong period.
+- Assuming `logical_date` is when the run started. Use `dag_run.start_date` for that.
+- Templates with `{{ execution_date }}` fail in Airflow 3 with an undefined-variable error.
+
+### In interviews
+
+"What is the difference between execution date and logical date?" A strong answer: they are the same concept renamed, because "execution date" sounded like the run time; the logical date identifies the data period, the data interval gives its bounds, and `run_after` says when it may run. Then add the Airflow 3 change: cron strings use `CronTriggerTimetable` by default, so data intervals are empty unless you opt in, and `execution_date` is removed.
+
+## Catchup and start_date pitfalls
+
+### What it is
+
+When a DAG is unpaused, the scheduler compares its `start_date` with now. With **catchup** on, it creates a run for every interval between `start_date` (or the last run) and now. With catchup off, it creates only the most recent one and moves on. Airflow 3 changed the default `[scheduler] catchup_by_default` to `False`; in Airflow 2 it was `True`.
+
+### How it works
+
+- `catchup=True` with `start_date` a year in the past and a daily schedule: about 365 runs are created, limited by `max_active_runs` (16 by default) at a time.
+- `catchup=False`: only the latest interval is scheduled. Historical periods are run deliberately with a **backfill** (`airflow backfill create`, the UI or the REST API), covered in the operations lesson.
+- `start_date` is not "the date of the first run". With data intervals, the first run's interval *starts* at `start_date` and runs after it ends; with trigger timetables, the first run fires at the first cron time on or after `start_date`.
+- Changing `start_date` on an existing DAG does not rewrite history, and moving it earlier does not create the missing runs unless catchup is on.
+- `end_date` stops scheduling after a date.
+
+### Pitfalls
+
+- **Dynamic start dates**: `start_date=datetime.now()` (or `days_ago(1)`, removed in Airflow 3) moves every time the file is parsed, so the next run is always in the future and never created.
+- **Accidental floods**: turning on a DAG with `catchup=True` and an old `start_date` floods workers and external systems. Set `catchup` explicitly and cap `max_active_runs`.
+- **Runs that depend on the previous run** (`depends_on_past=True`) plus catchup: one failure blocks every later run.
+- Not idempotent tasks plus catchup or backfill: duplicates. Overwrite or merge per interval.
+- Pausing a DAG for a week with catchup off: the missed week is silently skipped. Backfill it if the data matters.
+
+### In interviews
+
+Classic questions are "Why didn't my DAG run?" (dynamic start date, paused DAG, start date in the future, the run is not due until the interval ends) and "I turned on a DAG and it created hundreds of runs. Why?" (catchup with an old start date). Mention that Airflow 3's default is `catchup=False` and that you should set it explicitly either way.
+
+## Timetables
+
+### What it is
+
+A **timetable** is the object behind every schedule. It decides each run's logical date, data interval and `run_after`. When cron and timedeltas cannot express your calendar (business days only, different times on weekends, a fixed list of dates), you pass a timetable instead of a string.
+
+### How it works
+
+Built-in timetables in Airflow 3 (import from `airflow.sdk`, or `airflow.timetables.*` in Airflow 2):
+
+| Timetable | Use |
+|---|---|
+| `CronTriggerTimetable(cron, timezone=..., interval=...)` | Fire at cron times; optional data interval ending at the fire time. Airflow 3 default for cron strings. |
+| `CronDataIntervalTimetable(cron, timezone)` | Airflow 2 style: one run per interval between cron ticks, run after the interval. |
+| `DeltaTriggerTimetable(delta)` / `DeltaDataIntervalTimetable(delta)` | The same two styles for fixed frequencies. |
+| `MultipleCronTriggerTimetable(*crons, timezone=...)` | Several cron expressions in one schedule. |
+| `EventsTimetable(event_dates=[...])` | An explicit list of dates, such as quarter-ends or a release calendar. |
+| `AssetOrTimeSchedule(timetable=..., assets=...)` | Run on a time schedule *and* when assets update. |
+
+```python
+from airflow.timetables.events import EventsTimetable
+from airflow.timetables.trigger import MultipleCronTriggerTimetable
+
+weekday_and_weekend = MultipleCronTriggerTimetable("0 6 * * 1-5", "0 9 * * 6,0", timezone="UTC")
+print(*next_runs(weekday_and_weekend, pendulum.datetime(2026, 3, 6, tz="UTC"), n=4), sep="\n")
+
+quarter_ends = EventsTimetable(event_dates=[pendulum.datetime(2026, 3, 31, tz="UTC"),
+                                            pendulum.datetime(2026, 6, 30, tz="UTC")])
+print(*next_runs(quarter_ends, pendulum.datetime(2026, 1, 1, tz="UTC")), sep="\n")
+
+london = CronTriggerTimetable("0 2 * * *", timezone="Europe/London")      # across the clock change
+print(*next_runs(london, pendulum.datetime(2026, 3, 28, tz="Europe/London")), sep="\n")
+```
+
+```text
+logical 03-06 06:00 | interval 03-06 06:00 -> 03-06 06:00 | runs after 03-06 06:00
+logical 03-07 09:00 | interval 03-07 09:00 -> 03-07 09:00 | runs after 03-07 09:00
+logical 03-08 09:00 | interval 03-08 09:00 -> 03-08 09:00 | runs after 03-08 09:00
+logical 03-09 06:00 | interval 03-09 06:00 -> 03-09 06:00 | runs after 03-09 06:00
+logical 03-31 00:00 | interval 03-31 00:00 -> 03-31 00:00 | runs after 03-31 00:00
+logical 06-30 00:00 | interval 06-30 00:00 -> 06-30 00:00 | runs after 06-30 00:00
+logical 03-28 02:00 | interval 03-28 02:00 -> 03-28 02:00 | runs after 03-28 02:00
+logical 03-29 01:00 | interval 03-29 01:00 -> 03-29 01:00 | runs after 03-29 01:00
+logical 03-30 01:00 | interval 03-30 01:00 -> 03-30 01:00 | runs after 03-30 01:00
+```
+
+Friday 6 March ran at 06:00, the weekend at 09:00, Monday at 06:00 again; the events timetable stopped after its last date; and the London schedule kept 02:00 local time: the times are printed in UTC, so the run moves from 02:00 to 01:00 UTC when British Summer Time begins on 29 March.
+
+A **custom timetable** subclasses `airflow.timetables.base.Timetable` and implements `next_dagrun_info()` (the next scheduled run) and `infer_manual_data_interval()` (the interval for a manual run), plus `serialize`/`deserialize` if it has parameters. It must be registered through a plugin so the scheduler can load it:
+
+{/* noexec */}
+```python
+from airflow.plugins_manager import AirflowPlugin
+from airflow.timetables.base import DagRunInfo, DataInterval, Timetable
+
+class BusinessDaysTimetable(Timetable):
+    def infer_manual_data_interval(self, *, run_after):
+        ...  # return DataInterval(start, end) for a manual run
+
+    def next_dagrun_info(self, *, last_automated_data_interval, restriction):
+        ...  # return DagRunInfo.interval(start, end), skipping weekends and holidays, or None
+
+class BusinessDaysPlugin(AirflowPlugin):
+    name = "business_days_timetable"
+    timetables = [BusinessDaysTimetable]
+```
+
+### Pitfalls
+
+- Writing a custom timetable when `MultipleCronTriggerTimetable` or `EventsTimetable` would do. Custom timetables need a plugin, and they run in the scheduler, so bugs affect scheduling.
+- Slow or I/O-heavy logic in a custom timetable. It is called inside the scheduler loop.
+- Forgetting to restart components after changing a plugin.
+
+### In interviews
+
+"How would you run a DAG only on business days, at different times at weekends, or on a list of dates?" Name the built-ins first, and describe a custom timetable (two methods, registered as a plugin) for holiday calendars. Explaining that cron strings are just shorthand for a timetable shows you understand the model.
+
+## Data-aware scheduling with assets
+
+### What it is
+
+**Data-aware scheduling** runs a DAG when the data it depends on has been updated, instead of at a fixed time. A producer task declares that it updates an **asset** (a logical reference to data, identified by a URI or name); a consumer DAG is scheduled on that asset. Airflow 2.4 introduced this as **Datasets**; Airflow 3 renamed them **Assets** (`Dataset` became `Asset`, `DatasetAlias` became `AssetAlias`, and the UI, API and context names changed to match).
+
+### How it works
+
+- Producer: put the asset in a task's `outlets`. When the task **succeeds**, Airflow records an **asset event**. The task can attach metadata to the event (`outlet_events[asset].extra = {...}`, or yield `Metadata(asset, extra)`).
+- Consumer: `schedule=[asset_a, asset_b]` (all must update), or an expression with `&` (and) and `|` (or). The run is created once the condition is met; it can read the triggering events from `triggering_asset_events`.
+- Airflow does not look at the data itself. An asset event means "the producer task succeeded", nothing more.
+- `@asset` defines an asset and the DAG that materialises it in one decorator, and `AssetAlias` lets a task decide at run time which asset it updated. `AssetWatcher` (with an event-driven trigger, for example a message queue) can update an asset from outside Airflow.
+
+```python
+from airflow.sdk import Asset, asset, dag, task
+
+orders = Asset("s3://lake/orders/", extra={"owner": "sales"})
+customers = Asset(uri="s3://lake/customers/", name="customers")
+
+@dag(schedule="@daily", start_date=datetime(2026, 1, 1), catchup=False)
+def orders_producer():
+    @task(outlets=[orders])
+    def write_orders(*, outlet_events, ds=None):
+        # ... write s3://lake/orders/dt=<ds>/ ...
+        outlet_events[orders].extra = {"rows": 120, "partition": ds}
+        return "written"
+    write_orders()
+
+with DAG("needs_both", schedule=(orders & customers), start_date=datetime(2026, 1, 1)) as needs_both:
+    EmptyOperator(task_id="build_mart")
+with DAG("needs_either", schedule=(orders | customers), start_date=datetime(2026, 1, 1)) as needs_either:
+    EmptyOperator(task_id="refresh_cache")
+
+for d in (needs_both, needs_either):
+    print(d.dag_id, type(d.timetable).__name__, type(d.timetable.asset_condition).__name__)
+
+print(run_dag(orders_producer(), logical_date=pendulum.datetime(2026, 3, 1, tz="UTC"))[:2])
+
+from airflow.models.asset import AssetEvent
+with create_session() as session:
+    for event in session.query(AssetEvent).filter(AssetEvent.source_dag_id == "orders_producer"):
+        print("asset event:", event.asset.uri, event.extra, "from", f"{event.source_dag_id}.{event.source_task_id}")
+
+@asset(schedule="@daily", uri="s3://lake/daily_summary/")
+def daily_summary():
+    return "summary built"          # the DAG 'daily_summary' materialises this asset
+
+print(type(daily_summary).__name__, daily_summary.name, daily_summary.uri)
+```
+
+```text
+needs_both AssetTriggeredTimetable AssetAll
+needs_either AssetTriggeredTimetable AssetAny
+('success', {'write_orders': 'success'})
+asset event: s3://lake/orders {'rows': 120, 'partition': '2026-03-01'} from orders_producer.write_orders
+AssetDefinition daily_summary s3://lake/daily_summary
+```
+
+The producer run recorded an asset event with its metadata. In a running deployment, the scheduler would now check `needs_either` (condition met, run created) and `needs_both` (still waiting for `customers`).
+
+### Pitfalls
+
+- Treating an asset event as a data-quality guarantee. It only means a task with that outlet succeeded; add checks in the producer.
+- URIs are identifiers and must match exactly (Airflow normalises some forms, such as a trailing slash, as the `uri` in the output shows). Define assets once in a shared module and import them.
+- Several producer updates before the consumer runs are combined into one consumer run, not queued one per event. Read `triggering_asset_events` if you need each one.
+- Mixing time and data triggers by hand. Use `AssetOrTimeSchedule` for "daily, or earlier if the data arrives".
+- Using `Dataset` imports in Airflow 3 code; use `Asset` from `airflow.sdk`.
+
+### In interviews
+
+"How do you trigger a DAG when another DAG's output is ready?" The modern answer is assets: producer outlets, consumer `schedule=[asset]`, `&`/`|` conditions, event metadata. Compare with ExternalTaskSensor (polling, needs date alignment) and TriggerDagRunOperator (push, couples the producer to the consumer). Say "Datasets were renamed Assets in Airflow 3".
+
+## SLAs and deadline alerts
+
+### What it was
+
+An **SLA** (service level agreement) in Airflow 2 was a per-task `sla=timedelta(...)` measured from the start of the DAG run's data interval end. When a task had not finished in time, the scheduler recorded an SLA miss, sent an email and called the DAG's `sla_miss_callback`. It was widely used for "the finance tables must be ready by 07:00" alerts.
+
+### Why it went
+
+The legacy SLA feature was **removed in Airflow 3.0**. It was evaluated inside the scheduler loop (which cost scheduler time on every DAG), it fired only for scheduled runs, it measured from a confusing reference point, and misses for tasks that never started were easy to miss. In Airflow 3.x passing `sla=` to a task only logs a warning and the value is ignored:
+
+```python
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    with DAG("sla_demo", schedule=None, start_date=datetime(2026, 1, 1)) as sla_dag:
+        EmptyOperator(task_id="load", sla=timedelta(hours=1))
+print([str(w.message) for w in caught if "SLA" in str(w.message)])
+print("task still has an sla attribute:", hasattr(sla_dag.get_task("load"), "sla"))
+```
+
+```text
+['The SLA feature is removed in Airflow 3.0, replaced with Deadline Alerts in >=3.1']
+task still has an sla attribute: False
+```
+
+### What replaces it: deadline alerts
+
+**Deadline alerts** (added in Airflow 3.1) attach a deadline to a DAG run: a **reference** time, an **interval** after (or before) it, and a **callback** to run if the DAG run has not finished by then. Built-in references include `DeadlineReference.DAGRUN_QUEUED_AT` (time since the run was queued), `DAGRUN_LOGICAL_DATE` (time since the run's logical date), `FIXED_DATETIME(...)` and `AVERAGE_RUNTIME(...)`. Callbacks are an `AsyncCallback` (runs in the triggerer) or, from Airflow 3.2, a `SyncCallback` (runs on an executor); either can wrap a notifier (for example a Slack notifier from its provider) or your own function given by import path.
+
+```python
+from airflow.sdk import AsyncCallback, DeadlineAlert, DeadlineReference
+
+async def page_on_call(**kwargs):
+    ...   # call your paging or chat tool here; must be importable by the triggerer
+
+with DAG(
+    "finance_tables",
+    schedule="0 5 * * *",
     start_date=datetime(2026, 1, 1),
     catchup=False,
-    default_args={"retries": 3, "retry_delay": timedelta(minutes=5)},
-)
-def daily_orders():
-    @task
-    def extract():
-        ...
+    deadline=DeadlineAlert(
+        reference=DeadlineReference.DAGRUN_LOGICAL_DATE,   # measured from 05:00
+        interval=timedelta(hours=2),                       # must be done by 07:00
+        callback=AsyncCallback(page_on_call, kwargs={"team": "finance-data"}),
+    ),
+) as finance:
+    EmptyOperator(task_id="build_tables")
 
-    @task
-    def transform(raw):
-        ...
-
-    @task
-    def load(clean):
-        ...
-
-    load(transform(extract()))
-
-daily_orders()
+alert = finance.deadline[0]
+print(type(alert).__name__, alert.interval, alert.callback.path)   # the callback is stored by import path
 ```
 
-Calling the tasks like functions defines the dependencies: `extract → transform → load`. With classic operators you write `extract_task >> transform_task >> load_task`.
-
-## How scheduling really works
-
-A scheduled DAG run covers a **data interval** (for example, one day). Airflow starts the run **after the interval has ended**, so the run for 1 January 00:00 to 2 January 00:00 starts at the beginning of 2 January. This surprises many people: a `@daily` DAG's run labelled "1 Jan" executes on 2 Jan.
-
-Use the run's interval boundaries (templated variables such as `data_interval_start` and `data_interval_end`, or `{{ ds }}`) to decide which data a run processes. Never use "today's date" inside the task, or re-running an old interval would process the wrong data.
-
-## Catchup and backfills
-
-If a DAG's `start_date` is in the past, Airflow can create a run for every missed interval; this is **catchup**. Set `catchup` explicitly: the default is `False` in Airflow 3 but was `True` in Airflow 2, so relying on it makes behaviour depend on the version. A **backfill** reruns a range of past intervals on purpose, for example after fixing a bug.
-
-## Retries
-
-```python
-default_args={"retries": 3, "retry_delay": timedelta(minutes=5), "retry_exponential_backoff": True}
+```text
+DeadlineAlert 2:00:00 __main__.page_on_call
 ```
 
-Retries handle transient failures such as a network timeout. Set them per task or DAG default. Backoff avoids hammering a service that is struggling.
+The deadline is checked by the scheduler, and the callback runs whether or not any task started, which fixes the biggest gap of the old SLAs. For a limit on a single task, use `execution_timeout` (fail the task) rather than an alert.
 
-## Retries require idempotent tasks
+### Pitfalls
 
-If a task fails halfway and Airflow retries it, the same work runs again. If the task **appended** rows on the first attempt, the retry appends them again and you have duplicates.
+- Expecting `sla=` to do anything in Airflow 3. Migrate to deadline alerts.
+- Choosing the wrong reference: `DAGRUN_QUEUED_AT` catches slow runs, `DAGRUN_LOGICAL_DATE` catches "not ready by the business deadline" even when the run started late.
+- Callbacks that are not importable where they run, or that block (async callbacks run on the triggerer's event loop).
+- Using `dagrun_timeout` when you wanted an alert: it *fails* the run instead of notifying.
 
-An **idempotent** task produces the same final state no matter how many times it runs for the same interval:
+### In interviews
 
-- **Overwrite the partition** for the run's interval instead of appending (`INSERT OVERWRITE`, or delete-then-insert in a transaction).
-- **Upsert** using a unique key (`MERGE` / `INSERT ... ON CONFLICT`).
-- Write to a temporary location, then **atomically swap** it in.
+Interviewers still ask "How do you implement SLAs in Airflow?". Explain the Airflow 2 `sla` parameter and `sla_miss_callback`, say it was removed in Airflow 3.0, and describe deadline alerts (reference, interval, callback) as the replacement, plus `execution_timeout` and `dagrun_timeout` for hard limits and failure callbacks for alerts.
 
-The [Python tutorial on an idempotent loader](/python/idempotent-csv-loader/) shows the pattern in code.
+## Retries and idempotency
 
-## Dependencies and trigger rules
+Scheduling decides *when* a run happens; retries, reruns and backfills decide how often the same interval is processed. Every one of them is only safe if each task is **idempotent**: rerunning it for the same interval leaves the same final state. Overwrite the run's partition (or delete-then-insert in one transaction), upsert on a unique key, or write to a temporary location and swap it in atomically; never append blindly. The [Python tutorial on an idempotent loader](/python/idempotent-csv-loader/) shows the pattern in code, and the operations lesson covers retries, backfills and clearing in depth.
 
-By default a task runs only when all upstream tasks succeeded. Trigger rules change this, for example running a cleanup task whether or not upstream tasks failed. Use them sparingly; complicated rules make DAGs hard to reason about.
+## Practice questions
 
-## Design guidance
+<details>
+<summary>A @daily DAG in Airflow 2 shows a run for 1 March that started on 2 March. Why? Would Airflow 3 do the same?</summary>
 
-1. Keep tasks **small and single-purpose**, so a retry repeats little work.
-2. Pass **references, not data**: tasks should hand each other file paths or table names, not large payloads.
-3. Make every task **idempotent** and parameterised by the run's data interval.
-4. Add **alerts** on failure and **SLAs or timeouts** so stuck runs do not go unnoticed.
-5. Do not run heavy transformations on the Airflow workers; submit them to Spark or the warehouse.
+In Airflow 2, cron schedules used `CronDataIntervalTimetable`: the run for logical date 1 March covers 1 March 00:00 to 2 March 00:00 and can only start once that interval has ended, so it starts on 2 March. In Airflow 3 cron strings use `CronTriggerTimetable` by default, so the run fires at midnight on 1 March with logical date 1 March and an empty data interval, unless you set `create_cron_data_intervals = True` or pass a data-interval timetable.
 
-## Common mistakes
+</details>
 
-1. Using `datetime.now()` inside tasks instead of the data interval.
-2. Retrying non-idempotent tasks and creating duplicates.
-3. Leaving `catchup` at an unexamined default and flooding the scheduler with old runs.
-4. Putting large data frames through task-to-task communication.
+<details>
+<summary>You deployed a DAG with start_date=datetime.now() and it never runs. Why?</summary>
 
-## Interview relevance
+The start date is re-evaluated every time the DAG file is parsed, so it keeps moving forward and the first interval never becomes due. Use a fixed, timezone-aware start date.
 
-Expect "How does Airflow schedule a run?", "What is idempotency and why does it matter with retries?" and "How would you backfill?". The key insight: a retry is only safe if rerunning the task for the same interval gives the same result.
+</details>
 
-## Key takeaway
+<details>
+<summary>What happens when you unpause a daily DAG whose start_date is 1 January, on 1 October?</summary>
 
-Define order with a DAG, drive each run from its data interval, and make every task idempotent so retries and backfills are safe.
+With `catchup=True`, the scheduler creates a run for every missed day (about 270), up to `max_active_runs` at a time. With `catchup=False` (the Airflow 3 default) it creates only the latest run; earlier days must be backfilled deliberately.
+
+</details>
+
+<details>
+<summary>What replaced execution_date in Airflow 3, and what else changed with it?</summary>
+
+`logical_date` (in templates `{{ logical_date }}`, in code `dag_run.logical_date`), together with `data_interval_start`/`data_interval_end`. Related names such as `next_execution_date`, `prev_execution_date`, `yesterday_ds` and `tomorrow_ds` were removed. Manual runs may have no logical date.
+
+</details>
+
+<details>
+<summary>The marketing DAG must run when both the orders and customers tables have been refreshed, whichever order they finish in. How?</summary>
+
+Declare `orders` and `customers` as assets in the producer tasks' `outlets` and schedule the marketing DAG with `schedule=(orders & customers)` (or a list of both). The scheduler creates a run once both have new events since the last run. Assets were called datasets in Airflow 2.
+
+</details>
+
+<details>
+<summary>How do you alert if the finance DAG has not finished by 07:00, in Airflow 3?</summary>
+
+Use a deadline alert: `DeadlineAlert(reference=DeadlineReference.DAGRUN_LOGICAL_DATE, interval=...)` measured from the scheduled time (or `FIXED_DATETIME`), with an async or sync callback that notifies the team. The old `sla` parameter and `sla_miss_callback` were removed in Airflow 3.0.
+
+</details>
+
+<details>
+<summary>Why can running two schedulers on SQLite not work?</summary>
+
+Multiple schedulers coordinate through row-level locking (`SELECT ... FOR UPDATE SKIP LOCKED`), which SQLite does not support. HA schedulers need PostgreSQL or MySQL 8; SQLite is only for local development with a single scheduler.
+
+</details>
+
+## Key takeaways
+
+- The DAG processor parses and serialises DAGs; the scheduler creates runs, checks dependencies and queues tasks within concurrency limits; the executor starts them.
+- `schedule` takes cron strings, presets, timedeltas, `None`, `@once`, `@continuous`, assets or timetables; each becomes a timetable.
+- `logical_date` replaced `execution_date`. In Airflow 3 cron strings fire at the cron time with empty data intervals unless you opt into data intervals.
+- Set a fixed, timezone-aware `start_date` and an explicit `catchup` (the Airflow 3 default is `False`); backfill history on purpose.
+- Use built-in timetables (multiple crons, event dates) before writing a custom one, which needs a plugin.
+- Assets (formerly datasets) schedule consumers on producer success; SLAs were removed in 3.0 and deadline alerts replace them.
