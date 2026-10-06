@@ -1,0 +1,197 @@
+---
+title: "Implement Trie (Prefix Tree): Insert, Search and Prefix Lookup"
+seoTitle: "Implement a Trie (Prefix Tree) in Python"
+description: "Build a prefix tree with insert, exact search and starts-with queries, each costing time proportional to the word length. Python design, trade-offs and tests."
+technology: ["dsa"]
+topic: ["binary-trees", "tries"]
+difficulty: "Medium"
+questionType: ["coding", "architecture"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Each trie node holds a dictionary from character to child node and a flag marking whether a word ends there. Insert walks the word's characters from the root, creating missing children, and sets the end flag on the last node. search walks the same path and returns the flag; startsWith only needs the path to exist. Each operation is O(L) for a word of length L, independent of how many words are stored; memory is O(total characters inserted) in the worst case."
+followUps: ["How would you list every word that starts with a prefix, for autocomplete?", "When would a sorted list with binary search beat a trie?", "How would you support deletion?", "What is a compressed (radix) trie and when does it help?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/convert-sorted-array-to-bst"
+---
+
+## Problem
+
+Implement a class `Trie` with three operations on lowercase words:
+
+- `insert(word)` stores the word.
+- `search(word)` returns `True` only if exactly this word was inserted before.
+- `starts_with(prefix)` returns `True` if any inserted word begins with the prefix.
+
+This is widely known as LeetCode 208 (Implement Trie (Prefix Tree)). It is both a coding and a light design question: the interviewer wants a correct structure and a short discussion of its costs.
+
+Constraints for this version: words and prefixes of 1 to 2,000 lowercase letters, up to 30,000 calls in total.
+
+## Examples
+
+```text
+insert("cart")
+search("cart")       -> True
+search("car")        -> False   "car" was never inserted, only its extension
+starts_with("car")   -> True
+insert("car")
+search("car")        -> True
+starts_with("cat")   -> False
+```
+
+## Approach 1: brute force
+
+Store the words in a set for exact search, and scan all words for prefix queries.
+
+```python
+class TrieSet:
+    def __init__(self):
+        self.words = set()
+
+    def insert(self, word):
+        self.words.add(word)
+
+    def search(self, word):
+        return word in self.words
+
+    def starts_with(self, prefix):
+        return any(w.startswith(prefix) for w in self.words)
+```
+
+`insert` and `search` are O(L) on average (hashing the word), but `starts_with` is O(N * L) for `N` stored words. A sorted list with `bisect` improves prefix checks to O(L log N), but inserts then cost O(N) for shifting.
+
+## Approach 2: optimal
+
+**Key insight.** Words that share a prefix share a path from the root. Store one node per distinct prefix; each edge is labelled with a character. Then finding a word or a prefix is a walk of length `L`, no matter how many words are stored.
+
+A node needs:
+
+- `children`: a dictionary from character to child node (or a 26-slot list for lowercase letters only).
+- `is_word`: whether some inserted word ends exactly here. This is what separates "car" being a word from it only being a prefix of "cart".
+
+**Walkthrough** after inserting `cart` and `car`:
+
+```text
+root
+ └─ c
+     └─ a
+         └─ r   (is_word: car)
+             └─ t   (is_word: cart)
+```
+
+`search("ca")` reaches the `a` node, whose `is_word` is false, so it returns `False`; `starts_with("ca")` only needs the node to exist, so it returns `True`.
+
+```python
+class TrieNode:
+    __slots__ = ("children", "is_word")
+
+    def __init__(self):
+        self.children = {}
+        self.is_word = False
+
+class Trie:
+    def __init__(self):
+        self.root = TrieNode()
+
+    def insert(self, word):
+        node = self.root
+        for ch in word:
+            node = node.children.setdefault(ch, TrieNode())
+        node.is_word = True
+
+    def _walk(self, text):
+        node = self.root
+        for ch in text:
+            node = node.children.get(ch)
+            if node is None:
+                return None
+        return node
+
+    def search(self, word):
+        node = self._walk(word)
+        return node is not None and node.is_word
+
+    def starts_with(self, prefix):
+        return self._walk(prefix) is not None
+
+    def words_with_prefix(self, prefix, limit=10):
+        """Autocomplete: up to `limit` stored words that begin with prefix, in sorted order."""
+        start = self._walk(prefix)
+        if start is None:
+            return []
+        out, stack = [], [(start, prefix)]
+        while stack and len(out) < limit:
+            node, text = stack.pop()
+            if node.is_word:
+                out.append(text)
+            for ch in sorted(node.children, reverse=True):   # reverse so 'a' is popped first
+                stack.append((node.children[ch], text + ch))
+        return out
+```
+
+**Complexity.** `insert`, `search` and `starts_with` are O(L). Memory is O(total characters) in the worst case (no shared prefixes) and less when prefixes are shared. Dictionary children cost more memory per node than a fixed array but handle any alphabet.
+
+### Design discussion
+
+- **Deletion.** Clear `is_word`, then remove nodes on the way back up while they have no children and are not the end of another word.
+- **Compressed tries** (radix trees) merge chains of single-child nodes into one edge labelled with a string, which saves a lot of memory for sparse data such as URLs.
+- **Counts per node** (how many words pass through) let you answer "how many words have this prefix" in O(L).
+
+## Tests
+
+```python
+import random, string
+
+def check(cls):
+    t = cls()
+    t.insert("cart")
+    assert t.search("cart") and not t.search("car")
+    assert t.starts_with("car") and t.starts_with("c") and t.starts_with("cart")
+    assert not t.starts_with("cat") and not t.starts_with("carts")
+    t.insert("car")
+    assert t.search("car") and t.search("cart")
+    t.insert("car")                        # duplicate insert is harmless
+    assert t.search("car")
+    assert not t.search("ca") and not t.search("carx")
+    assert not cls().search("a") and not cls().starts_with("a")
+    t.insert("a")                          # single letter word
+    assert t.search("a") and not t.search("b")
+
+check(TrieSet)
+check(Trie)
+
+t = Trie()
+for w in ["data", "database", "dataset", "date", "dag", "delta", "dbt"]:
+    t.insert(w)
+assert t.words_with_prefix("dat") == ["data", "database", "dataset", "date"]
+assert t.words_with_prefix("da", limit=2) == ["dag", "data"]
+assert t.words_with_prefix("x") == []
+
+rng = random.Random(18)
+reference, trie = TrieSet(), Trie()
+for _ in range(2000):
+    w = "".join(rng.choice("abc") for _ in range(rng.randint(1, 6)))
+    if rng.random() < 0.4:
+        reference.insert(w); trie.insert(w)
+    else:
+        assert reference.search(w) == trie.search(w)
+        assert reference.starts_with(w) == trie.starts_with(w)
+
+long_word = "".join(rng.choice(string.ascii_lowercase) for _ in range(2000))
+trie.insert(long_word)
+assert trie.search(long_word) and trie.starts_with(long_word[:1500])
+print("all trie tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting the end-of-word flag** makes `search` return `True` for every prefix of an inserted word.
+- **Treating `starts_with` as `search`.** A prefix need not be a word; only the path must exist.
+- **Empty string.** If allowed, inserting `""` marks the root as a word. Decide whether `starts_with("")` is `True` (it usually is).
+- **Memory.** A node per character is expensive for millions of long, dissimilar strings; mention compressed tries or a sorted array when memory matters.
+
+## Where this shows up in data engineering
+
+Prefix structures appear in search and storage systems: autocomplete and typeahead services, IP routing tables (longest-prefix match), and the object key prefixes that cloud storage listing APIs (S3 `ListObjectsV2` with a `Prefix`) filter on. For pipeline work, the practical lesson is that prefix filters are cheap when data is organised by prefix, which is why partition paths such as `dt=2026-10-05/` are designed the way they are.
