@@ -23,6 +23,7 @@ sources:
   - { label: "PostgreSQL documentation: MERGE", url: "https://www.postgresql.org/docs/16/sql-merge.html" }
   - { label: "Snowflake documentation: Window function syntax and usage", url: "https://docs.snowflake.com/en/sql-reference/functions-window-syntax" }
 versionContext: "Examples run on PostgreSQL 16 (MERGE needs PostgreSQL 15 or later); the QUALIFY example runs on DuckDB 1.5. Notes on Snowflake, BigQuery and SQL Server were not executed."
+next: "articles:sql/recursive-ctes-hierarchies"
 ---
 
 Three query patterns come up in almost every Data Engineering job and interview: **top N per group** ("the three best-selling products in each category"), **deduplication** ("keep only the latest version of each customer from a change feed"), and **slowly changing dimension (SCD) queries** ("what tier was this customer in when they placed that order?"). All three are built from window functions, and all three go wrong in the same places: ties, non-deterministic ordering and `NULL`s. This lesson works through each with the edge cases that matter in production.

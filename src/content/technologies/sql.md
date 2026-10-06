@@ -9,7 +9,7 @@ whatToLearnFirst: ["articles:sql/sql-fundamentals","articles:sql/joins","article
 relatedTechnologies: ["python","pyspark","data-warehousing"]
 cheatSheet: "cheat-sheets:sql-data-engineering"
 monogram: "SQL"
-lessons: ["articles:sql/sql-fundamentals", "articles:sql/operators-nulls-case", "articles:sql/functions-strings-dates-types", "articles:sql/aggregations-group-by-having", "articles:sql/set-operations", "articles:sql/joins", "articles:sql/semi-anti-lateral-joins", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/pivot-unpivot-grouping-sets", "articles:sql/window-functions", "articles:sql/window-frames-running-totals", "articles:sql/dates-calendars-time-series", "articles:sql/top-n-deduplication-scd-queries"]
+lessons: ["articles:sql/sql-fundamentals", "articles:sql/operators-nulls-case", "articles:sql/functions-strings-dates-types", "articles:sql/aggregations-group-by-having", "articles:sql/set-operations", "articles:sql/joins", "articles:sql/semi-anti-lateral-joins", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/pivot-unpivot-grouping-sets", "articles:sql/window-functions", "articles:sql/window-frames-running-totals", "articles:sql/dates-calendars-time-series", "articles:sql/top-n-deduplication-scd-queries", "articles:sql/recursive-ctes-hierarchies", "articles:sql/gaps-islands-sessionization", "articles:sql/retention-cohort-funnel-analysis", "articles:sql/json-arrays-regex", "articles:sql/query-optimization-fundamentals", "articles:sql/indexes", "articles:sql/partitioning-materialized-views-storage", "articles:sql/query-optimizer-internals", "articles:sql/sql-performance-at-scale", "articles:sql/transactions-isolation-mvcc"]
 updatedDate: 2026-10-05
 ---
 

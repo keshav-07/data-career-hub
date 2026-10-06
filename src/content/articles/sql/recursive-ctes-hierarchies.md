@@ -23,6 +23,7 @@ sources:
   - { label: "Snowflake documentation: Querying hierarchical data", url: "https://docs.snowflake.com/en/user-guide/queries-hierarchical" }
   - { label: "BigQuery documentation: Work with recursive CTEs", url: "https://cloud.google.com/bigquery/docs/recursive-ctes" }
   - { label: "Databricks documentation: Common table expression (CTE)", url: "https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-qry-select-cte" }
+previous: "articles:sql/top-n-deduplication-scd-queries"
 ---
 
 A recursive CTE lets a query refer to its own output, so it can follow a chain of rows for as many steps as the data needs. That is how you answer "everyone who reports to this manager", "every component inside this product" or "every airport reachable from here" without knowing the depth in advance. Data Engineers meet these shapes in org charts, category trees, bills of materials, lineage graphs and account hierarchies.
