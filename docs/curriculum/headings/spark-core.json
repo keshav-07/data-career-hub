@@ -50,5 +50,41 @@
   "Spark UI & stages/tasks": {
     "ref": "articles:spark/execution-model-jobs-stages-tasks",
     "heading": "The Spark UI: finding slow stages and tasks"
+  },
+  "Partitions & parallelism": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Partitions and parallelism"
+  },
+  "Shuffle internals": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Shuffle internals"
+  },
+  "Understanding shuffle cost": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Understanding shuffle cost"
+  },
+  "Repartition vs coalesce": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Repartition versus coalesce"
+  },
+  "Spark partitioning strategy": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Choosing a partitioning strategy"
+  },
+  "spark.sql.shuffle.partitions tuning": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Tuning spark.sql.shuffle.partitions"
+  },
+  "Detecting data skew": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Detecting data skew"
+  },
+  "Salting for skew": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Salting for skew"
+  },
+  "Skew join optimization": {
+    "ref": "articles:spark/partitions-shuffles-skew",
+    "heading": "Skew join optimisation"
   }
 }
