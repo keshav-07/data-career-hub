@@ -263,8 +263,8 @@ For 20-year histories or 10× data: reprocess at coarser partitions (monthly) wh
 
 ## Capacity estimate
 
-- **Two-year backfill of one main table**: 730 daily partitions × about 1.4 GB per partition (1 TB/year ÷ 365 × compression-neutral) ≈ 1 TB to read and write. With 20 partitions processed in parallel at, say, 5 minutes each, that is 730 ÷ 20 × 5 ≈ 3 hours, inside the one-day target.
-- **Shadow storage**: up to one extra copy of the reprocessed range (1 TB) for the duration of the backfill.
+- **Two-year backfill of one main table**: 730 daily partitions × about 2.7 GB per partition (1 TB/year ÷ 365) ≈ 2 TB to read and write. With 20 partitions processed in parallel at, say, 5 minutes each, that is 730 ÷ 20 × 5 ≈ 3 hours, inside the one-day target.
+- **Shadow storage**: up to one extra copy of the reprocessed range (about 2 TB) for the duration of the backfill.
 - **Downstream**: if 6 downstream tables each need the same 730 partitions, total work is several times the primary backfill; run them as the primary partitions complete, not after the whole range.
 - **Ledger**: 800 jobs × daily partitions plus backfills ≈ under 1 million rows a year, trivial.
 
