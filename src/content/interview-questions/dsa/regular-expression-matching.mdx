@@ -1,0 +1,183 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Regular Expression Matching: Dot and Star with a 2D DP Table"
+seoTitle: "Regex Matching with Dot and Star: DP"
+description: "Match a whole string against a pattern with . and * using a 2D DP over prefixes, from recursion to memoised and bottom-up versions, with careful star handling and tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "strings"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Let match(i, j) mean the first i characters of the text match the first j characters of the pattern. If the pattern character is a letter or a dot, it must match the text character and match(i - 1, j - 1) must hold. If it is a star, the star and its preceding element either match zero times (match(i, j - 2)) or match one more character, which requires the preceding element to match the text character and match(i - 1, j). match(0, 0) is true, and match(0, j) is true only for patterns like a*b*. The table is O(m * n) in time and space."
+followUps: ["How does the problem change for wildcard matching, where * matches any sequence on its own?", "Why must the star look at the element before it?", "How do real regex engines avoid exponential backtracking?"]
+previous: "interview-questions:dsa/burst-balloons"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Implement a matcher for a tiny regular expression language. A pattern contains lowercase letters, `.` and `*`:
+
+- a letter matches that exact letter;
+- `.` matches any single character;
+- `*` means "zero or more of the element just before it" (that element is a letter or a dot).
+
+The match must cover the entire text, not part of it. Return whether the text matches. You may assume every `*` has a
+valid element before it.
+
+This is widely known as LeetCode 10, "Regular Expression Matching".
+
+Assume text and pattern of up to 30 characters.
+
+## Examples
+
+```text
+text "moon",   pattern "mo*n"     -> True    (o* matches "oo")
+text "mn",     pattern "mo*n"     -> True    (o* matches nothing)
+text "abc",    pattern ".*"       -> True    (.* matches anything)
+text "abc",    pattern "ab"       -> False   (must match the whole text)
+text "",       pattern "x*y*"     -> True    (both stars match zero times)
+text "aaa",    pattern "a*a"      -> True
+```
+
+## Approach 1: plain recursion
+
+Look at the first pattern element and whether a star follows it.
+
+```python
+def is_match_recursive(text, pattern):
+    if not pattern:
+        return not text
+    first = bool(text) and pattern[0] in (text[0], ".")
+    if len(pattern) >= 2 and pattern[1] == "*":
+        # skip "x*" entirely, or use it for one character and stay on it
+        return is_match_recursive(text, pattern[2:]) or (first and is_match_recursive(text[1:], pattern))
+    return first and is_match_recursive(text[1:], pattern[1:])
+```
+
+Correct, but patterns with several stars cause exponential backtracking, and slicing copies strings each call.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `dp[i][j]` = whether `text[:i]` matches `pattern[:j]`.
+- **Recurrence** for `p = pattern[j - 1]`:
+  - if `p` is a letter or `.`: `dp[i][j] = i > 0 and dp[i - 1][j - 1] and p in (text[i - 1], ".")`;
+  - if `p` is `*` with preceding element `q = pattern[j - 2]`:
+    `dp[i][j] = dp[i][j - 2]` (zero copies of q) **or** `(i > 0 and q in (text[i - 1], ".") and dp[i - 1][j])`
+    (q matches the last text character, and the same `q*` may still match more before it).
+- **Base cases:** `dp[0][0] = True`; `dp[i][0] = False` for non-empty text; `dp[0][j]` is true only when the pattern
+  prefix is made of `x*` pairs.
+- **Answer:** the bottom-right cell.
+
+### Filled table for text "moon", pattern "mo*n"
+
+Columns are pattern prefixes, rows text prefixes (T = match).
+
+| text \ pattern | "" | m | mo | mo* | mo*n |
+|---|---|---|---|---|---|
+| "" | T | F | F | F | F |
+| m | F | T | F | T | F |
+| mo | F | F | T | T | F |
+| moo | F | F | F | T | F |
+| moon | F | F | F | F | T |
+
+Row "m", column "mo*" is true through the zero-copies case (`dp[1][1]`). Row "moo", column "mo*" is true because
+`o` matches and `dp[2][3]` is true.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def is_match_memo(text, pattern):
+    @lru_cache(maxsize=None)
+    def go(i, j):                        # text[i:] against pattern[j:]
+        if j == len(pattern):
+            return i == len(text)
+        first = i < len(text) and pattern[j] in (text[i], ".")
+        if j + 1 < len(pattern) and pattern[j + 1] == "*":
+            return go(i, j + 2) or (first and go(i + 1, j))
+        return first and go(i + 1, j + 1)
+    return go(0, 0)
+```
+
+### Bottom-up
+
+```python
+def is_match(text, pattern):
+    rows, cols = len(text), len(pattern)
+    dp = [[False] * (cols + 1) for _ in range(rows + 1)]
+    dp[0][0] = True
+    for j in range(2, cols + 1):                       # empty text against x*y*...
+        if pattern[j - 1] == "*":
+            dp[0][j] = dp[0][j - 2]
+    for i in range(1, rows + 1):
+        for j in range(1, cols + 1):
+            p = pattern[j - 1]
+            if p == "*":
+                q = pattern[j - 2]
+                dp[i][j] = dp[i][j - 2] or (q in (text[i - 1], ".") and dp[i - 1][j])
+            else:
+                dp[i][j] = dp[i - 1][j - 1] and p in (text[i - 1], ".")
+    return dp[rows][cols]
+```
+
+Each row only uses the current and previous rows, so two rows suffice if memory matters; at these sizes the full
+table is clearer.
+
+### Complexity
+
+O(m * n) time and space for both DP versions, where m and n are the text and pattern lengths.
+
+## Tests
+
+```python
+import re
+
+for fn in (is_match, is_match_memo, is_match_recursive):
+    assert fn("moon", "mo*n")
+    assert fn("mn", "mo*n")                    # star matches zero
+    assert fn("abc", ".*")
+    assert not fn("abc", "ab")                  # partial match is not enough
+    assert fn("", "x*y*")                       # empty text, star-only pattern
+    assert fn("aaa", "a*a")
+    assert fn("", "")                           # both empty
+    assert not fn("a", "")                      # empty pattern, non-empty text
+    assert not fn("", ".")                      # dot needs a character
+    assert fn("ab", ".*b")
+    assert not fn("ab", ".*c")
+
+# Compare with Python's re.fullmatch on random small cases
+import random
+random.seed(25)
+for _ in range(300):
+    text = "".join(random.choice("ab") for _ in range(random.randint(0, 5)))
+    pat = ""
+    for _ in range(random.randint(0, 4)):
+        pat += random.choice("ab.")
+        if random.random() < 0.4:
+            pat += "*"
+    expected = re.fullmatch(pat, text) is not None
+    assert is_match(text, pat) == is_match_memo(text, pat) == expected
+```
+
+## Edge cases and pitfalls
+
+- **Treating `*` on its own.** The star always belongs to the element before it; `j - 2` skips the pair.
+- **Whole-string match.** Returning true when the pattern is used up but text remains is a common bug.
+- **Empty text row.** Initialise `dp[0][j]` for star pairs, or patterns like `a*` fail on empty text.
+- **Dot plus star** matches any sequence, including the empty one.
+- **Confusing this with wildcard matching** (LeetCode 44), where `*` matches any sequence by itself and `?` is the
+  single-character wildcard.
+
+## Where this shows up in data engineering
+
+Every data engineer uses regular expressions for validation and parsing (`REGEXP_LIKE`, `rlike` in Spark SQL). This
+problem shows why some patterns are expensive: a backtracking engine can take exponential time on nested stars,
+whereas this DP, like the automaton-based engines such as RE2, stays polynomial. That is a real consideration when
+user-supplied patterns run against large tables.
