@@ -1,0 +1,203 @@
+---
+title: "Convert Sorted Array to BST: Pick the Middle, Recurse on Halves"
+seoTitle: "Convert a Sorted Array to a Balanced BST"
+description: "Build a height-balanced binary search tree from a sorted list by choosing the middle value as the root at every level. Recursive and iterative Python with tests."
+technology: ["dsa"]
+topic: ["binary-search-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+shortAnswer: "Make the middle element the root, so the left half (all smaller values) forms the left subtree and the right half forms the right subtree, and apply the same rule recursively to each half. Passing index bounds instead of slicing keeps it O(n) time, with O(log n) recursion depth because the halves shrink by half each level. The resulting tree is height-balanced."
+followUps: ["How would you build a balanced BST from a sorted linked list?", "Why does choosing the middle guarantee balance?", "How many different balanced BSTs can a sorted list produce?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/delete-node-in-a-bst"
+---
+
+## Problem
+
+Given a list of distinct integers sorted in ascending order, build a **height-balanced** binary search tree containing exactly those values and return its root. Height-balanced means that for every node the heights of its two subtrees differ by at most one.
+
+This is widely known as LeetCode 108 (Convert Sorted Array to Binary Search Tree). More than one correct tree usually exists; any balanced BST with the right values is accepted.
+
+Constraints for this version: 0 to 10,000 values, strictly increasing.
+
+## Examples
+
+| `nums` | One valid result (level order) |
+|---|---|
+| `[3, 9, 14, 20, 27]` | `[14, 3, 20, None, 9, None, 27]` |
+| `[5, 10]` | `[5, None, 10]` (or `[10, 5]`) |
+| `[42]` | `[42]` |
+| `[]` | `[]` |
+
+The first result:
+
+```text
+       14
+      /  \
+     3    20
+      \     \
+       9     27
+```
+
+## Approach 1: brute force
+
+Insert the values one by one into an empty BST. In sorted order every value goes to the right of the previous one, producing a chain of height `n`, which is valid as a BST but not balanced. Inserting in a shuffled order gives an expected height of O(log n) but no guarantee.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def insert_all(nums):
+    root = None
+    for v in nums:
+        new = TreeNode(v)
+        if root is None:
+            root = new
+            continue
+        node = root
+        while True:
+            if v < node.val:
+                if node.left is None:
+                    node.left = new; break
+                node = node.left
+            else:
+                if node.right is None:
+                    node.right = new; break
+                node = node.right
+    return root
+```
+
+For sorted input this is O(n^2) time and produces a degenerate tree, which is exactly what the problem wants you to avoid.
+
+## Approach 2: optimal
+
+**Key insight.** In a sorted list, the middle value has half of the values below it and half above. Making it the root splits the remaining values into two halves that differ in size by at most one, and those halves are themselves sorted, so the same rule builds each subtree. Because every split is as even as possible, every node's subtrees have heights that differ by at most one.
+
+**Walkthrough** for `[3, 9, 14, 20, 27]` (indices 0 to 4):
+
+| Range | Middle index | Root of this subtree | Left range | Right range |
+|---|---|---|---|---|
+| 0..4 | 2 | 14 | 0..1 | 3..4 |
+| 0..1 | 0 | 3 | empty | 1..1 |
+| 1..1 | 1 | 9 | empty | empty |
+| 3..4 | 3 | 20 | empty | 4..4 |
+| 4..4 | 4 | 27 | empty | empty |
+
+### Recursive
+
+```python
+def sorted_array_to_bst(nums):
+    def build(lo, hi):                 # inclusive bounds, no slicing
+        if lo > hi:
+            return None
+        mid = (lo + hi) // 2           # lower middle; (lo + hi + 1) // 2 is also valid
+        node = TreeNode(nums[mid])
+        node.left = build(lo, mid - 1)
+        node.right = build(mid + 1, hi)
+        return node
+
+    return build(0, len(nums) - 1)
+```
+
+### Iterative
+
+The same construction with a stack of pending ranges and the parent link they belong to:
+
+```python
+def sorted_array_to_bst_iterative(nums):
+    if not nums:
+        return None
+    mid = (len(nums) - 1) // 2
+    root = TreeNode(nums[mid])
+    stack = [(root, 0, mid - 1, "left"), (root, mid + 1, len(nums) - 1, "right")]
+    while stack:
+        parent, lo, hi, side = stack.pop()
+        if lo > hi:
+            continue
+        mid = (lo + hi) // 2
+        child = TreeNode(nums[mid])
+        setattr(parent, side, child)
+        stack.append((child, lo, mid - 1, "left"))
+        stack.append((child, mid + 1, hi, "right"))
+    return root
+```
+
+**Complexity.** O(n) time: each value becomes one node. Recursion depth (or stack size) is O(log n). The output itself is O(n).
+
+## Tests
+
+```python
+from collections import deque
+
+def to_level_list(root):
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
+        if node:
+            out.append(node.val)
+            queue.extend([node.left, node.right])
+        else:
+            out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+def inorder_values(root):
+    out, stack, node = [], [], root
+    while stack or node:
+        while node:
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        out.append(node.val)
+        node = node.right
+    return out
+
+def balanced_height(node):
+    """Return the height if balanced, else -1."""
+    if node is None:
+        return 0
+    left, right = balanced_height(node.left), balanced_height(node.right)
+    if left < 0 or right < 0 or abs(left - right) > 1:
+        return -1
+    return 1 + max(left, right)
+
+assert to_level_list(sorted_array_to_bst([3, 9, 14, 20, 27])) == [14, 3, 20, None, 9, None, 27]
+assert to_level_list(sorted_array_to_bst([5, 10])) == [5, None, 10]
+assert to_level_list(sorted_array_to_bst([42])) == [42]
+assert sorted_array_to_bst([]) is None
+
+for fn in (sorted_array_to_bst, sorted_array_to_bst_iterative):
+    for n in range(0, 70):
+        nums = [i * 3 - 50 for i in range(n)]
+        tree = fn(nums)
+        assert inorder_values(tree) == nums, (fn.__name__, n)
+        assert balanced_height(tree) >= 0, (fn.__name__, n)
+    assert to_level_list(fn([3, 9, 14, 20, 27])) == [14, 3, 20, None, 9, None, 27]
+
+big = sorted_array_to_bst(list(range(10_000)))
+assert balanced_height(big) == 14            # ceil(log2(10001)) levels
+
+chain = insert_all(list(range(300)))         # the brute force on sorted input
+assert balanced_height(chain) == -1 and inorder_values(chain) == list(range(300))
+print("all sorted array to BST tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Slicing** (`nums[:mid]`, `nums[mid + 1:]`) copies the list at every level and costs O(n log n) time and extra memory. Pass indices.
+- **Empty input** returns `None`.
+- **Two elements.** Either can be the root; tests that demand one exact shape can fail correct solutions, so check balance and order instead.
+- **Duplicates** are not allowed in the standard problem; with duplicates you need a rule for which side equal values go to.
+
+## Where this shows up in data engineering
+
+Bulk-loading a sorted dataset into an ordered index is faster and gives a better structure than inserting rows one at a time. Databases use this when creating a B-tree index on existing data: they sort first and build the tree bottom-up. The same reasoning is why loading data pre-sorted by a table's clustering or sort key produces well-organised files with tight min/max ranges.
