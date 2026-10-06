@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:sql/window-functions"]
 related: ["articles:pyspark/window-functions", "interview-questions:sql/window-functions-vs-group-by"]
 previous: "articles:sql/window-functions"
+next: "articles:sql/dates-calendars-time-series"
 sources:
   - { label: "PostgreSQL documentation: Window function calls and frame clauses", url: "https://www.postgresql.org/docs/16/sql-expressions.html" }
   - { label: "PostgreSQL documentation: Window functions (CUME_DIST, PERCENT_RANK)", url: "https://www.postgresql.org/docs/16/functions-window.html" }
@@ -157,7 +158,7 @@ ORDER BY sale_date;
 
 ### Rows versus time
 
-Look at 5 June. The `ROWS` frame takes the previous two **rows**, which are 2 and 3 June, because 4 June is missing. The `RANGE` frame takes the previous two **days**, 3 to 5 June, and only finds 3 and 5 June. When the data has gaps, "the last 3 rows" and "the last 3 days" are different windows. For time-based metrics, either use a `RANGE` frame with an interval, or fill the gaps first by joining to a calendar (the time-series lesson that follows shows both). Also decide whether a closed day counts as zero revenue (fill with 0) or as no information (leave it out); the averages differ.
+Look at 5 June. The `ROWS` frame takes the previous two **rows**, which are 2 and 3 June, because 4 June is missing. The `RANGE` frame takes the previous two **days**, 3 to 5 June, and only finds 3 and 5 June. When the data has gaps, "the last 3 rows" and "the last 3 days" are different windows. For time-based metrics, either use a `RANGE` frame with an interval, or fill the gaps first by joining to a calendar (the [time-series lesson](/sql/dates-calendars-time-series/) shows both). Also decide whether a closed day counts as zero revenue (fill with 0) or as no information (leave it out); the averages differ.
 
 ### Incomplete windows
 

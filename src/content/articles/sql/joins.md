@@ -477,7 +477,7 @@ ORDER BY g.order_date, g.category;
 | 2025-06-03 | furniture | 0 |
 | 2025-06-03 | stationery | 5 |
 
-Three days × three categories gives nine rows, including the zero days that a plain `GROUP BY` would have left out. The second version also shows the safer shape for any grid report: **aggregate the facts to the grid's grain first, then left join once**. `generate_series` is PostgreSQL; the time-series lesson later in the course shows calendar tables and other engines' equivalents.
+Three days × three categories gives nine rows, including the zero days that a plain `GROUP BY` would have left out. The second version also shows the safer shape for any grid report: **aggregate the facts to the grid's grain first, then left join once**. `generate_series` is PostgreSQL; the [time-series lesson](/sql/dates-calendars-time-series/) shows calendar tables and other engines' equivalents.
 
 ### Accidental cartesian products
 

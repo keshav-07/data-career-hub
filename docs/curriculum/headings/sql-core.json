@@ -210,5 +210,25 @@
   "Median & percentile (PERCENTILE_CONT)": {
     "ref": "articles:sql/window-frames-running-totals",
     "heading": "Median and percentiles with PERCENTILE_CONT"
+  },
+  "Date truncation & bucketing": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Date truncation and bucketing"
+  },
+  "Generate date series / calendar table": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Generating a date series and calendar table"
+  },
+  "Year-over-year growth": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Year-over-year growth"
+  },
+  "Month-over-month change": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Month-over-month change"
+  },
+  "Rolling 7/30 day metrics": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Rolling 7 and 30 day metrics"
   }
 }

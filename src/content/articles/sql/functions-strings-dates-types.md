@@ -151,7 +151,7 @@ String questions are usually data-cleaning tasks: "extract the domain from an em
 
 ## Date and time functions
 
-Dates drive almost every metric: daily revenue, time to ship, monthly active users. The basic toolkit is getting the current date, extracting parts, adding intervals, computing differences and truncating to a period. Truncation and calendars get a full treatment in the time-series lesson later in this course; this section covers the building blocks.
+Dates drive almost every metric: daily revenue, time to ship, monthly active users. The basic toolkit is getting the current date, extracting parts, adding intervals, computing differences and truncating to a period. Truncation and calendars get a full treatment in the [time-series lesson](/sql/dates-calendars-time-series/); this section covers the building blocks.
 
 ### Types first
 
