@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Backfill and Late-Data Handling System"
 seoTitle: "Design a Backfill and Late-Data System"
-description: "A system-design case study for backfills and late data: idempotent partition rewrites, lookback windows, affected-partition detection, dependency-aware reruns and safety."
+description: "A system-design case study for backfills and late data: idempotent partition rewrites, affected-partition detection, dependency-aware reruns and validation."
 technology: ["data-engineering", "airflow", "etl-elt"]
 topic: ["batch", "backfill", "late-data", "architecture"]
 tags: ["backfill", "late-arriving-data", "idempotency", "partition-overwrite", "watermarks", "airflow"]
@@ -71,6 +71,7 @@ sources:
   - { label: "Delta Lake documentation: table batch reads and writes", url: "https://docs.delta.io/latest/delta-batch.html" }
   - { label: "PostgreSQL 16: transaction isolation", url: "https://www.postgresql.org/docs/16/transaction-iso.html" }
 previous: "system-designs:ad-bidding-analytics-pipeline"
+next: "system-designs:schema-registry-contract-system"
 ---
 
 ## Approach
