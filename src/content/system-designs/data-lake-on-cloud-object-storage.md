@@ -97,7 +97,7 @@ State the scope you will design for: object storage as the system of record, raw
 <figure class="diagram">
 <ol class="flow">
 <li><strong>Sources</strong>: file drops (SFTP, partner buckets), database extracts and CDC, and event streams through a streaming sink.</li>
-<li><strong>Landing / raw zone</strong>: files written unchanged under <code>raw/&lt;source&gt;/&lt;dataset&gt;/ingest_date=YYYY-MM-DD/</code>, with a manifest recording source, row count and checksum.</li>
+<li><strong>Landing / raw zone</strong>: files written unchanged under a <code>raw/</code> prefix per source, dataset and ingestion date, with a manifest recording source, row count and checksum.</li>
 <li><strong>Conversion jobs</strong> (Spark): parse, type, deduplicate and validate raw files, then commit them to Iceberg tables.</li>
 <li><strong>Curated zone</strong>: Iceberg tables in Parquet, partitioned by date and sorted by common filter columns; a separate restricted zone for personal data.</li>
 <li><strong>Catalog</strong>: one Iceberg REST catalog (Glue Data Catalog, Polaris or similar) holding table metadata pointers, owners and grants.</li>
@@ -122,7 +122,15 @@ Object storage has no real directories. A "folder" is a key prefix. Layout still
 | `acme-lake-restricted` | Tables containing personal data | Approved jobs only | Standard; separate KMS key |
 | `acme-lake-sandbox` | User scratch space | Analysts | Expire objects after 30 days |
 
-**Raw key pattern**: `raw/<source>/<dataset>/ingest_date=2026-10-05/<batch_id>/part-0001.json.gz`. Partition raw data by **ingestion date**, not business date: you know the ingestion date at write time, it never changes, and it makes "reprocess everything that arrived on Tuesday" a prefix operation. Business dates are applied later in curated tables.
+**Raw key pattern**:
+
+```text
+raw/<source>/<dataset>/
+  ingest_date=2026-10-05/
+    <batch_id>/part-0001.json.gz
+```
+
+Partition raw data by **ingestion date**, not business date: you know the ingestion date at write time, it never changes, and it makes "reprocess everything that arrived on Tuesday" a prefix operation. Business dates are applied later in curated tables.
 
 **Request throughput.** S3 supports at least 3,500 write and 5,500 read requests per second per prefix and scales by adding prefixes, so a well-spread key space rarely hits limits. What does hurt is millions of tiny objects: each one is a request to write, list and read. Aim for curated data files of roughly 128 MB to 1 GB.
 

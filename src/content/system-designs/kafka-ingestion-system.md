@@ -76,6 +76,7 @@ related:
   - "projects:kafka-spark-delta-streaming"
   - "system-designs:change-data-capture-platform"
 previous: "system-designs:change-data-capture-platform"
+next: "system-designs:event-driven-architecture"
 versionContext: "Design discussion based on Apache Kafka 4.x (KRaft only) and Apache Flink 2.x behaviour; configuration snippets are illustrative and were not executed."
 sources:
   - { label: "Apache Kafka documentation: design", url: "https://kafka.apache.org/documentation/#design" }
@@ -137,7 +138,7 @@ For a multi-team platform with hundreds of topics, compaction, transactions and 
 ## Durability and availability
 
 - Replication factor 3, `min.insync.replicas=2`, brokers rack-aware across three zones. A write is acknowledged only when two replicas have it, so one zone can fail without losing acknowledged data and without blocking producers.
-- `unclean.leader.election.enable=false`, so an out-of-date replica never becomes leader and silently drops data.
+- `unclean.leader.election.enable` set to `false`, so an out-of-date replica never becomes leader and silently drops data.
 - Producers: idempotence has been the default since Kafka 3.0 (it prevents duplicates from producer retries within a partition); keep `acks=all` and set a bounded `delivery.timeout.ms` so callers learn about failures.
 - Kafka 4.x runs only in KRaft mode: metadata lives in a Raft quorum of controllers instead of ZooKeeper. Run three or five controllers across zones.
 
@@ -152,7 +153,7 @@ Every topic has a registered schema (Avro or Protobuf) with a compatibility mode
 | Model | Record at a time, continuous | Micro-batch by default; Spark 4.1 added a real-time mode, initially limited to stateless queries | Library inside your service |
 | State | Large keyed state, RocksDB or ForSt (disaggregated state in Flink 2.0) | State store per micro-batch, RocksDB provider | Local RocksDB plus changelog topics |
 | Event time | Watermarks, allowed lateness, side outputs for late data | Watermarks, append and update output modes | Grace periods on windows |
-| Exactly-once | Checkpoints plus two-phase-commit sinks | Checkpoints plus idempotent or transactional sinks | Kafka transactions (`processing.guarantee=exactly_once_v2`) |
+| Exactly-once | Checkpoints plus two-phase-commit sinks | Checkpoints plus idempotent or transactional sinks | Kafka transactions (`exactly_once_v2` processing guarantee) |
 | Best fit | Low-latency stateful pipelines, CEP | Teams already on Spark, unified batch and streaming, lakehouse writes | Kafka-to-Kafka microservices |
 
 Offer Flink as the platform's default stateful engine, Spark Structured Streaming for lakehouse ingestion jobs owned by Spark teams, and Kafka Streams for service teams that want a library. Standardise checkpoint storage, metrics and deployment for all three.
@@ -161,7 +162,7 @@ Offer Flink as the platform's default stateful engine, Spark Structured Streamin
 
 "Exactly-once" means exactly-once **effect** on state, achieved by combining pieces:
 
-- **Kafka to Kafka**: transactional producers write outputs and consumer offsets atomically; downstream consumers use `isolation.level=read_committed` (the default is `read_uncommitted`) so they never see aborted writes.
+- **Kafka to Kafka**: transactional producers write outputs and consumer offsets atomically; downstream consumers set `isolation.level` to `read_committed` (the default is `read_uncommitted`) so they never see aborted writes.
 - **Kafka to lakehouse**: Flink's or Spark's checkpoint records source offsets; the sink commits files to Delta or Iceberg in the same checkpoint cycle, so a restart neither loses nor duplicates a batch.
 - **Kafka to external systems** (databases, APIs): use idempotent writes keyed by `event_id` or a natural key, because those systems do not join Kafka transactions.
 
