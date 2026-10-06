@@ -1,0 +1,175 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Edit Distance: Levenshtein Distance with a 2D DP Table"
+seoTitle: "Edit Distance: Levenshtein DP"
+description: "Compute the minimum inserts, deletes and replacements that turn one string into another with the Levenshtein DP, memoised, bottom-up and two-row versions, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "Let dist(i, j) be the edits needed to turn the first i characters of a into the first j characters of b. If a[i - 1] equals b[j - 1], dist(i, j) = dist(i - 1, j - 1). Otherwise it is 1 + the minimum of dist(i - 1, j) (delete), dist(i, j - 1) (insert) and dist(i - 1, j - 1) (replace). Base cases: dist(i, 0) = i and dist(0, j) = j. Filling the table is O(m * n) time; two rows reduce space to O(min(m, n))."
+followUps: ["How would you return the actual sequence of edits?", "How do you add transpositions (Damerau-Levenshtein)?", "How would you check only whether the distance is at most k, faster than the full table?"]
+previous: "interview-questions:dsa/interleaving-string"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given two strings, return the minimum number of single-character operations needed to turn the first into the second.
+The allowed operations are inserting a character, deleting a character and replacing one character with another.
+
+This is widely known as LeetCode 72, "Edit Distance", and the quantity is the Levenshtein distance. It extends
+[Longest Common Subsequence](/interview/dsa/longest-common-subsequence/) with a third operation.
+
+Assume each string has up to 500 lowercase letters.
+
+## Examples
+
+```text
+"table", "cable"   -> 1   (replace t with c)
+"plant", "pants"   -> 2   (delete l, insert s)
+"", "data"         -> 4   (four inserts)
+"same", "same"     -> 0
+```
+
+## Approach 1: plain recursion
+
+```python
+def edit_distance_recursive(a, b):
+    def go(i, j):                          # distance between a[:i] and b[:j]
+        if i == 0:
+            return j
+        if j == 0:
+            return i
+        if a[i - 1] == b[j - 1]:
+            return go(i - 1, j - 1)
+        return 1 + min(go(i - 1, j), go(i, j - 1), go(i - 1, j - 1))
+    return go(len(a), len(b))
+```
+
+Three branches on each mismatch: up to O(3^(m + n)).
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `dist[i][j]` = edit distance between `a[:i]` and `b[:j]`.
+- **Recurrence:**
+  - if `a[i - 1] == b[j - 1]`: `dist[i][j] = dist[i - 1][j - 1]` (no cost);
+  - otherwise `dist[i][j] = 1 + min(dist[i - 1][j], dist[i][j - 1], dist[i - 1][j - 1])` for delete, insert and
+    replace.
+- **Base cases:** `dist[i][0] = i` (delete everything) and `dist[0][j] = j` (insert everything).
+- **Answer:** the bottom-right cell.
+
+### Filled table for "plant" to "pants"
+
+| | "" | p | a | n | t | s |
+|---|---|---|---|---|---|---|
+| "" | 0 | 1 | 2 | 3 | 4 | 5 |
+| p | 1 | 0 | 1 | 2 | 3 | 4 |
+| l | 2 | 1 | 1 | 2 | 3 | 4 |
+| a | 3 | 2 | 1 | 2 | 3 | 4 |
+| n | 4 | 3 | 2 | 1 | 2 | 3 |
+| t | 5 | 4 | 3 | 2 | 1 | 2 |
+
+Answer 2.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def edit_distance_memo(a, b):
+    @lru_cache(maxsize=None)
+    def go(i, j):
+        if i == 0:
+            return j
+        if j == 0:
+            return i
+        if a[i - 1] == b[j - 1]:
+            return go(i - 1, j - 1)
+        return 1 + min(go(i - 1, j), go(i, j - 1), go(i - 1, j - 1))
+    return go(len(a), len(b))
+```
+
+### Bottom-up
+
+```python
+def edit_distance_table(a, b):
+    rows, cols = len(a), len(b)
+    dist = [[0] * (cols + 1) for _ in range(rows + 1)]
+    for i in range(rows + 1):
+        dist[i][0] = i
+    for j in range(cols + 1):
+        dist[0][j] = j
+    for i in range(1, rows + 1):
+        for j in range(1, cols + 1):
+            if a[i - 1] == b[j - 1]:
+                dist[i][j] = dist[i - 1][j - 1]
+            else:
+                dist[i][j] = 1 + min(dist[i - 1][j], dist[i][j - 1], dist[i - 1][j - 1])
+    return dist[rows][cols]
+```
+
+### Space optimised (two rows)
+
+```python
+def min_distance(a, b):
+    if len(b) > len(a):
+        a, b = b, a                        # the distance is symmetric
+    prev = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)
+        for j in range(1, len(b) + 1):
+            if a[i - 1] == b[j - 1]:
+                cur[j] = prev[j - 1]
+            else:
+                cur[j] = 1 + min(prev[j], cur[j - 1], prev[j - 1])
+        prev = cur
+    return prev[-1]
+```
+
+### Complexity
+
+O(m * n) time. O(m * n) space for the full table (needed to recover the edits), O(min(m, n)) with two rows.
+
+## Tests
+
+```python
+for fn in (min_distance, edit_distance_table, edit_distance_memo, edit_distance_recursive):
+    assert fn("table", "cable") == 1
+    assert fn("plant", "pants") == 2
+    assert fn("", "data") == 4                     # empty source
+    assert fn("data", "") == 4                     # empty target
+    assert fn("", "") == 0
+    assert fn("same", "same") == 0
+    assert fn("a", "b") == 1                       # single replacement
+    assert fn("abc", "cab") == 2
+
+import random
+random.seed(23)
+for _ in range(100):
+    a = "".join(random.choice("abc") for _ in range(random.randint(0, 6)))
+    b = "".join(random.choice("abc") for _ in range(random.randint(0, 6)))
+    d = min_distance(a, b)
+    assert d == edit_distance_recursive(a, b) == edit_distance_table(a, b) == min_distance(b, a)
+    assert abs(len(a) - len(b)) <= d <= max(len(a), len(b))      # standard bounds
+```
+
+## Edge cases and pitfalls
+
+- **Base row and column.** Forgetting `dist[i][0] = i` makes deletions from a non-empty prefix free.
+- **Charging for matches.** Equal characters cost 0 and take the diagonal.
+- **Mixing up insert and delete directions** does not change the number, but matters when you reconstruct edits.
+- **Space optimisation** loses the information needed to print the edit script.
+- **Bounds check**: the distance is at least the length difference and at most the longer length, a quick sanity test.
+
+## Where this shows up in data engineering
+
+Levenshtein distance is a standard fuzzy-matching score for deduplicating names, addresses and product titles. Many
+SQL engines expose it directly (for example `levenshtein` in PostgreSQL's fuzzystrmatch extension and in DuckDB), and
+the quadratic cost per pair is why matching pipelines first narrow candidates with blocking keys.
