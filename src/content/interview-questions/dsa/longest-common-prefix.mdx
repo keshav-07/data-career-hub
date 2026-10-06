@@ -1,0 +1,106 @@
+---
+title: "Longest Common Prefix: Shared Start of a List of Strings"
+seoTitle: "Longest Common Prefix: Vertical Scan"
+description: "Find the longest string that every word in a list starts with. Compare characters column by column and stop at the first mismatch, in O(total characters)."
+technology: ["dsa"]
+topic: ["strings"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 5
+interviewRelevance: "High"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "Scan column by column: for position i, check that every string has a character at i and that it equals the first string's character. The first failure ends the prefix. This touches at most n × m characters, where m is the length of the shortest string, so it is O(S) time for S total characters and O(1) extra space. Sorting and comparing only the first and last strings also works, in O(S log n)."
+followUps: ["Why is it enough to compare only the smallest and largest strings after sorting?", "How would a trie answer repeated prefix queries?", "What if the list is too large to fit in memory?"]
+previous: "interview-questions:dsa/number-of-recent-calls"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of strings, return the longest string that is a prefix of every one of them, or the empty string if they share no prefix. This is widely known as LeetCode 14, Longest Common Prefix.
+
+## Examples
+
+```text
+["datalake", "database", "datum"]   ->  "dat"
+["spark", "kafka"]                  ->  ""
+["solo"]                            ->  "solo"
+["", "abc"]                         ->  ""
+```
+
+## Approach 1: brute force (horizontal scan)
+
+Start with the first string as the candidate prefix and shorten it until each following string starts with it.
+
+```python
+def lcp_horizontal(strs):
+    if not strs:
+        return ""
+    prefix = strs[0]
+    for s in strs[1:]:
+        while not s.startswith(prefix):
+            prefix = prefix[:-1]
+    return prefix
+```
+
+**Complexity:** O(S · m) in the worst case, because each shortening creates a new string and re-checks it; O(m) space for the prefix. Correct and short, and a fine first answer.
+
+## Approach 2: optimal (vertical scan)
+
+**Key insight:** the prefix ends at the first column where any string runs out or disagrees, so check one column at a time across all strings and stop as early as possible.
+
+Walkthrough on `["datalake", "database", "datum"]`:
+
+| i | Characters | All equal? |
+|---|---|---|
+| 0 | d, d, d | yes |
+| 1 | a, a, a | yes |
+| 2 | t, t, t | yes |
+| 3 | a, a, u | **no** → prefix is `"dat"` |
+
+```python
+def longest_common_prefix(strs):
+    if not strs:
+        return ""
+    first = strs[0]
+    for i, ch in enumerate(first):
+        for s in strs[1:]:
+            if i == len(s) or s[i] != ch:
+                return first[:i]
+    return first
+```
+
+**Complexity:** O(S) time in the worst case (all strings equal), and it never reads past the shortest string plus one column. O(1) extra space besides the result.
+
+## Tests
+
+```python
+import random
+
+for f in (longest_common_prefix, lcp_horizontal):
+    assert f(["datalake", "database", "datum"]) == "dat"
+    assert f(["spark", "kafka"]) == ""                 # nothing shared
+    assert f(["solo"]) == "solo"                       # single string
+    assert f([]) == ""                                 # empty list
+    assert f(["", "abc"]) == ""                        # empty string
+    assert f(["same", "same"]) == "same"               # duplicates
+    assert f(["ab", "a"]) == "a"                       # shorter string later
+    assert f(["x" * 10_000, "x" * 9_999 + "y"]) == "x" * 9_999   # long strings
+
+random.seed(44)
+for _ in range(400):
+    strs = ["".join(random.choice("ab") for _ in range(random.randint(0, 4))) for _ in range(random.randint(1, 5))]
+    assert longest_common_prefix(strs) == lcp_horizontal(strs)
+```
+
+## Edge cases and pitfalls
+
+- Check the length of every string before indexing it; a shorter string later in the list otherwise raises `IndexError`.
+- An empty list has no common prefix; return `""` rather than failing on `strs[0]`.
+- `os.path.commonprefix` does this character-wise in the standard library, which is worth knowing but not what the interviewer wants to see.
+
+## Where this shows up in data engineering
+
+Common prefixes matter for object storage layouts: listing and partition pruning in S3 or GCS work on key prefixes, so finding the longest shared prefix of a set of paths tells you the narrowest prefix to list. Tries, the data structure behind repeated prefix queries, also power autocomplete over column and table names.
