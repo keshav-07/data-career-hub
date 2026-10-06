@@ -114,5 +114,25 @@
   "fetch.min/max.bytes": {
     "ref": "articles:kafka/consumers-offsets",
     "heading": "fetch.min.bytes and fetch.max.bytes"
+  },
+  "Group coordinator": {
+    "ref": "articles:kafka/consumer-groups-rebalancing",
+    "heading": "Group coordinator"
+  },
+  "Rebalancing protocols": {
+    "ref": "articles:kafka/consumer-groups-rebalancing",
+    "heading": "Rebalancing protocols"
+  },
+  "Cooperative sticky assignor": {
+    "ref": "articles:kafka/consumer-groups-rebalancing",
+    "heading": "Cooperative sticky assignor"
+  },
+  "Static membership": {
+    "ref": "articles:kafka/consumer-groups-rebalancing",
+    "heading": "Static membership"
+  },
+  "Partition reassignment": {
+    "ref": "articles:kafka/consumer-groups-rebalancing",
+    "heading": "Partition reassignment"
   }
 }
