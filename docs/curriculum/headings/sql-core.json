@@ -1,0 +1,234 @@
+{
+  "SELECT, WHERE & basic filtering": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "SELECT and WHERE: choosing columns and filtering rows"
+  },
+  "DISTINCT and de-duplication": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "DISTINCT and removing duplicate rows"
+  },
+  "ORDER BY multi-column sorting": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "ORDER BY: sorting on several columns"
+  },
+  "LIMIT / TOP / FETCH FIRST": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "LIMIT, TOP and FETCH FIRST"
+  },
+  "Aliases and column naming": {
+    "ref": "articles:sql/sql-fundamentals",
+    "heading": "Aliases and column naming"
+  },
+  "Comparison & logical operators": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "Comparison and logical operators"
+  },
+  "IN, BETWEEN, LIKE patterns": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "IN, BETWEEN and LIKE"
+  },
+  "NULL handling with IS NULL / COALESCE": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "Handling NULL: IS NULL, COALESCE and NULLIF"
+  },
+  "CASE WHEN expressions": {
+    "ref": "articles:sql/operators-nulls-case",
+    "heading": "CASE expressions"
+  },
+  "String functions (CONCAT, SUBSTRING, TRIM)": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "String functions: CONCAT, SUBSTRING, TRIM and friends"
+  },
+  "Date functions basics": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "Date and time functions"
+  },
+  "CAST and data type conversion": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "CAST and data type conversion"
+  },
+  "Arithmetic & rounding": {
+    "ref": "articles:sql/functions-strings-dates-types",
+    "heading": "Arithmetic and rounding"
+  },
+  "Aggregate functions (SUM, AVG, MIN, MAX)": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "Aggregate functions: SUM, AVG, MIN and MAX"
+  },
+  "COUNT vs COUNT(DISTINCT)": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "COUNT, COUNT(column) and COUNT(DISTINCT)"
+  },
+  "GROUP BY fundamentals": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "GROUP BY fundamentals"
+  },
+  "HAVING vs WHERE": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "HAVING versus WHERE"
+  },
+  "Conditional aggregation": {
+    "ref": "articles:sql/aggregations-group-by-having",
+    "heading": "Conditional aggregation"
+  },
+  "UNION vs UNION ALL": {
+    "ref": "articles:sql/set-operations",
+    "heading": "UNION versus UNION ALL"
+  },
+  "EXCEPT / INTERSECT set operations": {
+    "ref": "articles:sql/set-operations",
+    "heading": "INTERSECT and EXCEPT"
+  },
+  "INNER JOIN basics": {
+    "ref": "articles:sql/joins",
+    "heading": "INNER JOIN basics"
+  },
+  "LEFT JOIN basics": {
+    "ref": "articles:sql/joins",
+    "heading": "LEFT JOIN basics"
+  },
+  "RIGHT JOIN & FULL OUTER JOIN": {
+    "ref": "articles:sql/joins",
+    "heading": "RIGHT JOIN and FULL OUTER JOIN"
+  },
+  "Self Join patterns": {
+    "ref": "articles:sql/joins",
+    "heading": "Self join patterns"
+  },
+  "Cross Join & cartesian products": {
+    "ref": "articles:sql/joins",
+    "heading": "Cross join and cartesian products"
+  },
+  "Multi-table joins": {
+    "ref": "articles:sql/joins",
+    "heading": "Multi-table joins"
+  },
+  "Semi-join with EXISTS": {
+    "ref": "articles:sql/semi-anti-lateral-joins",
+    "heading": "Semi-join with EXISTS"
+  },
+  "Anti-join (NOT EXISTS / LEFT JOIN NULL)": {
+    "ref": "articles:sql/semi-anti-lateral-joins",
+    "heading": "Anti-join with NOT EXISTS or LEFT JOIN ... IS NULL"
+  },
+  "LATERAL / CROSS APPLY joins": {
+    "ref": "articles:sql/semi-anti-lateral-joins",
+    "heading": "LATERAL joins and CROSS APPLY"
+  },
+  "Subqueries in WHERE": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Subqueries in WHERE"
+  },
+  "Subqueries in FROM (derived tables)": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Subqueries in FROM (derived tables)"
+  },
+  "Scalar subqueries": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Scalar subqueries"
+  },
+  "Correlated subqueries": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Correlated subqueries"
+  },
+  "Common Table Expressions (CTEs)": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Common table expressions (CTEs)"
+  },
+  "Multiple chained CTEs": {
+    "ref": "articles:sql/ctes-subqueries-temp-tables",
+    "heading": "Multiple chained CTEs"
+  },
+  "PIVOT rows to columns": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "PIVOT: turning rows into columns"
+  },
+  "UNPIVOT columns to rows": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "UNPIVOT: turning columns into rows"
+  },
+  "Pivoting dynamic columns": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "Pivoting dynamic columns"
+  },
+  "GROUPING SETS": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "GROUPING SETS"
+  },
+  "ROLLUP and CUBE": {
+    "ref": "articles:sql/pivot-unpivot-grouping-sets",
+    "heading": "ROLLUP and CUBE"
+  },
+  "Window function basics (OVER)": {
+    "ref": "articles:sql/window-functions",
+    "heading": "Window function basics: the OVER clause"
+  },
+  "PARTITION BY clause": {
+    "ref": "articles:sql/window-functions",
+    "heading": "The PARTITION BY clause"
+  },
+  "ROW_NUMBER()": {
+    "ref": "articles:sql/window-functions",
+    "heading": "ROW_NUMBER()"
+  },
+  "RANK() vs DENSE_RANK()": {
+    "ref": "articles:sql/window-functions",
+    "heading": "RANK() versus DENSE_RANK()"
+  },
+  "NTILE() bucketing": {
+    "ref": "articles:sql/window-functions",
+    "heading": "NTILE() bucketing"
+  },
+  "LAG() and LEAD()": {
+    "ref": "articles:sql/window-functions",
+    "heading": "LAG() and LEAD()"
+  },
+  "FIRST_VALUE / LAST_VALUE": {
+    "ref": "articles:sql/window-functions",
+    "heading": "FIRST_VALUE and LAST_VALUE"
+  },
+  "Running totals with SUM OVER": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Running totals with SUM OVER"
+  },
+  "Moving average with frame clause": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Moving average with a frame clause"
+  },
+  "Conditional window frames": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Conditional window frames"
+  },
+  "Percent of total": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Percent of total"
+  },
+  "Cumulative distribution": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Cumulative distribution: CUME_DIST and PERCENT_RANK"
+  },
+  "Median & percentile (PERCENTILE_CONT)": {
+    "ref": "articles:sql/window-frames-running-totals",
+    "heading": "Median and percentiles with PERCENTILE_CONT"
+  },
+  "Date truncation & bucketing": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Date truncation and bucketing"
+  },
+  "Generate date series / calendar table": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Generating a date series and calendar table"
+  },
+  "Year-over-year growth": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Year-over-year growth"
+  },
+  "Month-over-month change": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Month-over-month change"
+  },
+  "Rolling 7/30 day metrics": {
+    "ref": "articles:sql/dates-calendars-time-series",
+    "heading": "Rolling 7 and 30 day metrics"
+  }
+}
