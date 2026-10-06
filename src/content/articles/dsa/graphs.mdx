@@ -1,0 +1,736 @@
+---
+title: "Graphs: BFS, DFS, Topological Sort, Union-Find and Shortest Paths"
+seoTitle: "Graph Algorithms for Coding Interviews"
+description: "Model problems as graphs and solve them with grid DFS and BFS, topological sort for DAG dependencies, union-find, Dijkstra, Bellman-Ford and minimum spanning trees."
+technology: ["dsa"]
+topic: ["graphs", "bfs", "dfs", "topological-sort", "union-find", "shortest-paths"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Represent graphs as adjacency lists and grids, and traverse them with DFS and BFS"
+  - "Order tasks with topological sort and detect cycles in dependency graphs"
+  - "Track connected components and detect redundant edges with union-find"
+  - "Find shortest paths with BFS, Dijkstra and k-limited Bellman-Ford, and build minimum spanning trees"
+  - "Apply graph algorithms to DAG scheduling, lineage and entity resolution in pipelines"
+prerequisites: ["articles:dsa/queues", "articles:dsa/heaps-priority-queues"]
+related: ["articles:airflow/dags-scheduling-retries"]
+next: "articles:dsa/dynamic-programming"
+previous: "articles:dsa/backtracking"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests. graphlib needs Python 3.9 or later."
+sources:
+  - { label: "Python documentation: graphlib (TopologicalSorter)", url: "https://docs.python.org/3/library/graphlib.html" }
+  - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
+  - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
+---
+
+A graph is a set of nodes connected by edges. Trees, grids, road maps, social networks and, above all for Data Engineers, **pipeline DAGs** are graphs. Graph questions look varied, but they reuse a small toolkit: depth-first and breadth-first traversal, topological sort, union-find and a couple of shortest-path algorithms. Topological sort deserves special attention: it is exactly how Airflow, dbt and every other orchestrator decide the order in which to run tasks.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How graphs are represented
+
+| Term | Meaning |
+|---|---|
+| Directed / undirected | Edges have a direction (task A before B) or not (friendship) |
+| Weighted | Edges carry a cost (distance, time, price) |
+| DAG | Directed acyclic graph: directed, with no cycles; every pipeline is one |
+| Connected component | A maximal group of nodes that can reach each other (undirected) |
+| In-degree | Number of edges pointing into a node (unmet dependencies) |
+
+The standard representation is an **adjacency list**: a dict from each node to its neighbours. It uses O(V + E) memory, where V is the number of nodes and E the number of edges.
+
+```python
+from collections import defaultdict
+
+edges = [("extract", "clean"), ("clean", "load"), ("extract", "audit")]
+graph = defaultdict(list)
+for src, dst in edges:
+    graph[src].append(dst)            # directed: add only one direction
+assert graph["extract"] == ["clean", "audit"]
+assert graph["load"] == []            # defaultdict creates empty lists on access
+```
+
+Grids are graphs too: each cell is a node and its up, down, left and right cells are neighbours. You do not build an adjacency list for a grid; you compute neighbours on the fly.
+
+## Recognising the pattern
+
+| Signal | Tool |
+|---|---|
+| "Islands", "regions", "connected cells" on a grid | DFS or BFS flood fill |
+| "Minimum steps / minutes", unweighted moves | BFS (multi-source if many starting points) |
+| "Prerequisites", "order of tasks", "dependencies", "is it possible to finish" | Topological sort (Kahn's algorithm) |
+| "Connected components", "is it a tree", "redundant edge", "merge accounts" | Union-find (or DFS) |
+| "Cheapest / fastest path" with non-negative weights | Dijkstra |
+| "At most k stops / edges" | Bellman-Ford limited to k + 1 rounds |
+| "Connect all points at minimum cost" | Minimum spanning tree (Prim or Kruskal) |
+| "Use every edge exactly once" | Eulerian path (Hierholzer) |
+| "Order implied by sorted words" | Build edges from comparisons, then topological sort |
+
+## Grid traversal: flood fill with DFS and BFS
+
+### Count and measure islands
+
+```python
+def num_islands(grid):
+    rows, cols = len(grid), len(grid[0])
+    seen = set()
+
+    def sink(r, c):                      # iterative DFS: no recursion limit issues
+        stack = [(r, c)]
+        seen.add((r, c))
+        while stack:
+            cr, cc = stack.pop()
+            for nr, nc in ((cr + 1, cc), (cr - 1, cc), (cr, cc + 1), (cr, cc - 1)):
+                if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == "1" and (nr, nc) not in seen:
+                    seen.add((nr, nc))
+                    stack.append((nr, nc))
+
+    count = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] == "1" and (r, c) not in seen:
+                sink(r, c)
+                count += 1
+    return count
+
+
+def max_area_of_island(grid):
+    rows, cols = len(grid), len(grid[0])
+    best = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] != 1:
+                continue
+            area, stack = 0, [(r, c)]
+            grid[r][c] = 0                       # mark visited by overwriting (mutates input)
+            while stack:
+                cr, cc = stack.pop()
+                area += 1
+                for nr, nc in ((cr + 1, cc), (cr - 1, cc), (cr, cc + 1), (cr, cc - 1)):
+                    if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1:
+                        grid[nr][nc] = 0
+                        stack.append((nr, nc))
+            best = max(best, area)
+    return best
+
+
+g = [list("11000"), list("11000"), list("00100"), list("00011")]
+assert num_islands(g) == 3
+assert num_islands([list("0")]) == 0
+assert max_area_of_island([[0, 0, 1, 0], [1, 1, 1, 0], [0, 0, 0, 1]]) == 4
+assert max_area_of_island([[0, 0]]) == 0
+```
+
+Mark a cell as visited **when you push it**, not when you pop it; otherwise the same cell can be pushed many times.
+
+### Search from the borders
+
+Some grid problems are easier backwards: instead of asking "can this cell reach the edge?", start from the edges and see what they reach.
+
+```python
+def pacific_atlantic(heights):
+    rows, cols = len(heights), len(heights[0])
+
+    def reachable(starts):
+        seen = set(starts)
+        stack = list(starts)
+        while stack:
+            r, c = stack.pop()
+            for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+                if (0 <= nr < rows and 0 <= nc < cols and (nr, nc) not in seen
+                        and heights[nr][nc] >= heights[r][c]):     # water flows downhill to us
+                    seen.add((nr, nc))
+                    stack.append((nr, nc))
+        return seen
+
+    pacific = reachable([(0, c) for c in range(cols)] + [(r, 0) for r in range(rows)])
+    atlantic = reachable([(rows - 1, c) for c in range(cols)] + [(r, cols - 1) for r in range(rows)])
+    return sorted([list(cell) for cell in pacific & atlantic])
+
+
+def surrounded_regions(board):
+    rows, cols = len(board), len(board[0])
+    stack = [(r, c) for r in range(rows) for c in (0, cols - 1)] + \
+            [(r, c) for c in range(cols) for r in (0, rows - 1)]
+    while stack:                                  # mark border-connected O cells as safe
+        r, c = stack.pop()
+        if 0 <= r < rows and 0 <= c < cols and board[r][c] == "O":
+            board[r][c] = "S"
+            stack.extend(((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)))
+    for r in range(rows):
+        for c in range(cols):
+            board[r][c] = "O" if board[r][c] == "S" else "X"
+
+
+heights = [[1, 2, 2, 3, 5], [3, 2, 3, 4, 4], [2, 4, 5, 3, 1], [6, 7, 1, 4, 5], [5, 1, 1, 2, 4]]
+assert pacific_atlantic(heights) == [[0, 4], [1, 3], [1, 4], [2, 2], [3, 0], [3, 1], [4, 0]]
+b = [list("XXXX"), list("XOOX"), list("XXOX"), list("XOXX")]
+surrounded_regions(b)
+assert b == [list("XXXX"), list("XXXX"), list("XXXX"), list("XOXX")]
+```
+
+### Multi-source BFS: rotting oranges
+
+BFS explores in rings of equal distance. Starting the queue with **every** source at once gives the time at which each cell is reached from the nearest source.
+
+```python
+from collections import deque
+
+
+def oranges_rotting(grid):
+    rows, cols = len(grid), len(grid[0])
+    queue = deque()
+    fresh = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] == 2:
+                queue.append((r, c))
+            elif grid[r][c] == 1:
+                fresh += 1
+    minutes = 0
+    while queue and fresh:
+        for _ in range(len(queue)):                    # one minute = one BFS level
+            r, c = queue.popleft()
+            for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+                if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1:
+                    grid[nr][nc] = 2
+                    fresh -= 1
+                    queue.append((nr, nc))
+        minutes += 1
+    return -1 if fresh else minutes
+
+
+assert oranges_rotting([[2, 1, 1], [1, 1, 0], [0, 1, 1]]) == 4
+assert oranges_rotting([[2, 1, 1], [0, 1, 1], [1, 0, 1]]) == -1
+assert oranges_rotting([[0, 2]]) == 0
+```
+
+## General graph traversal
+
+### Clone a graph
+
+Map each original node to its copy; the map doubles as the visited set.
+
+```python
+from collections import deque
+
+
+class Node:
+    def __init__(self, val, neighbors=None):
+        self.val = val
+        self.neighbors = neighbors if neighbors is not None else []
+
+
+def clone_graph(node):
+    if node is None:
+        return None
+    copies = {node: Node(node.val)}
+    queue = deque([node])
+    while queue:
+        current = queue.popleft()
+        for nb in current.neighbors:
+            if nb not in copies:
+                copies[nb] = Node(nb.val)
+                queue.append(nb)
+            copies[current].neighbors.append(copies[nb])
+    return copies[node]
+
+
+a, b, c, d = Node(1), Node(2), Node(3), Node(4)
+a.neighbors, b.neighbors, c.neighbors, d.neighbors = [b, d], [a, c], [b, d], [a, c]
+copy = clone_graph(a)
+assert copy is not a and [n.val for n in copy.neighbors] == [2, 4]
+assert copy.neighbors[0].neighbors[0] is copy               # cycle preserved, no originals reused
+assert clone_graph(None) is None
+```
+
+### Shortest transformation sequence: Word Ladder
+
+Unweighted shortest path means BFS. Generic patterns such as `h*t` link words that differ by one letter without comparing every pair.
+
+```python
+from collections import defaultdict, deque
+
+
+def ladder_length(begin, end, word_list):
+    words = set(word_list)
+    if end not in words:
+        return 0
+    buckets = defaultdict(list)                       # "h*t" -> ["hot", "hit", ...]
+    for w in words | {begin}:
+        for i in range(len(w)):
+            buckets[w[:i] + "*" + w[i + 1:]].append(w)
+    queue = deque([(begin, 1)])
+    seen = {begin}
+    while queue:
+        word, steps = queue.popleft()
+        if word == end:
+            return steps
+        for i in range(len(word)):
+            key = word[:i] + "*" + word[i + 1:]
+            for nxt in buckets[key]:
+                if nxt not in seen:
+                    seen.add(nxt)
+                    queue.append((nxt, steps + 1))
+            buckets[key] = []                         # this pattern is fully explored
+    return 0
+
+
+assert ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]) == 5
+assert ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log"]) == 0
+```
+
+## Topological sort: ordering dependencies
+
+A topological order lists the nodes of a DAG so that every edge points forwards: every task comes after the tasks it depends on. It exists if and only if the graph has no cycle.
+
+**Kahn's algorithm** repeatedly removes nodes with in-degree zero (no unmet dependencies). If some nodes are never removed, they are part of a cycle.
+
+```python
+from collections import defaultdict, deque
+
+
+def find_order(num_courses, prerequisites):
+    """prerequisites: [course, required_first] pairs. Return an order, or [] if impossible."""
+    graph = defaultdict(list)
+    indegree = [0] * num_courses
+    for course, required in prerequisites:
+        graph[required].append(course)           # edge: required -> course
+        indegree[course] += 1
+    queue = deque(i for i in range(num_courses) if indegree[i] == 0)
+    order = []
+    while queue:
+        node = queue.popleft()
+        order.append(node)
+        for nxt in graph[node]:
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    return order if len(order) == num_courses else []
+
+
+def can_finish(num_courses, prerequisites):
+    return len(find_order(num_courses, prerequisites)) == num_courses
+
+
+assert can_finish(2, [[1, 0]]) is True
+assert can_finish(2, [[1, 0], [0, 1]]) is False
+order = find_order(4, [[1, 0], [2, 0], [3, 1], [3, 2]])
+pos = {c: i for i, c in enumerate(order)}
+assert all(pos[req] < pos[c] for c, req in [[1, 0], [2, 0], [3, 1], [3, 2]])
+assert find_order(1, []) == [0]
+```
+
+The alternative is DFS with three colours (unvisited, in progress, done): meeting an "in progress" node means a cycle, and nodes appended when they finish give a reverse topological order.
+
+### Alien Dictionary: derive the edges first
+
+Adjacent words in a sorted alien dictionary reveal one ordering rule each: the first position where they differ.
+
+```python
+from collections import deque
+
+
+def alien_order(words):
+    letters = {ch for w in words for ch in w}
+    after = {ch: set() for ch in letters}
+    indegree = {ch: 0 for ch in letters}
+    for first, second in zip(words, words[1:]):
+        for a, b in zip(first, second):
+            if a != b:
+                if b not in after[a]:
+                    after[a].add(b)
+                    indegree[b] += 1
+                break
+        else:
+            if len(first) > len(second):
+                return ""                         # "abc" before "ab" is invalid
+    queue = deque(sorted(ch for ch in letters if indegree[ch] == 0))
+    order = []
+    while queue:
+        ch = queue.popleft()
+        order.append(ch)
+        for nxt in sorted(after[ch]):
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                queue.append(nxt)
+    return "".join(order) if len(order) == len(letters) else ""
+
+
+assert alien_order(["wrt", "wrf", "er", "ett", "rftt"]) == "wertf"
+assert alien_order(["z", "x"]) == "zx"
+assert alien_order(["z", "x", "z"]) == ""        # cycle
+assert alien_order(["abc", "ab"]) == ""
+```
+
+Only the **first** difference between two adjacent words carries information; later letters are not ordered by it.
+
+## Union-find: dynamic connectivity
+
+Union-find (disjoint set union) keeps a forest where each component has a root. `find` returns a node's root; `union` links two roots. With **path compression** and **union by size**, both run in nearly constant amortised time.
+
+```python
+class UnionFind:
+    def __init__(self, size):
+        self.parent = list(range(size))
+        self.size = [1] * size
+        self.components = size
+
+    def find(self, node):
+        while self.parent[node] != node:
+            self.parent[node] = self.parent[self.parent[node]]   # path halving
+            node = self.parent[node]
+        return node
+
+    def union(self, a, b):
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return False                      # already connected: this edge closes a cycle
+        if self.size[ra] < self.size[rb]:
+            ra, rb = rb, ra
+        self.parent[rb] = ra                  # attach the smaller tree under the larger
+        self.size[ra] += self.size[rb]
+        self.components -= 1
+        return True
+
+
+def count_components(n, edges):
+    uf = UnionFind(n)
+    for a, b in edges:
+        uf.union(a, b)
+    return uf.components
+
+
+def valid_tree(n, edges):
+    if len(edges) != n - 1:                   # a tree on n nodes has exactly n - 1 edges
+        return False
+    uf = UnionFind(n)
+    return all(uf.union(a, b) for a, b in edges)
+
+
+def find_redundant_connection(edges):
+    uf = UnionFind(len(edges) + 1)            # nodes are labelled 1..len(edges)
+    for a, b in edges:
+        if not uf.union(a, b):
+            return [a, b]
+    return []
+
+
+assert count_components(5, [[0, 1], [1, 2], [3, 4]]) == 2
+assert count_components(3, []) == 3
+assert valid_tree(5, [[0, 1], [0, 2], [0, 3], [1, 4]]) is True
+assert valid_tree(5, [[0, 1], [1, 2], [2, 3], [1, 3], [1, 4]]) is False
+assert valid_tree(4, [[0, 1], [2, 3], [1, 0]]) is False
+assert find_redundant_connection([[1, 2], [1, 3], [2, 3]]) == [2, 3]
+assert find_redundant_connection([[1, 2], [2, 3], [3, 4], [1, 4], [1, 5]]) == [1, 4]
+```
+
+## Weighted shortest paths and spanning trees
+
+### Dijkstra: non-negative weights
+
+Pop the closest unfinished node from a min-heap; its distance is final. Relax its outgoing edges.
+
+```python
+import heapq
+from collections import defaultdict
+
+
+def network_delay_time(times, n, k):
+    graph = defaultdict(list)
+    for u, v, w in times:
+        graph[u].append((v, w))
+    dist = {}
+    heap = [(0, k)]
+    while heap:
+        d, node = heapq.heappop(heap)
+        if node in dist:
+            continue                          # stale entry: already finalised
+        dist[node] = d
+        for nxt, w in graph[node]:
+            if nxt not in dist:
+                heapq.heappush(heap, (d + w, nxt))
+    return max(dist.values()) if len(dist) == n else -1
+
+
+def swim_in_water(grid):
+    # Minimise the maximum height on the path: Dijkstra with max instead of +.
+    size = len(grid)
+    heap = [(grid[0][0], 0, 0)]
+    seen = {(0, 0)}
+    while heap:
+        level, r, c = heapq.heappop(heap)
+        if (r, c) == (size - 1, size - 1):
+            return level
+        for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+            if 0 <= nr < size and 0 <= nc < size and (nr, nc) not in seen:
+                seen.add((nr, nc))
+                heapq.heappush(heap, (max(level, grid[nr][nc]), nr, nc))
+    return -1
+
+
+assert network_delay_time([[2, 1, 1], [2, 3, 1], [3, 4, 1]], 4, 2) == 2
+assert network_delay_time([[1, 2, 1]], 2, 2) == -1
+assert swim_in_water([[0, 2], [1, 3]]) == 3
+assert swim_in_water([[0, 1, 2, 3, 4], [24, 23, 22, 21, 5], [12, 13, 14, 15, 16],
+                      [11, 17, 18, 19, 20], [10, 9, 8, 7, 6]]) == 16
+```
+
+Dijkstra is wrong with negative edge weights, because a node's distance could still decrease after it is finalised.
+
+### At most k stops: Bellman-Ford with limited rounds
+
+Each round relaxes every edge once, extending paths by one edge. Copy the distances at the start of each round so a round cannot chain several edges.
+
+```python
+def find_cheapest_price(n, flights, src, dst, k):
+    INF = float("inf")
+    cost = [INF] * n
+    cost[src] = 0
+    for _ in range(k + 1):                    # k stops = at most k + 1 flights
+        previous = cost[:]
+        for u, v, price in flights:
+            if previous[u] + price < cost[v]:
+                cost[v] = previous[u] + price
+    return -1 if cost[dst] == INF else cost[dst]
+
+
+flights = [[0, 1, 100], [1, 2, 100], [2, 0, 100], [1, 3, 600], [2, 3, 200]]
+assert find_cheapest_price(4, flights, 0, 3, 1) == 700
+assert find_cheapest_price(3, [[0, 1, 100], [1, 2, 100], [0, 2, 500]], 0, 2, 1) == 200
+assert find_cheapest_price(3, [[0, 1, 100], [1, 2, 100], [0, 2, 500]], 0, 2, 0) == 500
+```
+
+Plain Dijkstra fails here because the cheapest path to an intermediate city might use too many stops; the round limit tracks the edge count explicitly.
+
+### Minimum spanning tree: Prim's algorithm
+
+Grow a tree from any node, always adding the cheapest edge to a node not yet in the tree.
+
+```python
+import heapq
+
+
+def min_cost_connect_points(points):
+    n = len(points)
+    in_tree = [False] * n
+    best = [float("inf")] * n                 # cheapest known edge into each node
+    best[0] = 0
+    total = 0
+    heap = [(0, 0)]
+    while heap:
+        cost, i = heapq.heappop(heap)
+        if in_tree[i]:
+            continue
+        in_tree[i] = True
+        total += cost
+        for j in range(n):
+            if not in_tree[j]:
+                d = abs(points[i][0] - points[j][0]) + abs(points[i][1] - points[j][1])
+                if d < best[j]:
+                    best[j] = d
+                    heapq.heappush(heap, (d, j))
+    return total
+
+
+assert min_cost_connect_points([[0, 0], [2, 2], [3, 10], [5, 2], [7, 0]]) == 20
+assert min_cost_connect_points([[3, 12], [-2, 5], [-4, 1]]) == 18
+assert min_cost_connect_points([[0, 0]]) == 0
+```
+
+Kruskal's algorithm is the alternative: sort all edges by cost and add each one that joins two different union-find components.
+
+### Use every edge once: Reconstruct Itinerary
+
+Hierholzer's algorithm: follow the smallest unused ticket until stuck, then add the airport to the route on the way back, and reverse at the end.
+
+```python
+from collections import defaultdict
+
+
+def find_itinerary(tickets):
+    graph = defaultdict(list)
+    for src, dst in sorted(tickets, reverse=True):
+        graph[src].append(dst)               # reverse-sorted, so pop() gives the smallest
+    route, stack = [], ["JFK"]
+    while stack:
+        while graph[stack[-1]]:
+            stack.append(graph[stack[-1]].pop())
+        route.append(stack.pop())
+    return route[::-1]
+
+
+assert find_itinerary([["MUC", "LHR"], ["JFK", "MUC"], ["SFO", "SJC"], ["LHR", "SFO"]]) == \
+    ["JFK", "MUC", "LHR", "SFO", "SJC"]
+assert find_itinerary([["JFK", "SFO"], ["JFK", "ATL"], ["SFO", "ATL"], ["ATL", "JFK"], ["ATL", "SFO"]]) == \
+    ["JFK", "ATL", "JFK", "SFO", "ATL", "SFO"]
+assert find_itinerary([["JFK", "KUL"], ["JFK", "NRT"], ["NRT", "JFK"]]) == ["JFK", "NRT", "JFK", "KUL"]
+```
+
+The last test shows why greedy "always take the smallest" fails without the post-order trick: going to KUL first strands the other tickets.
+
+## Complexity
+
+| Algorithm | Time | Extra space |
+|---|---|---|
+| DFS / BFS on a graph | O(V + E) | O(V) |
+| DFS / BFS on an R × C grid | O(R · C) | O(R · C) |
+| Topological sort (Kahn) | O(V + E) | O(V + E) |
+| Union-find (path compression + union by size) | Nearly O(1) amortised per operation | O(V) |
+| Dijkstra with a binary heap | O((V + E) log V) | O(V + E) |
+| Bellman-Ford limited to k + 1 rounds | O(k · E) | O(V) |
+| Prim on a dense graph of n points (as above) | O(n² log n) | O(n²) heap entries in the worst case |
+| Word Ladder | O(N · L²) for N words of length L | O(N · L²) |
+| Hierholzer | O(E log E) with sorting | O(E) |
+
+## Variations and common bugs
+
+- **Marking visited on pop instead of on push**, which lets nodes be queued many times.
+- **Forgetting disconnected parts:** loop over every node or cell as a potential start.
+- **Using DFS for a shortest unweighted path.** BFS finds shortest paths; DFS does not.
+- **Dijkstra with negative weights**, or without skipping stale heap entries.
+- **Edge direction in topological sort:** for "take B before A", the edge is B → A.
+- **Recursion depth** on large grids (a 1000 × 1000 island can be a million cells deep): prefer iterative DFS or BFS.
+- **Mutating the input grid** to mark visited; mention it, and use a set if the input must stay intact.
+- **Variants:** walls and gates (multi-source BFS), shortest path in a binary matrix, number of provinces, accounts merge (union-find on emails), critical connections (Tarjan's bridges), evaluate division (weighted graph traversal), parallel courses (topological levels).
+
+## Graphs in data-engineering work
+
+- **DAG scheduling.** An Airflow DAG or a dbt project is a dependency graph. The scheduler runs tasks in topological order, may run tasks with no unmet dependencies in parallel, and refuses to load a DAG with a cycle. Kahn's algorithm by "levels" tells you which tasks can run concurrently.
+- **Impact analysis and lineage.** "If this source table is late, which dashboards are affected?" is BFS downstream from a node; "where does this column come from?" is BFS upstream.
+- **Entity resolution.** Linking customer records that share an email, phone or device is connected components; union-find is the standard way to cluster them, and distributed engines provide connected-components algorithms for graphs that do not fit on one machine.
+- **Cost-based choices.** Routing, dependency critical paths (the longest path in a DAG determines the minimum pipeline runtime) and network costs are weighted path problems.
+
+Python ships a topological sorter in the standard library, `graphlib.TopologicalSorter` (since Python 3.9). It raises `CycleError` when the graph has a cycle and supports a parallel-friendly mode where you ask for all currently ready nodes.
+
+```python
+from graphlib import CycleError, TopologicalSorter
+
+# Each task maps to the set of tasks it depends on.
+dag = {
+    "clean_orders": {"extract_orders"},
+    "clean_customers": {"extract_customers"},
+    "join": {"clean_orders", "clean_customers"},
+    "report": {"join"},
+}
+
+ts = TopologicalSorter(dag)
+ts.prepare()
+waves = []
+while ts.is_active():
+    ready = sorted(ts.get_ready())         # everything runnable right now, in parallel
+    waves.append(ready)
+    ts.done(*ready)
+assert waves == [
+    ["extract_customers", "extract_orders"],
+    ["clean_customers", "clean_orders"],
+    ["join"],
+    ["report"],
+]
+
+try:
+    list(TopologicalSorter({"a": {"b"}, "b": {"a"}}).static_order())
+    raise AssertionError("expected a cycle")
+except CycleError as err:
+    cycle = err.args[1]
+assert set(cycle) == {"a", "b"}
+print(waves)
+```
+
+```text
+[['extract_customers', 'extract_orders'], ['clean_customers', 'clean_orders'], ['join'], ['report']]
+```
+
+```python
+def critical_path_minutes(durations, depends_on):
+    """Longest path through a DAG: the shortest possible end-to-end runtime with unlimited workers."""
+    from graphlib import TopologicalSorter
+    finish = {}
+    for task in TopologicalSorter(depends_on).static_order():
+        start = max((finish[d] for d in depends_on.get(task, ())), default=0)
+        finish[task] = start + durations[task]
+    return max(finish.values())
+
+
+durations = {"extract_orders": 10, "extract_customers": 3, "clean_orders": 5,
+             "clean_customers": 2, "join": 4, "report": 1}
+assert critical_path_minutes(durations, dag) == 20     # 10 + 5 + 4 + 1
+```
+
+## Problems in this pattern
+
+Recommended order, from the foundations to the hardest:
+
+1. **Number of Islands** (Medium): flood fill each unvisited land cell and count the fills.
+2. **Max Area of Island** (Medium): the same flood fill, counting cells per island.
+3. **Clone Graph** (Medium): BFS or DFS with a map from original to copy.
+4. **Rotting Oranges** (Medium): multi-source BFS; levels are minutes; check for unreachable fresh cells.
+5. **Surrounded Regions** (Medium): mark border-connected cells as safe, flip the rest.
+6. **Pacific Atlantic Water Flow** (Medium): search uphill from each ocean's border and intersect.
+7. **Course Schedule** (Medium): Kahn's algorithm; all courses processed means no cycle.
+8. **Course Schedule II** (Medium): Kahn's processing order is the answer.
+9. **Number of Connected Components** (Medium): union-find; each successful union removes a component.
+10. **Graph Valid Tree** (Medium): exactly n − 1 edges and no union inside an existing component.
+11. **Redundant Connection** (Medium): the first edge whose endpoints already share a root.
+12. **Network Delay Time** (Medium): Dijkstra from the source; the answer is the largest finished distance.
+13. **Cheapest Flights Within K Stops** (Medium): k + 1 rounds of Bellman-Ford using last round's costs.
+14. **Min Cost to Connect All Points** (Medium): Prim's algorithm (or Kruskal with union-find).
+15. **Word Ladder** (Hard): BFS over words linked through wildcard patterns.
+16. **Swim in Rising Water** (Hard): Dijkstra where a path's cost is its maximum height.
+17. **Reconstruct Itinerary** (Hard): Hierholzer: greedy smallest-first DFS, record on the way back, reverse.
+18. **Alien Dictionary** (Hard): one edge from the first difference of each adjacent pair, then topological sort.
+
+## Practice questions
+
+<details>
+<summary>How does Kahn's algorithm detect a cycle?</summary>
+
+It only ever processes nodes whose in-degree has dropped to zero. Nodes on a cycle each wait for another node on the same cycle, so their in-degree never reaches zero and they are never processed. If the output contains fewer nodes than the graph, there is a cycle.
+
+</details>
+
+<details>
+<summary>Why does BFS find shortest paths in an unweighted graph, and why does DFS not?</summary>
+
+BFS visits nodes in order of distance from the start: all nodes one edge away, then two, and so on, so the first time it reaches a node is along a shortest path. DFS follows one branch as deep as possible and can reach a node through a long path first.
+
+</details>
+
+<details>
+<summary>When would you use union-find instead of DFS for connectivity?</summary>
+
+When edges arrive over time and you need to answer "are these connected?" or "how many components?" after each addition, or when you need to detect the first edge that creates a cycle. Union-find handles each edge in nearly constant amortised time without re-traversing the graph. For a static graph queried once, DFS or BFS is just as good.
+
+</details>
+
+<details>
+<summary>Why does Dijkstra fail with negative edge weights?</summary>
+
+Dijkstra finalises a node when it is popped, assuming no later path can be cheaper because every remaining path only adds non-negative cost. A negative edge discovered later could reduce a finalised distance. Use Bellman-Ford when negative weights are possible.
+
+</details>
+
+<details>
+<summary>An orchestrator rejects your DAG because of a cycle. How would you find it?</summary>
+
+Run a DFS with three states (unvisited, in progress, finished). Reaching an in-progress node means you found a back edge; the nodes on the current DFS stack from that node onwards form the cycle. In Python, `graphlib.TopologicalSorter` raises `CycleError` with the cycle in its arguments.
+
+</details>
+
+<details>
+<summary>Customer records share emails or phone numbers across systems. How do you group records that belong to the same person?</summary>
+
+Treat records as nodes and shared identifiers as edges, then find connected components. Union-find works well: for each identifier, union all records that carry it. At scale, a distributed connected-components algorithm does the same. Watch for very common identifiers (a shared office phone) that would merge unrelated people; filter or cap them before linking.
+
+</details>
+
+## Key takeaways
+
+- Model the problem as nodes and edges first; grids are graphs with implicit neighbours.
+- DFS and BFS visit everything in O(V + E); BFS gives shortest unweighted paths, multi-source BFS gives distance to the nearest source.
+- Topological sort orders dependencies and detects cycles; it is how DAG schedulers decide what to run.
+- Union-find tracks components and redundant edges in nearly constant time per edge.
+- Dijkstra handles non-negative weights, Bellman-Ford handles edge limits and negative weights, Prim and Kruskal build minimum spanning trees.
+- In pipelines, graphs model DAGs, lineage, critical paths and entity resolution.

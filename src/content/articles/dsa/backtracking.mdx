@@ -1,0 +1,467 @@
+---
+title: "Backtracking: Subsets, Combinations, Permutations and Grid Search"
+seoTitle: "Backtracking Pattern for Coding Interviews"
+description: "One choose-explore-unchoose template for subsets, combinations, permutations, partitions, word search and N-Queens, with duplicate handling, pruning and itertools."
+technology: ["dsa"]
+topic: ["backtracking", "recursion", "combinatorics"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Apply the choose, explore, unchoose template to generate subsets, combinations and permutations"
+  - "Skip duplicate results by sorting and skipping equal siblings"
+  - "Prune the search early with constraints to keep exponential searches practical"
+  - "Search grids with backtracking and combine it with a trie for many words"
+  - "Know when itertools replaces hand-written backtracking in production code"
+prerequisites: ["articles:dsa/binary-trees"]
+previous: "articles:dsa/heaps-priority-queues"
+next: "articles:dsa/graphs"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: itertools (combinatoric iterators)", url: "https://docs.python.org/3/library/itertools.html" }
+  - { label: "Python documentation: Data structures tutorial", url: "https://docs.python.org/3/tutorial/datastructures.html" }
+---
+
+Backtracking explores every possible sequence of choices by building a candidate one step at a time, and undoing the last step when it reaches a dead end or a complete answer. It is how you generate all subsets, combinations and permutations, and how you solve puzzles such as N-Queens or finding words in a grid. The searches are exponential by nature, so the craft lies in pruning branches early and avoiding duplicate results.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How backtracking works
+
+Picture a decision tree. Each level makes one choice (include this element or not; which letter goes next; where to place the next queen). A depth-first walk of that tree visits every candidate. Backtracking is that walk with a single shared, mutable `path` that you **append to before going deeper and pop from after returning**:
+
+```
+def backtrack(state):
+    if state is a complete answer:
+        record a copy of it
+        return
+    for choice in choices available from state:
+        if choice is not allowed: continue      # pruning
+        make the choice                         # choose
+        backtrack(new state)                    # explore
+        undo the choice                         # unchoose
+```
+
+Three things decide the shape of every problem:
+
+| Question | Subsets | Combinations | Permutations |
+|---|---|---|---|
+| When is a path recorded? | At every node | When it reaches the target size or sum | When it uses every element |
+| Where does the next loop start? | `start` (only later elements) | `start` (or `i` to allow reuse) | 0, skipping used elements |
+| How many results? | 2ⁿ | C(n, k) | n! |
+
+Recording `path[:]` (a copy) rather than `path` is essential: the shared list keeps changing after you record it.
+
+## Recognising the pattern
+
+- "Return **all** subsets / combinations / permutations / partitions / arrangements".
+- "Find every way to ...", "generate all valid ...".
+- Small input limits (n up to about 10–20), which signal that exponential time is expected.
+- A grid or board where you place or trace things under constraints ("word search", "N-Queens", "Sudoku solver").
+- If the problem asks only **how many** ways or the **best** way, consider dynamic programming first; backtracking enumerates.
+
+## Core templates in Python
+
+### Subsets
+
+```python
+def subsets(nums):
+    result, path = [], []
+
+    def backtrack(start):
+        result.append(path[:])               # every node is a subset
+        for i in range(start, len(nums)):
+            path.append(nums[i])             # choose
+            backtrack(i + 1)                 # explore with later elements only
+            path.pop()                       # unchoose
+
+    backtrack(0)
+    return result
+
+
+def subsets_with_dup(nums):
+    nums = sorted(nums)                      # equal values become neighbours
+    result, path = [], []
+
+    def backtrack(start):
+        result.append(path[:])
+        for i in range(start, len(nums)):
+            if i > start and nums[i] == nums[i - 1]:
+                continue                     # same value at the same depth: duplicate branch
+            path.append(nums[i])
+            backtrack(i + 1)
+            path.pop()
+
+    backtrack(0)
+    return result
+
+
+assert sorted(subsets([1, 2, 3])) == sorted([[], [1], [2], [3], [1, 2], [1, 3], [2, 3], [1, 2, 3]])
+assert subsets([]) == [[]]
+assert sorted(subsets_with_dup([1, 2, 2])) == [[], [1], [1, 2], [1, 2, 2], [2], [2, 2]]
+assert len(subsets_with_dup([4, 4, 4, 1, 4])) == 10
+```
+
+The `i > start` condition skips a duplicate only as a **sibling** (the same choice at the same depth), not as a child, so `[2, 2]` is still generated.
+
+### Combinations that hit a target
+
+```python
+def combination_sum(candidates, target):
+    """Each candidate may be reused any number of times."""
+    candidates = sorted(candidates)
+    result, path = [], []
+
+    def backtrack(start, remaining):
+        if remaining == 0:
+            result.append(path[:])
+            return
+        for i in range(start, len(candidates)):
+            c = candidates[i]
+            if c > remaining:
+                break                        # sorted: every later candidate is too big too
+            path.append(c)
+            backtrack(i, remaining - c)      # i, not i + 1: reuse allowed
+            path.pop()
+
+    backtrack(0, target)
+    return result
+
+
+def combination_sum2(candidates, target):
+    """Each candidate used at most once; input may contain duplicates."""
+    candidates = sorted(candidates)
+    result, path = [], []
+
+    def backtrack(start, remaining):
+        if remaining == 0:
+            result.append(path[:])
+            return
+        for i in range(start, len(candidates)):
+            if i > start and candidates[i] == candidates[i - 1]:
+                continue
+            if candidates[i] > remaining:
+                break
+            path.append(candidates[i])
+            backtrack(i + 1, remaining - candidates[i])
+            path.pop()
+
+    backtrack(0, target)
+    return result
+
+
+assert combination_sum([2, 3, 6, 7], 7) == [[2, 2, 3], [7]]
+assert combination_sum([2, 3, 5], 8) == [[2, 2, 2, 2], [2, 3, 3], [3, 5]]
+assert combination_sum([2], 1) == []
+assert combination_sum2([10, 1, 2, 7, 6, 1, 5], 8) == [[1, 1, 6], [1, 2, 5], [1, 7], [2, 6]]
+assert combination_sum2([2, 5, 2, 1, 2], 5) == [[1, 2, 2], [5]]
+```
+
+Sorting enables two things: skipping duplicates, and `break` (not just `continue`) as soon as a candidate exceeds what remains. That pruning is what keeps these searches fast in practice.
+
+### Permutations
+
+```python
+def permutations(nums):
+    result, path = [], []
+    used = [False] * len(nums)
+
+    def backtrack():
+        if len(path) == len(nums):
+            result.append(path[:])
+            return
+        for i in range(len(nums)):
+            if used[i]:
+                continue
+            used[i] = True
+            path.append(nums[i])
+            backtrack()
+            path.pop()
+            used[i] = False
+
+    backtrack()
+    return result
+
+
+from itertools import permutations as it_permutations
+
+assert permutations([1, 2, 3]) == [list(p) for p in it_permutations([1, 2, 3])]
+assert len(permutations([1, 2, 3, 4])) == 24
+assert permutations([]) == [[]]
+```
+
+### Mapping choices: letter combinations of a phone number
+
+```python
+def letter_combinations(digits):
+    if not digits:
+        return []
+    keypad = {"2": "abc", "3": "def", "4": "ghi", "5": "jkl",
+              "6": "mno", "7": "pqrs", "8": "tuv", "9": "wxyz"}
+    result, path = [], []
+
+    def backtrack(i):
+        if i == len(digits):
+            result.append("".join(path))
+            return
+        for letter in keypad[digits[i]]:
+            path.append(letter)
+            backtrack(i + 1)
+            path.pop()
+
+    backtrack(0)
+    return result
+
+
+assert letter_combinations("23") == ["ad", "ae", "af", "bd", "be", "bf", "cd", "ce", "cf"]
+assert letter_combinations("") == []
+assert len(letter_combinations("79")) == 16
+```
+
+### Partitioning a string
+
+Choose where the next piece ends; only continue if the piece is valid.
+
+```python
+def palindrome_partition(s):
+    result, path = [], []
+
+    def backtrack(start):
+        if start == len(s):
+            result.append(path[:])
+            return
+        for end in range(start + 1, len(s) + 1):
+            piece = s[start:end]
+            if piece == piece[::-1]:          # prune: only palindromic pieces
+                path.append(piece)
+                backtrack(end)
+                path.pop()
+
+    backtrack(0)
+    return result
+
+
+assert palindrome_partition("aab") == [["a", "a", "b"], ["aa", "b"]]
+assert palindrome_partition("a") == [["a"]]
+```
+
+For long strings you can precompute which substrings are palindromes with dynamic programming so each check is O(1).
+
+### Grid search: Word Search
+
+Explore the four neighbours from each starting cell, marking the current path so a cell is not reused, and restoring it on the way back.
+
+```python
+def exist(board, word):
+    rows, cols = len(board), len(board[0])
+
+    def dfs(r, c, i):
+        if i == len(word):
+            return True
+        if not (0 <= r < rows and 0 <= c < cols) or board[r][c] != word[i]:
+            return False
+        saved, board[r][c] = board[r][c], "#"          # mark as in use
+        found = (dfs(r + 1, c, i + 1) or dfs(r - 1, c, i + 1)
+                 or dfs(r, c + 1, i + 1) or dfs(r, c - 1, i + 1))
+        board[r][c] = saved                            # unchoose: restore the cell
+        return found
+
+    return any(dfs(r, c, 0) for r in range(rows) for c in range(cols))
+
+
+grid = [list("ABCE"), list("SFCS"), list("ADEE")]
+assert exist(grid, "ABCCED") is True
+assert exist(grid, "SEE") is True
+assert exist(grid, "ABCB") is False                 # would reuse the B
+assert grid == [list("ABCE"), list("SFCS"), list("ADEE")]   # board restored
+```
+
+### Many words at once: Word Search II
+
+Running Word Search once per word repeats the same grid walks. Put all words in a trie and walk the grid once, following trie edges; a path that leaves the trie is pruned immediately.
+
+```python
+def find_words(board, words):
+    END = "$"
+    root = {}
+    for w in words:
+        node = root
+        for ch in w:
+            node = node.setdefault(ch, {})
+        node[END] = w
+
+    rows, cols = len(board), len(board[0])
+    found = []
+
+    def dfs(r, c, parent):
+        ch = board[r][c]
+        node = parent.get(ch)
+        if node is None:
+            return
+        if END in node:
+            found.append(node.pop(END))      # record once
+        board[r][c] = "#"
+        for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols and board[nr][nc] != "#":
+                dfs(nr, nc, node)
+        board[r][c] = ch
+        if not node:
+            parent.pop(ch)                   # prune exhausted trie branches
+
+    for r in range(rows):
+        for c in range(cols):
+            dfs(r, c, root)
+    return found
+
+
+board = [list("oaan"), list("etae"), list("ihkr"), list("iflv")]
+assert sorted(find_words(board, ["oath", "pea", "eat", "rain"])) == ["eat", "oath"]
+assert find_words([list("ab"), list("cd")], ["abcb"]) == []
+```
+
+Removing words once found and deleting empty trie branches stop the search from revisiting work, which matters on large boards.
+
+### Constraint search: N-Queens
+
+Place one queen per row; track used columns and both diagonals in sets so each placement check is O(1).
+
+```python
+def solve_n_queens(n):
+    cols, diag, anti = set(), set(), set()      # r - c and r + c identify diagonals
+    placement = []
+    solutions = []
+
+    def backtrack(r):
+        if r == n:
+            solutions.append(["." * c + "Q" + "." * (n - c - 1) for c in placement])
+            return
+        for c in range(n):
+            if c in cols or (r - c) in diag or (r + c) in anti:
+                continue
+            cols.add(c); diag.add(r - c); anti.add(r + c); placement.append(c)
+            backtrack(r + 1)
+            cols.remove(c); diag.remove(r - c); anti.remove(r + c); placement.pop()
+
+    backtrack(0)
+    return solutions
+
+
+assert solve_n_queens(4) == [[".Q..", "...Q", "Q...", "..Q."], ["..Q.", "Q...", "...Q", ".Q.."]]
+assert len(solve_n_queens(1)) == 1 and solve_n_queens(2) == [] and solve_n_queens(3) == []
+assert len(solve_n_queens(8)) == 92
+```
+
+## Complexity
+
+Backtracking is exponential; state the bound and explain the pruning.
+
+| Problem | Time (roughly) | Extra space (besides output) |
+|---|---|---|
+| Subsets | O(n · 2ⁿ): 2ⁿ subsets, O(n) to copy each | O(n) recursion |
+| Permutations | O(n · n!) | O(n) |
+| Combination sum | Exponential in target / smallest candidate; pruning helps a lot | O(target / smallest) depth |
+| Letter combinations | O(4ⁿ · n) for n digits | O(n) |
+| Palindrome partitioning | O(n · 2ⁿ) | O(n) |
+| Word Search | O(rows · cols · 3^L) for a word of length L | O(L) |
+| Word Search II | O(rows · cols · 3^L) with L the longest word, heavily pruned by the trie | O(total characters in words) |
+| N-Queens | Bounded by O(n!) | O(n) |
+
+The 3 in grid searches (rather than 4) is because you never step back onto the cell you came from.
+
+## Variations and common bugs
+
+- **Appending `path` instead of `path[:]`**, so every recorded result ends up as the same (eventually empty) list.
+- **Forgetting to undo** a choice (pop, unmark `used`, restore the grid cell, remove from the sets).
+- **Duplicate results:** sort and skip equal siblings with `i > start and nums[i] == nums[i - 1]`; do not use a set of tuples as an afterthought unless you explain the cost.
+- **Wrong next start index:** `i + 1` for "use once", `i` for "reuse allowed", 0 with a `used` array for permutations.
+- **`continue` where `break` is valid** after sorting, which wastes time.
+- **Mutating the caller's input** without restoring it (the board in Word Search).
+- **Variants:** combinations of k from n, permutations II (skip a duplicate if its equal predecessor is unused), restore IP addresses, word break II, Sudoku solver, matchsticks to square, partition to k equal-sum subsets.
+
+## Backtracking in data-engineering work
+
+You will rarely write a recursive backtracking search in a pipeline, but the ideas appear often:
+
+- **Enumerating configurations.** Testing every combination of partition columns, file formats or Spark settings in a benchmark is a Cartesian product; generating every subset of dimensions for a cube (`GROUPING SETS`, `CUBE` in SQL) is the subsets problem.
+- **Constraint search.** Assigning jobs to time slots or workers under constraints (no two heavy jobs together, dependencies first) is backtracking with pruning, at least until the problem is big enough to need a solver.
+- **Production code uses `itertools`.** `combinations`, `permutations`, `product` and `combinations_with_replacement` are lazy, well tested and fast. Hand-written backtracking is for when you need pruning that `itertools` cannot express.
+- **Know the blow-up.** Twenty columns have over a million subsets. Saying "this is 2ⁿ, so I would cap or sample it" is the kind of judgement interviewers value.
+
+```python
+from itertools import combinations, product
+
+dimensions = ["country", "device", "channel"]
+grouping_sets = [list(c) for k in range(len(dimensions) + 1) for c in combinations(dimensions, k)]
+assert len(grouping_sets) == 2 ** len(dimensions)           # what SQL CUBE produces
+assert grouping_sets[0] == [] and grouping_sets[-1] == dimensions
+
+configs = list(product(["parquet", "orc"], [64, 128], ["snappy", "zstd"]))
+assert len(configs) == 8
+print(grouping_sets)
+```
+
+```text
+[[], ['country'], ['device'], ['channel'], ['country', 'device'], ['country', 'channel'], ['device', 'channel'], ['country', 'device', 'channel']]
+```
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Subsets** (Medium): record every node; the next choice starts after the current index.
+2. **Combination Sum** (Medium): sort, reuse the same index, break when a candidate exceeds the remainder.
+3. **Permutations** (Medium): loop over all indices, skipping used ones; record at full length.
+4. **Subsets II** (Medium): sort and skip equal values at the same depth.
+5. **Combination Sum II** (Medium): sort, move to `i + 1`, and skip equal siblings.
+6. **Letter Combinations of a Phone Number** (Medium): one level per digit, one branch per mapped letter.
+7. **Palindrome Partitioning** (Medium): choose the end of the next piece; recurse only on palindromic pieces.
+8. **Word Search** (Medium): DFS from each cell, marking the path and restoring cells on return.
+9. **N-Queens** (Hard): one queen per row; sets for columns and both diagonals (`r - c`, `r + c`).
+10. **Word Search II** (Hard): build a trie of the words and walk the grid once, pruning trie branches as words are found.
+
+## Practice questions
+
+<details>
+<summary>Why must you append path[:] rather than path to the results?</summary>
+
+`path` is a single list that the search keeps modifying. Appending it stores a reference to that same list, so every stored "result" changes as the search continues and ends up empty. `path[:]` (or `list(path)`) stores a snapshot.
+
+</details>
+
+<details>
+<summary>How do you avoid duplicate subsets when the input contains duplicates?</summary>
+
+Sort the input so equal values are adjacent. In the loop, skip an element if it equals the previous one and is not the first choice at this depth (`i > start`). That prevents two sibling branches from starting with the same value while still allowing the value to be chosen again deeper in the same branch.
+
+</details>
+
+<details>
+<summary>What is the time complexity of generating all subsets, and why?</summary>
+
+There are 2ⁿ subsets, because each element is either in or out, and copying each one costs up to O(n), so O(n · 2ⁿ). The recursion depth is n, so extra space besides the output is O(n).
+
+</details>
+
+<details>
+<summary>Why does Word Search II use a trie instead of running Word Search for each word?</summary>
+
+Separate searches repeat the same grid walks for words that share prefixes. With a trie, one walk explores all words at once and stops as soon as the current path is not a prefix of any word. Removing found words and empty branches prunes further.
+
+</details>
+
+<details>
+<summary>When should you use dynamic programming instead of backtracking?</summary>
+
+When the question asks for a count, a yes/no answer or an optimum rather than every solution, and the subproblems overlap. Coin Change asks for the fewest coins (DP), whereas Combination Sum asks for every combination (backtracking). Enumerating all answers cannot be faster than the number of answers.
+
+</details>
+
+## Key takeaways
+
+- Backtracking is depth-first search over choices: choose, explore, unchoose, and record copies of complete paths.
+- The start index and the recording point define subsets, combinations and permutations.
+- Sort and skip equal siblings to avoid duplicates; sort and break to prune.
+- Mark and restore grid cells; use a trie when searching for many words at once.
+- State the exponential bound honestly, and use `itertools` in production code where no pruning is needed.

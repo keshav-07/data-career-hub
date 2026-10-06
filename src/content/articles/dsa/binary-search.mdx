@@ -1,0 +1,422 @@
+---
+title: "Binary Search: Exact Match, Boundaries and Searching the Answer"
+seoTitle: "Binary Search Pattern for Coding Interviews"
+description: "One reliable binary search template for exact matches, first and last positions, rotated arrays and searching on the answer, plus as-of lookups and partition pruning."
+technology: ["dsa"]
+topic: ["binary-search", "bisect"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Write a bug-free binary search using a clear loop invariant"
+  - "Find first and last positions with lower-bound and upper-bound searches"
+  - "Binary search over a monotonic answer space, such as a minimum feasible speed"
+  - "Handle rotated arrays, 2D matrices and the median of two sorted arrays"
+  - "Use bisect for partition lookup and point-in-time (as-of) lookups in pipelines"
+prerequisites: ["articles:dsa/arrays-and-hashing"]
+previous: "articles:dsa/queues"
+next: "articles:dsa/linked-lists"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests. bisect's key argument needs Python 3.10 or later."
+sources:
+  - { label: "Python documentation: bisect", url: "https://docs.python.org/3/library/bisect.html" }
+  - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
+  - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+---
+
+Binary search finds a target in sorted data by halving the search range on every step, so a million items need about 20 comparisons. In interviews it appears in two forms: searching a sorted array (including awkward ones such as rotated arrays), and **searching for an answer** when the question is "what is the smallest value that works?". In Data Engineering it is how you find which partition, file or version of a record a timestamp belongs to.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How binary search works
+
+Keep a range `[lo, hi]` that is guaranteed to contain the answer if one exists. Look at the middle; the comparison tells you which half cannot contain the answer, so discard it. Stop when the range is empty or has one candidate.
+
+It needs a **monotonic** property: a condition that is false for every item up to some point and true for every item after it (for example `a[i] >= target` in a sorted array). Binary search finds the boundary.
+
+```
+index:      0  1  2  3  4  5
+values:     1  3  3  5  8  9
+a[i] >= 4:  F  F  F  T  T  T      <- the first True is the "lower bound" of 4
+```
+
+Most bugs come from mixing up interval conventions. Pick one and stick to it. This lesson uses two:
+
+| Template | Range | Loop | Use for |
+|---|---|---|---|
+| Exact match | Closed `[lo, hi]` | `while lo <= hi` | "Is the target here, and where?" |
+| Boundary (first True) | Half-open `[lo, hi)` | `while lo < hi` | First/last position, insertion point, search on the answer |
+
+In Python, `mid = (lo + hi) // 2` cannot overflow because integers are unbounded. In Java or C++ write `lo + (hi - lo) / 2`, a detail interviewers sometimes ask about.
+
+## Recognising the pattern
+
+- The input is **sorted** (or sorted after a rotation, or sorted rows and columns).
+- The problem asks for O(log n), or n is large and a linear scan is the brute force.
+- "First", "last", "smallest such that", "largest such that", "insertion position".
+- "Minimum capacity / speed / time such that the task finishes": the answer space is monotonic, even though nothing is sorted.
+- "Value at time t", "version valid at time t": a sorted timeline.
+
+## Core templates in Python
+
+### Exact match
+
+```python
+def binary_search(nums, target):
+    lo, hi = 0, len(nums) - 1
+    while lo <= hi:                     # range [lo, hi] is non-empty
+        mid = (lo + hi) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[mid] < target:
+            lo = mid + 1                # target is right of mid
+        else:
+            hi = mid - 1                # target is left of mid
+    return -1
+
+
+assert binary_search([-1, 0, 3, 5, 9, 12], 9) == 4
+assert binary_search([-1, 0, 3, 5, 9, 12], 2) == -1
+assert binary_search([], 1) == -1
+assert binary_search([5], 5) == 0
+```
+
+### Boundary search: first index where a condition is true
+
+This is the most useful template. It finds the first index in `[lo, hi)` for which `ok(i)` is true, or `hi` if none is.
+
+```python
+def first_true(lo, hi, ok):
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if ok(mid):
+            hi = mid                    # mid might be the answer: keep it
+        else:
+            lo = mid + 1                # mid is not: discard it
+    return lo
+
+
+def search_range(nums, target):
+    n = len(nums)
+    first = first_true(0, n, lambda i: nums[i] >= target)        # lower bound
+    if first == n or nums[first] != target:
+        return [-1, -1]
+    last = first_true(0, n, lambda i: nums[i] > target) - 1      # upper bound - 1
+    return [first, last]
+
+
+assert search_range([5, 7, 7, 8, 8, 10], 8) == [3, 4]
+assert search_range([5, 7, 7, 8, 8, 10], 6) == [-1, -1]
+assert search_range([], 0) == [-1, -1]
+assert search_range([2, 2], 2) == [0, 1]
+
+import bisect
+nums = [5, 7, 7, 8, 8, 10]
+assert bisect.bisect_left(nums, 8) == 3 and bisect.bisect_right(nums, 8) - 1 == 4
+```
+
+`bisect.bisect_left` and `bisect.bisect_right` are exactly the lower and upper bound. Use them in real code; write the loop yourself in an interview unless told otherwise, then mention the library.
+
+### Searching on the answer
+
+When you can test "is speed `k` fast enough?" and faster speeds are always at least as good, binary search the speed.
+
+```python
+def min_eating_speed(piles, h):
+    def hours_needed(speed):
+        return sum((p + speed - 1) // speed for p in piles)   # ceil(p / speed)
+
+    lo, hi = 1, max(piles)             # max(piles) always works
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if hours_needed(mid) <= h:
+            hi = mid                   # fast enough: try slower
+        else:
+            lo = mid + 1               # too slow
+    return lo
+
+
+assert min_eating_speed([3, 6, 7, 11], 8) == 4
+assert min_eating_speed([30, 11, 23, 4, 20], 5) == 30
+assert min_eating_speed([30, 11, 23, 4, 20], 6) == 23
+assert min_eating_speed([1], 1) == 1
+```
+
+The steps are always the same: define the answer range, write a feasibility check, confirm it is monotonic, then find the first feasible value. The same template sizes a batch, picks a minimum number of workers, or finds the smallest capacity that ships packages within D days.
+
+### Two dimensions: treat the matrix as one sorted list
+
+If each row is sorted and each row starts after the previous row ends, index `i` of the flattened list is `matrix[i // cols][i % cols]`.
+
+```python
+def search_matrix(matrix, target):
+    if not matrix or not matrix[0]:
+        return False
+    rows, cols = len(matrix), len(matrix[0])
+    lo, hi = 0, rows * cols - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        value = matrix[mid // cols][mid % cols]
+        if value == target:
+            return True
+        if value < target:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return False
+
+
+grid = [[1, 3, 5, 7], [10, 11, 16, 20], [23, 30, 34, 60]]
+assert search_matrix(grid, 3) is True
+assert search_matrix(grid, 13) is False
+assert search_matrix([[1]], 2) is False
+```
+
+### Rotated sorted arrays
+
+A sorted array rotated at an unknown pivot (such as `[4, 5, 6, 7, 0, 1, 2]`) still has one sorted half around any midpoint.
+
+```python
+def find_min_rotated(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] > nums[hi]:
+            lo = mid + 1                # the drop (and the minimum) is right of mid
+        else:
+            hi = mid                    # mid..hi is sorted: minimum is at mid or left
+    return nums[lo]
+
+
+def search_rotated(nums, target):
+    lo, hi = 0, len(nums) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[lo] <= nums[mid]:                       # left half is sorted
+            if nums[lo] <= target < nums[mid]:
+                hi = mid - 1
+            else:
+                lo = mid + 1
+        else:                                           # right half is sorted
+            if nums[mid] < target <= nums[hi]:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+    return -1
+
+
+assert find_min_rotated([3, 4, 5, 1, 2]) == 1
+assert find_min_rotated([4, 5, 6, 7, 0, 1, 2]) == 0
+assert find_min_rotated([11, 13, 15, 17]) == 11
+assert find_min_rotated([2, 1]) == 1
+assert search_rotated([4, 5, 6, 7, 0, 1, 2], 0) == 4
+assert search_rotated([4, 5, 6, 7, 0, 1, 2], 3) == -1
+assert search_rotated([1], 0) == -1
+assert search_rotated([3, 1], 1) == 1
+```
+
+Comparing `nums[mid]` with `nums[hi]` (not `nums[lo]`) in `find_min_rotated` handles the unrotated case correctly. With duplicates allowed, neither algorithm can always decide which half to drop, and the worst case becomes O(n).
+
+### A sorted timeline: time-based key-value store
+
+Values for each key are appended with increasing timestamps; `get(key, t)` returns the value with the largest timestamp `<= t`.
+
+```python
+import bisect
+from collections import defaultdict
+
+
+class TimeMap:
+    def __init__(self):
+        self.times = defaultdict(list)
+        self.values = defaultdict(list)
+
+    def set(self, key, value, timestamp):
+        self.times[key].append(timestamp)          # timestamps arrive increasing
+        self.values[key].append(value)
+
+    def get(self, key, timestamp):
+        i = bisect.bisect_right(self.times[key], timestamp) - 1
+        return self.values[key][i] if i >= 0 else ""
+
+
+tm = TimeMap()
+tm.set("foo", "bar", 1)
+assert tm.get("foo", 1) == "bar" and tm.get("foo", 3) == "bar"
+tm.set("foo", "bar2", 4)
+assert tm.get("foo", 4) == "bar2" and tm.get("foo", 5) == "bar2"
+assert tm.get("foo", 0) == "" and tm.get("missing", 10) == ""
+```
+
+### Binary search on a partition: median of two sorted arrays
+
+Cut both arrays so that the left parts together hold half the elements and every left element is `<=` every right element. Binary search the cut position in the shorter array.
+
+```python
+def find_median_sorted_arrays(a, b):
+    if len(a) > len(b):
+        a, b = b, a                                  # search the shorter array
+    m, n = len(a), len(b)
+    half = (m + n + 1) // 2
+    lo, hi = 0, m
+    while lo <= hi:
+        i = (lo + hi) // 2                           # elements taken from a
+        j = half - i                                 # elements taken from b
+        a_left = a[i - 1] if i > 0 else float("-inf")
+        a_right = a[i] if i < m else float("inf")
+        b_left = b[j - 1] if j > 0 else float("-inf")
+        b_right = b[j] if j < n else float("inf")
+        if a_left <= b_right and b_left <= a_right:  # valid cut
+            if (m + n) % 2:
+                return float(max(a_left, b_left))
+            return (max(a_left, b_left) + min(a_right, b_right)) / 2
+        if a_left > b_right:
+            hi = i - 1                               # took too many from a
+        else:
+            lo = i + 1                               # took too few from a
+    raise ValueError("inputs must be sorted")
+
+
+assert find_median_sorted_arrays([1, 3], [2]) == 2.0
+assert find_median_sorted_arrays([1, 2], [3, 4]) == 2.5
+assert find_median_sorted_arrays([], [1]) == 1.0
+assert find_median_sorted_arrays([0, 0], [0, 0]) == 0.0
+import random
+random.seed(7)
+for _ in range(200):
+    x = sorted(random.randint(-50, 50) for _ in range(random.randint(0, 8)))
+    y = sorted(random.randint(-50, 50) for _ in range(random.randint(1, 8)))
+    merged = sorted(x + y)
+    k = len(merged)
+    expected = merged[k // 2] if k % 2 else (merged[k // 2 - 1] + merged[k // 2]) / 2
+    assert find_median_sorted_arrays(x, y) == expected
+```
+
+The random test compares against the obvious "merge and pick the middle" answer, which is a good habit for any tricky algorithm.
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Exact match, lower/upper bound | O(log n) | O(1) |
+| Search on the answer | O(log(range) × cost of the check), e.g. O(n log max) for Koko | O(1) |
+| 2D matrix as a flat list | O(log(rows × cols)) | O(1) |
+| Rotated array (distinct values) | O(log n) | O(1) |
+| Time map `get` | O(log v) for v versions of the key | O(total versions) |
+| Median of two sorted arrays | O(log min(m, n)) | O(1) |
+| `bisect.insort` | O(n) because of the shift | |
+
+## Variations and common bugs
+
+- **Infinite loops** from `lo = mid` with `mid = (lo + hi) // 2`: when `hi = lo + 1`, `mid == lo` and nothing changes. In the first-true template, `lo` always moves to `mid + 1`.
+- **Mixing conventions:** `while lo <= hi` belongs with `hi = mid - 1`; `while lo < hi` belongs with `hi = mid`.
+- **Wrong initial bounds** for search on the answer: the upper bound must be a value that definitely works.
+- **Checking a non-monotonic condition.** If "works" can flip back to "does not work", binary search gives wrong answers silently.
+- **Forgetting the empty input** or the "not found" case after the loop.
+- **Float searches** need a fixed number of iterations or a tolerance, not equality.
+- **Variants:** search insert position, peak element (compare with the neighbour), capacity to ship packages, split array largest sum, square root by search, first bad version.
+
+## Binary search in data-engineering work
+
+- **Partition and file lookup.** Partition boundaries, file start keys and Parquet row-group min/max statistics form sorted lists. Finding the partition for a timestamp is `bisect_right(starts, ts) - 1`, and query engines skip files whose range cannot match, which is pruning built on the same comparisons.
+- **As-of (point-in-time) joins.** Joining a trade to the exchange rate valid at the time of the trade, or a fact row to the slowly changing dimension version that was current, is the Time Based Key-Value Store problem. pandas `merge_asof` and as-of joins in several engines implement it.
+- **Finding the first bad run.** "Which day did the row counts start to drift?" or "which commit broke the job?" is a first-true search when the property is monotonic; `git bisect` automates it for commits.
+- **Sizing by search.** The smallest batch size, cluster size or parallelism that meets a deadline is a search on the answer, provided more resources never make it slower.
+
+```python
+import bisect
+
+# SCD Type 2 style versions of one customer's tier, sorted by valid_from.
+valid_from = ["2026-01-01", "2026-03-15", "2026-08-01"]
+tier = ["bronze", "silver", "gold"]
+
+orders = [("o1", "2026-02-10"), ("o2", "2026-03-15"), ("o3", "2026-09-30"), ("o4", "2025-12-31")]
+
+
+def tier_at(day):
+    i = bisect.bisect_right(valid_from, day) - 1
+    return tier[i] if i >= 0 else None
+
+
+enriched = [(order_id, day, tier_at(day)) for order_id, day in orders]
+assert enriched == [
+    ("o1", "2026-02-10", "bronze"),
+    ("o2", "2026-03-15", "silver"),     # effective on its start date
+    ("o3", "2026-09-30", "gold"),
+    ("o4", "2025-12-31", None),         # before the first version
+]
+print(enriched)
+```
+
+```text
+[('o1', '2026-02-10', 'bronze'), ('o2', '2026-03-15', 'silver'), ('o3', '2026-09-30', 'gold'), ('o4', '2025-12-31', None)]
+```
+
+ISO-formatted date strings sort correctly as text, which is why this works without parsing. Using `bisect_right` makes a version effective on its own start date; `bisect_left` would not.
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Binary Search** (Easy): closed range, `while lo <= hi`, move past `mid` on each side.
+2. **Search a 2D Matrix** (Medium): treat the matrix as one sorted list using `i // cols` and `i % cols`.
+3. **Find First and Last Position** (Medium): lower bound for the first index, upper bound minus one for the last.
+4. **Koko Eating Bananas** (Medium): binary search the speed; the check sums ceiling divisions.
+5. **Find Minimum in Rotated Sorted Array** (Medium): compare `mid` with `hi` to see which side holds the drop.
+6. **Search in Rotated Sorted Array** (Medium): one half is always sorted; test whether the target lies inside it.
+7. **Time Based Key-Value Store** (Medium): per-key sorted timestamps; `bisect_right(times, t) - 1`.
+8. **Median of Two Sorted Arrays** (Hard): binary search the cut in the shorter array so the left halves hold half the elements and are all `<=` the right halves.
+
+## Practice questions
+
+<details>
+<summary>What property must hold for binary search to work?</summary>
+
+A monotonic predicate: some condition that is false up to a boundary and true afterwards (or the reverse). In a sorted array, `a[i] >= target` is monotonic. Binary search finds the boundary in O(log n). If the condition can switch back and forth, binary search is not valid.
+
+</details>
+
+<details>
+<summary>Why can `lo = mid` cause an infinite loop, and how do you avoid it?</summary>
+
+With `mid = (lo + hi) // 2`, when `hi == lo + 1`, `mid` equals `lo`. If that branch sets `lo = mid`, the range never shrinks. Use templates where `lo` always becomes `mid + 1`, or round up (`mid = (lo + hi + 1) // 2`) when you need `lo = mid` for a "last true" search.
+
+</details>
+
+<details>
+<summary>How do you count occurrences of a value in a sorted list in O(log n)?</summary>
+
+`bisect.bisect_right(a, x) - bisect.bisect_left(a, x)`: the difference between the upper and lower bounds.
+
+</details>
+
+<details>
+<summary>Explain "binary search on the answer" with an example.</summary>
+
+Instead of searching an array, search the range of possible answers. For Koko Eating Bananas, speeds range from 1 to the largest pile; a speed is feasible if the total hours are within `h`, and any faster speed is also feasible. Binary search finds the first feasible speed, checking each candidate in O(n), for O(n log max) total.
+
+</details>
+
+<details>
+<summary>How would you join each order to the price that was valid when the order was placed?</summary>
+
+Sort price versions by effective time per product. For each order, binary search the product's version times for the last one `<= order_time` (`bisect_right - 1`). In SQL, use a join on `valid_from <= order_time < valid_to` for an SCD Type 2 table, or an as-of join where the engine supports it. Decide whether a version is effective on its start instant and what to do with orders before the first version.
+
+</details>
+
+<details>
+<summary>Why does Median of Two Sorted Arrays search the shorter array?</summary>
+
+The number taken from the second array is determined by the cut in the first (`j = half - i`). Searching the shorter array guarantees `j` stays within the longer array's bounds for every candidate `i`, and gives O(log min(m, n)) time.
+
+</details>
+
+## Key takeaways
+
+- Binary search needs a monotonic condition, not necessarily a sorted array.
+- Use one convention consistently: closed range with `<=` for exact matches, half-open with `<` for "first true".
+- `bisect_left` and `bisect_right` are lower and upper bound; their difference counts occurrences.
+- Search on the answer when you can check feasibility and feasibility is monotonic.
+- Partition lookup, file pruning and as-of joins are binary searches over sorted boundaries.

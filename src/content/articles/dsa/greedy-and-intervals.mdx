@@ -1,0 +1,398 @@
+---
+title: "Greedy Algorithms and Intervals: Safe Local Choices and Sweeps"
+seoTitle: "Greedy and Interval Problems for Interviews"
+description: "When a locally best choice is provably safe: reach, gas station, grouping and partition problems, plus interval sweeps used for sessionisation and time ranges."
+technology: ["dsa"]
+topic: ["greedy", "intervals", "sessionization"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain what makes a greedy choice safe and how to argue it with an exchange or invariant"
+  - "Solve reach, refuelling, grouping and partition problems with one-pass greedy templates"
+  - "Track a range of possible states, as in Valid Parenthesis String"
+  - "Sweep sorted intervals to merge ranges, count overlaps and build sessions"
+  - "Apply interval and greedy techniques to sessionisation and time-range merging in pipelines"
+prerequisites: ["articles:dsa/arrays-and-hashing", "articles:dsa/heaps-priority-queues"]
+related: ["articles:sql/window-functions"]
+previous: "articles:dsa/dynamic-programming"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
+  - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
+  - { label: "Python documentation: collections.Counter", url: "https://docs.python.org/3/library/collections.html#collections.Counter" }
+---
+
+A greedy algorithm builds an answer by making the choice that looks best right now and never revisiting it. When that is valid, greedy solutions are short, fast and usually O(n) or O(n log n). The difficulty is knowing when it is valid: many problems have a tempting greedy answer that is wrong (Coin Change in the dynamic programming lesson is the classic example). Interval problems, where you sort by start or end and sweep, are the most common family of greedy problems, and they matter to Data Engineers because sessionisation and time-range merging are interval sweeps.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How greedy algorithms work
+
+A greedy algorithm is correct when two things hold:
+
+- **Greedy-choice property:** some optimal answer starts with the greedy choice. You usually show this with an **exchange argument**: take any optimal answer, swap its first choice for the greedy one, and show it is no worse.
+- **Optimal substructure:** after making the choice, what remains is a smaller instance of the same problem.
+
+In an interview you rarely write a formal proof, but you should say one sentence of justification, for example "keeping the interval that ends earliest leaves the most room for the rest", and test the idea on a small counterexample attempt before coding.
+
+| Greedy works | Greedy fails |
+|---|---|
+| Interval scheduling (pick the earliest end) | Weighted interval scheduling (needs DP) |
+| Jump Game reach | Coin Change with arbitrary coins |
+| Gas Station start | 0/1 knapsack |
+| Partition Labels | Longest increasing subsequence |
+
+## Recognising the pattern
+
+- "Minimum number of ...", "maximum number of non-overlapping ...", "can you reach ...".
+- Intervals, meetings, bookings, time ranges, sessions.
+- Sorting by one key (start, end, size, ratio) makes the decision at each step obvious.
+- A single pass where you maintain the furthest reach, a running balance or a range of possibilities.
+- If you can construct a small case where the greedy choice loses, switch to DP or search.
+
+## Core templates in Python
+
+### Track the furthest reach: Jump Game I and II
+
+```python
+def can_jump(nums):
+    reach = 0
+    for i, step in enumerate(nums):
+        if i > reach:
+            return False                  # this index cannot be reached
+        reach = max(reach, i + step)
+    return True
+
+
+def min_jumps(nums):
+    jumps = 0
+    current_end = 0                       # furthest index reachable with `jumps` jumps
+    furthest = 0                          # furthest index reachable with one more jump
+    for i in range(len(nums) - 1):
+        furthest = max(furthest, i + nums[i])
+        if i == current_end:              # must jump to go further
+            jumps += 1
+            current_end = furthest
+    return jumps
+
+
+assert can_jump([2, 3, 1, 1, 4]) is True and can_jump([3, 2, 1, 0, 4]) is False and can_jump([0]) is True
+assert min_jumps([2, 3, 1, 1, 4]) == 2 and min_jumps([2, 3, 0, 1, 4]) == 2 and min_jumps([0]) == 0
+```
+
+`min_jumps` is a breadth-first search in disguise: each "level" is the range of indices reachable with the same number of jumps.
+
+### Running balance: Gas Station
+
+```python
+def can_complete_circuit(gas, cost):
+    if sum(gas) < sum(cost):
+        return -1                         # not enough fuel overall
+    tank, start = 0, 0
+    for i in range(len(gas)):
+        tank += gas[i] - cost[i]
+        if tank < 0:                      # cannot reach i + 1 from start, or from anything in between
+            start, tank = i + 1, 0
+    return start
+
+
+assert can_complete_circuit([1, 2, 3, 4, 5], [3, 4, 5, 1, 2]) == 3
+assert can_complete_circuit([2, 3, 4], [3, 4, 3]) == -1
+assert can_complete_circuit([5], [4]) == 0
+```
+
+The key insight: if you run dry at station i starting from `start`, every station between `start` and i would also run dry (it starts with less fuel than you had when passing it), so the next candidate is i + 1.
+
+### Smallest first: Hand of Straights
+
+```python
+from collections import Counter
+
+
+def is_n_straight_hand(hand, group_size):
+    if len(hand) % group_size:
+        return False
+    counts = Counter(hand)
+    for card in sorted(counts):
+        need = counts[card]
+        if need == 0:
+            continue
+        for nxt in range(card, card + group_size):   # the smallest card must start a group
+            if counts[nxt] < need:
+                return False
+            counts[nxt] -= need
+    return True
+
+
+assert is_n_straight_hand([1, 2, 3, 6, 2, 3, 4, 7, 8], 3) is True
+assert is_n_straight_hand([1, 2, 3, 4, 5], 4) is False
+assert is_n_straight_hand([], 2) is True
+```
+
+The smallest remaining card cannot be in the middle of any group, so it must start one; that is the safe greedy choice.
+
+### Filter, then combine: Merge Triplets to Form Target
+
+```python
+def merge_triplets(triplets, target):
+    found = set()
+    for t in triplets:
+        if all(t[i] <= target[i] for i in range(3)):   # usable: never overshoots
+            found.update(i for i in range(3) if t[i] == target[i])
+    return len(found) == 3
+
+
+assert merge_triplets([[2, 5, 3], [1, 8, 4], [1, 7, 5]], [2, 7, 5]) is True
+assert merge_triplets([[3, 4, 5], [4, 5, 6]], [3, 2, 5]) is False
+```
+
+Merging takes the maximum of each position, so any triplet with a value above the target poisons the result and must be ignored; every other triplet is harmless to include.
+
+### Last occurrence: Partition Labels
+
+```python
+def partition_labels(s):
+    last = {ch: i for i, ch in enumerate(s)}
+    sizes, start, end = [], 0, 0
+    for i, ch in enumerate(s):
+        end = max(end, last[ch])          # this part must reach ch's last occurrence
+        if i == end:
+            sizes.append(end - start + 1)
+            start = i + 1
+    return sizes
+
+
+assert partition_labels("ababcbacadefegdehijhklij") == [9, 7, 8]
+assert partition_labels("eccbbbbdec") == [10]
+```
+
+This is interval merging in disguise: each letter spans from its first to its last occurrence, and the parts are the merged spans.
+
+### Track a range of states: Valid Parenthesis String
+
+`*` can be `(`, `)` or empty, so instead of one open count, track the lowest and highest possible open counts.
+
+```python
+def check_valid_string(s):
+    low = high = 0                        # range of possible unmatched "(" counts
+    for ch in s:
+        if ch == "(":
+            low, high = low + 1, high + 1
+        elif ch == ")":
+            low, high = low - 1, high - 1
+        else:
+            low, high = low - 1, high + 1  # "*" as ")" or as "("
+        if high < 0:
+            return False                  # too many ")" whatever the stars are
+        low = max(low, 0)                 # cannot have negative open brackets
+    return low == 0
+
+
+assert check_valid_string("()") and check_valid_string("(*)") and check_valid_string("(*))")
+assert not check_valid_string(")(") and not check_valid_string("(((*)")
+assert check_valid_string("")
+```
+
+## Interval sweeps
+
+The arrays and hashing lesson covers merging, inserting and removing overlapping intervals. Two more sweeps complete the toolkit.
+
+### How many overlap at once: meeting rooms
+
+```python
+import heapq
+
+
+def min_meeting_rooms(intervals):
+    ends = []                                       # end times of meetings in progress
+    for start, end in sorted(intervals):
+        if ends and ends[0] <= start:
+            heapq.heapreplace(ends, end)            # reuse the room that frees up first
+        else:
+            heapq.heappush(ends, end)
+    return len(ends)
+
+
+def max_concurrent(intervals):
+    events = []
+    for start, end in intervals:
+        events.append((start, 1))
+        events.append((end, -1))                    # at equal times, -1 sorts first: end before start
+    best = current = 0
+    for _, delta in sorted(events):
+        current += delta
+        best = max(best, current)
+    return best
+
+
+meetings = [[0, 30], [5, 10], [15, 20]]
+assert min_meeting_rooms(meetings) == 2 == max_concurrent(meetings)
+assert min_meeting_rooms([[7, 10], [2, 4]]) == 1 == max_concurrent([[7, 10], [2, 4]])
+assert min_meeting_rooms([[1, 5], [5, 10]]) == 1 == max_concurrent([[1, 5], [5, 10]])
+```
+
+The event sweep generalises well: peak concurrent users, peak running tasks or peak memory are all "sort start and end events and keep a running sum".
+
+### Maximum non-overlapping: sort by end
+
+```python
+def max_non_overlapping(intervals):
+    count, last_end = 0, float("-inf")
+    for start, end in sorted(intervals, key=lambda iv: iv[1]):
+        if start >= last_end:                       # compatible with the last chosen one
+            count += 1
+            last_end = end
+    return count
+
+
+assert max_non_overlapping([[1, 2], [2, 3], [3, 4], [1, 3]]) == 3
+assert max_non_overlapping([[1, 10], [2, 3], [4, 5]]) == 2
+```
+
+Choosing the interval that **ends** earliest is the textbook exchange argument: swapping any optimal first interval for the earliest-ending one never blocks more of the rest. Sorting by start instead fails on the second test.
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Jump Game I and II | O(n) | O(1) |
+| Gas Station | O(n) | O(1) |
+| Hand of Straights | O(n log n) for sorting distinct cards, plus O(n · group size) | O(n) |
+| Merge Triplets | O(n) | O(1) |
+| Partition Labels | O(n) | O(alphabet) |
+| Valid Parenthesis String | O(n) | O(1) |
+| Meeting rooms (heap or events) | O(n log n) | O(n) |
+| Max non-overlapping | O(n log n) | O(1) besides sorting |
+
+## Variations and common bugs
+
+- **Using greedy without a reason.** Always try to break your greedy rule with a tiny example.
+- **Sorting by the wrong key:** by end for "maximum non-overlapping", by start for merging.
+- **Tie handling at equal times:** decide whether an interval ending at 5 and another starting at 5 overlap, and order events accordingly.
+- **Off-by-one in Jump Game II:** loop to `len(nums) - 1`, otherwise you count a jump from the last index.
+- **Gas Station:** forgetting the total-fuel check, or resetting `start` to `i` instead of `i + 1`.
+- **Valid Parenthesis String:** not clamping `low` at zero, or returning `high == 0`.
+- **Variants:** assign cookies, lemonade change, minimum arrows to burst balloons, queue reconstruction by height, candy, two-city scheduling, employee free time, interval list intersections.
+
+## Greedy and intervals in data-engineering work
+
+- **Sessionisation.** Group a user's events into sessions that end after a gap of inactivity (often 30 minutes). Sorted by time, each event either extends the current session or starts a new one: a merge of intervals `[t, t + gap]`. In SQL you compute it with `LAG` to find gaps and a running `SUM` to number sessions; streaming engines offer session windows.
+- **Merging time ranges.** Combining overlapping maintenance windows, outage periods, subscription periods or SCD validity ranges is Merge Intervals; total covered time is the sum of merged lengths.
+- **Concurrency and capacity.** Peak concurrent queries, running tasks or open connections come from the start/end event sweep, which also sizes worker pools and warehouses.
+- **Packing.** Combining small files into output files near a target size is bin packing; the greedy "first fit after sorting by size descending" heuristic is fast and usually close enough, but it is not guaranteed optimal.
+
+```python
+from collections import defaultdict
+
+
+def sessionise(events, gap):
+    """events: (user, ts) pairs in any order. Returns {user: [(start, end, n_events)]}."""
+    by_user = defaultdict(list)
+    for user, ts in events:
+        by_user[user].append(ts)
+    sessions = {}
+    for user, times in by_user.items():
+        times.sort()
+        out = []
+        start = prev = times[0]
+        count = 1
+        for ts in times[1:]:
+            if ts - prev > gap:                 # inactivity gap: close the session
+                out.append((start, prev, count))
+                start, count = ts, 0
+            prev = ts
+            count += 1
+        out.append((start, prev, count))
+        sessions[user] = out
+    return sessions
+
+
+clicks = [("u1", 0), ("u1", 10), ("u2", 5), ("u1", 50), ("u1", 61), ("u2", 100), ("u1", 15)]
+result = sessionise(clicks, gap=30)
+assert result == {"u1": [(0, 15, 3), (50, 61, 2)], "u2": [(5, 5, 1), (100, 100, 1)]}
+
+
+def total_covered(ranges):
+    covered, cur_start, cur_end = 0, None, None
+    for start, end in sorted(ranges):
+        if cur_end is None or start > cur_end:
+            if cur_end is not None:
+                covered += cur_end - cur_start
+            cur_start, cur_end = start, end
+        else:
+            cur_end = max(cur_end, end)
+    return covered + (cur_end - cur_start if cur_end is not None else 0)
+
+
+outages = [(10, 20), (15, 25), (40, 45), (44, 50)]
+assert total_covered(outages) == 25          # (10, 25) + (40, 50)
+assert total_covered([]) == 0
+print(result)
+```
+
+```text
+{'u1': [(0, 15, 3), (50, 61, 2)], 'u2': [(5, 5, 1), (100, 100, 1)]}
+```
+
+In an interview, state the rule at the boundary (is a gap of exactly 30 minutes a new session?) and how late, out-of-order events would be handled: in batch you sort, in streaming the engine keeps the session open until the watermark passes its end.
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Jump Game** (Medium): track the furthest reachable index; fail if you pass it.
+2. **Jump Game II** (Medium): count jumps by levels of reach, jumping when you hit the current level's end.
+3. **Partition Labels** (Medium): extend each part to the last occurrence of every letter in it.
+4. **Merge Triplets to Form Target** (Medium): ignore triplets that overshoot; the rest must cover each target value.
+5. **Gas Station** (Medium): if total gas covers total cost, restart after any point where the tank goes negative.
+6. **Hand of Straights** (Medium): the smallest remaining card must start a group of consecutive cards.
+7. **Valid Parenthesis String** (Medium): track the range of possible open counts; clamp the low end at zero.
+
+The interval problems Merge Intervals, Insert Interval and Non-overlapping Intervals are taught in the arrays and hashing lesson.
+
+## Practice questions
+
+<details>
+<summary>How do you convince an interviewer that a greedy choice is correct?</summary>
+
+Use an exchange argument: take any optimal solution and show that replacing its first choice with the greedy choice keeps it valid and no worse. For interval scheduling, the earliest-ending interval finishes no later than the optimal solution's first interval, so swapping it in cannot cause a conflict. Also try a small counterexample out loud; if you cannot break it, say why.
+
+</details>
+
+<details>
+<summary>Why sort by end time to maximise the number of non-overlapping intervals?</summary>
+
+The interval that ends first leaves the most time for the remaining intervals. Sorting by start can pick a long interval that blocks many short ones: with `[1, 10]`, `[2, 3]` and `[4, 5]`, sorting by start takes `[1, 10]` and gets one interval, while sorting by end takes `[2, 3]` and `[4, 5]`.
+
+</details>
+
+<details>
+<summary>Why does the Gas Station algorithm skip straight to i + 1 after the tank goes negative?</summary>
+
+Starting at `start`, you arrived at every station between `start` and i with a non-negative tank. Starting at one of those stations instead means arriving there with an empty tank, which is no better, so you would also fail before i + 1. None of them can be the answer, so the next candidate is i + 1.
+
+</details>
+
+<details>
+<summary>How do you find the peak number of concurrent jobs from a log of start and end times?</summary>
+
+Create +1 events at each start and −1 events at each end, sort by time (with ends before starts at equal times if a job ending at t frees its slot for one starting at t), and keep a running sum. The maximum running sum is the peak. This is O(n log n), and in SQL the same sweep is a running `SUM` over a union of start and end events ordered by time.
+
+</details>
+
+<details>
+<summary>Describe how you would sessionise clickstream events with a 30-minute inactivity gap, in Python and in SQL.</summary>
+
+In Python, group by user, sort each user's timestamps, and start a new session whenever the gap from the previous event exceeds 30 minutes. In SQL, use `LAG(ts) OVER (PARTITION BY user ORDER BY ts)` to compute the gap, flag rows where the gap exceeds 30 minutes (or is NULL), then a running `SUM` of the flag over the same window numbers the sessions. Agree whether a gap of exactly 30 minutes starts a new session.
+
+</details>
+
+## Key takeaways
+
+- Greedy is correct only when a locally best choice can be shown safe, usually with an exchange argument; otherwise use DP.
+- Many greedy solutions are one pass maintaining a reach, a balance or a range of possibilities.
+- For intervals: sort by start to merge, by end to maximise non-overlapping, and sweep start and end events to count overlaps.
+- Decide and state the rule for touching intervals and equal timestamps.
+- Sessionisation, time-range merging and peak concurrency in pipelines are interval sweeps.

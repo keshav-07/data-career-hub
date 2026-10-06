@@ -1,0 +1,463 @@
+---
+title: "Heaps and Priority Queues: Top-K, Scheduling and Running Medians"
+seoTitle: "Heaps and Priority Queues for Interviews"
+description: "Use Python's heapq for top-K, k-th largest, k-way merges, task scheduling and running medians, with the bounded-memory streaming patterns Data Engineers rely on."
+technology: ["dsa"]
+topic: ["heaps", "priority-queues", "top-k"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain the heap invariant and the cost of push, pop and heapify"
+  - "Use heapq as a min-heap and a max-heap, with tuple priorities and tie-breakers"
+  - "Solve top-K and k-th largest problems with a size-k heap or quickselect"
+  - "Maintain a running median with two heaps and schedule tasks by priority"
+  - "Apply heaps to streaming top-K, k-way merges and job scheduling in pipelines"
+prerequisites: ["articles:dsa/arrays-and-hashing", "articles:dsa/binary-trees"]
+previous: "articles:dsa/binary-search-trees"
+next: "articles:dsa/backtracking"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests. The heapq max-heap functions added in Python 3.14 are mentioned but not executed."
+sources:
+  - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
+  - { label: "Python documentation: collections.Counter", url: "https://docs.python.org/3/library/collections.html#collections.Counter" }
+  - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+---
+
+A heap is a tree-shaped structure that always gives you the smallest (or largest) item in O(1) and lets you add or remove items in O(log n). That makes it the right tool whenever a problem says "top K", "k-th largest", "closest", "next to run" or "median of a stream". It is also one of the most practical structures for Data Engineers, because a heap of size k computes top-K over data of any size with bounded memory.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How a heap works
+
+A binary heap is a **complete binary tree** stored in an array: the children of index `i` are at `2i + 1` and `2i + 2`, and its parent is at `(i - 1) // 2`. The **heap invariant** for a min-heap is that every parent is less than or equal to its children, so the minimum is always at index 0. The rest of the array is only partially ordered.
+
+| Operation | `heapq` call | Cost |
+|---|---|---|
+| Peek at the minimum | `heap[0]` | O(1) |
+| Push | `heappush(heap, x)` | O(log n): add at the end, sift up |
+| Pop the minimum | `heappop(heap)` | O(log n): move the last item to the root, sift down |
+| Push then pop (keep size fixed) | `heappushpop(heap, x)` | O(log n), faster than the two calls |
+| Pop then push | `heapreplace(heap, x)` | O(log n) |
+| Build from a list | `heapify(list)` | **O(n)**, in place |
+| k smallest / largest | `nsmallest(k, it)`, `nlargest(k, it)` | O(n log k) |
+
+```python
+import heapq
+
+data = [5, 9, 1, 7, 3]
+heapq.heapify(data)                       # O(n), rearranges in place
+assert data[0] == 1
+assert all(data[i] <= data[c] for i in range(len(data)) for c in (2 * i + 1, 2 * i + 2) if c < len(data))
+assert [heapq.heappop(data) for _ in range(5)] == [1, 3, 5, 7, 9]   # popping all = heap sort
+```
+
+### Max-heaps, priorities and ties in Python
+
+`heapq` only provides a min-heap (Python 3.14 added `heappush_max`, `heappop_max` and related functions, but older versions are common in interviews). The usual tricks:
+
+- **Max-heap:** push `-value` and negate on the way out.
+- **Priorities:** push tuples; they compare field by field, so `(priority, item)` orders by priority.
+- **Ties:** if two priorities are equal Python compares the next field; when that is a dict or object it raises `TypeError`. Insert a counter: `(priority, sequence_number, item)`.
+
+```python
+import heapq
+import itertools
+
+max_heap = []
+for v in [3, 10, 4]:
+    heapq.heappush(max_heap, -v)
+assert -max_heap[0] == 10
+
+counter = itertools.count()
+jobs = []
+for priority, job in [(2, {"name": "load"}), (1, {"name": "extract"}), (2, {"name": "report"})]:
+    heapq.heappush(jobs, (priority, next(counter), job))   # dicts are never compared
+order = [heapq.heappop(jobs)[2]["name"] for _ in range(3)]
+assert order == ["extract", "load", "report"]               # FIFO among equal priorities
+```
+
+## Recognising the pattern
+
+| Signal | Heap shape |
+|---|---|
+| "k largest / most frequent / closest" | Min-heap of size k (evict the smallest of the kept items) |
+| "k-th largest", "k-th smallest" | Size-k heap, or quickselect |
+| "Repeatedly take the largest two / smallest" | Max-heap or min-heap of everything |
+| "Merge k sorted lists / streams" | Min-heap of the current head of each |
+| "Median of a stream", "balance two halves" | Two heaps: a max-heap and a min-heap |
+| "Schedule tasks", "next event", "earliest deadline" | Min-heap keyed by time or priority |
+| "Shortest path with weights" | Min-heap of (distance, node): Dijkstra (graphs lesson) |
+
+## Core templates in Python
+
+### Top K with a bounded min-heap
+
+To keep the k **largest**, use a **min**-heap of size k: its root is the weakest member of the current top k, so each new item only has to beat that.
+
+```python
+import heapq
+
+
+class KthLargest:
+    def __init__(self, k, nums):
+        self.k = k
+        self.heap = []
+        for n in nums:
+            self.add(n)
+
+    def add(self, val):
+        if len(self.heap) < self.k:
+            heapq.heappush(self.heap, val)
+        elif val > self.heap[0]:
+            heapq.heapreplace(self.heap, val)    # drop the smallest, keep size k
+        return self.heap[0]                      # k-th largest so far
+
+
+kl = KthLargest(3, [4, 5, 8, 2])
+assert [kl.add(v) for v in [3, 5, 10, 9, 4]] == [4, 5, 5, 8, 8]
+
+
+def k_closest(points, k):
+    heap = []                                    # max-heap via negated distance
+    for x, y in points:
+        d = x * x + y * y                        # squared distance: no sqrt needed
+        if len(heap) < k:
+            heapq.heappush(heap, (-d, x, y))
+        elif -d > heap[0][0]:                    # closer than the farthest kept point
+            heapq.heapreplace(heap, (-d, x, y))
+    return sorted([[x, y] for _, x, y in heap])
+
+
+assert k_closest([[1, 3], [-2, 2]], 1) == [[-2, 2]]
+assert k_closest([[3, 3], [5, -1], [-2, 4]], 2) == [[-2, 4], [3, 3]]
+```
+
+To keep the k **smallest** (like the k closest points), flip it: a max-heap of size k whose root is the largest kept item.
+
+### k-th largest: heap or quickselect
+
+```python
+import heapq
+import random
+
+
+def find_kth_largest_heap(nums, k):
+    heap = nums[:k]
+    heapq.heapify(heap)
+    for n in nums[k:]:
+        if n > heap[0]:
+            heapq.heapreplace(heap, n)
+    return heap[0]
+
+
+def find_kth_largest_quickselect(nums, k):
+    target = len(nums) - k                       # index in ascending order
+    lo, hi = 0, len(nums) - 1
+    nums = nums[:]                               # do not mutate the caller's list
+    while True:
+        pivot = nums[random.randint(lo, hi)]
+        # Three-way partition of nums[lo..hi] around the pivot.
+        less = [x for x in nums[lo:hi + 1] if x < pivot]
+        equal = [x for x in nums[lo:hi + 1] if x == pivot]
+        greater = [x for x in nums[lo:hi + 1] if x > pivot]
+        nums[lo:hi + 1] = less + equal + greater
+        if target < lo + len(less):
+            hi = lo + len(less) - 1
+        elif target < lo + len(less) + len(equal):
+            return pivot
+        else:
+            lo = lo + len(less) + len(equal)
+
+
+random.seed(1)
+for fn in (find_kth_largest_heap, find_kth_largest_quickselect):
+    assert fn([3, 2, 1, 5, 6, 4], 2) == 5
+    assert fn([3, 2, 3, 1, 2, 4, 5, 5, 6], 4) == 4
+    assert fn([1], 1) == 1
+    for _ in range(100):
+        arr = [random.randint(-20, 20) for _ in range(random.randint(1, 30))]
+        k = random.randint(1, len(arr))
+        assert fn(arr, k) == sorted(arr, reverse=True)[k - 1]
+```
+
+| Approach | Time | Space | Notes |
+|---|---|---|---|
+| Sort | O(n log n) | O(n) | Simplest; fine unless asked to do better |
+| Size-k heap | O(n log k) | O(k) | Works on streams |
+| Quickselect | O(n) average, O(n²) worst | O(n) here (O(1) with in-place partitioning) | Random pivots make the worst case unlikely |
+
+The quickselect above copies sublists for clarity; an in-place Lomuto or Hoare partition gives O(1) extra space. The three-way partition matters: with many duplicates, a two-way partition can degrade badly.
+
+### Simulate with a max-heap: Last Stone Weight
+
+```python
+import heapq
+
+
+def last_stone_weight(stones):
+    heap = [-s for s in stones]
+    heapq.heapify(heap)
+    while len(heap) > 1:
+        a = -heapq.heappop(heap)                 # heaviest
+        b = -heapq.heappop(heap)                 # second heaviest
+        if a != b:
+            heapq.heappush(heap, -(a - b))
+    return -heap[0] if heap else 0
+
+
+assert last_stone_weight([2, 7, 4, 1, 8, 1]) == 1
+assert last_stone_weight([1]) == 1
+assert last_stone_weight([3, 3]) == 0
+```
+
+### Scheduling: Task Scheduler
+
+Tasks of the same type need `n` idle slots between them. Always run the most frequent available task; a queue holds tasks that are cooling down.
+
+```python
+import heapq
+from collections import Counter, deque
+
+
+def least_interval(tasks, n):
+    heap = [-c for c in Counter(tasks).values()]
+    heapq.heapify(heap)
+    cooling = deque()                            # (time available again, -remaining count)
+    time = 0
+    while heap or cooling:
+        time += 1
+        if heap:
+            remaining = heapq.heappop(heap) + 1  # run one instance (counts are negative)
+            if remaining:
+                cooling.append((time + n, remaining))
+        if cooling and cooling[0][0] == time:
+            heapq.heappush(heap, cooling.popleft()[1])
+    return time
+
+
+def least_interval_formula(tasks, n):
+    counts = Counter(tasks).values()
+    top = max(counts)
+    tied = sum(1 for c in counts if c == top)
+    return max(len(tasks), (top - 1) * (n + 1) + tied)
+
+
+for tasks, n, expected in [(list("AAABBB"), 2, 8), (list("ACABDB"), 1, 6), (list("AAABBB"), 3, 10), (list("A"), 5, 1)]:
+    assert least_interval(tasks, n) == expected
+    assert least_interval_formula(tasks, n) == expected
+```
+
+The simulation generalises to real schedulers; the formula is the faster interview answer once you can explain it (the most frequent task forms `top - 1` full frames of length `n + 1`, plus a final partial frame).
+
+### Two heaps: running median
+
+Keep the smaller half in a max-heap and the larger half in a min-heap, with sizes equal or the max-heap one larger. The median is at the tops.
+
+```python
+import heapq
+
+
+class MedianFinder:
+    def __init__(self):
+        self.low = []        # max-heap (negated): smaller half
+        self.high = []       # min-heap: larger half
+
+    def add_num(self, num):
+        heapq.heappush(self.low, -num)
+        heapq.heappush(self.high, -heapq.heappop(self.low))   # move the largest of low to high
+        if len(self.high) > len(self.low):
+            heapq.heappush(self.low, -heapq.heappop(self.high))
+
+    def find_median(self):
+        if len(self.low) > len(self.high):
+            return float(-self.low[0])
+        return (-self.low[0] + self.high[0]) / 2
+
+
+mf = MedianFinder()
+seen = []
+import random
+random.seed(3)
+for v in [random.randint(-100, 100) for _ in range(200)]:
+    mf.add_num(v)
+    seen.append(v)
+    s = sorted(seen)
+    m = len(s)
+    expected = s[m // 2] if m % 2 else (s[m // 2 - 1] + s[m // 2]) / 2
+    assert mf.find_median() == expected
+```
+
+Pushing every new number through `low` and then `high` guarantees that every element of `low` is at most every element of `high`, without special cases.
+
+### Merging feeds: Design Twitter
+
+Each user's tweets are already in time order, so the news feed is a k-way merge of the followees' lists, stopping after 10.
+
+```python
+import heapq
+import itertools
+from collections import defaultdict
+
+
+class Twitter:
+    def __init__(self):
+        self.clock = itertools.count()
+        self.tweets = defaultdict(list)          # user -> [(time, tweet_id)]
+        self.following = defaultdict(set)
+
+    def post_tweet(self, user_id, tweet_id):
+        self.tweets[user_id].append((next(self.clock), tweet_id))
+
+    def get_news_feed(self, user_id):
+        heap = []
+        for uid in self.following[user_id] | {user_id}:
+            if self.tweets[uid]:
+                i = len(self.tweets[uid]) - 1
+                t, tid = self.tweets[uid][i]
+                heap.append((-t, tid, uid, i))
+        heapq.heapify(heap)
+        feed = []
+        while heap and len(feed) < 10:
+            _, tid, uid, i = heapq.heappop(heap)
+            feed.append(tid)
+            if i > 0:
+                t, nxt = self.tweets[uid][i - 1]
+                heapq.heappush(heap, (-t, nxt, uid, i - 1))
+        return feed
+
+    def follow(self, follower, followee):
+        if follower != followee:
+            self.following[follower].add(followee)
+
+    def unfollow(self, follower, followee):
+        self.following[follower].discard(followee)
+
+
+tw = Twitter()
+tw.post_tweet(1, 5)
+assert tw.get_news_feed(1) == [5]
+tw.follow(1, 2)
+tw.post_tweet(2, 6)
+assert tw.get_news_feed(1) == [6, 5]
+tw.unfollow(1, 2)
+assert tw.get_news_feed(1) == [5]
+```
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Heapify | O(n) | O(1) in place |
+| Top K / k-th largest with a heap | O(n log k) | O(k) |
+| Quickselect | O(n) average | O(1) in place |
+| Last stone weight | O(n log n) | O(n) |
+| Task scheduler (simulation) | O(T log 26) for T time slots | O(26) |
+| Running median | O(log n) per add, O(1) per query | O(n) |
+| News feed (f followees, feed size 10) | O(f + 10 log f) | O(f) |
+| Merge k sorted lists (N items) | O(N log k) | O(k) |
+
+## Variations and common bugs
+
+- **Using a max-heap for top-K largest.** It works but stores all n items; the size-k min-heap keeps memory at O(k).
+- **Forgetting to negate back** when popping from a negated max-heap.
+- **Uncomparable payloads** in tuples with equal priorities; add a sequence number.
+- **Assuming the heap list is sorted.** Only `heap[0]` is guaranteed; the rest is partially ordered.
+- **Calling `heapify` after every push** (O(n) each time) instead of `heappush`.
+- **`heapq.nlargest` on a stream you also need afterwards**: it consumes iterators.
+- **Variants:** reorganise string (always place the most frequent character that differs from the last), meeting rooms II (min-heap of end times), IPO (two heaps), sliding window median, smallest range covering k lists, Dijkstra.
+
+## Heaps in data-engineering work
+
+- **Streaming top-K.** "Top 10 products by revenue today" over a stream needs a count per key plus a size-10 heap; distributed engines compute a top-K per partition and merge them, because the global top K must be within the union of partition top Ks (when partitions hold disjoint keys).
+- **External sort and k-way merge.** Sorting data larger than memory writes sorted runs to disk and merges them with a heap holding one record per run.
+- **Scheduling.** Schedulers and worker pools pick the next job by priority or earliest start time; delayed retries sit in a heap keyed by "retry at" time.
+- **Percentiles and medians.** Two heaps give exact running medians for small streams; at scale, systems use approximate sketches (t-digest, quantile sketches) because exact medians need all the data.
+- **Time-ordered event processing.** Buffering slightly out-of-order events in a heap keyed by event time, and releasing those older than the watermark, is how you re-order a stream.
+
+```python
+import heapq
+
+
+def reorder_events(events, max_delay):
+    """Release events in timestamp order once the watermark (max seen - max_delay) passes them."""
+    buffer, released, max_seen = [], [], float("-inf")
+    for ts, payload in events:
+        heapq.heappush(buffer, (ts, payload))
+        max_seen = max(max_seen, ts)
+        watermark = max_seen - max_delay
+        while buffer and buffer[0][0] <= watermark:
+            released.append(heapq.heappop(buffer))
+    while buffer:                                  # end of stream: flush
+        released.append(heapq.heappop(buffer))
+    return released
+
+
+arrivals = [(1, "a"), (3, "c"), (2, "b"), (6, "f"), (4, "d"), (9, "i"), (5, "e")]
+out = reorder_events(arrivals, max_delay=2)
+assert [ts for ts, _ in out] == [1, 2, 3, 4, 6, 5, 9]   # 5 arrived after the watermark passed it
+print(out)
+```
+
+```text
+[(1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (6, 'f'), (5, 'e'), (9, 'i')]
+```
+
+The event with timestamp 5 arrived after the watermark had reached 7, so it came out late and out of order. Real streaming engines handle this explicitly: they drop late events or route them to a side output, which is why choosing the allowed lateness is a trade-off between completeness and latency.
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Last Stone Weight** (Easy): max-heap via negation; smash the two heaviest and push the difference.
+2. **Kth Largest Element in a Stream** (Easy): keep a min-heap of size k; its root is the answer.
+3. **K Closest Points to Origin** (Medium): max-heap of size k keyed by squared distance.
+4. **Kth Largest Element in an Array** (Medium): size-k min-heap in O(n log k), or quickselect in O(n) average.
+5. **Task Scheduler** (Medium): run the most frequent available task; cooling tasks wait in a queue (or use the frame formula).
+6. **Design Twitter** (Medium): k-way merge of followees' time-ordered tweets, stopping at 10.
+7. **Find Median from Data Stream** (Hard): max-heap for the lower half, min-heap for the upper half, kept balanced.
+
+## Practice questions
+
+<details>
+<summary>Why does finding the k largest values use a min-heap?</summary>
+
+The heap holds the current best k candidates, and the decision for each new value is "is it better than the weakest candidate?". The weakest of the k largest is the smallest, so a min-heap exposes it at the root in O(1) and replaces it in O(log k). Memory stays O(k).
+
+</details>
+
+<details>
+<summary>Why is heapify O(n) while pushing n items one at a time is O(n log n)?</summary>
+
+Heapify sifts down from the last parent upwards. Most nodes are near the bottom and sift down only a short distance; summing the work over all levels gives a bound linear in n. Pushing items one at a time can make each new item sift up the full height, O(log n) each.
+
+</details>
+
+<details>
+<summary>Explain how two heaps maintain a running median.</summary>
+
+A max-heap holds the smaller half of the numbers and a min-heap the larger half. Every element of the max-heap is at most every element of the min-heap, and their sizes differ by at most one. The median is the top of the larger heap, or the average of both tops when sizes are equal. Each insert is O(log n).
+
+</details>
+
+<details>
+<summary>How would you compute the top 10 URLs by hits from 1 TB of logs across a cluster?</summary>
+
+Aggregate counts per URL, partitioned by URL hash so each URL's total is computed on one worker (a group-by). Each worker keeps a size-10 min-heap of its URLs, and a final step merges the per-worker top 10s and keeps the global top 10. If exact counts are too expensive, use an approximate heavy-hitters algorithm such as Count-Min Sketch with a heap.
+
+</details>
+
+<details>
+<summary>When would you choose quickselect over a heap for the k-th largest element?</summary>
+
+When all the data is in memory, you need a single answer and want O(n) average time. Quickselect can modify the array and has an O(n²) worst case (mitigated with random pivots). A heap is better for streams, for repeated queries as data arrives, and when you cannot reorder the input.
+
+</details>
+
+## Key takeaways
+
+- A heap gives the min (or max) in O(1) and push or pop in O(log n); `heapify` is O(n).
+- `heapq` is a min-heap: negate for a max-heap and add a counter to break ties between uncomparable items.
+- Top-K uses a size-k heap of the opposite kind: O(n log k) time and O(k) memory, which works on streams.
+- Two heaps maintain a running median; a heap of list heads merges k sorted sequences.
+- Pipelines use heaps for streaming top-K, external sort merges, job scheduling and event-time reordering.

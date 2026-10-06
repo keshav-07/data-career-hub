@@ -1,0 +1,616 @@
+---
+title: "Dynamic Programming: States, Transitions and the Classic DP Families"
+seoTitle: "Dynamic Programming for Coding Interviews"
+description: "A repeatable method for dynamic programming: define the state and transition, pick memoisation or a table, then solve 1D, grid, string and knapsack problems."
+technology: ["dsa"]
+topic: ["dynamic-programming", "memoization", "knapsack"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Recognise overlapping subproblems and optimal substructure in a problem statement"
+  - "Define a DP state and transition, then implement it top-down with memoisation or bottom-up with a table"
+  - "Solve 1D, grid, two-string, knapsack and interval DP problems with tested templates"
+  - "Reduce DP memory by keeping only the rows or values the transition needs"
+  - "Connect DP to fuzzy matching, diffs and incremental computation in data work"
+prerequisites: ["articles:dsa/backtracking"]
+previous: "articles:dsa/graphs"
+next: "articles:dsa/greedy-and-intervals"
+versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: functools (lru_cache and cache)", url: "https://docs.python.org/3/library/functools.html" }
+  - { label: "Python documentation: itertools", url: "https://docs.python.org/3/library/itertools.html" }
+  - { label: "Python documentation: bisect", url: "https://docs.python.org/3/library/bisect.html" }
+---
+
+Dynamic programming (DP) solves a problem by breaking it into smaller subproblems, solving each **once**, and reusing the answers. It applies when a brute-force recursion would solve the same subproblems again and again. DP has a reputation for being hard, but most interview DP problems fall into a handful of families, and every one is solved with the same four steps. Data Engineering interviews ask DP less often than arrays or graphs, but medium problems such as Coin Change, House Robber and Longest Common Subsequence do come up.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How dynamic programming works
+
+DP fits when a problem has two properties:
+
+- **Overlapping subproblems:** the same smaller question is asked many times (the number of ways to reach step 5 is needed to compute both step 6 and step 7).
+- **Optimal substructure:** the best answer for the whole problem is built from best answers to subproblems.
+
+### The four-step method
+
+1. **State:** what does `dp[i]` (or `dp[i][j]`) mean, in one sentence? "The fewest coins that make amount `a`."
+2. **Transition:** how is a state computed from smaller states? `dp[a] = 1 + min(dp[a - c] for each coin c)`.
+3. **Base cases and order:** which states are known directly (`dp[0] = 0`), and in what order must you fill the rest so dependencies are ready?
+4. **Answer:** which state holds the result (`dp[amount]`, `max(dp)`, `dp[0][last]`)?
+
+Writing the state sentence down before coding prevents most DP bugs.
+
+### Top-down or bottom-up
+
+```python
+from functools import lru_cache
+
+
+def climb_stairs_naive(steps):
+    if steps <= 1:
+        return 1
+    return climb_stairs_naive(steps - 1) + climb_stairs_naive(steps - 2)   # O(2^steps)
+
+
+@lru_cache(maxsize=None)
+def climb_stairs_memo(steps):                     # top-down: recursion + cache
+    if steps <= 1:
+        return 1
+    return climb_stairs_memo(steps - 1) + climb_stairs_memo(steps - 2)
+
+
+def climb_stairs_table(steps):                    # bottom-up: fill a table in order
+    ways = [1, 1] + [0] * max(0, steps - 1)
+    for i in range(2, steps + 1):
+        ways[i] = ways[i - 1] + ways[i - 2]
+    return ways[steps]
+
+
+def climb_stairs(steps):                          # bottom-up with O(1) memory
+    prev, cur = 1, 1
+    for _ in range(steps - 1):
+        prev, cur = cur, prev + cur
+    return cur
+
+
+for s in range(1, 20):
+    assert climb_stairs_naive(s) == climb_stairs_memo(s) == climb_stairs_table(s) == climb_stairs(s)
+assert climb_stairs(2) == 2 and climb_stairs(3) == 3 and climb_stairs(45) == 1836311903
+```
+
+| | Top-down (memoisation) | Bottom-up (tabulation) |
+|---|---|---|
+| How | Recursive function plus a cache | Loop filling a table in dependency order |
+| Pros | Close to the recurrence; computes only needed states | No recursion limit; easy to reduce memory |
+| Cons | Recursion depth; cache overhead | Must work out the fill order |
+
+Both are fine in interviews. A common path is to write the recursion, add `@lru_cache` (or `functools.cache`), then convert to a table if asked about memory or recursion depth.
+
+## Recognising the pattern
+
+- "Number of ways", "minimum cost", "maximum profit", "longest / shortest", "is it possible".
+- Choices at each step, where a greedy choice can be wrong.
+- A brute-force recursion with repeated arguments.
+- Two strings compared character by character (edit distance, subsequences, interleaving).
+- "Pick items with a total of exactly / at most T" (knapsack).
+- Constraints such as n ≤ 1,000 to 10,000 that allow O(n²) or O(n · T) tables.
+
+If the question asks for **all** solutions, it is backtracking; if it asks for a count or an optimum, think DP.
+
+## 1D DP: one index of state
+
+### Cost and house-robber choices
+
+```python
+def min_cost_climbing_stairs(cost):
+    # best_k = cheapest cost to stand on step k (you may start on step 0 or 1).
+    two_back, one_back = 0, 0
+    for i in range(2, len(cost) + 1):
+        two_back, one_back = one_back, min(one_back + cost[i - 1], two_back + cost[i - 2])
+    return one_back
+
+
+def rob(houses):
+    # best = max money from houses so far; each house: skip it, or take it plus best from two back.
+    two_back, one_back = 0, 0
+    for money in houses:
+        two_back, one_back = one_back, max(one_back, two_back + money)
+    return one_back
+
+
+def rob_circle(houses):
+    if len(houses) == 1:
+        return houses[0]
+    return max(rob(houses[1:]), rob(houses[:-1]))     # first and last cannot both be taken
+
+
+assert min_cost_climbing_stairs([10, 15, 20]) == 15
+assert min_cost_climbing_stairs([1, 100, 1, 1, 1, 100, 1, 1, 100, 1]) == 6
+assert rob([1, 2, 3, 1]) == 4 and rob([2, 7, 9, 3, 1]) == 12 and rob([]) == 0
+assert rob_circle([2, 3, 2]) == 3 and rob_circle([1, 2, 3, 1]) == 4 and rob_circle([5]) == 5
+```
+
+### Counting decodings
+
+```python
+def num_decodings(s):
+    # ways_i = number of ways to decode the first i characters.
+    if not s:
+        return 0
+    prev, cur = 1, (0 if s[0] == "0" else 1)          # ways for 0 and 1 characters
+    for i in range(2, len(s) + 1):
+        ways = 0
+        if s[i - 1] != "0":
+            ways += cur                               # single digit 1-9
+        if 10 <= int(s[i - 2:i]) <= 26:
+            ways += prev                              # two digits 10-26
+        prev, cur = cur, ways
+    return cur
+
+
+assert num_decodings("12") == 2 and num_decodings("226") == 3
+assert num_decodings("06") == 0 and num_decodings("10") == 1 and num_decodings("2101") == 1
+```
+
+### Unbounded choices: Coin Change and Word Break
+
+```python
+def coin_change(coins, amount):
+    INF = float("inf")
+    fewest = [0] + [INF] * amount                     # fewest[a] = fewest coins making a
+    for a in range(1, amount + 1):
+        for c in coins:
+            if c <= a and fewest[a - c] + 1 < fewest[a]:
+                fewest[a] = fewest[a - c] + 1
+    return -1 if fewest[amount] == INF else fewest[amount]
+
+
+def word_break(s, words):
+    vocab = set(words)
+    longest = max(map(len, vocab), default=0)
+    ok = [True] + [False] * len(s)                    # ok[i]: s[:i] can be segmented
+    for i in range(1, len(s) + 1):
+        for j in range(max(0, i - longest), i):
+            if ok[j] and s[j:i] in vocab:
+                ok[i] = True
+                break
+    return ok[len(s)]
+
+
+assert coin_change([1, 2, 5], 11) == 3 and coin_change([2], 3) == -1 and coin_change([1], 0) == 0
+assert coin_change([186, 419, 83, 408], 6249) == 20
+assert word_break("leetcode", ["leet", "code"]) is True
+assert word_break("applepenapple", ["apple", "pen"]) is True
+assert word_break("catsandog", ["cats", "dog", "sand", "and", "cat"]) is False
+```
+
+Coin Change is the standard example of greedy failing: with coins `[1, 3, 4]` and amount 6, greedy takes 4 + 1 + 1 (three coins) while DP finds 3 + 3 (two).
+
+### Tracking more than one value: Maximum Product Subarray
+
+A negative number turns the smallest product into the largest, so track both.
+
+```python
+def max_product(nums):
+    best = hi = lo = nums[0]
+    for v in nums[1:]:
+        candidates = (v, hi * v, lo * v)
+        hi, lo = max(candidates), min(candidates)
+        best = max(best, hi)
+    return best
+
+
+assert max_product([2, 3, -2, 4]) == 6
+assert max_product([-2, 0, -1]) == 0
+assert max_product([-2, 3, -4]) == 24
+```
+
+### State machines: Best Time to Buy and Sell with Cooldown
+
+When each day can be in one of several situations, give each situation its own DP value.
+
+```python
+def max_profit_cooldown(prices):
+    holding, sold, resting = float("-inf"), 0, 0      # best profit ending today in each state
+    for p in prices:
+        holding, sold, resting = (
+            max(holding, resting - p),                # keep holding, or buy after resting
+            holding + p,                              # sell today (cooldown tomorrow)
+            max(resting, sold),                       # do nothing
+        )
+    return max(sold, resting)
+
+
+assert max_profit_cooldown([1, 2, 3, 0, 2]) == 3
+assert max_profit_cooldown([1]) == 0
+```
+
+### Subsequences: Longest Increasing Subsequence
+
+```python
+import bisect
+
+
+def length_of_lis_quadratic(nums):
+    ending_at = [1] * len(nums)                       # LIS that ends exactly at index i
+    for i in range(len(nums)):
+        for j in range(i):
+            if nums[j] < nums[i]:
+                ending_at[i] = max(ending_at[i], ending_at[j] + 1)
+    return max(ending_at, default=0)
+
+
+def length_of_lis(nums):
+    tails = []                                        # tails[k] = smallest tail of an increasing run of length k + 1
+    for v in nums:
+        i = bisect.bisect_left(tails, v)
+        if i == len(tails):
+            tails.append(v)
+        else:
+            tails[i] = v
+    return len(tails)
+
+
+for case, expected in [([10, 9, 2, 5, 3, 7, 101, 18], 4), ([0, 1, 0, 3, 2, 3], 4), ([7, 7, 7], 1), ([], 0)]:
+    assert length_of_lis_quadratic(case) == expected == length_of_lis(case)
+```
+
+The O(n log n) version keeps the smallest possible tail for each length; `tails` is not itself a valid subsequence, only its length is meaningful.
+
+### Counting Bits: reuse a smaller answer
+
+```python
+def count_bits(limit):
+    bits = [0] * (limit + 1)
+    for i in range(1, limit + 1):
+        bits[i] = bits[i >> 1] + (i & 1)              # drop the last bit, add it back
+    return bits
+
+
+assert count_bits(5) == [0, 1, 1, 2, 1, 2]
+assert all(count_bits(64)[i] == bin(i).count("1") for i in range(65))
+```
+
+## 2D DP: grids and two strings
+
+### Grid paths
+
+```python
+def unique_paths(rows, cols):
+    row = [1] * cols                                  # one row of the table is enough
+    for _ in range(1, rows):
+        for c in range(1, cols):
+            row[c] += row[c - 1]                      # from above (old row[c]) + from the left
+    return row[-1]
+
+
+assert unique_paths(3, 7) == 28 and unique_paths(3, 2) == 3 and unique_paths(1, 1) == 1
+```
+
+### Two strings: LCS and edit distance
+
+State: `dp[i][j]` is the answer for the first `i` characters of `a` and the first `j` of `b`. Row 0 and column 0 are the empty-prefix base cases.
+
+```python
+def longest_common_subsequence(a, b):
+    prev = [0] * (len(b) + 1)
+    for i in range(1, len(a) + 1):
+        cur = [0] * (len(b) + 1)
+        for j in range(1, len(b) + 1):
+            if a[i - 1] == b[j - 1]:
+                cur[j] = prev[j - 1] + 1              # extend the common subsequence
+            else:
+                cur[j] = max(prev[j], cur[j - 1])     # drop a char from one string
+        prev = cur
+    return prev[-1]
+
+
+def edit_distance(a, b):
+    prev = list(range(len(b) + 1))                    # turning "" into b[:j] takes j inserts
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)                      # turning a[:i] into "" takes i deletes
+        for j in range(1, len(b) + 1):
+            if a[i - 1] == b[j - 1]:
+                cur[j] = prev[j - 1]
+            else:
+                cur[j] = 1 + min(prev[j],             # delete a[i-1]
+                                 cur[j - 1],          # insert b[j-1]
+                                 prev[j - 1])         # replace
+        prev = cur
+    return prev[-1]
+
+
+def is_interleave(s1, s2, s3):
+    if len(s1) + len(s2) != len(s3):
+        return False
+    ok = [[False] * (len(s2) + 1) for _ in range(len(s1) + 1)]
+    ok[0][0] = True
+    for i in range(len(s1) + 1):
+        for j in range(len(s2) + 1):
+            if i and s1[i - 1] == s3[i + j - 1] and ok[i - 1][j]:
+                ok[i][j] = True
+            if j and s2[j - 1] == s3[i + j - 1] and ok[i][j - 1]:
+                ok[i][j] = True
+    return ok[len(s1)][len(s2)]
+
+
+assert longest_common_subsequence("abcde", "ace") == 3 and longest_common_subsequence("abc", "def") == 0
+assert edit_distance("horse", "ros") == 3 and edit_distance("intention", "execution") == 5
+assert edit_distance("", "abc") == 3
+assert is_interleave("aabcc", "dbbca", "aadbbcbcac") is True
+assert is_interleave("aabcc", "dbbca", "aadbbbaccc") is False
+assert is_interleave("", "", "") is True
+```
+
+### Pattern matching: regular expressions with . and *
+
+```python
+from functools import lru_cache
+
+
+def is_match(text, pattern):
+    @lru_cache(maxsize=None)
+    def match(i, j):                                  # does text[i:] match pattern[j:]?
+        if j == len(pattern):
+            return i == len(text)
+        first = i < len(text) and pattern[j] in (text[i], ".")
+        if j + 1 < len(pattern) and pattern[j + 1] == "*":
+            return match(i, j + 2) or (first and match(i + 1, j))   # zero copies, or one more
+        return first and match(i + 1, j + 1)
+
+    return match(0, 0)
+
+
+assert is_match("aa", "a") is False
+assert is_match("aa", "a*") is True
+assert is_match("ab", ".*") is True
+assert is_match("aab", "c*a*b") is True
+assert is_match("mississippi", "mis*is*p*.") is False
+```
+
+### Palindromic substrings: expand around centres
+
+Palindrome problems can be solved with a DP table (`is_pal[i][j]`), but expanding from each of the 2n − 1 centres is simpler and uses O(1) space.
+
+```python
+def expand(s, left, right):
+    while left >= 0 and right < len(s) and s[left] == s[right]:
+        left -= 1
+        right += 1
+    return left + 1, right                            # s[left+1:right] is the palindrome
+
+
+def longest_palindrome(s):
+    best = (0, 0)
+    for center in range(len(s)):
+        for lo, hi in (expand(s, center, center), expand(s, center, center + 1)):
+            if hi - lo > best[1] - best[0]:
+                best = (lo, hi)
+    return s[best[0]:best[1]]
+
+
+def count_substrings(s):
+    total = 0
+    for center in range(2 * len(s) - 1):
+        left, right = center // 2, center // 2 + center % 2
+        while left >= 0 and right < len(s) and s[left] == s[right]:
+            total += 1
+            left -= 1
+            right += 1
+    return total
+
+
+assert longest_palindrome("babad") in ("bab", "aba") and longest_palindrome("cbbd") == "bb"
+assert longest_palindrome("a") == "a"
+assert count_substrings("abc") == 3 and count_substrings("aaa") == 6
+```
+
+## Knapsack: choose items to reach a total
+
+In 0/1 knapsack each item is used at most once, so loop totals **downwards**; in unbounded knapsack items repeat, so loop **upwards**.
+
+```python
+def can_partition(nums):
+    total = sum(nums)
+    if total % 2:
+        return False
+    target = total // 2
+    reachable = [True] + [False] * target            # reachable[t]: some subset sums to t
+    for v in nums:
+        for t in range(target, v - 1, -1):           # downwards: each number used once
+            reachable[t] = reachable[t] or reachable[t - v]
+    return reachable[target]
+
+
+def coin_change_ii(amount, coins):
+    ways = [1] + [0] * amount                        # ways[a]: combinations making a
+    for c in coins:                                  # coins outer: counts combinations, not orders
+        for a in range(c, amount + 1):               # upwards: coins may repeat
+            ways[a] += ways[a - c]
+    return ways[amount]
+
+
+def find_target_sum_ways(nums, target):
+    # Split into a plus-set P and minus-set M: P - M = target, P + M = total -> P = (total + target) / 2.
+    total = sum(nums)
+    if abs(target) > total or (total + target) % 2:
+        return 0
+    goal = (total + target) // 2
+    ways = [1] + [0] * goal
+    for v in nums:
+        for t in range(goal, v - 1, -1):
+            ways[t] += ways[t - v]
+    return ways[goal]
+
+
+assert can_partition([1, 5, 11, 5]) is True and can_partition([1, 2, 3, 5]) is False
+assert coin_change_ii(5, [1, 2, 5]) == 4 and coin_change_ii(3, [2]) == 0 and coin_change_ii(0, [7]) == 1
+assert find_target_sum_ways([1, 1, 1, 1, 1], 3) == 5 and find_target_sum_ways([1], 1) == 1
+assert find_target_sum_ways([0, 0, 1], 1) == 4          # zeros can take either sign
+```
+
+Swapping the loops in `coin_change_ii` (amounts outside, coins inside) counts ordered sequences instead of combinations, a classic bug.
+
+## Interval DP: Burst Balloons
+
+When the order of operations matters, think about the **last** action inside an interval instead of the first.
+
+```python
+def max_coins(nums):
+    vals = [1] + nums + [1]
+    size = len(vals)
+    best = [[0] * size for _ in range(size)]           # best[l][r]: max coins bursting all strictly between l and r
+    for width in range(2, size):
+        for left in range(0, size - width):
+            right = left + width
+            for last in range(left + 1, right):        # balloon burst last in (left, right)
+                gain = vals[left] * vals[last] * vals[right]
+                best[left][right] = max(best[left][right], best[left][last] + gain + best[last][right])
+    return best[0][size - 1]
+
+
+assert max_coins([3, 1, 5, 8]) == 167
+assert max_coins([1, 5]) == 10
+```
+
+Choosing the balloon burst **last** makes its neighbours fixed (the interval boundaries), which splits the problem into two independent halves.
+
+## Complexity
+
+| Problem family | Time | Space (after optimisation) |
+|---|---|---|
+| Climbing stairs, house robber, decode ways, cooldown | O(n) | O(1) |
+| Coin change (amount A, k coins) | O(A · k) | O(A) |
+| Word break (n characters, longest word L) | O(n · L²) with slicing | O(n) |
+| LIS | O(n²) simple, O(n log n) with tails | O(n) |
+| Unique paths | O(rows · cols) | O(cols) |
+| LCS, edit distance, interleaving | O(m · n) | O(n) with two rows (the interleaving code above keeps the full table) |
+| Regex matching | O(m · n) states | O(m · n) cache |
+| Palindromic substrings (expand) | O(n²) | O(1) |
+| Partition, target sum, coin change II | O(n · T) | O(T) |
+| Burst balloons | O(n³) | O(n²) |
+
+## Variations and common bugs
+
+- **No clear state sentence**, leading to an off-by-one between "first i items" and "item i".
+- **Wrong base case:** `dp[0] = 1` for counting problems (one way to make nothing), `0` for cost problems.
+- **Wrong loop direction in knapsack:** downwards for 0/1, upwards for unbounded.
+- **Loop order swapped** in Coin Change II (combinations versus permutations).
+- **Initialising minimum problems with 0** instead of infinity.
+- **Mutable default caches** or forgetting that `lru_cache` arguments must be hashable (convert lists to tuples).
+- **Recursion depth** in top-down DP for large inputs; switch to a table.
+- **Variants:** minimum path sum, unique paths with obstacles, longest palindromic subsequence, distinct subsequences, stock problems with k transactions, minimum cost for tickets, perfect squares.
+
+## Dynamic programming in data-engineering work
+
+- **Fuzzy matching and deduplication.** Edit distance (Levenshtein) scores how close two names or addresses are, which is a core step in record linkage. Comparing every pair is O(pairs × m × n), so pipelines first group candidates with a cheap blocking key (postcode, first letters) and only score within groups.
+- **Diffs.** Longest common subsequence underlies line-based diffs, which is how you compare two versions of a SQL model or a config file.
+- **Incremental computation.** Reusing earlier results instead of recomputing is the same idea as memoisation: incremental models process only new partitions and combine them with stored aggregates, and caching expensive lookups with `functools.lru_cache` avoids repeated API calls.
+- **Packing and allocation.** Choosing which small files to combine into output files close to a target size, or which jobs fit in a time budget, are knapsack-style problems; in practice a greedy heuristic is often good enough, and knowing the exact DP tells you how far from optimal it might be.
+
+```python
+from functools import lru_cache
+
+
+@lru_cache(maxsize=None)
+def normalised_distance(a, b):
+    """Edit distance scaled to 0..1, cached because the same pairs recur across batches."""
+    a, b = a.casefold().strip(), b.casefold().strip()
+    if not a and not b:
+        return 0.0
+    prev = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)
+        for j in range(1, len(b) + 1):
+            cur[j] = prev[j - 1] if a[i - 1] == b[j - 1] else 1 + min(prev[j], cur[j - 1], prev[j - 1])
+        prev = cur
+    return prev[-1] / max(len(a), len(b))
+
+
+names = ["Jon Smith", "John Smith", "Jane Smyth", "jon smith "]
+pairs = [(x, y) for i, x in enumerate(names) for y in names[i + 1:] if normalised_distance(x, y) <= 0.2]
+assert pairs == [("Jon Smith", "John Smith"), ("Jon Smith", "jon smith "), ("John Smith", "jon smith ")]
+print(pairs)
+```
+
+```text
+[('Jon Smith', 'John Smith'), ('Jon Smith', 'jon smith '), ('John Smith', 'jon smith ')]
+```
+
+The 0.2 threshold is only an example; in practice you tune it on labelled pairs and accept that some true matches are missed and some false ones are flagged for review.
+
+## Problems in this pattern
+
+Recommended order, easy to hard:
+
+1. **Climbing Stairs** (Easy): ways to step i = ways to step i − 1 + ways to step i − 2.
+2. **Min Cost Climbing Stairs** (Easy): cheapest cost to stand on each step from the two below.
+3. **Counting Bits** (Easy): `bits[i] = bits[i >> 1] + (i & 1)`.
+4. **House Robber** (Medium): for each house, skip it or take it plus the best from two houses back.
+5. **House Robber II** (Medium): run House Robber without the first house and without the last; take the best.
+6. **Decode Ways** (Medium): add the one-digit and the valid two-digit ways; zeros need care.
+7. **Coin Change** (Medium): fewest coins for each amount from 0 up to the target.
+8. **Maximum Product Subarray** (Medium): track the largest and smallest product ending here.
+9. **Word Break** (Medium): a prefix is breakable if a shorter breakable prefix plus a dictionary word forms it.
+10. **Longest Increasing Subsequence** (Medium): O(n²) DP, or smallest tails with binary search.
+11. **Unique Paths** (Medium): paths to a cell = paths from above + paths from the left.
+12. **Longest Common Subsequence** (Medium): match extends the diagonal, mismatch takes the better neighbour.
+13. **Longest Palindromic Substring** (Medium): expand around all 2n − 1 centres.
+14. **Palindromic Substrings** (Medium): count every successful expansion around each centre.
+15. **Best Time to Buy/Sell with Cooldown** (Medium): three states (holding, just sold, resting) per day.
+16. **Partition Equal Subset Sum** (Medium): 0/1 knapsack for half the total, looping sums downwards.
+17. **Coin Change II** (Medium): coins in the outer loop to count combinations, amounts upwards.
+18. **Target Sum** (Medium): convert to counting subsets that sum to (total + target) / 2.
+19. **Interleaving String** (Medium): a 2D table of how many characters come from each string.
+20. **Edit Distance** (Medium): match is free; otherwise one plus the best of insert, delete and replace.
+21. **Regular Expression Matching** (Hard): memoised match of suffixes; `*` means zero copies or one more.
+22. **Burst Balloons** (Hard): interval DP over the balloon burst last in each interval.
+
+## Practice questions
+
+<details>
+<summary>How do you decide that a problem needs dynamic programming rather than greedy?</summary>
+
+Look for a counterexample to the greedy choice. In Coin Change with coins 1, 3 and 4 and amount 6, always taking the largest coin gives 4 + 1 + 1, but 3 + 3 is better. If a locally best choice can block a better overall answer, and the problem asks for a count or an optimum, use DP. Greedy needs a proof that the local choice is always safe.
+
+</details>
+
+<details>
+<summary>What is the difference between memoisation and tabulation?</summary>
+
+Memoisation is top-down: write the recursion and cache each result, so only reachable states are computed, at the cost of recursion depth and cache overhead. Tabulation is bottom-up: fill a table in an order where dependencies are already computed, which avoids recursion and makes it easy to keep only the rows you still need.
+
+</details>
+
+<details>
+<summary>Why does the inner loop run downwards in 0/1 knapsack but upwards in unbounded knapsack?</summary>
+
+Going downwards, `dp[t - v]` still holds the value from before this item was considered, so the item is counted at most once. Going upwards, `dp[t - v]` may already include the current item, which allows it to be used again, exactly what unbounded problems such as Coin Change II need.
+
+</details>
+
+<details>
+<summary>How do you reduce the memory of LCS from O(m · n) to O(n)?</summary>
+
+Each row only depends on the previous row and the current row, so keep two one-dimensional arrays and swap them after each row. If you also need to reconstruct the subsequence, not just its length, you need the full table or a divide-and-conquer approach such as Hirschberg's algorithm.
+
+</details>
+
+<details>
+<summary>You need to find near-duplicate company names among 5 million records. How do you use edit distance without comparing every pair?</summary>
+
+Comparing all pairs is about 12.5 trillion comparisons, which is infeasible. Normalise names first (case, punctuation, legal suffixes), then block: group records by a cheap key such as a phonetic code, the first few characters or tokens, and compute edit distance only within each block. Cache repeated comparisons and tune the threshold on labelled examples.
+
+</details>
+
+## Key takeaways
+
+- DP applies when subproblems overlap and the optimum is built from optimal sub-answers.
+- Write the state sentence, the transition, the base cases and the answer before coding.
+- Top-down with `lru_cache` is quickest to write; bottom-up avoids recursion and makes memory reduction easy.
+- Learn the families: 1D, grid, two-string, knapsack (loop direction matters) and interval DP.
+- Edit distance and LCS power fuzzy matching and diffs; memoisation is the same idea as incremental, cached computation.
