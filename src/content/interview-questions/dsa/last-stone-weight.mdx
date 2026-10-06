@@ -1,0 +1,129 @@
+---
+title: "Last Stone Weight: Simulating Smashes with a Max-Heap"
+seoTitle: "Last Stone Weight with a Max-Heap in Python"
+description: "Repeatedly smash the two heaviest stones and report what is left, using a max-heap built from Python's min-heap with negated values. Code, walkthrough and tests."
+technology: ["dsa"]
+topic: ["heaps-priority-queues"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+shortAnswer: "Each round needs the two largest remaining stones, which is exactly what a max-heap provides. Python's heapq is a min-heap, so store negated weights. Pop twice, and if the weights differ push back the difference; stop when at most one stone remains and return its weight or 0. Each round is O(log n) and there are at most n - 1 rounds, so O(n log n) time and O(n) space."
+followUps: ["How would you solve it if weights were bounded by a small number (counting sort / bucket approach)?", "What if you needed to minimise the final weight by choosing which stones to smash?", "How do you implement a max-heap with heapq for objects, not numbers?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+sources:
+  - { label: "Python documentation: heapq - Heap queue algorithm", url: "https://docs.python.org/3/library/heapq.html" }
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/kth-largest-element-in-a-stream"
+---
+
+## Problem
+
+You have a collection of stones with positive integer weights. In each round, take the two heaviest stones, with weights `x <= y`, and smash them together. If they weigh the same, both are destroyed. Otherwise the lighter one is destroyed and the heavier one is replaced by a stone of weight `y - x`. Repeat until at most one stone is left, and return its weight, or 0 if none remain.
+
+This is widely known as LeetCode 1046 (Last Stone Weight). It is a pure simulation whose only challenge is getting the two largest values quickly every round.
+
+Constraints for this version: 1 to 10,000 stones, each weighing 1 to 1,000.
+
+## Examples
+
+| Stones | Rounds | Result |
+|---|---|---|
+| `[6, 13, 4, 9]` | 13 vs 9 leaves 4; 6 vs 4 leaves 2; 4 vs 2 leaves 2 | `2` |
+| `[7, 7]` | both destroyed | `0` |
+| `[11]` | nothing to smash | `11` |
+| `[3, 8, 1]` | 8 vs 3 gives 5; 5 vs 1 gives 4 | `4` |
+
+## Approach 1: brute force
+
+Sort the list every round and take the last two values.
+
+```python
+def last_stone_sorting(stones):
+    stones = list(stones)
+    while len(stones) > 1:
+        stones.sort()
+        y = stones.pop()
+        x = stones.pop()
+        if y != x:
+            stones.append(y - x)
+    return stones[0] if stones else 0
+```
+
+Up to `n - 1` rounds with an O(n log n) sort each: O(n^2 log n). (Python's sort is fast on nearly sorted input, but the bound is still poor.)
+
+## Approach 2: optimal
+
+**Key insight.** The operation "repeatedly remove the largest, sometimes insert a new value" is the definition of a priority queue. A max-heap does both in O(log n). Python's `heapq` only offers a min-heap, so push `-weight` and negate again when popping.
+
+**Walkthrough** for `[6, 13, 4, 9]` (heap shown as positive weights):
+
+| Heap | Pop `y` | Pop `x` | Push |
+|---|---|---|---|
+| 13, 9, 6, 4 | 13 | 9 | 4 |
+| 6, 4, 4 | 6 | 4 | 2 |
+| 4, 2 | 4 | 2 | 2 |
+| 2 | | | one stone left: answer 2 |
+
+```python
+import heapq
+
+def last_stone_weight(stones):
+    heap = [-w for w in stones]
+    heapq.heapify(heap)                         # O(n)
+    while len(heap) > 1:
+        y = -heapq.heappop(heap)                # heaviest
+        x = -heapq.heappop(heap)                # second heaviest
+        if y != x:
+            heapq.heappush(heap, -(y - x))
+    return -heap[0] if heap else 0
+```
+
+**Complexity.** `heapify` is O(n). Each round pops twice and pushes at most once, all O(log n), and every round reduces the number of stones by at least one, so O(n log n) in total. Memory is O(n).
+
+### Bounded weights
+
+When weights are small integers (here at most 1,000), a counting array indexed by weight also works: walk from the heaviest bucket down, pairing stones. It runs in O(n + W) for maximum weight `W`. Mention it as an alternative if asked; the heap is the expected answer.
+
+## Tests
+
+```python
+import random
+
+cases = [
+    ([6, 13, 4, 9], 2),
+    ([7, 7], 0),
+    ([11], 11),
+    ([3, 8, 1], 4),
+    ([1, 1, 1], 1),
+    ([2, 2, 2, 2], 0),
+    ([1000, 1], 999),
+]
+for fn in (last_stone_sorting, last_stone_weight):
+    for stones, want in cases:
+        original = list(stones)
+        assert fn(stones) == want, (fn.__name__, stones)
+        assert stones == original, "input list was modified"
+
+rng = random.Random(22)
+for _ in range(500):
+    stones = [rng.randint(1, 30) for _ in range(rng.randint(1, 12))]
+    assert last_stone_sorting(stones) == last_stone_weight(stones), stones
+
+big = [rng.randint(1, 1000) for _ in range(10_000)]
+assert last_stone_weight(big) == last_stone_sorting(big)
+print("all last stone weight tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting to negate** both on push and on pop. Pushing `y - x` instead of `-(y - x)` silently corrupts the max-heap.
+- **Empty result.** When the last two stones are equal, the heap is empty; return 0 instead of reading `heap[0]`.
+- **Mutating the input.** Building the heap from a new list keeps the caller's data intact.
+- **Single stone** returns its weight without any rounds.
+
+## Where this shows up in data engineering
+
+The max-heap-by-negation trick is the everyday way to get "largest first" ordering from `heapq`, for example when scheduling the biggest files or partitions first so that a pool of workers finishes at about the same time (a greedy longest-processing-time-first strategy). That reduces the long tail where one large task keeps a job running after the others are done.
