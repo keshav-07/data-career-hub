@@ -1,0 +1,206 @@
+---
+title: "Lowest Common Ancestor of a Binary Tree: One Post-Order Search"
+seoTitle: "Lowest Common Ancestor of a Binary Tree"
+description: "Find the deepest node that has two given nodes as descendants, in one recursive pass, plus a parent-pointer version. Python code, walkthrough, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Recurse from the root. If the current node is None, p or q, return it. Otherwise search both subtrees: if both return a node, p and q are on different sides and the current node is their lowest common ancestor; if only one side returns a node, pass that result upward. This visits each node at most once: O(n) time and O(h) stack. An iterative alternative records parent pointers with a traversal, collects p's ancestors in a set and walks up from q until it hits one."
+followUps: ["How does the solution change if p or q might not be in the tree?", "How is it simpler for a binary search tree?", "How would you answer many LCA queries on the same tree quickly?", "What if each node has a parent pointer?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/serialize-and-deserialize-binary-tree"
+next: "interview-questions:dsa/validate-binary-search-tree"
+---
+
+## Problem
+
+You are given the root of a binary tree (not necessarily a search tree) and two distinct nodes `p` and `q` that are both in the tree. Return their **lowest common ancestor**: the deepest node that has both `p` and `q` among its descendants, where a node counts as a descendant of itself.
+
+This is widely known as LeetCode 236 (Lowest Common Ancestor of a Binary Tree). The BST version, which can use ordering, is a separate problem.
+
+Constraints for this version: 2 to 100,000 nodes, unique values, and `p` and `q` both exist.
+
+## Examples
+
+Tree used below (level order `[20, 8, 22, 4, 12, None, 30, None, None, 10, 14]`):
+
+```text
+          20
+        /    \
+       8      22
+      / \       \
+     4   12      30
+        /  \
+      10    14
+```
+
+| `p` | `q` | LCA | Why |
+|---|---|---|---|
+| 10 | 14 | 12 | siblings under 12 |
+| 4 | 14 | 8 | on different sides of 8 |
+| 12 | 14 | 12 | a node is its own ancestor |
+| 10 | 30 | 20 | in different subtrees of the root |
+
+## Approach 1: brute force
+
+Find the root-to-node path for `p` and for `q`, then walk both paths together; the last node they share is the answer.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def path_to(root, target):
+    stack = [(root, [root])]
+    while stack:
+        node, path = stack.pop()
+        if node is target:
+            return path
+        for child in (node.left, node.right):
+            if child:
+                stack.append((child, path + [child]))
+    return None
+
+def lca_by_paths(root, p, q):
+    path_p, path_q = path_to(root, p), path_to(root, q)
+    answer = None
+    for a, b in zip(path_p, path_q):
+        if a is not b:
+            break
+        answer = a
+    return answer
+```
+
+It is easy to explain and O(n) visits, but copying paths costs up to O(n * h) memory on skewed trees.
+
+## Approach 2: optimal
+
+**Key insight.** Ask each subtree a single question: "does this subtree contain `p` or `q`, and if so which node should represent it?" A subtree returns `None` if it contains neither, the found node if it contains one, or the LCA itself once both have been found below a node. The first node at which both the left and right answers are non-empty is the split point, the lowest common ancestor.
+
+If the current node is `p` (or `q`), you can return it immediately without searching below: either the other node is beneath it, in which case this node is the LCA, or the other node is elsewhere, and an ancestor will see results from both sides.
+
+**Walkthrough** for `p = 4`, `q = 14`:
+
+| Node | Left result | Right result | Returns |
+|---|---|---|---|
+| 4 | | | itself (it is `p`) |
+| 10 | None | None | None |
+| 14 | | | itself (it is `q`) |
+| 12 | None (from 10) | 14 | 14 |
+| 8 | 4 | 14 | **8**: both sides found something |
+| 22 | None | None (30 has neither) | None |
+| 20 | 8 | None | 8 |
+
+### Recursive
+
+```python
+def lowest_common_ancestor(root, p, q):
+    if root is None or root is p or root is q:
+        return root
+    left = lowest_common_ancestor(root.left, p, q)
+    right = lowest_common_ancestor(root.right, p, q)
+    if left and right:
+        return root            # p and q are on different sides
+    return left or right       # pass up whichever side found something
+```
+
+### Iterative with parent pointers
+
+Record each node's parent with a traversal that stops once both targets are seen, collect all ancestors of `p`, then walk up from `q` until you reach one of them.
+
+```python
+def lowest_common_ancestor_iterative(root, p, q):
+    parent = {root: None}
+    stack = [root]
+    while p not in parent or q not in parent:
+        node = stack.pop()
+        for child in (node.left, node.right):
+            if child:
+                parent[child] = node
+                stack.append(child)
+    ancestors = set()
+    while p is not None:
+        ancestors.add(p)
+        p = parent[p]
+    while q not in ancestors:
+        q = parent[q]
+    return q
+```
+
+**Complexity.** O(n) time for both. The recursive version uses O(h) stack; the iterative one uses O(n) for the parent dictionary.
+
+## Tests
+
+```python
+from collections import deque
+import random
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+def find(root, val):
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if node:
+            if node.val == val:
+                return node
+            stack.extend([node.left, node.right])
+    return None
+
+tree = build_tree([20, 8, 22, 4, 12, None, 30, None, None, 10, 14])
+cases = [(10, 14, 12), (4, 14, 8), (12, 14, 12), (10, 30, 20), (20, 4, 20), (22, 30, 22)]
+for fn in (lca_by_paths, lowest_common_ancestor, lowest_common_ancestor_iterative):
+    for a, b, want in cases:
+        assert fn(tree, find(tree, a), find(tree, b)).val == want, (fn.__name__, a, b)
+        assert fn(tree, find(tree, b), find(tree, a)).val == want     # order does not matter
+
+two = build_tree([1, 2])                       # smallest tree
+assert lowest_common_ancestor(two, two, two.left) is two
+
+chain = build_tree([1, None, 2, None, 3, None, 4])     # skewed
+assert lowest_common_ancestor(chain, find(chain, 2), find(chain, 4)).val == 2
+
+rng = random.Random(14)
+for _ in range(200):
+    size = rng.randint(2, 40)
+    vals = rng.sample(range(1000), size)
+    t = build_tree(vals)                               # complete tree with unique values
+    a, b = rng.sample(vals, 2)
+    p, q = find(t, a), find(t, b)
+    assert lowest_common_ancestor(t, p, q) is lca_by_paths(t, p, q) is lowest_common_ancestor_iterative(t, p, q)
+print("all lowest common ancestor tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **One node is the ancestor of the other.** The early return handles it; make sure your version returns `p` itself, not its parent.
+- **Compare nodes, not values**, when values might repeat; the problem passes node references for this reason.
+- **Missing nodes.** The short-circuit version assumes both exist. If one may be absent, it would return the other node as if it were the LCA. Then you need to count how many targets were actually found, without the early return.
+- **Many queries.** For repeated queries on a static tree, precompute depths and ancestors (binary lifting) or use an Euler tour with a range-minimum structure to answer each query in O(log n) or O(1).
+
+## Where this shows up in data engineering
+
+Lowest common ancestors answer "where do these two branches meet?" questions in hierarchies: the nearest shared manager of two employees, the smallest category containing two products, or the merge base of two Git branches (Git's merge base is an LCA in the commit graph). In data lineage graphs, the same idea finds the shared upstream source of two datasets that disagree.

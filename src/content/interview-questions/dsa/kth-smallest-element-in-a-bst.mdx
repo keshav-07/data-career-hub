@@ -1,0 +1,221 @@
+---
+title: "Kth Smallest Element in a BST: Inorder Traversal with Early Stop"
+seoTitle: "Kth Smallest Element in a BST"
+description: "Return the k-th smallest value in a binary search tree with an iterative inorder walk that stops after k steps. Python code, follow-up with subtree sizes and tests."
+technology: ["dsa"]
+topic: ["binary-search-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "An inorder traversal of a BST visits values in ascending order, so the k-th node it visits is the answer. Do it iteratively with a stack: push the left spine, pop a node, count it, and stop as soon as the count reaches k, then move to its right subtree. This costs O(h + k) time and O(h) space. If the tree changes often and many queries arrive, store each node's subtree size to answer in O(h)."
+followUps: ["How would you support frequent inserts and deletes along with k-th smallest queries?", "How would you find the k-th largest instead?", "Why is the iterative traversal better than collecting the whole inorder list?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/validate-binary-search-tree"
+next: "interview-questions:dsa/lowest-common-ancestor-of-a-bst"
+---
+
+## Problem
+
+Given the root of a binary search tree with distinct values and an integer `k` between 1 and the number of nodes, return the `k`-th smallest value in the tree (`k = 1` is the minimum).
+
+This is widely known as LeetCode 230 (Kth Smallest Element in a BST). It tests whether you know that inorder traversal of a BST is sorted, and whether you can stop a traversal early.
+
+Constraints for this version: 1 to 10,000 nodes, `1 <= k <= n`.
+
+## Examples
+
+BST built by inserting `41, 20, 65, 11, 29, 50, 91, 32, 72, 99`:
+
+```text
+            41
+          /    \
+        20      65
+       /  \    /  \
+      11  29  50   91
+            \     /  \
+            32   72   99
+```
+
+| `k` | Result | Sorted values for reference |
+|---|---|---|
+| 1 | `11` | 11 20 29 32 41 50 65 72 91 99 |
+| 4 | `32` | |
+| 5 | `41` | the root |
+| 10 | `99` | the maximum |
+
+## Approach 1: brute force
+
+Collect every value with a traversal, sort, and index. Or, slightly better, collect the inorder list (already sorted) and index it.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def kth_smallest_full(root, k):
+    values = []
+
+    def inorder(node):
+        if node:
+            inorder(node.left)
+            values.append(node.val)
+            inorder(node.right)
+
+    inorder(root)
+    return values[k - 1]
+```
+
+O(n) time and O(n) memory regardless of `k`, even when the answer is the very first node visited.
+
+## Approach 2: optimal
+
+**Key insight.** Inorder traversal produces values in ascending order, so you can stop as soon as you have produced `k` of them. An iterative traversal makes stopping trivial.
+
+The iterative inorder loop: walk left from the current node, pushing each node; pop the top (the smallest unvisited value), count it, then continue from its right child.
+
+**Walkthrough** for `k = 4` on the tree above:
+
+| Pop | Count | Next action |
+|---|---|---|
+| 11 | 1 | no right child, pop again |
+| 20 | 2 | go right to 29, push 29 |
+| 29 | 3 | go right to 32, push 32 |
+| 32 | 4 | count equals k: return 32 |
+
+### Iterative
+
+```python
+def kth_smallest(root, k):
+    stack, node = [], root
+    while stack or node:
+        while node:
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        k -= 1
+        if k == 0:
+            return node.val
+        node = node.right
+    raise ValueError("k is larger than the number of nodes")
+```
+
+### Recursive with early exit
+
+```python
+def kth_smallest_recursive(root, k):
+    count, answer = 0, None
+
+    def inorder(node):
+        nonlocal count, answer
+        if node is None or answer is not None:
+            return
+        inorder(node.left)
+        if answer is not None:
+            return
+        count += 1
+        if count == k:
+            answer = node.val
+            return
+        inorder(node.right)
+
+    inorder(root)
+    return answer
+```
+
+**Complexity.** O(h + k) time: you descend the left spine (up to `h` nodes) and then visit `k` nodes. O(h) space for the stack.
+
+### Follow-up: frequent updates
+
+If the tree is modified often and k-th queries are frequent, augment each node with the size of its subtree. Then at each node compare `k` with the size of the left subtree: equal plus one means this node; smaller means go left; larger means go right with `k` reduced by the left size plus one. That is O(h) per query, and sizes are updated along the path on each insert or delete.
+
+```python
+class SizedNode:
+    def __init__(self, val):
+        self.val, self.left, self.right, self.size = val, None, None, 1
+
+def sized_insert(root, val):
+    if root is None:
+        return SizedNode(val)
+    root.size += 1
+    if val < root.val:
+        root.left = sized_insert(root.left, val)
+    else:
+        root.right = sized_insert(root.right, val)
+    return root
+
+def sized_kth(root, k):
+    while root:
+        left_size = root.left.size if root.left else 0
+        if k == left_size + 1:
+            return root.val
+        if k <= left_size:
+            root = root.left
+        else:
+            k -= left_size + 1
+            root = root.right
+    raise ValueError("k out of range")
+```
+
+## Tests
+
+```python
+import random
+
+def bst_from_inserts(values):
+    root = None
+    for v in values:
+        if root is None:
+            root = TreeNode(v)
+            continue
+        node = root
+        while True:
+            if v < node.val:
+                if node.left is None:
+                    node.left = TreeNode(v); break
+                node = node.left
+            else:
+                if node.right is None:
+                    node.right = TreeNode(v); break
+                node = node.right
+    return root
+
+inserts = [41, 20, 65, 11, 29, 50, 91, 32, 72, 99]
+tree = bst_from_inserts(inserts)
+for fn in (kth_smallest_full, kth_smallest, kth_smallest_recursive):
+    for k, want in [(1, 11), (4, 32), (5, 41), (10, 99)]:
+        assert fn(tree, k) == want, (fn.__name__, k)
+    assert fn(bst_from_inserts([7]), 1) == 7
+    skewed = bst_from_inserts(list(range(1, 50)))          # right-skewed chain
+    assert fn(skewed, 49) == 49 and fn(skewed, 1) == 1
+    down = bst_from_inserts(list(range(50, 0, -1)))        # left-skewed chain
+    assert fn(down, 1) == 1 and fn(down, 50) == 50
+
+rng = random.Random(6)
+for _ in range(200):
+    vals = rng.sample(range(-500, 500), rng.randint(1, 60))
+    t = bst_from_inserts(vals)
+    sized = None
+    for v in vals:
+        sized = sized_insert(sized, v)
+    ordered = sorted(vals)
+    for k in range(1, len(vals) + 1):
+        assert kth_smallest(t, k) == ordered[k - 1] == sized_kth(sized, k)
+print("all kth smallest tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Off by one.** `k` is 1-based; `values[k - 1]` and "decrement then check for zero" both respect that.
+- **Not stopping early.** Recursive solutions often keep traversing after finding the answer; guard with a flag or use the iterative version.
+- **k-th largest** is a reverse inorder traversal (right, node, left), not `n - k` unless you know `n`.
+- **Duplicates.** The standard problem has distinct values; if duplicates exist, decide which side they go on and the inorder order still holds.
+
+## Where this shows up in data engineering
+
+Order statistics, such as the k-th value, a median or a percentile, are common in analytics. Engines answer them with sorting or approximate sketches (`percentile_approx` in Spark), and databases can answer "the k-th row by key" quickly from a sorted B-tree index, which is the disk-based relative of a BST. `LIMIT k` over an index-ordered scan is the SQL analogue of stopping the traversal after `k` steps.

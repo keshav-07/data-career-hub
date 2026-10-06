@@ -1,0 +1,154 @@
+---
+title: "Same Tree: Comparing Two Binary Trees Recursively and Iteratively"
+seoTitle: "Same Tree: Compare Two Binary Trees"
+description: "Check whether two binary trees have identical shape and values with a simultaneous traversal. Recursive and queue-based Python solutions, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Walk both trees in lockstep. Two empty nodes match; one empty and one non-empty do not; two non-empty nodes match only if their values are equal and their left subtrees match and their right subtrees match. Stop at the first difference. This visits each node pair once: O(min(n, m)) time in the worst case O(n), and O(h) stack space, or O(w) with an iterative queue."
+followUps: ["How would you check if one tree is a mirror of the other?", "Why does comparing in-order traversals alone not prove two trees are the same?", "How would you compare two very large trees stored on different machines?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/balanced-binary-tree"
+next: "interview-questions:dsa/subtree-of-another-tree"
+---
+
+## Problem
+
+Given the roots of two binary trees, return `True` if they are the same: they have exactly the same shape, and nodes in the same positions hold equal values. Otherwise return `False`.
+
+This is widely known as LeetCode 100 (Same Tree). It is short, but the same comparison is reused inside harder problems such as Subtree of Another Tree.
+
+Constraints for this version: each tree has 0 to 100 nodes in the classic version; values are integers.
+
+## Examples
+
+| `p` (level order) | `q` (level order) | Result | Why |
+|---|---|---|---|
+| `[3, 9, 4]` | `[3, 9, 4]` | `True` | identical |
+| `[3, 9]` | `[3, None, 9]` | `False` | same values, different shape |
+| `[3, 9, 4]` | `[3, 4, 9]` | `False` | children swapped |
+| `[]` | `[]` | `True` | both empty |
+
+## Approach 1: brute force
+
+Serialise each tree, including markers for missing children, and compare the strings. The markers matter: without them, different shapes can produce the same sequence.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def serialise(node, out):
+    if node is None:
+        out.append("#")
+        return out
+    out.append(str(node.val))
+    serialise(node.left, out)
+    serialise(node.right, out)
+    return out
+
+def is_same_tree_serialised(p, q):
+    return serialise(p, []) == serialise(q, [])
+```
+
+O(n + m) time and O(n + m) extra memory, and it always walks both trees fully, even if the roots differ.
+
+## Approach 2: optimal
+
+**Key insight.** Compare the two trees node by node in a single traversal and return as soon as anything differs. There are only three cases at each pair of positions: both empty (match), exactly one empty (mismatch), both present (compare values, then children).
+
+### Recursive
+
+```python
+def is_same_tree(p, q):
+    if p is None and q is None:
+        return True
+    if p is None or q is None:
+        return False
+    return (p.val == q.val
+            and is_same_tree(p.left, q.left)
+            and is_same_tree(p.right, q.right))
+```
+
+### Iterative
+
+Push pairs of nodes onto a queue and check each pair with the same three rules.
+
+```python
+from collections import deque
+
+def is_same_tree_iterative(p, q):
+    queue = deque([(p, q)])
+    while queue:
+        a, b = queue.popleft()
+        if a is None and b is None:
+            continue
+        if a is None or b is None or a.val != b.val:
+            return False
+        queue.append((a.left, b.left))
+        queue.append((a.right, b.right))
+    return True
+```
+
+**Walkthrough** for `p = [3, 9]` and `q = [3, None, 9]`: the roots both hold 3. Next pair: `p.left` is 9 but `q.left` is `None`, so exactly one is empty and the answer is `False`.
+
+**Complexity.** O(n) time in the worst case (when the trees are equal), and the comparison stops early otherwise. The recursive version uses O(h) stack; the iterative one uses O(w) queue memory.
+
+## Tests
+
+```python
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([3, 9, 4], [3, 9, 4], True),
+    ([3, 9], [3, None, 9], False),
+    ([3, 9, 4], [3, 4, 9], False),
+    ([], [], True),
+    ([1], [], False),
+    ([1], [1], True),
+    ([1, 1], [1, None, 1], False),              # duplicates, different shape
+    ([5, 4, None, 3, None, 2], [5, 4, None, 3, None, 2], True),   # left-skewed
+]
+for fn in (is_same_tree_serialised, is_same_tree, is_same_tree_iterative):
+    for a, b, want in cases:
+        assert fn(build_tree(a), build_tree(b)) == want, (fn.__name__, a, b)
+        assert fn(build_tree(b), build_tree(a)) == want   # symmetric
+
+# negative and multi-digit values must not collide in the serialised form
+assert not is_same_tree_serialised(build_tree([12]), build_tree([1, 2]))
+print("all same tree tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Checking `p.val == q.val` before checking for `None`** raises `AttributeError`. Handle the empty cases first.
+- **Comparing traversals without null markers.** Two different shapes can share an in-order or pre-order sequence; `[3, 9]` and `[3, None, 9]` share the pre-order `3, 9`.
+- **Joining values without separators** in a serialisation makes `12` and `1, 2` look alike. Keep values as separate list items or use a delimiter.
+- **Comparing node identity** (`p is q`) instead of values answers a different question.
+
+## Where this shows up in data engineering
+
+Structural comparison is what schema diffing does: checking whether two nested schemas (a Parquet or Avro schema, a nested `StructType` in Spark) have the same fields, in the same structure, with the same types, and reporting the first difference. Comparing two plans or two JSON configs field by field follows the same lockstep walk.

@@ -1,0 +1,181 @@
+---
+title: "Subtree of Another Tree: Brute-Force Matching and Linear Serialisation"
+seoTitle: "Subtree of Another Tree in Python"
+description: "Decide whether one binary tree appears as a complete subtree of another: same-tree checks at every node, then an O(m + n) serialisation with KMP. Python and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "Medium"
+shortAnswer: "The simple answer runs a same-tree comparison from every node of the big tree, which is O(m * n) in the worst case and usually accepted. For a linear bound, serialise both trees in pre-order with explicit markers for missing children, so that a subtree becomes a contiguous run of tokens, then search for the small sequence in the big one with KMP. That is O(m + n) time and space."
+followUps: ["Why are null markers essential in the serialisation?", "How would Merkle-style hashing of subtrees solve it, and what about collisions?", "How would you count how many times the pattern tree occurs?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/same-tree"
+next: "interview-questions:dsa/binary-tree-level-order-traversal"
+---
+
+## Problem
+
+You are given two binary trees, a large one `root` and a smaller one `sub`. Return `True` if `root` contains a node whose entire subtree (that node and all of its descendants) is identical in shape and values to `sub`. A partial match, where the node in `root` has extra descendants, does not count. The tree `root` counts as a subtree of itself.
+
+This is widely known as LeetCode 572 (Subtree of Another Tree).
+
+Constraints for this version: `root` has 1 to 2,000 nodes, `sub` has 1 to 1,000 nodes, values are integers.
+
+## Examples
+
+| `root` (level order) | `sub` | Result | Why |
+|---|---|---|---|
+| `[5, 8, 2, 1, 6]` | `[8, 1, 6]` | `True` | node 8 and its children match exactly |
+| `[5, 8, 2, 1, 6, None, None, None, None, 0]` | `[8, 1, 6]` | `False` | node 8's subtree also contains 0 under 6 |
+| `[5, 8, 2]` | `[5, 8, 2]` | `True` | the whole tree |
+| `[3, 3]` | `[3]` | `True` | the leaf 3 matches |
+
+## Approach 1: brute force
+
+For every node in `root`, check whether the subtree starting there is the same tree as `sub`.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def same_tree(a, b):
+    if a is None and b is None:
+        return True
+    if a is None or b is None or a.val != b.val:
+        return False
+    return same_tree(a.left, b.left) and same_tree(a.right, b.right)
+
+def is_subtree(root, sub):
+    if root is None:
+        return sub is None
+    if same_tree(root, sub):
+        return True
+    return is_subtree(root.left, sub) or is_subtree(root.right, sub)
+```
+
+Worst case O(m * n) for `m` nodes in `root` and `n` in `sub`, for example when every value is the same and the shapes almost match. In practice comparisons fail fast, and this is the answer most interviewers expect first.
+
+## Approach 2: optimal
+
+**Key insight.** In a pre-order serialisation that records a marker for every missing child, each subtree is a **contiguous** slice of the token list, and two subtrees are identical exactly when their slices are equal. So "is `sub` a subtree of `root`" becomes "does the token sequence of `sub` occur in the token sequence of `root`", which the Knuth-Morris-Pratt (KMP) algorithm answers in linear time.
+
+The markers are what make this sound. Without them, a tree with only a left child and a tree with only a right child serialise the same way.
+
+**Walkthrough** for `root = [5, 8, 2, 1, 6]` and `sub = [8, 1, 6]`:
+
+- `root` tokens: `5 8 1 # # 6 # # 2 # #`
+- `sub` tokens: `8 1 # # 6 # #`
+- The `sub` sequence appears starting at position 1, so the answer is `True`.
+
+For the second example, `root` tokens contain `8 1 # # 6 0 # # #`, which differs from `sub`'s tokens at the 0, so no match.
+
+```python
+def preorder_tokens(root):
+    tokens, stack = [], [root]
+    while stack:                       # iterative pre-order with null markers
+        node = stack.pop()
+        if node is None:
+            tokens.append(None)
+            continue
+        tokens.append(node.val)
+        stack.append(node.right)
+        stack.append(node.left)
+    return tokens
+
+def kmp_contains(text, pattern):
+    # failure[i] = length of the longest proper prefix of pattern[:i+1] that is also a suffix
+    failure = [0] * len(pattern)
+    k = 0
+    for i in range(1, len(pattern)):
+        while k and pattern[i] != pattern[k]:
+            k = failure[k - 1]
+        if pattern[i] == pattern[k]:
+            k += 1
+        failure[i] = k
+    k = 0
+    for item in text:
+        while k and item != pattern[k]:
+            k = failure[k - 1]
+        if item == pattern[k]:
+            k += 1
+            if k == len(pattern):
+                return True
+    return False
+
+def is_subtree_linear(root, sub):
+    return kmp_contains(preorder_tokens(root), preorder_tokens(sub))
+```
+
+Working on lists of tokens (values and `None`) instead of a joined string avoids a classic bug where the string for value `12` contains the string for value `2`.
+
+**Complexity.** Serialising is O(m + n); KMP is O(m + n). Space is O(m + n) for the token lists.
+
+## Tests
+
+```python
+from collections import deque
+import random
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([5, 8, 2, 1, 6], [8, 1, 6], True),
+    ([5, 8, 2, 1, 6, None, None, None, None, 0], [8, 1, 6], False),
+    ([5, 8, 2], [5, 8, 2], True),
+    ([3, 3], [3], True),
+    ([12], [2], False),                        # string-prefix trap
+    ([1, 2], [1, None, 2], False),             # same values, different shape
+    ([1, None, 2, None, 3], [2, None, 3], True),   # skewed
+    ([4, 4, 4, 4, 4, 4, 4], [4, 4, 4], True),  # duplicates
+    ([4, 4, 4, 4], [4, 4, 4], False),
+]
+for fn in (is_subtree, is_subtree_linear):
+    for big, small, want in cases:
+        assert fn(build_tree(big), build_tree(small)) == want, (fn.__name__, big, small)
+
+def random_tree(rng, size):
+    if size == 0:
+        return None
+    left = rng.randint(0, size - 1)
+    return TreeNode(rng.randint(0, 2), random_tree(rng, left), random_tree(rng, size - 1 - left))
+
+rng = random.Random(4)
+for _ in range(400):
+    big, small = random_tree(rng, rng.randint(1, 15)), random_tree(rng, rng.randint(1, 4))
+    assert is_subtree(big, small) == is_subtree_linear(big, small)
+print("all subtree tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Partial matches.** Matching the top part of a subtree is not enough; `same_tree` must reach `None` on both sides at the same time.
+- **Missing null markers** in the serialisation produce false positives for different shapes.
+- **String concatenation without delimiters**: `"12"` contains `"2"`. Use token lists, or start every value with a delimiter such as `",12"`.
+- **Hashing subtrees** (each node hashes its value and children's hashes) is another linear approach, but you must handle collisions by confirming candidate matches with `same_tree`.
+
+## Where this shows up in data engineering
+
+Finding a repeated sub-structure in a tree is what query engines do when they reuse work: Spark can detect identical subqueries or exchanges in a plan and reuse the result, which needs canonical comparison of plan subtrees. The serialise-then-compare trick is also how you deduplicate nested records: build a canonical, ordered string or hash of each record's structure and compare those.

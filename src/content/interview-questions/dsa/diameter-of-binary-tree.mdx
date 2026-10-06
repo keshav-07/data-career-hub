@@ -1,0 +1,187 @@
+---
+title: "Diameter of Binary Tree: Longest Path via Post-Order Heights"
+seoTitle: "Diameter of a Binary Tree in O(n)"
+description: "Find the longest path between any two nodes of a binary tree in one post-order pass that returns heights and tracks the best path. Python code and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "The longest path that bends at a given node has length height(left) + height(right), counted in edges. A single post-order traversal returns each subtree's height to its parent and, along the way, updates a running maximum of left height + right height. That visits each node once: O(n) time and O(h) stack space. Recomputing heights separately at every node is O(n^2) on skewed trees."
+followUps: ["Why might the diameter not pass through the root?", "How would you return the actual path, not just its length?", "How do you find the diameter of a general tree (an undirected acyclic graph)?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/maximum-depth-of-binary-tree"
+next: "interview-questions:dsa/balanced-binary-tree"
+---
+
+## Problem
+
+Given the root of a binary tree, return the length of its **diameter**: the longest path between any two nodes, measured as the number of edges on that path. The path may or may not pass through the root. An empty tree or a single node has diameter 0.
+
+This is widely known as LeetCode 543 (Diameter of Binary Tree). It introduces a pattern you will reuse often: a recursive function returns one thing to its parent (a height) while updating a separate global answer (the best path).
+
+Constraints for this version: 0 to 10,000 nodes.
+
+## Examples
+
+| Tree (level order) | Diameter | A longest path |
+|---|---|---|
+| `[6, 2, 9, 1, 4]` | `3` | 1, 2, 6, 9 |
+| `[6, 2, None, 1, 4, 0, None, None, 5]` | `4` | 0, 1, 2, 4, 5 (does not use the root) |
+| `[6, 2]` | `1` | 2, 6 |
+| `[6]` | `0` | none |
+
+The second tree:
+
+```text
+        6
+       /
+      2
+     / \
+    1   4
+   /     \
+  0       5
+```
+
+## Approach 1: brute force
+
+For every node, compute the heights of its two subtrees with a separate helper, and take the best `left + right`.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def height(node):
+    if node is None:
+        return 0
+    return 1 + max(height(node.left), height(node.right))
+
+def diameter_naive(root):
+    if root is None:
+        return 0
+    through_root = height(root.left) + height(root.right)
+    return max(through_root, diameter_naive(root.left), diameter_naive(root.right))
+```
+
+Correct, but each node's height is recomputed by every ancestor: O(n log n) on a balanced tree and O(n^2) on a skewed one.
+
+## Approach 2: optimal
+
+**Key insight.** Every path has a single highest node where it bends. At that node, the longest such path uses the deepest branch on each side, so its length in edges is `height(left) + height(right)` (heights counted in nodes). Compute heights bottom-up in one post-order traversal and check this sum at every node.
+
+**Walkthrough** for the second tree above (heights in nodes):
+
+| Node | Left height | Right height | Path through node | Returned height |
+|---|---|---|---|---|
+| 0 | 0 | 0 | 0 | 1 |
+| 1 | 1 | 0 | 1 | 2 |
+| 5 | 0 | 0 | 0 | 1 |
+| 4 | 0 | 1 | 1 | 2 |
+| 2 | 2 | 2 | **4** | 3 |
+| 6 | 3 | 0 | 3 | 4 |
+
+The best is 4, at node 2, not the root.
+
+```python
+def diameter_of_binary_tree(root):
+    best = 0
+
+    def depth(node):
+        nonlocal best
+        if node is None:
+            return 0
+        left = depth(node.left)
+        right = depth(node.right)
+        best = max(best, left + right)    # longest path bending here, in edges
+        return 1 + max(left, right)       # height of this subtree, in nodes
+
+    depth(root)
+    return best
+```
+
+An iterative post-order version avoids recursion limits on deep trees. It stores each node's height in a dictionary once both children are done:
+
+```python
+def diameter_iterative(root):
+    if root is None:
+        return 0
+    heights = {None: 0}
+    best = 0
+    stack = [(root, False)]
+    while stack:
+        node, children_done = stack.pop()
+        if children_done:
+            left, right = heights[node.left], heights[node.right]
+            best = max(best, left + right)
+            heights[node] = 1 + max(left, right)
+        else:
+            stack.append((node, True))
+            if node.right:
+                stack.append((node.right, False))
+            if node.left:
+                stack.append((node.left, False))
+    return best
+```
+
+**Complexity.** O(n) time. The recursive version uses O(h) stack; the iterative one uses O(n) for the dictionary.
+
+## Tests
+
+```python
+from collections import deque
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([6, 2, 9, 1, 4], 3),
+    ([6, 2, None, 1, 4, 0, None, None, 5], 4),
+    ([6, 2], 1),
+    ([6], 0),
+    ([], 0),
+    ([1, None, 2, None, 3, None, 4], 3),       # skewed: the whole chain
+    ([7, 7, 7, 7, 7, 7, 7], 4),                # duplicates, full tree
+]
+for fn in (diameter_naive, diameter_of_binary_tree, diameter_iterative):
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+
+deep = node = TreeNode(0)
+for v in range(1, 5000):
+    node.left = TreeNode(v)
+    node = node.left
+assert diameter_iterative(deep) == 4999
+print("all diameter tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Assuming the path goes through the root.** The second example is the standard counter-example.
+- **Edges versus nodes.** With heights counted in nodes, `left + right` already counts edges on the path. Adding 1 gives the node count, which is a different answer.
+- **Returning the wrong value.** The helper returns a height; the diameter lives in the outer variable. Mixing the two is the most common bug.
+- **`nonlocal`.** Without it, `best = ...` inside the nested function creates a new local variable and Python raises `UnboundLocalError`.
+
+## Where this shows up in data engineering
+
+The "return one value upward, track another globally" technique is how you compute aggregates over hierarchies in one pass, for example the deepest chain in a task dependency graph or the longest lineage path between two datasets. In SQL the same hierarchy questions are answered with recursive CTEs.

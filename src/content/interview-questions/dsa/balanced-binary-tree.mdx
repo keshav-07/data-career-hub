@@ -1,0 +1,183 @@
+---
+title: "Balanced Binary Tree: Height Check with Early Exit"
+seoTitle: "Balanced Binary Tree Check in O(n)"
+description: "Decide whether every node's subtrees differ in height by at most one, in a single bottom-up pass with an early exit. Python code, naive comparison and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "Compute heights bottom-up and check the balance condition at the same time: a helper returns the height of a balanced subtree, or a sentinel such as -1 as soon as any subtree is unbalanced, which then propagates straight to the root. Each node is visited once, so it is O(n) time and O(h) stack space, compared with O(n log n) to O(n^2) for calling a separate height function at every node."
+followUps: ["Why is checking only the root's two subtrees not enough?", "How do self-balancing trees such as AVL or red-black trees keep this property?", "How would you write the check without recursion?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/diameter-of-binary-tree"
+next: "interview-questions:dsa/same-tree"
+---
+
+## Problem
+
+Given the root of a binary tree, decide whether it is **height-balanced**: for every node, the heights of its left and right subtrees differ by no more than one. Return `True` or `False`. An empty tree is balanced.
+
+This is widely known as LeetCode 110 (Balanced Binary Tree). It is the follow-on to computing tree depth, and the point is to avoid recomputing heights.
+
+Constraints for this version: 0 to 5,000 nodes.
+
+## Examples
+
+| Tree (level order) | Balanced? | Reason |
+|---|---|---|
+| `[20, 10, 30, None, 15, 25, 40]` | `True` | every node's subtree heights differ by at most 1 |
+| `[20, 10, 30, 5, None, None, None, 1]` | `False` | node 10 has heights 2 (left) and 0 (right) |
+| `[1, 2, 3, 4, None, None, 5, 6, None, None, 7]` | `False` | root's subtrees have equal height but nodes 2 and 3 are unbalanced |
+| `[]` | `True` | empty tree |
+
+The third case is why you must check every node, not only the root:
+
+```text
+        1
+       / \
+      2   3
+     /     \
+    4       5
+   /         \
+  6           7
+```
+
+## Approach 1: brute force
+
+Check the condition at every node, using a separate height function.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def height(node):
+    if node is None:
+        return 0
+    return 1 + max(height(node.left), height(node.right))
+
+def is_balanced_naive(root):
+    if root is None:
+        return True
+    if abs(height(root.left) - height(root.right)) > 1:
+        return False
+    return is_balanced_naive(root.left) and is_balanced_naive(root.right)
+```
+
+Heights are recomputed by every ancestor: O(n log n) on a balanced tree and O(n^2) on a long chain.
+
+## Approach 2: optimal
+
+**Key insight.** The height of a subtree and whether it is balanced can be computed together, bottom-up. Return the height when the subtree is balanced and `-1` when it is not. Once a child reports `-1`, the parent can return `-1` immediately without looking further.
+
+**Walkthrough** for `[20, 10, 30, 5, None, None, None, 1]`:
+
+| Node | Left result | Right result | Returns |
+|---|---|---|---|
+| 1 | 0 | 0 | 1 |
+| 5 | 1 | 0 | 2 |
+| 10 | 2 | 0 | difference 2: `-1` |
+| 20 | `-1` | (skipped) | `-1`, so not balanced |
+
+```python
+def is_balanced(root):
+    def check(node):
+        if node is None:
+            return 0
+        left = check(node.left)
+        if left == -1:
+            return -1
+        right = check(node.right)
+        if right == -1:
+            return -1
+        if abs(left - right) > 1:
+            return -1
+        return 1 + max(left, right)
+
+    return check(root) != -1
+```
+
+For very deep trees, the same logic works iteratively with a post-order stack and a dictionary of heights:
+
+```python
+def is_balanced_iterative(root):
+    heights = {None: 0}
+    stack = [(root, False)] if root else []
+    while stack:
+        node, ready = stack.pop()
+        if ready:
+            left, right = heights[node.left], heights[node.right]
+            if abs(left - right) > 1:
+                return False
+            heights[node] = 1 + max(left, right)
+        else:
+            stack.append((node, True))
+            for child in (node.right, node.left):
+                if child:
+                    stack.append((child, False))
+    return True
+```
+
+**Complexity.** O(n) time. The recursive version uses O(h) stack space; the iterative one uses O(n) for the dictionary.
+
+## Tests
+
+```python
+from collections import deque
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([20, 10, 30, None, 15, 25, 40], True),
+    ([20, 10, 30, 5, None, None, None, 1], False),
+    ([1, 2, 3, 4, None, None, 5, 6, None, None, 7], False),
+    ([], True),
+    ([1], True),
+    ([1, 2], True),
+    ([1, None, 2, None, 3], False),            # right-skewed chain of three
+    ([4, 4, 4, 4, 4, 4], True),                # duplicates
+]
+for fn in (is_balanced_naive, is_balanced, is_balanced_iterative):
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+
+chain = node = TreeNode(0)
+for v in range(1, 4000):
+    node.left = TreeNode(v)
+    node = node.left
+assert is_balanced_iterative(chain) is False
+print("all balanced tree tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Only checking the root.** The third example has equal root subtree heights but is unbalanced deeper down.
+- **Confusing balanced with complete or full.** A balanced tree need not have every level filled.
+- **Forgetting to propagate the failure.** If a child returns `-1` and the parent treats it as a height, `abs(-1 - 2)` and similar comparisons give wrong answers.
+- **Recursion depth** on long chains; the iterative version handles them.
+
+## Where this shows up in data engineering
+
+Balance is why database indexes stay fast: B-trees and B+ trees, used by PostgreSQL, MySQL and many storage engines, keep every leaf at the same depth, so a lookup touches only a logarithmic number of pages. An unbalanced structure degrades towards a linked list, which is the same reason skewed data partitions slow down distributed jobs: one long branch dominates the total time.

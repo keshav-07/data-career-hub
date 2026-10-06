@@ -1,0 +1,174 @@
+---
+title: "Binary Tree Right Side View: Last Node of Each Level"
+seoTitle: "Binary Tree Right Side View in Python"
+description: "List the nodes visible from the right of a binary tree by taking the last node of each BFS level, or by a right-first DFS. Python code, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "The node you see from the right at each depth is the last node of that level. Run a level-order traversal and record the value of the final node in every level. Alternatively, do a DFS that visits the right child before the left and records a node the first time a new depth is reached. Both are O(n) time; BFS uses O(w) memory and DFS O(h)."
+followUps: ["How would you return the left side view?", "Why is following only right children wrong?", "How would you return the view from the bottom or top of the tree?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/binary-tree-level-order-traversal"
+next: "interview-questions:dsa/count-good-nodes-in-binary-tree"
+---
+
+## Problem
+
+Imagine standing to the right of a binary tree and looking at it. At each depth you can see exactly one node: the rightmost node on that level. Given the root, return the values you can see, ordered from the top level to the bottom.
+
+This is widely known as LeetCode 199 (Binary Tree Right Side View). It is a small variation on level order traversal, with one trap.
+
+Constraints for this version: 0 to 1,000 nodes.
+
+## Examples
+
+| Tree (level order) | Right side view |
+|---|---|
+| `[7, 3, 9, None, 5, None, 11]` | `[7, 9, 11]` |
+| `[7, 3, 9, 1]` | `[7, 9, 1]` (node 1 on the left is visible because nothing is to its right) |
+| `[7, 3]` | `[7, 3]` |
+| `[]` | `[]` |
+
+The second example is the trap:
+
+```text
+      7
+     / \
+    3   9
+   /
+  1        <- visible from the right: the deepest level has only this node
+```
+
+## Approach 1: brute force
+
+A tempting wrong answer follows `right` pointers from the root. It returns `[7, 9]` for the second example and misses node 1. A correct simple approach collects all levels first, then takes the last value of each.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def right_view_via_levels(root):
+    levels = []
+
+    def visit(node, depth):
+        if node is None:
+            return
+        if depth == len(levels):
+            levels.append([])
+        levels[depth].append(node.val)
+        visit(node.left, depth + 1)
+        visit(node.right, depth + 1)
+
+    visit(root, 0)
+    return [level[-1] for level in levels]
+```
+
+O(n) time but O(n) extra memory to hold every level, when only one value per level is needed.
+
+## Approach 2: optimal
+
+**Key insight.** Only the last node of each level matters. With BFS, that is the node popped at the end of each level's inner loop. With DFS that goes right before left, it is the first node reached at each new depth.
+
+**Walkthrough** (BFS) for `[7, 3, 9, 1]`:
+
+| Level | Nodes in order | Last node |
+|---|---|---|
+| 0 | 7 | 7 |
+| 1 | 3, 9 | 9 |
+| 2 | 1 | 1 |
+
+### Breadth-first
+
+```python
+from collections import deque
+
+def right_side_view(root):
+    if root is None:
+        return []
+    view, queue = [], deque([root])
+    while queue:
+        size = len(queue)
+        for i in range(size):
+            node = queue.popleft()
+            if i == size - 1:              # last node in this level
+                view.append(node.val)
+            if node.left:
+                queue.append(node.left)
+            if node.right:
+                queue.append(node.right)
+    return view
+```
+
+### Depth-first, right child first
+
+```python
+def right_side_view_dfs(root):
+    view = []
+    stack = [(root, 0)] if root else []
+    while stack:
+        node, depth = stack.pop()
+        if depth == len(view):             # first node seen at this depth
+            view.append(node.val)
+        if node.left:                      # pushed first, popped after the right
+            stack.append((node.left, depth + 1))
+        if node.right:
+            stack.append((node.right, depth + 1))
+    return view
+```
+
+**Complexity.** O(n) time for both. BFS stores at most one level, O(w); the DFS stack holds O(h) entries in the typical case.
+
+## Tests
+
+```python
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([7, 3, 9, None, 5, None, 11], [7, 9, 11]),
+    ([7, 3, 9, 1], [7, 9, 1]),
+    ([7, 3], [7, 3]),
+    ([], []),
+    ([1, 2, None, 3, None, 4], [1, 2, 3, 4]),          # left-skewed: everything visible
+    ([1, 2, 3, None, 5, None, None, 6], [1, 3, 5, 6]),  # deep node under the left branch
+    ([8, 8, 8, 8], [8, 8, 8]),                          # duplicates
+]
+for fn in (right_view_via_levels, right_side_view, right_side_view_dfs):
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+print("all right side view tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Following right pointers only** misses deeper nodes that hang off left branches.
+- **Pushing the wrong child first in the DFS stack.** A stack pops in reverse order, so push left then right to visit right first.
+- **Empty tree** returns `[]`.
+- **Left view** is the mirror: take the first node of each level, or visit left first in DFS.
+
+## Where this shows up in data engineering
+
+"Pick one representative per group, by a defined order" is a very common data task: the latest record per key, the top product per category. In SQL you do it with `ROW_NUMBER() OVER (PARTITION BY level ORDER BY position DESC) = 1`. Here the group is the depth and the order is left-to-right position, so this problem is the tree version of a deduplication query.

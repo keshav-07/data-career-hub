@@ -1,0 +1,246 @@
+---
+title: "Serialize and Deserialize Binary Tree: Preorder with Null Markers"
+seoTitle: "Serialize and Deserialize a Binary Tree"
+description: "Turn a binary tree into a string and back with preorder plus null markers, or level order. Python codecs, format design choices, pitfalls and round-trip tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "Write the tree in preorder, emitting a marker such as # for every missing child and separating tokens with commas. The markers make the encoding unambiguous, so deserialising is a mirror-image recursion that reads tokens from an iterator: a marker returns None, anything else becomes a node whose left and right are read next. A level-order (BFS) encoding with markers works too. Both directions are O(n) time and O(n) space."
+followUps: ["Why does a single traversal without null markers not identify the tree?", "How would you make the format more compact for a binary search tree?", "How would you version the format so old data still loads?", "How would you avoid recursion limits on very deep trees?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/binary-tree-maximum-path-sum"
+next: "interview-questions:dsa/lowest-common-ancestor-of-binary-tree"
+---
+
+## Problem
+
+Design two functions. `serialize(root)` turns a binary tree into a string, and `deserialize(data)` turns that string back into a tree with exactly the same shape and values. You choose the format; the only requirement is that the round trip is lossless for every tree, including the empty tree and trees with negative or repeated values.
+
+This is widely known as LeetCode 297 (Serialize and Deserialize Binary Tree). It is a hard problem mostly because of format design: the code is short once the format is unambiguous.
+
+Constraints for this version: 0 to 10,000 nodes; integer values between -1,000 and 1,000.
+
+## Examples
+
+Using the preorder format chosen below:
+
+| Tree (level order) | Serialised |
+|---|---|
+| `[1, 2, 3, None, None, 4, 5]` | `1,2,#,#,3,4,#,#,5,#,#` |
+| `[-7]` | `-7,#,#` |
+| `[2, 2]` | `2,2,#,#,#` |
+| `[]` | `#` |
+
+## Approach 1: brute force
+
+A tempting shortcut stores only the values in one traversal order, such as preorder `1,2,3`. That is not reversible: a left chain and a right chain of the same values give the same preorder. Storing **two** traversals (preorder and inorder) is reversible only when values are unique, so it fails on `[2, 2]`.
+
+The simplest correct design is a full level-order listing that writes a marker for every missing child, similar to how tree inputs are usually written down:
+
+```python
+from collections import deque
+
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def serialize_bfs(root):
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
+        if node is None:
+            out.append("#")
+            continue
+        out.append(str(node.val))
+        queue.append(node.left)
+        queue.append(node.right)
+    return ",".join(out)
+
+def deserialize_bfs(data):
+    tokens = data.split(",")
+    if tokens[0] == "#":
+        return None
+    root = TreeNode(int(tokens[0]))
+    queue, i = deque([root]), 1
+    while queue:
+        node = queue.popleft()
+        for side in ("left", "right"):
+            if tokens[i] != "#":
+                child = TreeNode(int(tokens[i]))
+                setattr(node, side, child)
+                queue.append(child)
+            i += 1
+    return root
+```
+
+This is already O(n) in both directions and avoids recursion. It writes one marker per missing child, which for a binary tree with `n` nodes is exactly `n + 1` markers.
+
+## Approach 2: optimal
+
+**Key insight.** Preorder visits a node, then its whole left subtree, then its whole right subtree. If every missing child is written as `#`, then while reading the tokens back in the same order you always know what the next token means: it is the root of the subtree you are about to build, or a marker saying that subtree is empty. No sizes or positions need to be stored.
+
+**Walkthrough** for `1,2,#,#,3,4,#,#,5,#,#`:
+
+| Token | Meaning |
+|---|---|
+| 1 | root |
+| 2 | root's left child |
+| #, # | 2 has no children |
+| 3 | root's right child |
+| 4 | 3's left child, then `#, #` |
+| 5 | 3's right child, then `#, #` |
+
+```python
+def serialize(root):
+    out = []
+
+    def write(node):
+        if node is None:
+            out.append("#")
+            return
+        out.append(str(node.val))
+        write(node.left)
+        write(node.right)
+
+    write(root)
+    return ",".join(out)
+
+def deserialize(data):
+    tokens = iter(data.split(","))
+
+    def read():
+        token = next(tokens)
+        if token == "#":
+            return None
+        node = TreeNode(int(token))
+        node.left = read()
+        node.right = read()
+        return node
+
+    return read()
+```
+
+For trees deeper than Python's recursion limit, the same format can be written and read with an explicit stack:
+
+```python
+def serialize_iterative(root):
+    out, stack = [], [root]
+    while stack:
+        node = stack.pop()
+        if node is None:
+            out.append("#")
+            continue
+        out.append(str(node.val))
+        stack.append(node.right)                 # left must come out first
+        stack.append(node.left)
+    return ",".join(out)
+
+def deserialize_iterative(data):
+    tokens = data.split(",")
+    if tokens[0] == "#":
+        return None
+    root = TreeNode(int(tokens[0]))
+    stack = [(root, "left")]                     # (node, which child to fill next)
+    for token in tokens[1:]:
+        parent, side = stack.pop()
+        child = None if token == "#" else TreeNode(int(token))
+        setattr(parent, side, child)
+        if side == "left":
+            stack.append((parent, "right"))      # the right child is filled after the left subtree
+        if child is not None:
+            stack.append((child, "left"))
+    return root
+```
+
+**Complexity.** O(n) time and O(n) space in both directions; the output has `2n + 1` tokens.
+
+### Design notes worth saying out loud
+
+- **Delimiters** matter: without commas, `12` and `1,2` collide.
+- **Compactness.** For a binary search tree, preorder alone (no markers) is enough, because the BST ordering tells you where each value goes.
+- **Versioning.** Prefix the string with a format version so that a later format change does not break stored data.
+
+## Tests
+
+```python
+import random
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+def same(a, b):
+    if a is None or b is None:
+        return a is b
+    return a.val == b.val and same(a.left, b.left) and same(a.right, b.right)
+
+assert serialize(build_tree([1, 2, 3, None, None, 4, 5])) == "1,2,#,#,3,4,#,#,5,#,#"
+assert serialize(build_tree([-7])) == "-7,#,#"
+assert serialize(build_tree([2, 2])) == "2,2,#,#,#"
+assert serialize(None) == "#"
+assert serialize_iterative(build_tree([1, 2, 3, None, None, 4, 5])) == "1,2,#,#,3,4,#,#,5,#,#"
+
+codecs = [(serialize, deserialize), (serialize_bfs, deserialize_bfs),
+          (serialize_iterative, deserialize_iterative)]
+shapes = [[], [-7], [2, 2], [2, None, 2], [1, 2, 3, None, None, 4, 5],
+          [12, 1, 2], [1, None, 2, None, 3, None, 4], [0, -1000, 1000]]
+for ser, de in codecs:
+    for values in shapes:
+        tree = build_tree(values)
+        assert same(de(ser(tree)), tree), (ser.__name__, values)
+
+def random_tree(rng, size):
+    if size == 0:
+        return None
+    k = rng.randint(0, size - 1)
+    return TreeNode(rng.randint(-3, 3), random_tree(rng, k), random_tree(rng, size - 1 - k))
+
+rng = random.Random(30)
+for _ in range(300):
+    tree = random_tree(rng, rng.randint(0, 30))
+    for ser, de in codecs:
+        assert same(de(ser(tree)), tree)
+    assert serialize(tree) == serialize_iterative(tree)
+
+deep = node = TreeNode(0)                       # 20,000 levels: iterative codec only
+for v in range(1, 20_000):
+    node.left = TreeNode(v)
+    node = node.left
+text = serialize_iterative(deep)
+again = deserialize_iterative(text)
+assert serialize_iterative(again) == text
+print("all serialise/deserialise tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Empty tree** should round-trip; here it is the single token `#`.
+- **Negative numbers** contain `-`; make sure your marker and delimiter cannot appear inside a value.
+- **Duplicate values** break any scheme that relies on finding a value's position (preorder plus inorder).
+- **Rebuilding by index arithmetic** (child at `2i + 1`) only works for complete trees, or wastes huge space on sparse ones.
+- **Deep trees** exceed the recursion limit in the recursive codec; the iterative codec above handles them.
+
+## Where this shows up in data engineering
+
+Serialising nested structures is daily work: writing records to JSON, Avro or Parquet, sending messages to Kafka, or caching objects. The design choices here map directly to real formats. Explicit markers for absent values are how Parquet's definition levels encode nulls in nested columns, delimiters and escaping are the classic CSV problem, and a version prefix is the job a schema registry does for Avro messages.

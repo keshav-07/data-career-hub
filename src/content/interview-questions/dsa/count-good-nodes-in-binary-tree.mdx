@@ -1,0 +1,176 @@
+---
+title: "Count Good Nodes in Binary Tree: DFS Carrying the Path Maximum"
+seoTitle: "Count Good Nodes in a Binary Tree"
+description: "Count nodes that are at least as large as every ancestor by passing the running maximum down a DFS. Recursive and iterative Python solutions with tests."
+technology: ["dsa"]
+topic: ["binary-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "Medium"
+shortAnswer: "A node is good if no value on the path from the root to it is larger than the node itself. Traverse the tree while passing down the maximum value seen so far on the path: a node is good when its value is at least that maximum, and its children receive max(path maximum, node value). Each node is visited once: O(n) time and O(h) space for the recursion or stack."
+followUps: ["How would you count nodes that are strictly greater than all ancestors?", "How would you return the good nodes' values instead of a count?", "What if the condition depended on the sum of the path rather than its maximum?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/binary-tree-right-side-view"
+next: "interview-questions:dsa/construct-tree-from-preorder-and-inorder"
+---
+
+## Problem
+
+In a binary tree, call a node **good** if, on the path from the root down to that node, no node has a value larger than it. The root is always good. Given the root, return the number of good nodes.
+
+This is widely known as LeetCode 1448 (Count Good Nodes in Binary Tree). It is a clean example of passing state **down** a tree, the opposite direction to problems like maximum depth.
+
+Constraints for this version: 1 to 100,000 nodes; values between -10,000 and 10,000.
+
+## Examples
+
+| Tree (level order) | Good nodes | Count |
+|---|---|---|
+| `[5, 3, 8, 6, None, 7, 9]` | 5, 6, 8, 9 | `4` |
+| `[2, 2, 2]` | all three (equal values count) | `3` |
+| `[-1, -5, 0]` | -1, 0 | `2` |
+| `[4]` | 4 | `1` |
+
+For the first tree, 3 is not good (5 is above it), 6 is good (path 5, 3, 6 has maximum 6), 7 is not good (8 is above it), and 9 is good.
+
+## Approach 1: brute force
+
+For every node, walk its full root-to-node path and check the condition. Carrying the whole path in a list makes that easy but wasteful.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def good_nodes_paths(root):
+    count = 0
+    stack = [(root, [])] if root else []
+    while stack:
+        node, path = stack.pop()
+        if all(v <= node.val for v in path):
+            count += 1
+        for child in (node.left, node.right):
+            if child:
+                stack.append((child, path + [node.val]))
+    return count
+```
+
+O(n * h) time and up to O(n * h) memory for the copied paths, which is O(n^2) on a skewed tree.
+
+## Approach 2: optimal
+
+**Key insight.** The only thing you need from the path is its maximum. Carry that single number down instead of the whole path.
+
+**Walkthrough** for `[5, 3, 8, 6, None, 7, 9]`:
+
+| Node | Max above it | Good? | Max passed to children |
+|---|---|---|---|
+| 5 | -inf | yes | 5 |
+| 3 | 5 | no | 5 |
+| 6 | 5 | yes | 6 |
+| 8 | 5 | yes | 8 |
+| 7 | 8 | no | 8 |
+| 9 | 8 | yes | 9 |
+
+### Recursive
+
+```python
+def good_nodes(root):
+    def dfs(node, path_max):
+        if node is None:
+            return 0
+        good = 1 if node.val >= path_max else 0
+        path_max = max(path_max, node.val)
+        return good + dfs(node.left, path_max) + dfs(node.right, path_max)
+
+    return dfs(root, float("-inf"))
+```
+
+### Iterative
+
+The same idea with an explicit stack of `(node, path_max)` pairs, which avoids Python's recursion limit on deep trees.
+
+```python
+def good_nodes_iterative(root):
+    count = 0
+    stack = [(root, float("-inf"))] if root else []
+    while stack:
+        node, path_max = stack.pop()
+        if node.val >= path_max:
+            count += 1
+            path_max = node.val
+        if node.left:
+            stack.append((node.left, path_max))
+        if node.right:
+            stack.append((node.right, path_max))
+    return count
+```
+
+**Complexity.** O(n) time, O(h) space (O(n) for a skewed tree).
+
+## Tests
+
+```python
+from collections import deque
+import random
+
+def build_tree(values):
+    if not values or values[0] is None:
+        return None
+    root = TreeNode(values[0])
+    queue, i = deque([root]), 1
+    while queue and i < len(values):
+        node = queue.popleft()
+        if i < len(values) and values[i] is not None:
+            node.left = TreeNode(values[i])
+            queue.append(node.left)
+        i += 1
+        if i < len(values) and values[i] is not None:
+            node.right = TreeNode(values[i])
+            queue.append(node.right)
+        i += 1
+    return root
+
+cases = [
+    ([5, 3, 8, 6, None, 7, 9], 4),
+    ([2, 2, 2], 3),
+    ([-1, -5, 0], 2),
+    ([4], 1),
+    ([1, None, 2, None, 3, None, 4], 4),     # increasing right chain: all good
+    ([4, 3, None, 2, None, 1], 1),           # decreasing left chain: only the root
+    ([3, 1, 4, 3, None, 1, 5], 4),
+]
+for fn in (good_nodes_paths, good_nodes, good_nodes_iterative):
+    for values, want in cases:
+        assert fn(build_tree(values)) == want, (fn.__name__, values)
+
+rng = random.Random(8)
+for _ in range(300):
+    values = [rng.randint(-3, 3) for _ in range(rng.randint(1, 20))]
+    tree = build_tree(values)
+    assert good_nodes(tree) == good_nodes_iterative(tree) == good_nodes_paths(tree)
+
+deep = node = TreeNode(0)
+for v in range(1, 20_000):
+    node.right = TreeNode(v)
+    node = node.right
+assert good_nodes_iterative(deep) == 20_000
+print("all good nodes tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Equal values count as good.** Use `>=`, not `>`; the `[2, 2, 2]` case catches this.
+- **Initial maximum.** Start with minus infinity (or the root's value). Starting at 0 wrongly rejects a negative root.
+- **Updating the maximum before the comparison** makes every node compare with itself and always pass.
+- **Sharing state between branches.** Pass the maximum as an argument; a single global variable would leak a large value from the left subtree into the right one.
+
+## Where this shows up in data engineering
+
+Carrying a running value down a path is how you compute inherited attributes in hierarchies: the effective permission of a folder given its parents, the cumulative cost along a bill of materials, or whether any ancestor in a category tree is flagged. Recursive CTEs do the same by carrying an extra column from parent to child rows.
