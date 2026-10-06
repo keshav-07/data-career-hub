@@ -13,6 +13,7 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Think of BFS where each level is a contiguous range of indices reachable with the same number of jumps. Scan left to right keeping current_end (the end of the current level) and furthest (the furthest index reachable with one more jump). When i reaches current_end, you must jump: increase the count and set current_end to furthest. Stop once current_end covers the last index. This is O(n) time and O(1) space."
 followUps: ["Why can the levels be treated as contiguous ranges?", "How would you return the actual indices you jump to?", "What would you return if the end were unreachable?"]
+previous: "interview-questions:dsa/jump-game"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
@@ -26,12 +27,6 @@ This is widely known as LeetCode 45, "Jump Game II". It extends [Jump Game](/int
 Assume up to 10,000 values, each up to 1,000.
 
 ## Examples
-
-```text
-[3, 1, 4, 1, 1, 1, 2]   -> 3   (0 -> 2 -> 6 is 2 jumps? index 2 has value 4, so 2 -> 6: yes, 2 jumps)
-```
-
-Worked carefully, that is 2, not 3. Verified examples:
 
 ```text
 [3, 1, 4, 1, 1, 1, 2]   -> 2   (0 -> 2 -> 6)
@@ -134,6 +129,5 @@ while tested < 150:
 
 ## Where this shows up in data engineering
 
-The level-by-level counting is the same as computing how many stages a dependency chain needs when each stage can
-cover a range of steps, for example the minimum number of chained batch windows needed to cover a backlog when each
-window's reach depends on where it starts.
+There is no direct pipeline use. The transferable technique is BFS without a queue: when the nodes reachable at each
+level form a contiguous range, you can count levels by tracking range boundaries in a single pass.

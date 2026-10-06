@@ -13,6 +13,8 @@ estimatedMinutes: 10
 interviewRelevance: "High"
 shortAnswer: "Scan left to right keeping reach, the furthest index you can get to so far. At index i, if i is beyond reach you are stuck and the answer is false; otherwise update reach to max(reach, i + nums[i]). If the scan finishes (or reach covers the last index), the answer is true. This is O(n) time and O(1) space; a DP over 'can I reach index i' is correct but O(n^2)."
 followUps: ["How do you find the minimum number of jumps (Jump Game II)?", "Why is the greedy correct: why can tracking only the furthest reach not miss a path?", "How would you solve it scanning from right to left?"]
+previous: "interview-questions:dsa/regular-expression-matching"
+next: "interview-questions:dsa/jump-game-ii"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 
