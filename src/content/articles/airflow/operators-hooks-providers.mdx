@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:airflow/dag-fundamentals-taskflow"]
 related: ["articles:python/functions-modules-reusable-code"]
 previous: "articles:airflow/dag-fundamentals-taskflow"
+next: "articles:airflow/sensors-deferrable-operators"
 versionContext: "Examples run on Apache Airflow 3.3.2 with apache-airflow-providers-standard 1.20.0, Python 3.11 and a SQLite metadata database. The KubernetesPodOperator example was not executed (it needs a Kubernetes cluster and the cncf.kubernetes provider); it is written from the provider documentation."
 sources:
   - { label: "Apache Airflow documentation: Tasks", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/tasks.html" }
@@ -250,7 +251,7 @@ A custom operator is a subclass of `BaseOperator` that packages a repeated piece
 - Declare `template_fields` so arguments such as dates are rendered by Jinja before `execute` runs. Templates are not rendered in `__init__`.
 - Keep `__init__` cheap: it runs at parse time. Create hooks and connections inside `execute`.
 - Raise an exception to fail (and retry); raise `AirflowSkipException` to skip.
-- Optional: `ui_color`, `template_ext`, `on_kill()` for cleanup when a task is stopped, and deferral for long waits (covered in the sensors lesson).
+- Optional: `ui_color`, `template_ext`, `on_kill()` for cleanup when a task is stopped, and deferral for long waits (covered in the [sensors lesson](/airflow/sensors-deferrable-operators/)).
 
 ```python
 from airflow.sdk import BaseOperator

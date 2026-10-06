@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:airflow/operators-hooks-providers"]
 related: ["articles:airflow/dag-fundamentals-taskflow"]
 previous: "articles:airflow/operators-hooks-providers"
+next: "articles:airflow/dags-scheduling-retries"
 versionContext: "Examples run on Apache Airflow 3.3.2 with apache-airflow-providers-standard 1.20.0, Python 3.11 and a SQLite metadata database; dag.test() runs triggers in-process, so no separate triggerer was needed. Smart Sensors are described from the Airflow 2.2 documentation and cannot run on any current version."
 sources:
   - { label: "Apache Airflow documentation: Deferrable operators and triggers", url: "https://airflow.apache.org/docs/apache-airflow/stable/authoring-and-scheduling/deferring.html" }
@@ -303,8 +304,15 @@ Requirements: run at least one `airflow triggerer` process (it is part of a stan
 A minimal deferrable operator and trigger:
 
 ```python
+import sys, types
 from airflow.sdk import BaseOperator
 from airflow.triggers.base import BaseTrigger, TriggerEvent
+
+# The triggerer re-imports a trigger by its dotted path, so it must live in an importable module.
+# In a project that is a file in your package (for example my_company/triggers.py); here an
+# in-memory module stands in for it.
+job_triggers = types.ModuleType("job_triggers")
+sys.modules["job_triggers"] = job_triggers
 
 class JobDoneTrigger(BaseTrigger):
     """Polls a (pretend) job API asynchronously until the job finishes."""
@@ -321,6 +329,9 @@ class JobDoneTrigger(BaseTrigger):
         for poll in range(1, self.polls_needed + 1):
             await asyncio.sleep(self.interval)   # never use blocking calls such as time.sleep here
         yield TriggerEvent({"job_id": self.job_id, "status": "SUCCEEDED", "polls": poll})
+
+JobDoneTrigger.__module__ = "job_triggers"
+job_triggers.JobDoneTrigger = JobDoneTrigger
 
 class RunJobOperator(BaseOperator):
     def __init__(self, *, job_name: str, **kwargs):
