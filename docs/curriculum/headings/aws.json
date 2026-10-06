@@ -246,5 +246,33 @@
  "Cost optimization on EMR": {
   "ref": "articles:aws/emr",
   "heading": "Cost optimisation on EMR"
+ },
+ "Kinesis Data Streams": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Kinesis Data Streams"
+ },
+ "Shards & throughput": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Shards and throughput"
+ },
+ "KCL/KPL": {
+  "ref": "articles:aws/kinesis",
+  "heading": "KCL and KPL"
+ },
+ "Enhanced fan-out": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Enhanced fan-out"
+ },
+ "Kinesis Firehose": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Amazon Data Firehose"
+ },
+ "Kinesis Data Analytics": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Kinesis Data Analytics (now Managed Service for Apache Flink)"
+ },
+ "Kinesis vs Kafka": {
+  "ref": "articles:aws/kinesis",
+  "heading": "Kinesis vs Kafka"
  }
 }
