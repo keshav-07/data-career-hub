@@ -8,7 +8,7 @@ keyFacts: ["Driver plans work; executors run tasks","A shuffle ends a stage and 
 whatToLearnFirst: ["articles:spark/apache-spark-architecture", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew"]
 relatedTechnologies: ["pyspark","delta-lake","kafka"]
 monogram: "Sp"
-lessons: ["articles:spark/apache-spark-architecture", "articles:spark/rdd-fundamentals", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew", "articles:spark/adaptive-query-execution"]
+lessons: ["articles:spark/apache-spark-architecture", "articles:spark/rdd-fundamentals", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew", "articles:spark/caching-broadcast-accumulators", "articles:spark/adaptive-query-execution"]
 updatedDate: 2026-10-05
 ---
 

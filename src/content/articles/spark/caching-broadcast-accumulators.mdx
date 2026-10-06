@@ -168,9 +168,9 @@ totals.filter("total > 50000").explain()
 ```text
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
-+- Filter (isnotnull(total#240) AND (total#240 > 50000.0))
-   +- InMemoryTableScan [customer_id#2L, total#240], [isnotnull(total#240), (total#240 > 50000.0)]
-         +- InMemoryRelation [customer_id#2L, total#240], StorageLevel(disk, memory, deserialized, 1 replicas)
++- Filter (isnotnull(total#278) AND (total#278 > 50000.0))
+   +- InMemoryTableScan [customer_id#2L, total#278], [isnotnull(total#278), (total#278 > 50000.0)]
+         +- InMemoryRelation [customer_id#2L, total#278], StorageLevel(disk, memory, deserialized, 1 replicas)
                +- AdaptiveSparkPlan isFinalPlan=true
                   (trimmed: the aggregation plan that filled the cache)
 ```
@@ -195,7 +195,7 @@ The aggregation and its shuffle no longer run; the filter reads the cached colum
 
 Caching is not free. It costs:
 
-- **Memory taken from execution.** Storage and execution share one unified memory region (see the [memory lesson](/spark/memory-executors-tuning/)). Cached blocks can push joins and aggregations into spilling.
+- **Memory taken from execution.** Storage and execution share one unified memory region (see the memory lesson later in this course). Cached blocks can push joins and aggregations into spilling.
 - **The cost of writing the cache.** Converting to the columnar cache format (or serializing to disk) on the first pass takes time; if the data is used once, that is pure overhead.
 - **Lost optimisations.** A cached DataFrame is a fixed result. Later queries cannot push filters or column pruning into the *source* below the cache; a query that needs one column of a wide cached table still reads it from the cache rather than from a columnar file with pruning.
 - **Garbage collection pressure** with large deserialized caches.
@@ -282,11 +282,11 @@ print(x.toDebugString().decode())
 ```text
 checkpointed before action: False
 checkpointed after action:  True
-(2) PythonRDD[...] at RDD at PythonRDD.scala:59 []
- |  ReliableCheckpointRDD[...] at count at <block 8>:8 []
+(2) PythonRDD[67] at RDD at PythonRDD.scala:59 []
+ |  ReliableCheckpointRDD[69] at count at <block 7>:9 []
 ```
 
-(RDD ids trimmed.) The three `map` steps have disappeared from the lineage; the RDD now starts from the `ReliableCheckpointRDD`.
+RDD ids vary between runs, and `<block 7>:9` is the source location of the `count()` call. The three `map` steps have disappeared from the lineage; the RDD now starts from the `ReliableCheckpointRDD`.
 
 ### DataFrame checkpoint
 
@@ -302,11 +302,11 @@ local_cp.explain()
 
 ```text
 == Physical Plan ==
-*(1) Scan ExistingRDD[customer_id#2L,total#240]
+*(1) Scan ExistingRDD[customer_id#2L,total#278]
 
 
 == Physical Plan ==
-*(1) Scan ExistingRDD[customer_id#2L,total#240]
+*(1) Scan ExistingRDD[customer_id#2L,total#278]
 ```
 
 The plans look the same; the difference is where the data lives and whether it survives executor loss.
@@ -369,7 +369,7 @@ except Exception as e:
 ```
 
 ```text
-OUTPUT_DESTROY
+ Attempted to use Broadcast(25) after it was destroyed (destroy at DirectMethodHandleAccessor.java:103)  SQLSTATE: XX000
 ```
 
 ### Pitfalls
