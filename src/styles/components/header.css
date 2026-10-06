@@ -156,6 +156,16 @@
     }
   }
 
+  /* Narrow desktops: keep all menu items and the header actions on one line. */
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    .primary-nav a {
+      padding-inline: var(--sp-2);
+    }
+    .search-trigger kbd {
+      display: none;
+    }
+  }
+
   /* Mobile menu (native dialog) */
   .mobile-menu {
     border: 0;
