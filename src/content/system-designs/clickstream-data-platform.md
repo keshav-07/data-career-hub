@@ -71,6 +71,7 @@ related:
   - "system-designs:gdpr-pii-compliant-pipeline"
   - "system-designs:kafka-ingestion-system"
 previous: "system-designs:gdpr-pii-compliant-pipeline"
+next: "system-designs:iot-sensor-data-pipeline"
 versionContext: "The sessionisation SQL was run on PostgreSQL 16 (DISTINCT ON is PostgreSQL syntax; Spark SQL would use ROW_NUMBER). Collector and streaming configuration is described, not executed."
 sources:
   - { label: "PostgreSQL documentation: window functions", url: "https://www.postgresql.org/docs/current/tutorial-window.html" }
