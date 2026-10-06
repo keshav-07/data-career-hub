@@ -68,6 +68,7 @@ related:
   - "system-designs:elt-pipeline-with-dbt"
   - "system-designs:change-data-capture-platform"
 previous: "system-designs:real-time-analytics-pipeline"
+next: "system-designs:idempotent-reprocessing-system"
 versionContext: "The SCD Type 1 and Type 2 load was run on PostgreSQL 16, including a rerun to confirm idempotency. dbt snapshot configuration is described, not executed."
 sources:
   - { label: "Kimball Group: dimensional modelling techniques", url: "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/" }
