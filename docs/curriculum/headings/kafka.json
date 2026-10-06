@@ -82,5 +82,37 @@
   "Producer buffering": {
     "ref": "articles:kafka/producers",
     "heading": "Producer buffering"
+  },
+  "Consumer API": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Consumer API"
+  },
+  "Poll loop": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Poll loop"
+  },
+  "Offset management": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Offset management"
+  },
+  "Auto vs manual commit": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Auto vs manual commit"
+  },
+  "Consumer lag": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Consumer lag"
+  },
+  "Seek & rewind": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Seek and rewind"
+  },
+  "Deserialization": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "Deserialization"
+  },
+  "fetch.min/max.bytes": {
+    "ref": "articles:kafka/consumers-offsets",
+    "heading": "fetch.min.bytes and fetch.max.bytes"
   }
 }

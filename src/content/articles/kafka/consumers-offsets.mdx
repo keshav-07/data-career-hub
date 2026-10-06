@@ -17,7 +17,6 @@ learningObjectives:
 prerequisites: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/producers"]
 related: ["articles:etl-elt/idempotency-in-data-pipelines", "articles:etl-elt/pipeline-observability", "interview-questions:kafka/at-least-once-delivery"]
 previous: "articles:kafka/producers"
-next: "articles:kafka/consumer-groups-rebalancing"
 sources:
   - { label: "Apache Kafka documentation: Consumer configs", url: "https://kafka.apache.org/41/configuration/consumer-configs/" }
   - { label: "Apache Kafka documentation: Message delivery semantics", url: "https://kafka.apache.org/documentation/#semantics" }
@@ -207,7 +206,7 @@ on shutdown: wakeup() from another thread -> poll throws WakeupException -> comm
 
 ### In interviews
 
-"Why does my consumer keep rebalancing?" A strong answer checks processing time against `max.poll.interval.ms`, and the session timeout and heartbeat settings, and mentions static membership and the new consumer protocol (see [rebalancing](/kafka/consumer-groups-rebalancing/)).
+"Why does my consumer keep rebalancing?" A strong answer checks processing time against `max.poll.interval.ms`, and the session timeout and heartbeat settings, and mentions static membership and the new consumer protocol (see rebalancing).
 
 ## Offset management
 
@@ -304,7 +303,7 @@ commit-before: wrote  8 rows, missing ['payment-6', 'payment-7'], duplicated []
 commit-after : wrote 12 rows, missing [], duplicated ['payment-4', 'payment-5']
 ```
 
-Committing first lost the rest of the batch in flight. Committing after processing re-delivered the part of the batch that had been written before the crash. Neither is exactly-once; the at-least-once version is the one you can fix, by making the sink idempotent (upsert by `payment_id`) or by using transactions, as covered in [delivery semantics](/kafka/delivery-semantics-exactly-once/).
+Committing first lost the rest of the batch in flight. Committing after processing re-delivered the part of the batch that had been written before the crash. Neither is exactly-once; the at-least-once version is the one you can fix, by making the sink idempotent (upsert by `payment_id`) or by using transactions, as covered in delivery semantics.
 
 ### Pitfalls
 
@@ -468,7 +467,7 @@ Without the `catch` and `seek`, every `poll()` throws again at offset 1 and the 
 ### Patterns for bad records
 
 - **Dead-letter topic.** Consume as bytes (`ByteArrayDeserializer`), deserialise in your own code, and send failures with error headers to a `<topic>.dlq` topic.
-- **Schema Registry.** Prevents most poison pills by rejecting incompatible schemas at produce time (see [Schema Registry](/kafka/schema-registry/)).
+- **Schema Registry.** Prevents most poison pills by rejecting incompatible schemas at produce time (see Schema Registry).
 - **Framework support.** Kafka Connect's `errors.tolerance` and DLQ, and Kafka Streams' deserialisation exception handlers, implement these patterns for you.
 
 ### Pitfalls
