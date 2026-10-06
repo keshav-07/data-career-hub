@@ -70,6 +70,7 @@ related:
   - "system-designs:kafka-ingestion-system"
   - "system-designs:metrics-kpi-platform"
 previous: "system-designs:log-ingestion-search-platform"
+next: "system-designs:slowly-changing-dimension-framework"
 versionContext: "The windowing example is plain Python run with Python 3 to show watermark and upsert behaviour; production uses Flink or Spark Structured Streaming. Store configuration is described, not executed."
 sources:
   - { label: "Apache Spark: Structured Streaming programming guide", url: "https://spark.apache.org/docs/latest/streaming/index.html" }
