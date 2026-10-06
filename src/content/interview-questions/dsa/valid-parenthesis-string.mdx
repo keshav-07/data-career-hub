@@ -122,7 +122,7 @@ for fn in (check_valid_string, check_valid_dp):
 import itertools
 def brute(s):
     stars = [i for i, ch in enumerate(s) if ch == "*"]
-    for choice in itertools.product("()", repeat=len(stars)):
+    for choice in itertools.product(("(", ")", ""), repeat=len(stars)):
         t = list(s)
         for idx, c in zip(stars, choice):
             t[idx] = c
