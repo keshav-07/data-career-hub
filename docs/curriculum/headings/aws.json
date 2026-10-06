@@ -38,5 +38,213 @@
  "Multipart upload": {
   "ref": "articles:aws/s3-for-data-engineers",
   "heading": "Multipart upload"
+ },
+ "IAM users/groups/roles": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Users, groups and roles"
+ },
+ "Policies (identity/resource)": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Identity-based and resource-based policies"
+ },
+ "Least privilege": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Least privilege"
+ },
+ "Assume role & STS": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Assuming roles with STS"
+ },
+ "Cross-account access": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Cross-account access"
+ },
+ "Service-linked roles": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Service-linked roles"
+ },
+ "Permission boundaries": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Permissions boundaries"
+ },
+ "Policy evaluation logic": {
+  "ref": "articles:aws/iam-for-data-engineers",
+  "heading": "Policy evaluation logic"
+ },
+ "Lambda fundamentals": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Lambda fundamentals"
+ },
+ "Triggers & event sources": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Triggers and event sources"
+ },
+ "Lambda + S3/Kinesis": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Lambda with S3 and Kinesis"
+ },
+ "Concurrency & scaling": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Concurrency and scaling"
+ },
+ "Cold starts": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Cold starts"
+ },
+ "Layers": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Layers"
+ },
+ "Memory/timeout tuning": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Memory and timeout tuning"
+ },
+ "Error handling & DLQ": {
+  "ref": "articles:aws/lambda-for-data-pipelines",
+  "heading": "Error handling and DLQs"
+ },
+ "Glue Data Catalog": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue Data Catalog"
+ },
+ "Glue Crawlers": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue crawlers"
+ },
+ "Glue partitions": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue partitions"
+ },
+ "Glue ETL jobs (Spark)": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue ETL jobs (Spark)"
+ },
+ "PySpark on Glue": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "PySpark on Glue"
+ },
+ "Dynamic frames": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "DynamicFrames"
+ },
+ "Glue Studio": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue Studio"
+ },
+ "Glue bookmarks": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue job bookmarks"
+ },
+ "Glue triggers/workflows": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue triggers and workflows"
+ },
+ "Glue cost tuning": {
+  "ref": "articles:aws/glue-catalog-crawlers-etl",
+  "heading": "Glue cost tuning"
+ },
+ "Athena basics": {
+  "ref": "articles:aws/athena",
+  "heading": "Athena basics"
+ },
+ "Querying S3 with SQL": {
+  "ref": "articles:aws/athena",
+  "heading": "Querying S3 with SQL"
+ },
+ "CTAS & external tables": {
+  "ref": "articles:aws/athena",
+  "heading": "CTAS and external tables"
+ },
+ "Partition projection": {
+  "ref": "articles:aws/athena",
+  "heading": "Partition projection"
+ },
+ "Athena performance tuning": {
+  "ref": "articles:aws/athena",
+  "heading": "Athena performance tuning"
+ },
+ "Workgroups": {
+  "ref": "articles:aws/athena",
+  "heading": "Workgroups"
+ },
+ "Federated queries": {
+  "ref": "articles:aws/athena",
+  "heading": "Federated queries"
+ },
+ "Cost per query": {
+  "ref": "articles:aws/athena",
+  "heading": "Cost per query"
+ },
+ "Redshift architecture": {
+  "ref": "articles:aws/redshift",
+  "heading": "Redshift architecture"
+ },
+ "RA3 & managed storage": {
+  "ref": "articles:aws/redshift",
+  "heading": "RA3 and managed storage"
+ },
+ "Distribution styles": {
+  "ref": "articles:aws/redshift",
+  "heading": "Distribution styles"
+ },
+ "Sort keys": {
+  "ref": "articles:aws/redshift",
+  "heading": "Sort keys"
+ },
+ "COPY & UNLOAD": {
+  "ref": "articles:aws/redshift",
+  "heading": "COPY and UNLOAD"
+ },
+ "Vacuum & analyze": {
+  "ref": "articles:aws/redshift",
+  "heading": "Vacuum and analyze"
+ },
+ "Workload management (WLM)": {
+  "ref": "articles:aws/redshift",
+  "heading": "Workload management (WLM)"
+ },
+ "Concurrency scaling": {
+  "ref": "articles:aws/redshift",
+  "heading": "Concurrency scaling"
+ },
+ "Redshift Spectrum": {
+  "ref": "articles:aws/redshift",
+  "heading": "Redshift Spectrum"
+ },
+ "Materialized views": {
+  "ref": "articles:aws/redshift",
+  "heading": "Materialized views"
+ },
+ "Redshift Serverless": {
+  "ref": "articles:aws/redshift",
+  "heading": "Redshift Serverless"
+ },
+ "EMR clusters": {
+  "ref": "articles:aws/emr",
+  "heading": "EMR clusters"
+ },
+ "Spark on EMR": {
+  "ref": "articles:aws/emr",
+  "heading": "Spark on EMR"
+ },
+ "Instance fleets & spot": {
+  "ref": "articles:aws/emr",
+  "heading": "Instance fleets and Spot"
+ },
+ "Bootstrap actions": {
+  "ref": "articles:aws/emr",
+  "heading": "Bootstrap actions"
+ },
+ "EMR on EKS": {
+  "ref": "articles:aws/emr",
+  "heading": "EMR on EKS"
+ },
+ "EMR Serverless": {
+  "ref": "articles:aws/emr",
+  "heading": "EMR Serverless"
+ },
+ "Cost optimization on EMR": {
+  "ref": "articles:aws/emr",
+  "heading": "Cost optimisation on EMR"
  }
 }

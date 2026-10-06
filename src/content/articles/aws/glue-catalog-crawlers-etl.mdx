@@ -1,0 +1,457 @@
+---
+title: "AWS Glue: Data Catalog, Crawlers and Spark ETL Jobs"
+seoTitle: "AWS Glue: Data Catalog, Crawlers and Spark ETL"
+description: "AWS Glue for Data Engineers: the Data Catalog, crawlers, partitions, Spark ETL jobs, DynamicFrames, Glue Studio, job bookmarks, triggers, workflows and cost tuning."
+technology: ["aws", "pyspark", "spark"]
+topic: ["glue", "etl", "data-catalog"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain what the Glue Data Catalog stores and which services read it"
+  - "Configure crawlers and manage partitions without full re-crawls"
+  - "Write a Glue Spark job with DynamicFrames, push-down predicates and job bookmarks"
+  - "Chain jobs and crawlers with triggers and workflows"
+  - "Choose Glue versions, worker types and execution classes to control cost"
+prerequisites: ["articles:aws/s3-for-data-engineers", "articles:pyspark/dataframes-and-schemas"]
+related: ["articles:spark/partitions-shuffles-skew", "articles:etl-elt/idempotency-in-data-pipelines", "articles:data-warehousing/partitioning-clustering-data-layout"]
+previous: "articles:aws/lambda-for-data-pipelines"
+next: "articles:aws/athena"
+versionContext: "Glue versions and worker types checked against the AWS Glue documentation in October 2026 (Glue 6.0 is the newest version). The PySpark partition-pruning analogue and the bookmark model run locally on PySpark 4.2 (Python 3.11). Glue scripts using awsglue, and AWS CLI commands, need the Glue runtime and an AWS account, so they were written from the Glue documentation and not executed; they were checked to compile."
+sources:
+  - { label: "AWS Glue: Configuring job properties for Spark jobs", url: "https://docs.aws.amazon.com/glue/latest/dg/add-job.html" }
+  - { label: "AWS Glue: Glue versions (release notes)", url: "https://docs.aws.amazon.com/glue/latest/dg/release-notes.html" }
+  - { label: "AWS Glue: Migrating Spark jobs to Glue version 6.0", url: "https://docs.aws.amazon.com/glue/latest/dg/migrating-version-60.html" }
+  - { label: "AWS Glue: Triggers API", url: "https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-jobs-trigger.html" }
+  - { label: "AWS Glue: Automating AWS Glue with EventBridge", url: "https://docs.aws.amazon.com/glue/latest/dg/automating-awsglue-with-cloudwatch-events.html" }
+  - { label: "AWS Glue: Version support policy", url: "https://docs.aws.amazon.com/glue/latest/dg/glue-version-support-policy.html" }
+---
+
+AWS Glue is two things that are easy to confuse: a **metadata catalogue** that describes your lake's tables, and a **serverless Spark service** that runs ETL jobs. Most AWS data platforms use the catalogue even if they run Spark elsewhere, and many use Glue jobs as their main batch engine. This lesson covers both halves, plus the scheduling and cost knobs that decide whether Glue is cheap and reliable or slow and expensive.
+
+## Sample data
+
+The runnable examples use local PySpark as an analogue for what Glue does on S3: write a date-partitioned Parquet table and read it back with a partition filter. Code that imports `awsglue` only runs inside Glue, so it is shown but not executed.
+
+```python
+import tempfile, os
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("glue-analogue")
+         .config("spark.ui.enabled", "false").config("spark.sql.shuffle.partitions", "2").getOrCreate())
+spark.sparkContext.setLogLevel("ERROR")
+
+orders = spark.createDataFrame(
+    [(1, "u1", 20.0, "2026-10-01"), (2, "u2", 35.5, "2026-10-01"),
+     (3, "u1", 12.0, "2026-10-02"), (4, "u3", 99.9, "2026-10-03")],
+    "order_id INT, customer_id STRING, amount DOUBLE, dt STRING")
+
+lake = tempfile.mkdtemp()
+path = os.path.join(lake, "curated", "orders")
+orders.write.mode("overwrite").partitionBy("dt").parquet(path)
+print(sorted(d for d in os.listdir(path) if d.startswith("dt=")))
+```
+
+```text
+['dt=2026-10-01', 'dt=2026-10-02', 'dt=2026-10-03']
+```
+
+## Glue Data Catalog
+
+**What it is.** The Data Catalog is a managed, Hive-metastore-compatible store of **databases**, **tables** (columns, types, S3 location, file format, SerDe) and **partitions**. There is one catalogue per account per Region. Athena, Redshift Spectrum, EMR, Glue jobs and Lake Formation all read it, so one table definition serves every engine.
+
+**How it works.** A table is metadata only: deleting it does not delete the S3 data (for external tables). Tables get into the catalogue in four ways: a crawler infers them, you run DDL in Athena (`CREATE EXTERNAL TABLE`), a job creates or updates them when writing, or infrastructure as code defines them. Open table formats (Iceberg, Hudi, Delta Lake) are registered in the catalogue too, with the table's current metadata pointer stored as a table property.
+
+{/* noexec */}
+```bash
+aws glue create-database --database-input '{"Name": "curated", "Description": "Cleaned lake tables"}'
+aws glue get-table --database-name curated --name orders \
+  --query 'Table.StorageDescriptor.[Location, Columns[].Name]'
+```
+
+**Pitfalls.**
+
+- Treating the catalogue as the source of truth for schema while files drift. A crawler or a job that writes a different schema can silently change a table.
+- Permission errors that come from Lake Formation, not IAM, once a location is registered with Lake Formation.
+- Too many partitions per table (hundreds of thousands) slow down query planning unless you use partition indexes or partition projection.
+
+**In interviews.** Describe the catalogue as the shared metastore of the AWS lake: metadata, not data, used by Athena, Spectrum, EMR and Glue, with Lake Formation permissions layered on top.
+
+## Glue crawlers
+
+**What it is.** A crawler scans a data store (S3 prefixes, JDBC databases, DynamoDB and others), infers schemas and partitions using classifiers, and creates or updates catalogue tables.
+
+**How it works.** You give a crawler an IAM role, one or more targets, a target database, a schedule and two policies:
+
+- **Schema change policy**: what to do when the schema changes (update the table or only log) and when objects disappear (delete, deprecate or log).
+- **Recrawl policy**: crawl everything every time, or only new folders since the last run (incremental), which is much faster for append-only partitioned data. Incremental crawls require the schema change policy to only log changes.
+
+{/* noexec */}
+```bash
+aws glue create-crawler --name raw-orders-crawler \
+  --role arn:aws:iam::111122223333:role/glue-crawler \
+  --database-name raw \
+  --targets '{"S3Targets": [{"Path": "s3://example-lake/raw/orders/"}]}' \
+  --schema-change-policy UpdateBehavior=LOG,DeleteBehavior=LOG \
+  --recrawl-policy RecrawlBehavior=CRAWL_NEW_FOLDERS_ONLY \
+  --schedule "cron(15 2 * * ? *)"
+```
+
+Crawlers group files into one table when their schemas and formats are compatible. When they are not (a stray CSV among JSON files, or different columns in different folders), the crawler creates several tables or one table per folder, which is the most common crawler surprise.
+
+**Pitfalls.**
+
+- Mixed file types or schemas under one prefix produce many unexpected tables. Keep one dataset per prefix.
+- Crawling a large bucket in full every hour costs DPU time and can change types (for example `bigint` to `string`) when one bad file appears. Prefer incremental crawls, or define tables in code and only add partitions.
+- Crawling CSV without headers or with inconsistent quoting gives column names like `col0`. Use a custom classifier or define the table yourself.
+
+**In interviews.** Say what crawlers infer (schema, format, partitions), their main risk (unintended schema changes and table splits), and the alternatives for stable pipelines: tables defined as code plus partition registration or partition projection.
+
+## Glue partitions
+
+**What it is.** For Hive-style layouts (`dt=2026-10-01/`), each partition is a catalogue entry with its own values and S3 location. Engines list partitions from the catalogue to plan which prefixes to read.
+
+**How it works.** New data is invisible to catalogue-based queries until its partition is registered. Options:
+
+| Method | How | When |
+|---|---|---|
+| Crawler | Incremental crawl finds new folders | Simple setups, unknown schemas |
+| Job writes partitions | Glue sink with `enableUpdateCatalog` and `partitionKeys` | Glue jobs that produce the data |
+| API or DDL | `batch-create-partition`, Athena `ALTER TABLE ADD PARTITION` | Precise, cheap, event-driven |
+| `MSCK REPAIR TABLE` | Athena or Hive scans the location for missing partitions | Occasional repair; slow on large tables |
+| Partition projection | Athena computes partitions from table properties, no catalogue entries | Predictable keys such as dates (Athena lesson) |
+| Table format | Iceberg tracks files in its own metadata | Iceberg, Hudi, Delta tables |
+
+Reading only some partitions in a Glue job uses a **push-down predicate**, the Glue equivalent of the Spark partition filter in this local analogue:
+
+```python
+import re
+
+recent = spark.read.parquet(path).where(F.col("dt") >= "2026-10-02")
+scan = [l for l in recent._jdf.queryExecution().executedPlan().toString().splitlines() if "FileScan" in l][0]
+start = scan.index("PartitionFilters")
+print(re.sub(r"#\d+", "", scan[start:scan.index("]", start) + 1]))
+recent.orderBy("order_id").show()
+```
+
+```text
+PartitionFilters: [isnotnull(dt), (dt >= 2026-10-02)]
++--------+-----------+------+----------+
+|order_id|customer_id|amount|        dt|
++--------+-----------+------+----------+
+|       3|         u1|  12.0|2026-10-02|
+|       4|         u3|  99.9|2026-10-03|
++--------+-----------+------+----------+
+```
+
+In Glue, `push_down_predicate` filters partitions after listing them from the catalogue, while `catalogPartitionPredicate` asks the catalogue to filter server-side, which is faster for tables with very many partitions, especially with a **partition index** on the key columns.
+
+**Pitfalls.**
+
+- Partition values are strings in the path. `dt >= '2026-10-02'` works because ISO dates sort as strings; `month=9` and `month=10` do not.
+- A job that writes new partitions but never registers them, so Athena returns stale results.
+
+**In interviews.** Explain why new partitions are invisible, list the registration options, and recommend projection or a table format for high-volume date-partitioned tables.
+
+## Glue ETL jobs (Spark)
+
+**What it is.** A Glue job runs your Spark (or Ray, or Python shell) code on serverless workers. You choose the Glue version, worker type and number of workers; Glue provisions and tears down the cluster per run.
+
+**How it works.**
+
+| Glue version | Spark | Python | Notes |
+|---|---|---|---|
+| 4.0 | 3.3 | 3.10 | Older; check the version support policy for end-of-support dates |
+| 5.0 | 3.5.4 | 3.11 | |
+| 5.1 | 3.5.6 | 3.11 | Iceberg 1.10, Iceberg format v3 support |
+| 6.0 | 4.1.1 | 3.13 | Scala 2.13, Java 17; new Iceberg v3 types work with DataFrames only, not DynamicFrames |
+
+A **DPU** (data processing unit) is 4 vCPUs and 16 GB of memory. Worker types:
+
+| Worker type | Size | Typical use |
+|---|---|---|
+| G.025X | 0.25 DPU (2 vCPU, 4 GB) | Low-volume streaming jobs |
+| G.1X | 1 DPU (4 vCPU, 16 GB) | Most batch jobs |
+| G.2X | 2 DPU (8 vCPU, 32 GB) | Memory-heavy transforms, ML transforms |
+| G.4X, G.8X | 4 and 8 DPU | Large joins and aggregations |
+| G.12X, G.16X | 12 and 16 DPU | Very large jobs (Glue 4.0 and later, selected Regions) |
+| R.1X to R.8X | Memory-optimised | Jobs that spill or run out of memory (Glue 4.0 and later, selected Regions) |
+
+{/* noexec */}
+```bash
+aws glue create-job --name raw-to-curated-orders \
+  --role arn:aws:iam::111122223333:role/glue-etl \
+  --glue-version 5.1 --worker-type G.1X --number-of-workers 10 \
+  --command Name=glueetl,ScriptLocation=s3://example-artifacts/jobs/orders.py,PythonVersion=3 \
+  --default-arguments '{"--job-bookmark-option": "job-bookmark-enable", "--enable-metrics": "true", "--enable-auto-scaling": "true", "--target_path": "s3://example-lake/curated/orders/"}' \
+  --timeout 60
+aws glue start-job-run --job-name raw-to-curated-orders
+```
+
+**Pitfalls.**
+
+- Leaving the job timeout at its default, so a stuck job burns DPU-hours for many hours. Set a timeout from observed runtimes.
+- Too many concurrent runs of the same job writing the same output. Set maximum concurrency to 1 for jobs that are not safe to overlap.
+- Upgrading Glue versions without testing: Spark 4 (Glue 6.0) changes defaults such as ANSI SQL mode.
+
+**In interviews.** Know the DPU definition, the main worker types, and that Glue is serverless Spark billed per DPU-hour. Comparing it with EMR (more control, more operations) is a common follow-up.
+
+## PySpark on Glue
+
+**What it is.** A Glue Spark script is ordinary PySpark plus the `awsglue` library: a `GlueContext` wrapping the Spark context, a `Job` object for bookmarks and commits, and catalogue-aware readers and writers.
+
+**How it works.** This job reads new raw orders from the catalogue, fixes types, de-duplicates with plain Spark DataFrames, and writes date-partitioned Parquet while updating the catalogue:
+
+{/* noexec */}
+```python
+import sys
+from awsglue.context import GlueContext
+from awsglue.dynamicframe import DynamicFrame
+from awsglue.job import Job
+from awsglue.transforms import ApplyMapping
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+
+args = getResolvedOptions(sys.argv, ["JOB_NAME", "target_path"])
+glue_context = GlueContext(SparkContext.getOrCreate())
+spark = glue_context.spark_session
+job = Job(glue_context)
+job.init(args["JOB_NAME"], args)
+
+raw = glue_context.create_dynamic_frame.from_catalog(
+    database="raw",
+    table_name="orders",
+    push_down_predicate="dt >= '2026-10-01'",
+    transformation_ctx="raw_orders",          # required for bookmarks
+)
+typed = ApplyMapping.apply(
+    frame=raw,
+    mappings=[
+        ("order_id", "string", "order_id", "long"),
+        ("customer_id", "string", "customer_id", "string"),
+        ("amount", "string", "amount", "double"),
+        ("dt", "string", "dt", "string"),
+    ],
+    transformation_ctx="typed_orders",
+)
+deduped = typed.toDF().dropDuplicates(["order_id"])
+
+sink = glue_context.getSink(
+    connection_type="s3",
+    path=args["target_path"],
+    enableUpdateCatalog=True,
+    updateBehavior="UPDATE_IN_DATABASE",
+    partitionKeys=["dt"],
+    transformation_ctx="curated_sink",
+)
+sink.setFormat("glueparquet")
+sink.setCatalogInfo(catalogDatabase="curated", catalogTableName="orders")
+sink.writeFrame(DynamicFrame.fromDF(deduped, glue_context, "deduped"))
+job.commit()                                  # saves the bookmark state
+```
+
+Develop interactively with **Glue interactive sessions** (notebooks in Glue Studio or your own Jupyter) or the Glue Docker image locally, then deploy the script to S3.
+
+**Pitfalls.**
+
+- Forgetting `job.commit()`, so bookmarks never advance and every run reprocesses everything.
+- Converting to pandas or calling `collect()` on large data, which pulls everything to the driver.
+- Writing with `mode("overwrite")` on a whole table path when you meant to replace one partition. Use dynamic partition overwrite (`spark.sql.sources.partitionOverwriteMode=dynamic`) or a table format.
+
+**In interviews.** Walk through the skeleton: `getResolvedOptions`, `GlueContext`, `job.init`, read with `transformation_ctx`, transform, write, `job.commit()`. Mention that you can drop to Spark DataFrames for anything DynamicFrames do not do well.
+
+## DynamicFrames
+
+**What it is.** A DynamicFrame is Glue's own distributed collection. Unlike a Spark DataFrame, it does not need one fixed schema up front: each record describes itself, and a column whose type varies across records becomes a **choice type** (for example `amount` is sometimes a string and sometimes a number).
+
+**How it works.** DynamicFrames add transforms for messy semi-structured data:
+
+| Transform | What it does |
+|---|---|
+| `ApplyMapping` | Rename, retype and select columns in one step |
+| `resolveChoice` | Settle choice types: `cast:double`, `make_cols`, `make_struct`, `project:string` |
+| `Relationalize` | Flatten nested JSON into a set of relational tables |
+| `DropNullFields`, `Filter`, `Map` | Clean-up and record-level transforms |
+| `toDF()` / `DynamicFrame.fromDF()` | Convert to and from Spark DataFrames |
+
+{/* noexec */}
+```python
+resolved = raw.resolveChoice(specs=[("amount", "cast:double")])
+flat = Relationalize.apply(frame=resolved, staging_path="s3://example-tmp/relationalize/", name="orders")
+```
+
+Use DynamicFrames at the edges (catalogue reads with bookmarks, messy JSON, catalogue-updating writes) and Spark DataFrames for joins, window functions and SQL, where the optimiser does better.
+
+**Pitfalls.**
+
+- Unresolved choice types fail at write time or produce struct columns nobody expected.
+- Assuming every Spark feature works on DynamicFrames: for example, in Glue 6.0 the new Iceberg v3 data types are supported only through DataFrames.
+
+**In interviews.** One sentence: "A DynamicFrame is a schema-flexible frame for semi-structured data, with choice types and transforms like `resolveChoice` and `Relationalize`; I convert to DataFrames for heavy relational work."
+
+## Glue Studio
+
+**What it is.** Glue Studio is the console for building, running and monitoring Glue jobs. Its visual editor lets you draw a job as a graph of sources, transforms and targets, and it generates the PySpark script.
+
+**How it works.** Visual jobs suit standard patterns (read from the catalogue, apply mapping, join, filter, write Parquet, run data quality rules) and teams with less Spark experience. You can switch a visual job to script mode for custom logic, but then it no longer round-trips to the visual view. Studio also hosts notebooks on interactive sessions, data previews, and a job runs dashboard.
+
+**Pitfalls.** Generated scripts are verbose and hard to review in pull requests. For production pipelines, keep scripts in version control and deploy them with infrastructure as code, using Studio for prototyping and monitoring.
+
+**In interviews.** Position Studio as a productivity tool (visual authoring, notebooks, monitoring), not a replacement for code review and CI/CD.
+
+## Glue job bookmarks
+
+**What it is.** Job bookmarks let a Glue job remember what it already processed, so each run reads only new data: new S3 files (by path and modification time) or new rows from JDBC sources (by bookmark keys, usually an increasing column).
+
+**How it works.** Enable bookmarks with `--job-bookmark-option job-bookmark-enable` (other values: `job-bookmark-disable`, `job-bookmark-pause`). Every source and sink needs a stable `transformation_ctx`. The state is saved only when the run calls `job.commit()` and succeeds. This toy model shows the consequence of a failed run:
+
+```python
+class Bookmark:
+    """Toy model of a Glue job bookmark for an S3 source: remember what a committed run saw."""
+    def __init__(self):
+        self.committed = set()
+
+    def new_files(self, listing):
+        return sorted(set(listing) - self.committed)
+
+    def commit(self, files):
+        self.committed |= set(files)
+
+bm = Bookmark()
+day1 = ["raw/orders/f1.json", "raw/orders/f2.json"]
+run1 = bm.new_files(day1); bm.commit(run1)
+day2 = day1 + ["raw/orders/f3.json"]
+run2 = bm.new_files(day2)                       # job fails before job.commit()
+run3 = bm.new_files(day2); bm.commit(run3)      # retry sees f3 again
+print("run 1 reads:", run1)
+print("run 2 reads:", run2, "(failed, not committed)")
+print("run 3 reads:", run3)
+print("run 4 reads:", bm.new_files(day2))
+```
+
+```text
+run 1 reads: ['raw/orders/f1.json', 'raw/orders/f2.json']
+run 2 reads: ['raw/orders/f3.json'] (failed, not committed)
+run 3 reads: ['raw/orders/f3.json']
+run 4 reads: []
+```
+
+Run 2 may have written some output before failing, and run 3 reprocesses the same file, so the **write must be idempotent** (overwrite the partitions you produce, or merge on a key). To reprocess everything, reset the bookmark (`aws glue reset-job-bookmark --job-name ...`) or rewind to an earlier run.
+
+**Pitfalls.**
+
+- Changing `transformation_ctx` names, which makes Glue treat the source as new and reprocess all data.
+- Files overwritten in place with the same name: bookmarks may not see them as new. Land new data under new keys.
+- JDBC bookmarks on a non-monotonic column (such as an updated timestamp that can go backwards) miss rows. Use CDC for updates.
+
+**In interviews.** Explain what bookmarks track, that they commit only on success, and that you still need idempotent writes because failed runs can leave partial output.
+
+## Glue triggers and workflows
+
+**What it is.** Triggers start jobs and crawlers; workflows group jobs, crawlers and triggers into a named pipeline with a visual graph and run history.
+
+**How it works.** Trigger types:
+
+| Type | Fires when |
+|---|---|
+| `SCHEDULED` | A cron expression matches |
+| `CONDITIONAL` | Watched jobs or crawlers reach a state (`SUCCEEDED`, `FAILED`, `TIMEOUT`, `STOPPED`), combined with `AND` or `ANY` |
+| `ON_DEMAND` | You start it manually or by API |
+| `EVENT` | An EventBridge event arrives (workflows only), optionally batched by count or time window |
+
+{/* noexec */}
+```bash
+aws glue create-workflow --name orders-daily
+aws glue create-trigger --name orders-start --workflow-name orders-daily \
+  --type SCHEDULED --schedule "cron(30 2 * * ? *)" \
+  --actions '[{"CrawlerName": "raw-orders-crawler"}]' --start-on-creation
+aws glue create-trigger --name orders-transform --workflow-name orders-daily \
+  --type CONDITIONAL \
+  --predicate '{"Conditions": [{"LogicalOperator": "EQUALS", "CrawlerName": "raw-orders-crawler", "CrawlState": "SUCCEEDED"}]}' \
+  --actions '[{"JobName": "raw-to-curated-orders"}]' --start-on-creation
+```
+
+Workflows can pass run properties between steps. For anything beyond a chain of Glue jobs and crawlers (calling Lambda, waiting for files, branching, notifications, other services), Step Functions or Airflow is a better orchestrator; both can start Glue jobs and wait for them.
+
+**Pitfalls.**
+
+- Conditional triggers only watch jobs and crawlers in the same workflow run; a job started outside the workflow does not fire them.
+- No alerting by default. Add an EventBridge rule on `Glue Job State Change` events with state `FAILED` or `TIMEOUT`.
+
+**In interviews.** List the trigger types and say when you would outgrow Glue workflows: cross-service steps, complex branching, backfills and SLAs point to Step Functions or Airflow.
+
+## Glue cost tuning
+
+**What it is.** Glue bills DPU-hours for jobs, crawlers and interactive sessions, metered per second with a short minimum, plus Data Catalog storage and requests beyond a free allowance. Cost is DPUs multiplied by runtime, so you tune both.
+
+**How it works: the levers.**
+
+1. **Right-size workers.** Start with G.1X and a modest number of workers; read the job metrics (executor utilisation, memory, spill) before scaling up.
+2. **Auto Scaling** (`--enable-auto-scaling`) adds and removes workers during a run up to your maximum, so idle stages stop paying for a full cluster.
+3. **Flex execution class** runs non-urgent jobs on spare capacity at a lower rate, with possibly longer start and run times. Good for nightly backfills, not for tight SLAs.
+4. **Read less.** Push-down predicates, bookmarks, Parquet instead of JSON, column pruning.
+5. **Fix small files.** Many tiny inputs slow every stage; group them with the `groupFiles` and `groupSize` reader options, and write fewer, larger output files.
+6. **Use the right job type.** A Python shell job (a fraction of a DPU or one DPU) is enough for small API calls or file moves, rather than a Spark cluster.
+7. **Newer versions.** Newer Glue versions often run faster, and AWS announced lower DPU pricing with Glue 6.0; check the pricing page for the current rates per version.
+8. **Set timeouts and alarms** so failed or stuck jobs do not run for hours.
+
+**Pitfalls.**
+
+- Doubling workers for a job that is skewed: one task still does all the work. Fix skew (salting, AQE) first.
+- Crawlers on huge prefixes every hour: often the hidden biggest line item.
+
+**In interviews.** Expect "this Glue job got expensive, what do you do?" Answer in order: measure (metrics, Spark UI), read less, fix skew and small files, right-size or auto-scale, consider Flex for non-urgent runs, and tag jobs for cost allocation.
+
+## Practice questions
+
+<details>
+<summary>What is the difference between the Glue Data Catalog and a Glue job?</summary>
+
+The Data Catalog is a metadata store (databases, tables, partitions, schemas, locations) shared by Athena, Redshift Spectrum, EMR, Glue and Lake Formation. A Glue job is serverless compute, usually Spark, that reads and writes data. You can use the catalogue without ever running a Glue job.
+
+</details>
+
+<details>
+<summary>Your crawler suddenly created 40 tables instead of one. Why, and how do you prevent it?</summary>
+
+The files under the prefix had incompatible schemas or formats (for example a stray CSV, a schema change in some folders, or different compression), so the crawler could not group them into one table. Keep one dataset per prefix, validate files on arrival, use the table-grouping option for the crawler, or define the table in code and only add partitions.
+
+</details>
+
+<details>
+<summary>How do Glue job bookmarks work, and what happens if a job fails halfway?</summary>
+
+Bookmarks record what each source with a `transformation_ctx` has processed (S3 file paths and timestamps, or JDBC key values) and persist the state on `job.commit()` after a successful run. If the job fails, the state is not committed, so the next run reprocesses the same input. Any output the failed run wrote remains, so writes must be idempotent.
+
+</details>
+
+<details>
+<summary>When would you use a DynamicFrame instead of a DataFrame?</summary>
+
+For catalogue reads and writes that use bookmarks and update the catalogue, and for messy semi-structured data whose column types vary between records (choice types handled by `resolveChoice`, nested data flattened by `Relationalize`). For joins, aggregations and window functions, convert to a DataFrame.
+
+</details>
+
+<details>
+<summary>A Glue job reading a table with 200,000 partitions spends minutes before any task starts. What helps?</summary>
+
+Partition listing is the bottleneck. Add a partition index on the filter keys and use `catalogPartitionPredicate` so the catalogue filters server-side, keep the push-down predicate narrow, reduce partition count (coarser partitions), or move the table to Iceberg, which tracks files in its own metadata.
+
+</details>
+
+<details>
+<summary>How would you cut the cost of a nightly Glue job that is not time-critical?</summary>
+
+Use the Flex execution class, enable Auto Scaling with a sensible maximum, right-size the worker type from metrics, read only new data with bookmarks or predicates, compact small input files, set a timeout, and tag the job so its cost is visible in Cost Explorer.
+
+</details>
+
+## Key takeaways
+
+- The Glue Data Catalog is the shared metastore of an AWS lake; Glue jobs are serverless Spark that may or may not use it.
+- Crawlers infer schemas and partitions but can change tables unexpectedly; incremental crawls or tables defined as code are safer.
+- New partitions must be registered (crawler, API, job sink, projection) or managed by a table format.
+- Glue 6.0 runs Spark 4.1.1 and Python 3.13; a DPU is 4 vCPUs and 16 GB; choose G or R workers by workload.
+- Bookmarks process only new data and commit on success, so writes must still be idempotent.
+- Control cost with less data read, right-sized and auto-scaled workers, Flex for non-urgent runs, and timeouts.

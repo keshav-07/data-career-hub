@@ -1,0 +1,438 @@
+---
+title: "Amazon Athena: Serverless SQL on S3"
+description: "Query S3 with Amazon Athena: external tables, CTAS, partition projection, performance tuning, workgroups, federated queries and what drives the cost per query."
+technology: ["aws", "sql"]
+topic: ["athena", "serverless-sql", "data-lake"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain how Athena runs SQL on S3 through the Glue Data Catalog and where results go"
+  - "Create external tables and use CTAS, INSERT INTO and UNLOAD to write optimised data"
+  - "Configure partition projection so new partitions need no registration"
+  - "Tune queries and layouts to scan less data, and control spend with workgroups"
+  - "Describe federated queries and the billing dimensions of Athena"
+prerequisites: ["articles:aws/glue-catalog-crawlers-etl", "articles:sql/query-optimization-fundamentals"]
+related: ["articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/parquet-vs-avro-vs-orc"]
+previous: "articles:aws/glue-catalog-crawlers-etl"
+next: "articles:aws/redshift"
+versionContext: "Athena behaviour checked against the Athena documentation for engine version 3 in October 2026. Athena DDL and queries need an AWS account, so they were written from the Athena documentation and not executed. The PostgreSQL 16 analogues (declarative partition pruning and CREATE TABLE AS) and the Python projection and billing models were run locally; PostgreSQL is not Athena's engine, and the analogues show the concept only."
+sources:
+  - { label: "Amazon Athena: Athena engine version 3", url: "https://docs.aws.amazon.com/athena/latest/ug/engine-versions-reference-0003.html" }
+  - { label: "Amazon Athena: Set up partition projection", url: "https://docs.aws.amazon.com/athena/latest/ug/partition-projection-setting-up.html" }
+  - { label: "Amazon Athena: Per-query and per-workgroup data usage controls", url: "https://docs.aws.amazon.com/athena/latest/ug/workgroups-setting-control-limits-cloudwatch.html" }
+  - { label: "Amazon Athena pricing", url: "https://aws.amazon.com/athena/pricing/" }
+  - { label: "AWS Whitepaper: Amazon Athena (Big Data Analytics Options)", url: "https://docs.aws.amazon.com/whitepapers/latest/big-data-analytics-options/amazon-athena.html" }
+---
+
+Amazon Athena lets you run SQL directly on files in S3 with nothing to provision: you define a table over a prefix, run a query, and pay for the data the query scans. It is the default tool for exploring a lake, for ad hoc analysis and for many lightweight transformations. This lesson covers how it works, how to make queries cheap and fast, and how teams keep its spend under control.
+
+## Sample data
+
+Athena itself needs an AWS account, so its SQL is shown but not executed. Where the idea is engine-independent, a PostgreSQL 16 analogue runs locally; it is labelled as an analogue, because PostgreSQL stores tables itself while Athena reads files in S3.
+
+```sql
+-- PostgreSQL analogue: a table partitioned by day, like s3://.../sales/dt=YYYY-MM-DD/
+CREATE TABLE sales (order_id int, region text, amount numeric(10,2), dt date) PARTITION BY RANGE (dt);
+CREATE TABLE sales_20261001 PARTITION OF sales FOR VALUES FROM ('2026-10-01') TO ('2026-10-02');
+CREATE TABLE sales_20261002 PARTITION OF sales FOR VALUES FROM ('2026-10-02') TO ('2026-10-03');
+CREATE TABLE sales_20261003 PARTITION OF sales FOR VALUES FROM ('2026-10-03') TO ('2026-10-04');
+INSERT INTO sales VALUES
+  (1, 'eu', 20.00, '2026-10-01'), (2, 'us', 35.50, '2026-10-01'), (3, 'eu', 12.00, '2026-10-02'),
+  (4, 'apac', 99.90, '2026-10-03'), (5, 'us', 5.25, '2026-10-03');
+```
+
+## Athena basics
+
+**What it is.** Athena is a serverless, distributed SQL engine. Engine version 3, the current engine, is based on the open-source Trino project, so its SQL dialect and functions follow Trino. Athena also offers Apache Spark notebooks, but "Athena" in interviews nearly always means the SQL engine.
+
+**How it works.**
+
+1. Tables live in the **Glue Data Catalog** (or another catalogue). A table is metadata: columns, format and the S3 location.
+2. When you run a query, Athena plans it using the catalogue, reads only the objects it needs from S3, and processes them on a fleet of workers that AWS manages.
+3. Results are written as CSV to a **query result location** in S3 (set per workgroup), along with a metadata file. The console and the API read results from there.
+
+{/* noexec */}
+```bash
+aws athena start-query-execution \
+  --work-group analytics \
+  --query-execution-context Database=curated \
+  --query-string "SELECT region, sum(amount) FROM sales WHERE dt = '2026-10-03' GROUP BY region"
+aws athena get-query-execution --query-execution-id <id-from-previous-call> \
+  --query 'QueryExecution.[Status.State, Statistics.DataScannedInBytes]'
+```
+
+**Pitfalls.**
+
+- Athena reads whatever is in the table's location. Stray files (a `_SUCCESS` marker, a CSV in a Parquet folder) cause errors or wrong results.
+- Result files accumulate in S3. Put a lifecycle rule on the result bucket.
+- Athena is not a low-latency serving database. Queries take seconds, and there are quotas on concurrent queries per account.
+
+**In interviews.** Describe Athena as "serverless Trino over S3 using the Glue Data Catalog, billed per data scanned" and name its sweet spot: ad hoc and moderate workloads on a well-laid-out lake.
+
+## Querying S3 with SQL
+
+**What it is.** To query files you define an **external table** that maps a schema onto an S3 prefix, then use ordinary `SELECT` statements.
+
+**How it works.** Choose the SerDe or format to match the files. For Parquet the schema comes from column names; for CSV and JSON you declare how to parse rows.
+
+{/* noexec */}
+```sql
+CREATE EXTERNAL TABLE curated.sales (
+  order_id   bigint,
+  region     string,
+  amount     decimal(10,2)
+)
+PARTITIONED BY (dt string)
+STORED AS PARQUET
+LOCATION 's3://example-lake/curated/sales/';
+
+CREATE EXTERNAL TABLE raw.clicks_json (
+  user_id string,
+  url     string,
+  ts      timestamp
+)
+PARTITIONED BY (dt string)
+ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
+LOCATION 's3://example-lake/raw/clicks/';
+
+MSCK REPAIR TABLE curated.sales;   -- discover Hive-style partitions (slow on large tables)
+
+SELECT region, sum(amount) AS revenue
+FROM curated.sales
+WHERE dt BETWEEN '2026-10-01' AND '2026-10-03'
+GROUP BY region
+ORDER BY revenue DESC;
+```
+
+Filtering on the partition column lets Athena skip whole prefixes. The PostgreSQL analogue shows the same idea: the first plan touches one partition, while wrapping the partition column in a function forces a scan of all of them.
+
+```sql
+EXPLAIN (COSTS OFF) SELECT region, sum(amount) FROM sales WHERE dt = DATE '2026-10-03' GROUP BY region;
+EXPLAIN (COSTS OFF) SELECT region, sum(amount) FROM sales WHERE date_trunc('day', dt) = DATE '2026-10-03' GROUP BY region;
+```
+
+```text
+                   QUERY PLAN
+-------------------------------------------------
+ GroupAggregate
+   Group Key: sales.region
+   ->  Sort
+         Sort Key: sales.region
+         ->  Seq Scan on sales_20261003 sales
+               Filter: (dt = '2026-10-03'::date)
+
+ GroupAggregate
+   Group Key: sales.region
+   ->  Sort
+         Sort Key: sales.region
+         ->  Append
+               ->  Seq Scan on sales_20261001 sales_1
+                     Filter: (date_trunc('day'::text, (dt)::timestamp with time zone) = '2026-10-03'::date)
+               ->  Seq Scan on sales_20261002 sales_2
+                     Filter: (date_trunc('day'::text, (dt)::timestamp with time zone) = '2026-10-03'::date)
+               ->  Seq Scan on sales_20261003 sales_3
+                     Filter: (date_trunc('day'::text, (dt)::timestamp with time zone) = '2026-10-03'::date)
+```
+
+**Pitfalls.**
+
+- Column order and names in the DDL must match the files' schema (by name for Parquet, by position for CSV).
+- Schema drift in JSON (a field changing type) causes `HIVE_BAD_DATA` errors at query time, not at load time.
+- `string` partition values compared to dates need care: `dt = '2026-10-03'` works, `dt = DATE '2026-10-03'` fails on a string column.
+
+**In interviews.** Show the external table DDL, explain that dropping an external table leaves the data, and explain why filters must hit partition columns directly.
+
+## CTAS and external tables
+
+**What it is.** `CREATE TABLE AS SELECT` (CTAS) runs a query and writes its result to S3 as a new table, in the format and layout you choose. With `INSERT INTO` and `UNLOAD`, it turns Athena into a lightweight ETL engine: convert raw JSON or CSV into partitioned Parquet without a Spark job.
+
+**How it works.**
+
+{/* noexec */}
+```sql
+CREATE TABLE curated.daily_region_sales
+WITH (
+  format = 'PARQUET',
+  write_compression = 'SNAPPY',
+  external_location = 's3://example-lake/curated/daily_region_sales/',
+  partitioned_by = ARRAY['dt']
+) AS
+SELECT region, sum(amount) AS revenue, count(*) AS orders, dt   -- partition column last
+FROM curated.sales
+GROUP BY region, dt;
+
+INSERT INTO curated.daily_region_sales
+SELECT region, sum(amount), count(*), dt
+FROM curated.sales
+WHERE dt = '2026-10-04'
+GROUP BY region, dt;
+
+UNLOAD (SELECT * FROM curated.sales WHERE dt = '2026-10-03')
+TO 's3://example-exports/sales/2026-10-03/'
+WITH (format = 'PARQUET');
+```
+
+The local analogue of CTAS is PostgreSQL's `CREATE TABLE AS`, which also materialises a query result as a new table:
+
+```sql
+CREATE TABLE daily_region_sales AS
+SELECT dt, region, sum(amount) AS revenue, count(*) AS orders
+FROM sales
+GROUP BY dt, region;
+
+SELECT * FROM daily_region_sales ORDER BY dt, region;
+```
+
+```text
+     dt     | region | revenue | orders
+------------+--------+---------+--------
+ 2026-10-01 | eu     |   20.00 |      1
+ 2026-10-01 | us     |   35.50 |      1
+ 2026-10-02 | eu     |   12.00 |      1
+ 2026-10-03 | apac   |   99.90 |      1
+ 2026-10-03 | us     |    5.25 |      1
+```
+
+For tables that need updates and deletes, create **Iceberg** tables (`TBLPROPERTIES ('table_type' = 'ICEBERG')`) and use `MERGE INTO`, `UPDATE`, `DELETE`, `OPTIMIZE` and `VACUUM`; plain Hive-style tables are append and overwrite only.
+
+**Pitfalls.**
+
+- A single CTAS or `INSERT INTO` can write at most 100 partitions. Backfill larger ranges in batches.
+- The `external_location` must be empty, or CTAS fails. Clean up before re-running, which also makes reruns non-atomic.
+- Partition columns must come last in the `SELECT` list, in the order given in `partitioned_by`.
+- `UNLOAD` writes files but does not create a table.
+
+**In interviews.** Use CTAS as your answer to "convert this CSV dataset to partitioned Parquet without Spark", and mention the 100-partition limit and Iceberg for row-level changes.
+
+## Partition projection
+
+**What it is.** Partition projection makes Athena compute partition values and locations from table properties at query time, instead of looking them up in the catalogue. New partitions become queryable the moment their files land, with no crawler, no `MSCK REPAIR` and no `ADD PARTITION`.
+
+**How it works.** You declare a type for each partition column (`date`, `integer`, `enum` or `injected`), its range or values, and a storage location template:
+
+{/* noexec */}
+```sql
+CREATE EXTERNAL TABLE curated.sales_projected (
+  order_id bigint,
+  amount   decimal(10,2)
+)
+PARTITIONED BY (dt string, region string)
+STORED AS PARQUET
+LOCATION 's3://example-lake/curated/sales/'
+TBLPROPERTIES (
+  'projection.enabled' = 'true',
+  'projection.dt.type' = 'date',
+  'projection.dt.format' = 'yyyy-MM-dd',
+  'projection.dt.range' = '2026-01-01,NOW',
+  'projection.region.type' = 'enum',
+  'projection.region.values' = 'eu,us,apac',
+  'storage.location.template' = 's3://example-lake/curated/sales/dt=${dt}/region=${region}/'
+);
+```
+
+This model computes the prefixes Athena would read for a query filtered on two days and one region:
+
+```python
+from datetime import date, timedelta
+
+props = {
+    "projection.enabled": "true",
+    "projection.dt.type": "date",
+    "projection.dt.format": "yyyy-MM-dd",
+    "projection.dt.range": "2026-01-01,NOW",
+    "projection.region.type": "enum",
+    "projection.region.values": "eu,us,apac",
+    "storage.location.template": "s3://example-lake/curated/sales/dt=${dt}/region=${region}/",
+}
+
+def projected_locations(props, dt_from, dt_to, regions=None):
+    """Compute the prefixes Athena would read for a query, without asking the catalogue."""
+    allowed = props["projection.region.values"].split(",")
+    regions = [r for r in (regions or allowed) if r in allowed]
+    out, d = [], dt_from
+    while d <= dt_to:
+        for r in regions:
+            out.append(props["storage.location.template"]
+                       .replace("${dt}", d.isoformat()).replace("${region}", r))
+        d += timedelta(days=1)
+    return out
+
+for loc in projected_locations(props, date(2026, 10, 2), date(2026, 10, 3), regions=["eu"]):
+    print(loc)
+print(len(projected_locations(props, date(2026, 10, 1), date(2026, 10, 31))), "prefixes for October, all regions")
+```
+
+```text
+s3://example-lake/curated/sales/dt=2026-10-02/region=eu/
+s3://example-lake/curated/sales/dt=2026-10-03/region=eu/
+93 prefixes for October, all regions
+```
+
+**Pitfalls.**
+
+- Projection is an Athena feature. Glue jobs, EMR and Redshift Spectrum do not use it and still need catalogue partitions.
+- Queries without a filter on a projected column enumerate the whole range; a range from years ago to `NOW` at hourly granularity can mean a very large number of prefixes to check.
+- Projected partitions that have no data simply return no rows, so typos in the template fail silently.
+- Once projection is enabled, Athena ignores partitions registered in the catalogue for that table.
+
+**In interviews.** Recommend projection for high-volume, predictable keys (dates, hours, known enums) as the fix for slow partition listing and forgotten partition registration, and mention that it is Athena-only.
+
+## Athena performance tuning
+
+**What it is.** Athena performance and cost follow the same rule: read less data, in fewer, larger files.
+
+**The checklist.**
+
+| Technique | Why it helps |
+|---|---|
+| Columnar formats (Parquet, ORC) with compression | Reads only the columns referenced, uses min/max statistics to skip row groups |
+| Partition on common filter columns, filter on them directly | Skips whole prefixes |
+| File sizes of roughly 128 MB or more; compact small files | Fewer S3 requests and less per-file overhead |
+| Select only needed columns, never `SELECT *` on wide tables | Less data scanned |
+| Put the larger table on the left of a join, the smaller on the right | The right side is built into memory in the distributed hash join |
+| `approx_distinct` and other approximate functions where exactness is not needed | Much less memory than exact `COUNT(DISTINCT)` |
+| `ORDER BY` with `LIMIT` | Avoids a full global sort |
+| Iceberg tables with `OPTIMIZE` and sort order | Compaction and clustering for frequently updated data |
+| Query result reuse for repeated identical queries | Returns cached results without scanning again |
+
+**Pitfalls.**
+
+- Gzip-compressed large CSV or JSON files are not splittable, so one worker reads each whole file.
+- Too many small partitions make planning slow and files small; partition by day, not by minute.
+- Errors like "Query exhausted resources at this scale factor" usually mean a large `ORDER BY` without `LIMIT`, a huge `COUNT(DISTINCT)`, or a join with the big table on the right.
+
+**In interviews.** Expect "this Athena query scans 2 TB, make it cheaper". Answer: convert to Parquet with CTAS, partition by the filter column, select fewer columns, compact files, and check the data scanned in the query statistics after each change.
+
+## Workgroups
+
+**What it is.** A workgroup separates users, teams or applications that use Athena. Each has its own settings, query history, metrics and limits.
+
+**How it works.** Per workgroup you can set the query result location and its encryption, the engine version, whether those settings override client-side settings ("enforce workgroup configuration"), and data usage controls:
+
+- A **per-query limit** cancels any query that scans more than a set amount of data.
+- **Per-workgroup limits** track total data scanned over a period and trigger a CloudWatch alarm and SNS notification (or other action) when crossed.
+
+{/* noexec */}
+```bash
+aws athena create-work-group --name analytics \
+  --configuration '{"ResultConfiguration": {"OutputLocation": "s3://example-athena-results/analytics/"}, "EnforceWorkGroupConfiguration": true, "PublishCloudWatchMetricsEnabled": true, "BytesScannedCutoffPerQuery": 1099511627776, "EngineVersion": {"SelectedEngineVersion": "Athena engine version 3"}}' \
+  --tags Key=team,Value=analytics
+```
+
+IAM policies can restrict users to their workgroup (`athena:StartQueryExecution` on the workgroup ARN), and tags on workgroups feed cost allocation. Workgroups are also where you attach **provisioned capacity** reservations.
+
+**Pitfalls.**
+
+- Not enforcing workgroup configuration, so clients write results to arbitrary, unencrypted buckets.
+- Setting no per-query limit, so one accidental cross join over the raw zone costs a lot.
+
+**In interviews.** Workgroups are the answer to "how do you control Athena costs and separate teams": per-query scan cutoffs, workgroup alarms, enforced result locations, IAM restrictions and tags.
+
+## Federated queries
+
+**What it is.** Federated queries let Athena query data outside S3 (DynamoDB, RDS and Aurora, Redshift, CloudWatch Logs, on-premises databases and others) through **data source connectors** that run as Lambda functions.
+
+**How it works.** You deploy a connector (AWS provides many, built on the Athena Query Federation SDK), register it as a data source (a catalogue), and refer to tables as `catalog.database.table`. The connector reads from the source and returns data to Athena, which can join it with S3 tables:
+
+{/* noexec */}
+```sql
+SELECT o.order_id, o.amount, c.segment
+FROM curated.sales AS o
+JOIN "ddb_customers"."default"."customers" AS c
+  ON o.customer_id = c.customer_id
+WHERE o.dt = '2026-10-03';
+```
+
+**Pitfalls.**
+
+- Every federated query hits the source system: fine for occasional lookups, harmful as a nightly full-table export from a production OLTP database.
+- Connector Lambda functions have their own costs, timeouts and concurrency limits, and need network access (VPC, security groups) to private databases.
+- Predicate push-down depends on the connector, so some filters run after all rows are fetched.
+
+**In interviews.** Present federation as useful for exploration and small joins across systems, and say that regular, heavy access should land the data in S3 (DMS, zero-ETL or exports) instead.
+
+## Cost per query
+
+**What it is.** With the default pay-per-query model, Athena charges for the bytes each SQL query scans, per terabyte. With **provisioned capacity**, you reserve DPUs (a DPU is 4 vCPUs and 16 GB) for a workgroup and pay for the reservation instead of for data scanned.
+
+**How it works.** For pay-per-query, scanned bytes are rounded up to the next megabyte, with a 10 MB minimum per query. You are not charged for failed queries or for DDL statements such as `CREATE TABLE` and partition management, but a cancelled query is charged for what it scanned before cancellation. Separate charges apply for S3 storage and requests, Glue catalogue requests beyond the free allowance, federated connector Lambda invocations, and query results stored in S3. The rounding rule in code:
+
+```python
+import math
+
+MB = 1024 * 1024
+
+def billable_bytes(bytes_scanned):
+    """Athena pay-per-query billing: round up to the next megabyte, with a 10 MB minimum per query."""
+    return max(10 * MB, math.ceil(bytes_scanned / MB) * MB)
+
+for scanned in (2_000, 10_485_761, 3_200_000_000):
+    print(f"scanned {scanned:>13,} bytes -> billed as {billable_bytes(scanned) / MB:>8,.0f} MB")
+```
+
+```text
+scanned         2,000 bytes -> billed as       10 MB
+scanned    10,485,761 bytes -> billed as       11 MB
+scanned 3,200,000,000 bytes -> billed as    3,052 MB
+```
+
+The minimum means thousands of tiny queries (from a dashboard that polls every few seconds) each pay for 10 MB. Check the pricing page for the current per-TB and per-DPU rates in your Region.
+
+**Choosing a model.** Pay-per-query suits spiky, unpredictable use. Provisioned capacity suits steady, heavy use where predictable spend and guaranteed concurrency matter more; reservations can now be short and small, so it is worth modelling both.
+
+**In interviews.** State the billing dimension (data scanned, rounded up per MB with a 10 MB minimum) and immediately connect it to design: Parquet, partitions and column pruning reduce the bill in direct proportion to bytes not read.
+
+## Practice questions
+
+<details>
+<summary>How does Athena know where the data for a table is and how to read it?</summary>
+
+From the Glue Data Catalog (or another registered catalogue): the table definition holds the S3 location, the format or SerDe, the columns and the partitions (or partition projection properties). Athena plans the query from that metadata, reads the matching objects from S3, and writes results to the workgroup's result location.
+
+</details>
+
+<details>
+<summary>New daily partitions are not showing up in Athena. List three fixes.</summary>
+
+Register them: run an incremental crawler, call `ALTER TABLE ... ADD PARTITION` (or the Glue `batch-create-partition` API) when the data lands, or have the writing job update the catalogue. Better, enable partition projection for date partitions so no registration is needed, or use an Iceberg table. `MSCK REPAIR TABLE` works but is slow on large tables.
+
+</details>
+
+<details>
+<summary>A query on a 5 TB JSON table is slow and expensive. What do you do?</summary>
+
+Convert the data to partitioned, compressed Parquet with CTAS (in batches of at most 100 partitions) or a Glue job, partition by the main filter column, select only needed columns, compact small files, and re-check the data scanned. Add a per-query scan limit in the workgroup to prevent accidents.
+
+</details>
+
+<details>
+<summary>When would you choose Athena provisioned capacity over pay-per-query?</summary>
+
+When usage is steady and heavy enough that reserved DPUs cost less than per-TB scanning, when you need guaranteed concurrency for a production workload, or when finance wants predictable spend. Model both with your actual query history before deciding.
+
+</details>
+
+<details>
+<summary>What is partition projection and what are its limits?</summary>
+
+Athena computes partition values and S3 locations from table properties (types, ranges, enums and a location template) instead of reading them from the catalogue, so new partitions are instantly queryable and planning is fast. It works only in Athena (not in Glue, EMR or Spectrum), ignores catalogue partitions for that table, and unfiltered queries can enumerate a huge range.
+
+</details>
+
+<details>
+<summary>Why put the smaller table on the right side of a join in Athena?</summary>
+
+Athena's engine (Trino-based) builds an in-memory hash table from the right side of a distributed hash join and streams the left side through it. A large right side can exhaust memory and fail with resource errors, while a small right side builds quickly.
+
+</details>
+
+## Key takeaways
+
+- Athena is serverless SQL (engine version 3, Trino-based) over S3, using the Glue Data Catalog and writing results to S3.
+- External tables are metadata; CTAS, `INSERT INTO` and `UNLOAD` write optimised data, with a 100-partition limit per statement.
+- Partition projection removes partition registration for predictable keys, but only Athena uses it.
+- Performance and cost both come from scanning less: Parquet, partitions, column pruning, larger files.
+- Workgroups give per-query and per-workgroup scan limits, enforced result settings and cost separation.
+- Pay-per-query bills data scanned (rounded per MB, 10 MB minimum); provisioned capacity bills reserved DPUs.
