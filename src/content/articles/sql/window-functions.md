@@ -224,7 +224,7 @@ ORDER BY customer_id;
 | 1 | 103 | 2025-06-10 |
 | 2 | 105 | 2025-06-05 |
 
-The top-N and deduplication lesson later in this course builds on this pattern.
+The [top-N and deduplication lesson](/sql/top-n-deduplication-scd-queries/) builds on this pattern.
 
 ### Pitfalls
 

@@ -1,7 +1,7 @@
 ---
 title: "Time-Series SQL: Date Buckets, Calendars, YoY, MoM and Rolling Metrics"
 seoTitle: "Time-Series SQL: Calendars, YoY, MoM, Rolling"
-description: "Build time-series metrics in SQL: truncate and bucket dates, generate calendars to fill gaps, and compute month-over-month, year-over-year and rolling 7 and 30 day figures."
+description: "Build time-series metrics in SQL: bucket dates, generate calendars to fill gaps, and compute month-over-month, year-over-year and rolling 7 and 30 day figures."
 technology: ["sql"]
 topic: ["dates", "time-series", "calendar-table", "growth-metrics"]
 difficulty: "Intermediate"
@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:sql/window-frames-running-totals", "articles:sql/functions-strings-dates-types"]
 related: ["articles:sql/window-functions", "articles:data-warehousing/star-schema"]
 previous: "articles:sql/window-frames-running-totals"
+next: "articles:sql/top-n-deduplication-scd-queries"
 sources:
   - { label: "PostgreSQL documentation: Date/time functions (date_trunc, date_bin)", url: "https://www.postgresql.org/docs/16/functions-datetime.html" }
   - { label: "PostgreSQL documentation: Set returning functions (generate_series)", url: "https://www.postgresql.org/docs/16/functions-srf.html" }

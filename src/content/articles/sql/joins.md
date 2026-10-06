@@ -196,7 +196,7 @@ ORDER BY c.customer_id, o.order_id;
 | Diana Lopez | 107 | 64.99 |
 | Ethan Brown | NULL | NULL |
 
-The rule: conditions on the **left** table that should remove left rows go in `WHERE`; conditions on the **right** table go in `ON`. The one deliberate exception is `WHERE o.order_id IS NULL`, which keeps only unmatched left rows. That is the anti-join pattern, covered in the next lesson.
+The rule: conditions on the **left** table that should remove left rows go in `WHERE`; conditions on the **right** table go in `ON`. The one deliberate exception is `WHERE o.order_id IS NULL`, which keeps only unmatched left rows. That is the anti-join pattern, covered in the [next lesson](/sql/semi-anti-lateral-joins/).
 
 ### A quick safety check
 

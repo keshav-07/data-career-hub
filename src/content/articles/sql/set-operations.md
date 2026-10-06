@@ -144,7 +144,7 @@ ORDER BY signup_date, source_system;
 - **Using `UNION` by habit.** If the inputs cannot overlap (different months, different source systems with a source column), `UNION` wastes a sort. If they can overlap, `UNION` may hide duplicates you should have found. Choose deliberately.
 - **Columns in a different order.** `SELECT email, country ... UNION ALL SELECT country, email ...` runs without error when both are text and silently swaps the values. List columns explicitly in every branch, never `SELECT *`.
 - **Type mismatches.** `NULL` without a type, or text unioned with numbers, can fail or be coerced. Cast: `CAST(NULL AS DATE)`.
-- **Expecting `UNION` to de-duplicate by key.** Ben's two signups differ in date, so both survive. De-duplicating by key needs `ROW_NUMBER()`, covered in the top-N and deduplication lesson later in the course.
+- **Expecting `UNION` to de-duplicate by key.** Ben's two signups differ in date, so both survive. De-duplicating by key needs `ROW_NUMBER()`, covered in the [top-N and deduplication lesson](/sql/top-n-deduplication-scd-queries/).
 
 ### In interviews
 
