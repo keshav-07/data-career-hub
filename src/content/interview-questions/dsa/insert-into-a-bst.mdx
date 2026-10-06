@@ -1,0 +1,204 @@
+---
+title: "Insert into a BST: Walk Down to the Empty Spot"
+seoTitle: "Insert into a Binary Search Tree"
+description: "Insert a value into a binary search tree by descending to the empty child where it belongs. Iterative and recursive Python solutions, complexity, pitfalls and tests."
+technology: ["dsa"]
+topic: ["binary-search-trees"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+shortAnswer: "Compare the new value with the current node and go left if it is smaller, right if it is larger, until the child in that direction is empty; attach a new node there. An empty tree simply becomes the new node. The search follows one path, so it is O(h) time: O(log n) for a balanced tree and O(n) for a skewed one. The iterative version uses O(1) extra space; the recursive one O(h) stack."
+followUps: ["What happens to the tree's shape if you insert values in sorted order?", "How do self-balancing trees fix that?", "How would you handle duplicate values?", "How would you insert while keeping subtree sizes up to date?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/lowest-common-ancestor-of-a-bst"
+---
+
+## Problem
+
+Given the root of a binary search tree and a value that is not already in the tree, insert the value so that the tree is still a valid BST, and return the root. Many valid results exist; the expected one adds the value as a new leaf without restructuring existing nodes.
+
+This is widely known as LeetCode 701 (Insert into a Binary Search Tree). It is the basic BST write operation and a building block for deletion and for building trees from data.
+
+Constraints for this version: 0 to 10,000 nodes; values are distinct integers, and the new value is not in the tree.
+
+## Examples
+
+Starting tree (inserted in the order `40, 20, 60, 10, 30`):
+
+```text
+        40
+       /  \
+     20    60
+    /  \
+  10    30
+```
+
+| Insert | Result (level order) | Where it goes |
+|---|---|---|
+| 35 | `[40, 20, 60, 10, 30, None, None, None, None, None, 35]` | right child of 30 |
+| 70 | `[40, 20, 60, 10, 30, None, 70]` | right child of 60 |
+| 5 | `[40, 20, 60, 10, 30, None, None, 5]` | left child of 10 |
+| 8 into an empty tree | `[8]` | becomes the root |
+
+## Approach 1: brute force
+
+A simple but wasteful method: collect all values, add the new one, sort, and rebuild a balanced tree from the sorted list.
+
+```python
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def insert_by_rebuild(root, val):
+    values = []
+
+    def inorder(node):
+        if node:
+            inorder(node.left)
+            values.append(node.val)
+            inorder(node.right)
+
+    inorder(root)
+    values.append(val)
+    values.sort()
+
+    def build(lo, hi):
+        if lo > hi:
+            return None
+        mid = (lo + hi) // 2
+        return TreeNode(values[mid], build(lo, mid - 1), build(mid + 1, hi))
+
+    return build(0, len(values) - 1)
+```
+
+O(n log n) per insert, and it replaces every node. It does produce a balanced tree, which is a fair point to raise, but it is not what the problem is after.
+
+## Approach 2: optimal
+
+**Key insight.** The BST ordering tells you, at every node, which side the new value belongs on. Following those decisions from the root leads to exactly one empty child slot, and attaching the new node there keeps every ancestor's ordering valid.
+
+**Walkthrough** inserting 35:
+
+| Node | Compare | Move |
+|---|---|---|
+| 40 | 35 is smaller | left to 20 |
+| 20 | 35 is larger | right to 30 |
+| 30 | 35 is larger | right child is empty: attach 35 |
+
+### Iterative
+
+```python
+def insert_into_bst(root, val):
+    new = TreeNode(val)
+    if root is None:
+        return new
+    node = root
+    while True:
+        if val < node.val:
+            if node.left is None:
+                node.left = new
+                return root
+            node = node.left
+        else:
+            if node.right is None:
+                node.right = new
+                return root
+            node = node.right
+```
+
+### Recursive
+
+```python
+def insert_into_bst_recursive(root, val):
+    if root is None:
+        return TreeNode(val)
+    if val < root.val:
+        root.left = insert_into_bst_recursive(root.left, val)
+    else:
+        root.right = insert_into_bst_recursive(root.right, val)
+    return root
+```
+
+Reassigning `root.left` (or `root.right`) on the way back up is what attaches the new node to its parent; on every other level it assigns the same child back, which is harmless.
+
+**Complexity.** O(h) time. O(1) extra space iteratively, O(h) stack recursively. Inserting already-sorted values one by one creates a chain, so `h` becomes `n`; self-balancing trees (AVL, red-black) rotate nodes after inserts to keep `h` at O(log n).
+
+## Tests
+
+```python
+from collections import deque
+import random
+
+def to_level_list(root):
+    out, queue = [], deque([root])
+    while queue:
+        node = queue.popleft()
+        if node:
+            out.append(node.val)
+            queue.extend([node.left, node.right])
+        else:
+            out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+def inorder_values(root):
+    out, stack, node = [], [], root
+    while stack or node:
+        while node:
+            stack.append(node)
+            node = node.left
+        node = stack.pop()
+        out.append(node.val)
+        node = node.right
+    return out
+
+def height(root):
+    best, stack = 0, [(root, 1)] if root else []
+    while stack:
+        node, d = stack.pop()
+        best = max(best, d)
+        stack.extend((c, d + 1) for c in (node.left, node.right) if c)
+    return best
+
+def build(fn, values):
+    root = None
+    for v in values:
+        root = fn(root, v)
+    return root
+
+base = [40, 20, 60, 10, 30]
+for fn in (insert_into_bst, insert_into_bst_recursive):
+    assert to_level_list(fn(build(fn, base), 35)) == [40, 20, 60, 10, 30, None, None, None, None, None, 35]
+    assert to_level_list(fn(build(fn, base), 70)) == [40, 20, 60, 10, 30, None, 70]
+    assert to_level_list(fn(build(fn, base), 5)) == [40, 20, 60, 10, 30, None, None, 5]
+    assert to_level_list(fn(None, 8)) == [8]
+
+rng = random.Random(16)
+for _ in range(200):
+    vals = rng.sample(range(-300, 300), rng.randint(1, 60))
+    for fn in (insert_into_bst, insert_into_bst_recursive, insert_by_rebuild):
+        assert inorder_values(build(fn, vals)) == sorted(vals)
+
+# sorted inserts degenerate into a chain; the rebuild version stays balanced
+assert height(build(insert_into_bst, range(500))) == 500
+assert height(build(insert_by_rebuild, range(100))) == 7
+print("all BST insert tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Empty tree.** Return the new node as the root; forgetting this returns `None`.
+- **Losing the attachment in recursion.** Calling `insert(root.left, val)` without assigning the result to `root.left` creates the node and then drops it.
+- **Duplicates.** The problem guarantees a new value. If duplicates were allowed, choose a side consistently (or keep a count per node) and say so.
+- **Sorted input** turns the BST into a linked list. Mention balancing when asked about worst cases.
+
+## Where this shows up in data engineering
+
+Every insert into a B-tree index follows this "descend to the right leaf" logic, with page splits playing the role of rebalancing. The sorted-input problem is also real: inserting monotonically increasing keys (timestamps, auto-increment IDs) concentrates writes on the right-most leaf of an index, which is a known hot-spot in OLTP databases and a reason some systems hash or randomise keys.
