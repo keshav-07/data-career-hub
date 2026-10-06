@@ -174,5 +174,49 @@
  "Cost per query": {
   "ref": "articles:aws/athena",
   "heading": "Cost per query"
+ },
+ "Redshift architecture": {
+  "ref": "articles:aws/redshift",
+  "heading": "Redshift architecture"
+ },
+ "RA3 & managed storage": {
+  "ref": "articles:aws/redshift",
+  "heading": "RA3 and managed storage"
+ },
+ "Distribution styles": {
+  "ref": "articles:aws/redshift",
+  "heading": "Distribution styles"
+ },
+ "Sort keys": {
+  "ref": "articles:aws/redshift",
+  "heading": "Sort keys"
+ },
+ "COPY & UNLOAD": {
+  "ref": "articles:aws/redshift",
+  "heading": "COPY and UNLOAD"
+ },
+ "Vacuum & analyze": {
+  "ref": "articles:aws/redshift",
+  "heading": "Vacuum and analyze"
+ },
+ "Workload management (WLM)": {
+  "ref": "articles:aws/redshift",
+  "heading": "Workload management (WLM)"
+ },
+ "Concurrency scaling": {
+  "ref": "articles:aws/redshift",
+  "heading": "Concurrency scaling"
+ },
+ "Redshift Spectrum": {
+  "ref": "articles:aws/redshift",
+  "heading": "Redshift Spectrum"
+ },
+ "Materialized views": {
+  "ref": "articles:aws/redshift",
+  "heading": "Materialized views"
+ },
+ "Redshift Serverless": {
+  "ref": "articles:aws/redshift",
+  "heading": "Redshift Serverless"
  }
 }
