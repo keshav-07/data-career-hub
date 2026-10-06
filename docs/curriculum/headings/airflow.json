@@ -110,5 +110,29 @@
  "SLAs": {
   "ref": "articles:airflow/dags-scheduling-retries",
   "heading": "SLAs and deadline alerts"
+ },
+ "XCom push/pull": {
+  "ref": "articles:airflow/xcom-variables-connections",
+  "heading": "XCom push and pull"
+ },
+ "Custom XCom backends": {
+  "ref": "articles:airflow/xcom-variables-connections",
+  "heading": "Custom XCom backends"
+ },
+ "Variables & Connections": {
+  "ref": "articles:airflow/xcom-variables-connections",
+  "heading": "Variables and Connections"
+ },
+ "Params": {
+  "ref": "articles:airflow/xcom-variables-connections",
+  "heading": "Params"
+ },
+ "Connections & secrets backend": {
+  "ref": "articles:airflow/xcom-variables-connections",
+  "heading": "Connections and secrets backends"
+ },
+ "Task state lifecycle": {
+  "ref": "articles:airflow/xcom-variables-connections",
+  "heading": "Task state lifecycle"
  }
 }
