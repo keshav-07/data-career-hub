@@ -1,0 +1,183 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Coin Change: Fewest Coins with Bottom-Up DP"
+seoTitle: "Coin Change: Fewest Coins with DP"
+description: "Find the fewest coins that make an amount with unlimited coins of each value, using unbounded-knapsack DP and BFS, why greedy fails, and edge-case tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Let fewest(a) be the minimum number of coins that sum to a. The last coin used is some c, so fewest(a) = 1 + min over coins c <= a of fewest(a - c), with fewest(0) = 0 and unreachable amounts marked as infinity. Fill a table from 0 up to the target and return -1 if the target stays infinite. With A the amount and k coin types this is O(A * k) time and O(A) space. Greedy (largest coin first) is wrong for many coin sets."
+followUps: ["Why does greedy work for some coin systems but not others?", "How would you count the number of combinations instead (Coin Change II)?", "How would you return the actual coins used?", "How does a BFS over amounts solve the same problem?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of coin values and a target amount. You have an unlimited supply of each coin. Return the
+smallest number of coins that add up exactly to the amount, or -1 if it cannot be done. An amount of 0 needs 0 coins.
+
+This is widely known as LeetCode 322, "Coin Change". Counting the number of ways instead is
+[Coin Change II](/interview/dsa/coin-change-ii/).
+
+Assume up to 12 coin values between 1 and 2^31 - 1 and an amount up to 10,000.
+
+## Examples
+
+```text
+coins [1, 4, 5], amount 8   -> 2   (4 + 4; greedy 5+1+1+1 uses 4 coins)
+coins [2, 7], amount 11     -> 3   (2 + 2 + 7)
+coins [4], amount 6         -> -1  (unreachable)
+coins [3, 9], amount 0      -> 0
+```
+
+## Approach 1: plain recursion
+
+```python
+def coin_change_recursive(coins, amount):
+    def fewest(rest):
+        if rest == 0:
+            return 0
+        best = float("inf")
+        for c in coins:
+            if c <= rest:
+                best = min(best, 1 + fewest(rest - c))
+        return best
+    result = fewest(amount)
+    return -1 if result == float("inf") else result
+```
+
+It tries every sequence of coins, roughly O(k^(A / smallest coin)), and recomputes the same remainders constantly.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `fewest[a]` = minimum coins summing to exactly a (infinity if impossible).
+- **Recurrence:** `fewest[a] = 1 + min(fewest[a - c] for each coin c <= a)`.
+- **Base case:** `fewest[0] = 0`.
+- **Answer:** `fewest[amount]`, or -1 if infinite.
+
+This is the unbounded knapsack pattern: each coin may be reused, so `fewest[a - c]` may already contain coin c.
+
+### Filled table for coins [1, 4, 5], amount 8
+
+| a | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| fewest | 0 | 1 | 2 | 3 | 1 | 1 | 2 | 3 | 2 |
+
+`fewest[8] = 1 + min(fewest[7], fewest[4], fewest[3]) = 1 + min(3, 1, 3) = 2`.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def coin_change_memo(coins, amount):
+    @lru_cache(maxsize=None)
+    def fewest(rest):
+        if rest == 0:
+            return 0
+        best = float("inf")
+        for c in coins:
+            if c <= rest:
+                best = min(best, 1 + fewest(rest - c))
+        return best
+    result = fewest(amount)
+    return -1 if result == float("inf") else result
+```
+
+The memoised version can hit Python's recursion limit for large amounts with a coin of 1, which is one reason to
+prefer bottom-up.
+
+### Bottom-up
+
+```python
+def coin_change(coins, amount):
+    INF = amount + 1                       # more coins than could ever be needed
+    fewest = [0] + [INF] * amount
+    for a in range(1, amount + 1):
+        for c in coins:
+            if c <= a and fewest[a - c] + 1 < fewest[a]:
+                fewest[a] = fewest[a - c] + 1
+    return fewest[amount] if fewest[amount] != INF else -1
+```
+
+Using `amount + 1` as infinity avoids floats: no answer can need more than `amount` coins, because the smallest
+coin is at least 1.
+
+### BFS alternative
+
+Amounts are nodes, each coin is an edge, and every edge costs one coin, so BFS from 0 finds the fewest coins.
+
+```python
+from collections import deque
+
+def coin_change_bfs(coins, amount):
+    if amount == 0:
+        return 0
+    seen = {0}
+    queue = deque([0])
+    steps = 0
+    while queue:
+        steps += 1
+        for _ in range(len(queue)):
+            total = queue.popleft()
+            for c in coins:
+                nxt = total + c
+                if nxt == amount:
+                    return steps
+                if nxt < amount and nxt not in seen:
+                    seen.add(nxt)
+                    queue.append(nxt)
+    return -1
+```
+
+### Complexity
+
+- DP: O(A * k) time, O(A) space.
+- BFS: same bounds, and it can stop early when the answer is small.
+- No standard space optimisation: every earlier amount may be needed.
+
+## Tests
+
+```python
+for fn in (coin_change, coin_change_memo, coin_change_bfs, coin_change_recursive):
+    assert fn([1, 4, 5], 8) == 2                   # greedy would give 4
+    assert fn([2, 7], 11) == 3
+    assert fn([4], 6) == -1                        # unreachable
+    assert fn([3, 9], 0) == 0                      # zero amount
+    assert fn([5], 5) == 1                         # single coin, exact
+    assert fn([], 3) == -1                         # no coins
+    assert fn([7, 3], 1) == -1                     # every coin too large
+
+assert coin_change([1, 2, 5], 100) == 20
+assert coin_change([186, 419, 83, 408], 6249) == coin_change_bfs([186, 419, 83, 408], 6249)
+
+import random
+random.seed(14)
+for _ in range(60):
+    cs = random.sample(range(1, 12), random.randint(1, 3))
+    amt = random.randint(0, 25)
+    assert coin_change(cs, amt) == coin_change_bfs(cs, amt) == coin_change_memo(cs, amt)
+```
+
+## Edge cases and pitfalls
+
+- **Greedy is not correct in general.** It works for coin systems like 1, 5, 10, 25 but fails for [1, 4, 5] at 8.
+- **Infinity arithmetic.** Adding 1 to a large sentinel can overflow in fixed-width languages; using `amount + 1` is
+  safe.
+- **Amount 0** returns 0, not -1.
+- **Large coins.** Coins larger than the amount are simply skipped.
+- **Recursion limits** for the memoised version with small coins and a large amount.
+
+## Where this shows up in data engineering
+
+The same minimum-count recurrence describes packing work into the fewest fixed-size units, for example covering a
+backfill window with the fewest runs when each run can process one of a few allowed window lengths. In practice the
+search space is tiny and the DP is overkill, but it is the right way to reason about why greedy splitting can be
+suboptimal.
