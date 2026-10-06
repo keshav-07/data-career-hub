@@ -1,112 +1,667 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
 title: "PySpark Joins and Join Strategy"
-description: "Write correct PySpark joins (inner, left, anti, semi), avoid duplicate-column and fan-out bugs, and understand when Spark broadcasts or sort-merges a join."
+description: "Write correct PySpark joins, then control how Spark executes them: broadcast hash, sort-merge and shuffle hash joins, hints, AQE, bucketing and bucketed joins."
 inventoryId: "TECH-12"
 technology: ["pyspark", "spark"]
-topic: ["joins", "performance"]
+topic: ["joins", "performance", "bucketing"]
 difficulty: "Intermediate"
-prerequisites: ["articles:sql/joins", "articles:pyspark/transformations-vs-actions"]
-related: ["interview-questions:pyspark/broadcast-join", "articles:spark/partitions-shuffles-skew"]
-previous: "articles:pyspark/transformations-vs-actions"
+learningObjectives:
+  - "Choose the right join type, including semi and anti joins, and avoid ambiguous columns and fan-out"
+  - "Explain how broadcast hash, sort-merge and shuffle hash joins work and what each costs"
+  - "Predict which strategy Spark will pick, and override it with hints when needed"
+  - "Tune sort-merge joins: shuffle partitions, AQE, skew handling and NULL keys"
+  - "Create bucketed tables and recognise when a bucketed join removes the shuffle"
+prerequisites: ["articles:sql/joins", "articles:pyspark/aggregations-pivot-views"]
+related: ["interview-questions:pyspark/broadcast-join", "articles:spark/partitions-shuffles-skew", "articles:spark/adaptive-query-execution", "interview-questions:spark/data-skew"]
+previous: "articles:pyspark/aggregations-pivot-views"
 next: "articles:pyspark/window-functions"
-sources: [{"label": "PySpark API reference: DataFrame.join", "url": "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.join.html"}, {"label": "Apache Spark documentation: Performance tuning", "url": "https://spark.apache.org/docs/latest/sql-performance-tuning.html"}]
-versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+sources:
+  - { label: "PySpark API reference: DataFrame.join", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.join.html" }
+  - { label: "Apache Spark documentation: Performance tuning (join hints, AQE)", url: "https://spark.apache.org/docs/latest/sql-performance-tuning.html" }
+  - { label: "Spark SQL reference: Hints", url: "https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html" }
+  - { label: "Spark SQL reference: JOIN clause", url: "https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-join.html" }
+versionContext: "All examples run on PySpark 4.2.0 in local mode (local[2], spark.sql.shuffle.partitions=4). Plans are printed with expression IDs and plan IDs removed for readability. Some examples switch AQE off so that the planned strategy is visible before execution; AQE is on by default in Spark 3.2 and later."
 ---
 
-Join semantics in PySpark match SQL (see [SQL joins](/sql/joins/)). Two things are specific to Spark: **how you express the join** to avoid ambiguous columns, and **which physical strategy** Spark uses, which decides cost.
+Join semantics in PySpark match SQL (see [SQL joins](/sql/joins/)), but on a cluster the semantics are only half the story. The other half is **how** Spark brings matching rows together: by copying a small table to every executor, or by shuffling both sides across the network. That choice usually decides whether a pipeline takes minutes or hours, and it is the most common Spark performance topic in interviews.
 
-## Setup
+## Sample data and helpers
+
+`orders` has an order for a customer that does not exist (9) and one with no customer (NULL); `customers` has a customer with no orders (3) and one with a NULL key. Two helpers print plans without the noisy expression IDs, and pull out the join strategy name.
 
 ```python
+import tempfile, re, io, contextlib
 from pyspark.sql import SparkSession, functions as F
 
-spark = SparkSession.builder.master("local[2]").appName("example").getOrCreate()
+warehouse = tempfile.mkdtemp()
+spark = (SparkSession.builder.master("local[2]").appName("joins")
+         .config("spark.sql.warehouse.dir", warehouse)
+         .config("spark.sql.shuffle.partitions", "4")
+         .getOrCreate())
+spark.sparkContext.setLogLevel("ERROR")
 
 orders = spark.createDataFrame(
-    [(10, 1, 50), (11, 1, 70), (12, 2, 20), (13, 9, 99)],
-    ["order_id", "customer_id", "amount"],
-)
-customers = spark.createDataFrame([(1, "Asha"), (2, "Ben"), (3, "Chen")], ["customer_id", "name"])
+    [(10, 1, 50.0), (11, 1, 70.0), (12, 2, 20.0), (13, 9, 99.0), (14, None, 5.0)],
+    "order_id INT, customer_id INT, amount DOUBLE")
+customers = spark.createDataFrame(
+    [(1, "Asha", "IN"), (2, "Ben", "UK"), (3, "Chen", "UK"), (None, "Ghost", "XX")],
+    "customer_id INT, name STRING, country STRING")
+
+def explain_text(df):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        df.explain()
+    return buf.getvalue()
+
+def plan(df):
+    text = re.sub(r"#\d+L?", "", explain_text(df))
+    text = re.sub(r", \[plan_id=\d+\]", "", text)
+    print(re.sub(r"\[file:[^\]]*\]", "[...]", text).strip())
+
+def strategy(df):
+    found = re.findall(r"(BroadcastHashJoin|SortMergeJoin|ShuffledHashJoin|"
+                       r"BroadcastNestedLoopJoin|CartesianProduct)", explain_text(df))
+    return found[0] if found else None
 ```
 
-## Join on a column name, not an expression, when names match
+## Joins in Spark SQL
+
+### Join types
+
+`df.join(other, on, how)` supports every SQL join type. `on` can be a column name, a list of names or a boolean Column expression; `how` defaults to `"inner"`.
 
 ```python
-joined = orders.join(customers, on="customer_id", how="inner")
-print(joined.columns)
+for how in ["inner", "left", "right", "full", "left_semi", "left_anti"]:
+    j = orders.join(customers, on="customer_id", how=how)
+    print(f"{how:10}", j.count(), j.columns)
 ```
 
 ```text
-['customer_id', 'order_id', 'amount', 'name']
+inner      3 ['customer_id', 'order_id', 'amount', 'name', 'country']
+left       5 ['customer_id', 'order_id', 'amount', 'name', 'country']
+right      5 ['customer_id', 'order_id', 'amount', 'name', 'country']
+full       7 ['customer_id', 'order_id', 'amount', 'name', 'country']
+left_semi  3 ['customer_id', 'order_id', 'amount']
+left_anti  2 ['customer_id', 'order_id', 'amount']
 ```
 
-Passing the column name keeps a single `customer_id` column. Joining with an expression such as `orders.customer_id == customers.customer_id` keeps **both** columns, and a later `select("customer_id")` fails as ambiguous.
+| `how` | Returns |
+|-------|---------|
+| `inner` | Rows with a match on both sides |
+| `left` / `left_outer` | All left rows; right columns NULL where there is no match |
+| `right` / `right_outer` | All right rows |
+| `full` / `full_outer` | All rows from both sides |
+| `left_semi` | Left rows that have at least one match; left columns only, never duplicated |
+| `left_anti` | Left rows with **no** match; left columns only |
+| `cross` (or `crossJoin`) | Every combination: rows multiply |
 
-## Join types
+`left_semi` is the DataFrame form of `WHERE EXISTS`, and `left_anti` of `WHERE NOT EXISTS`. Both are cheaper and safer than a left join followed by a filter, because they never add columns or duplicate rows.
+
+The full outer join shows how NULL keys behave:
 
 ```python
-print(orders.join(customers, "customer_id", "left").count())        # 4: all orders kept
-print(customers.join(orders, "customer_id", "left_anti").collect())  # customers with no orders
-print(customers.join(orders, "customer_id", "left_semi").count())    # customers with at least one order
+orders.join(customers, "customer_id", "full").orderBy("order_id").show()
 ```
 
 ```text
++-----------+--------+------+-----+-------+
+|customer_id|order_id|amount| name|country|
++-----------+--------+------+-----+-------+
+|       NULL|    NULL|  NULL|Ghost|     XX|
+|          3|    NULL|  NULL| Chen|     UK|
+|          1|      10|  50.0| Asha|     IN|
+|          1|      11|  70.0| Asha|     IN|
+|          2|      12|  20.0|  Ben|     UK|
+|          9|      13|  99.0| NULL|   NULL|
+|       NULL|      14|   5.0| NULL|   NULL|
++-----------+--------+------+-----+-------+
+```
+
+Order 14 (NULL customer) and customer Ghost (NULL key) appear on **separate** rows: NULL never equals NULL in a join condition.
+
+### Joining on names vs expressions
+
+Joining on a column **name** (or list of names) keeps one copy of the key. Joining on an **expression** keeps both, and an unqualified reference to the key then fails:
+
+```python
+o, c = orders.alias("o"), customers.alias("c")
+expr_join = o.join(c, F.col("o.customer_id") == F.col("c.customer_id"), "left")
+print(expr_join.columns)
+try:
+    expr_join.select("customer_id").show()
+except Exception as e:
+    print(type(e).__name__, str(e).split(",")[0])
+expr_join.select("o.order_id", "c.name", F.col("o.customer_id")).orderBy("order_id").show()
+```
+
+```text
+['order_id', 'customer_id', 'amount', 'customer_id', 'name', 'country']
+AnalysisException [AMBIGUOUS_REFERENCE] Reference `customer_id` is ambiguous
++--------+----+-----------+
+|order_id|name|customer_id|
++--------+----+-----------+
+|      10|Asha|          1|
+|      11|Asha|          1|
+|      12| Ben|          2|
+|      13|NULL|          9|
+|      14|NULL|       NULL|
++--------+----+-----------+
+```
+
+Use expressions when the key names differ or the condition is not plain equality, and give each DataFrame an `alias` so columns can be qualified. Aliases are essential for **self-joins** (an employee table joined to itself for managers), where both sides otherwise have identical column references.
+
+### Null-safe joins
+
+When NULL should match NULL (for example, composite keys where some parts are optional), use `eqNullSafe` (SQL `<=>`):
+
+```python
+print(orders.join(customers, orders.customer_id == customers.customer_id).count())
+print(orders.join(customers, orders.customer_id.eqNullSafe(customers.customer_id)).count())
+```
+
+```text
+3
 4
-[Row(customer_id=3, name='Chen')]
-2
 ```
 
-- `left_anti` returns left rows with **no** match: the efficient way to find missing records.
-- `left_semi` returns left rows **with** a match, without adding right-side columns or duplicating rows when there are several matches.
+The fourth row is order 14 matched with Ghost. That is rarely what you want for real business keys, so use it deliberately.
 
-## Watch for fan-out
+### Non-equi joins
 
-If the right side has several rows per key, the left row repeats. Before a join, check that the key is unique where you expect it:
+Joins on ranges (an amount falling into a price band, an event inside a session window) are allowed, but without an equality condition Spark cannot hash or sort by key, so it falls back to a **nested loop** over every pair. That is fine only when one side is tiny and broadcast:
 
 ```python
-dupes = customers.groupBy("customer_id").count().filter("count > 1")
-print(dupes.count())
+tiers = spark.createDataFrame([("bronze", 0.0, 30.0), ("silver", 30.0, 60.0), ("gold", 60.0, 1e9)],
+                              "tier STRING, lo DOUBLE, hi DOUBLE")
+banded = orders.join(F.broadcast(tiers), (orders.amount >= tiers.lo) & (orders.amount < tiers.hi))
+banded.select("order_id", "amount", "tier").orderBy("order_id").show()
+print(strategy(banded))
 ```
 
 ```text
-0
++--------+------+------+
+|order_id|amount|  tier|
++--------+------+------+
+|      10|  50.0|silver|
+|      11|  70.0|  gold|
+|      12|  20.0|bronze|
+|      13|  99.0|  gold|
+|      14|   5.0|bronze|
++--------+------+------+
+
+BroadcastNestedLoopJoin
 ```
 
-## Join strategies
-
-| Strategy | When Spark uses it | Cost |
-|----------|--------------------|------|
-| Broadcast hash join | One side is small (below `spark.sql.autoBroadcastJoinThreshold`, 10 MB by default) or hinted | No shuffle of the large side |
-| Sort-merge join | Both sides large, equi-join | Both sides shuffled and sorted |
-| Shuffle hash join | Chosen in some cases, for example by AQE or a hint | Shuffle, no sort |
+### The same joins in SQL
 
 ```python
-small_join = orders.join(F.broadcast(customers), "customer_id")
-small_join.explain()   # look for BroadcastHashJoin
+orders.createOrReplaceTempView("orders")
+customers.createOrReplaceTempView("customers")
+spark.sql("""
+    SELECT c.name, COUNT(o.order_id) AS orders, COALESCE(SUM(o.amount), 0) AS spend
+    FROM customers c
+    LEFT JOIN orders o ON o.customer_id = c.customer_id
+    WHERE c.customer_id IS NOT NULL
+    GROUP BY c.name
+    ORDER BY c.name
+""").show()
+spark.sql("""
+    SELECT name FROM customers c
+    WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)
+    ORDER BY name
+""").show()
 ```
 
-With Adaptive Query Execution (on by default), Spark can switch a planned sort-merge join to a broadcast join at run time once it sees that one side is actually small.
+```text
++----+------+-----+
+|name|orders|spend|
++----+------+-----+
+|Asha|     2|120.0|
+| Ben|     1| 20.0|
+|Chen|     0|  0.0|
++----+------+-----+
 
-<Callout tone="warning" title="NULL keys never match">
++-----+
+| name|
++-----+
+| Chen|
+|Ghost|
++-----+
+```
 
-Rows with a `NULL` join key never match in an equi-join. If many rows have `NULL` keys, they still get shuffled in a sort-merge join and can create a skewed partition. Filter them out first if they cannot match anyway, or use the null-safe `eqNullSafe` comparison if `NULL` should match `NULL`.
+`COUNT(o.order_id)` (not `COUNT(*)`) gives 0 for Chen, because the unmatched row has a NULL `order_id`. Spark SQL also accepts `LEFT SEMI JOIN` and `LEFT ANTI JOIN` directly, and rewrites `EXISTS` / `NOT EXISTS` subqueries into those joins.
 
-</Callout>
+### Pitfalls
 
-## Common mistakes
+- **Fan-out.** If the right side has several rows per key, every matching left row is repeated. Check key uniqueness before joining (`groupBy(key).count().filter("count > 1")`), especially on dimension tables that are supposed to be unique.
+- **Filtering a left join in `WHERE`.** A condition on a right-side column in `WHERE` (`WHERE o.amount > 10`) removes the NULL rows and silently turns the left join into an inner join. Put it in the `ON` clause, or filter the right side before joining.
+- **`NOT IN` with NULLs.** In SQL, `NOT IN (subquery)` returns nothing if the subquery contains a NULL. Prefer `NOT EXISTS` or `left_anti`.
+- **Accidental cross joins.** A join condition that references only one side multiplies rows; Spark allows explicit cross joins, so check row counts.
 
-1. Expression joins on same-named columns, then ambiguous column errors.
-2. Using `left` join plus `filter(isNull)` instead of `left_anti`.
-3. Broadcasting a table that is not small.
-4. Not checking key uniqueness and silently multiplying rows.
+### In interviews
 
-## Interview relevance
+Expect "find customers who never ordered" (anti join), "why did my row count grow after a join?" (fan-out), and "what is the difference between a left semi join and an inner join?" (semi returns left columns only and never duplicates left rows).
 
-Expect "broadcast versus sort-merge", "how do you find records missing from another table?" (anti join) and "why did my row count grow after a join?".
+## Broadcast hash join
 
-## Key takeaway
+### What it is
 
-Join on column names, use semi and anti joins for existence checks, verify key uniqueness, and let small tables be broadcast.
+In a **broadcast hash join**, Spark collects the small side to the driver, sends a full copy to every executor and builds an in-memory hash table from it. Each partition of the large side is then joined locally by probing the hash table. **The large side is never shuffled**, which removes the most expensive part of a join.
+
+Spark broadcasts automatically when it estimates that one side is smaller than `spark.sql.autoBroadcastJoinThreshold` (10 MB by default; `-1` disables automatic broadcasting). You can force it with `F.broadcast(df)` or a `BROADCAST` hint.
+
+### Worked example
+
+Size estimates come from statistics. For Parquet files, Spark knows the file sizes, so it broadcasts the small dimension table:
+
+```python
+spark.conf.set("spark.sql.adaptive.enabled", "false")   # show the planned strategy only
+big = spark.range(0, 200_000).select(
+    F.col("id").alias("order_id"), (F.col("id") % 5000).alias("customer_id"), (F.col("id") % 97).alias("amount"))
+dim = spark.range(0, 5000).select(F.col("id").alias("customer_id"), (F.col("id") % 3).alias("segment"))
+bpath, dpath = warehouse + "/big", warehouse + "/dim"
+big.write.mode("overwrite").parquet(bpath)
+dim.write.mode("overwrite").parquet(dpath)
+bigf, dimf = spark.read.parquet(bpath), spark.read.parquet(dpath)
+print(strategy(bigf.join(dimf, "customer_id")))
+plan(bigf.join(dimf, "customer_id"))
+```
+
+```text
+BroadcastHashJoin
+== Physical Plan ==
+*(2) Project [customer_id, order_id, amount, segment]
++- *(2) BroadcastHashJoin [customer_id], [customer_id], Inner, BuildRight, false, false
+   :- *(2) Filter isnotnull(customer_id)
+   :  +- *(2) ColumnarToRow
+   :     +- FileScan parquet [order_id,customer_id,amount] Batched: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<order_id:bigint,customer_id:bigint,amount:bigint>
+   +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false)
+      +- *(1) Filter isnotnull(customer_id)
+         +- *(1) ColumnarToRow
+            +- FileScan parquet [customer_id,segment] Batched: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<customer_id:bigint,segment:bigint>
+```
+
+`BuildRight` means the right side (`dimf`) is the one broadcast and hashed. There is a `BroadcastExchange` on the small side and **no `Exchange hashpartitioning`** on the large side.
+
+Spark can only estimate what it can measure. DataFrames built from local Python data (`createDataFrame`) or from complex upstream plans may have no useful size estimate, so they are not broadcast at planning time even when tiny:
+
+```python
+print(strategy(orders.join(customers, "customer_id")))
+print(strategy(orders.join(F.broadcast(customers), "customer_id")))
+```
+
+```text
+SortMergeJoin
+BroadcastHashJoin
+```
+
+### Which side can be broadcast
+
+The broadcast side must be the side whose unmatched rows are **not** needed in the output, because each executor only sees its own slice of the other side:
+
+```python
+print(strategy(orders.join(F.broadcast(customers), "customer_id", "left")))
+print(strategy(orders.join(F.broadcast(customers), "customer_id", "right")))
+print(strategy(orders.join(F.broadcast(customers), "customer_id", "full")))
+```
+
+```text
+BroadcastHashJoin
+SortMergeJoin
+SortMergeJoin
+```
+
+| Join type | Side that can be broadcast |
+|-----------|----------------------------|
+| inner | Either |
+| left outer, left semi, left anti | Right only |
+| right outer | Left only |
+| full outer | Neither (as a hash join) |
+
+When the hint cannot be honoured, Spark ignores it and logs a warning; it does not fail.
+
+### Pitfalls
+
+- **Broadcasting something that is not small.** The broadcast table is collected to the driver and held in memory on every executor. A "small" table that grows to gigabytes causes driver out-of-memory errors or broadcast timeouts (`spark.sql.broadcastTimeout`, 300 seconds by default). Raise the threshold carefully, and never hint a table whose size you do not control.
+- **The estimate is of the plan, not the file.** A filter or a projection may make a large table small; Spark's estimate after filters can be off. AQE fixes many of these cases at run time (below).
+- **Repeated broadcasts.** A broadcast is rebuilt for each query that uses it; caching the small table helps when it comes from an expensive computation.
+
+### In interviews
+
+"When would you use a broadcast join?" Answer: when one side comfortably fits in executor memory; the large side is not shuffled; it cannot broadcast the preserved side of an outer join; and it can fail with OOM or timeouts if the small side grows. See the [interview answer](/interview/pyspark/broadcast-join/).
+
+## Sort-merge join and how to tune it
+
+### How it works
+
+A **sort-merge join** is Spark's default for joining two large tables on equality keys (`spark.sql.join.preferSortMergeJoin` is `true`). It runs in three steps:
+
+1. **Shuffle** both sides by the join key (`Exchange hashpartitioning`) so that equal keys from both tables land in the same partition number.
+2. **Sort** each partition by the key.
+3. **Merge**: walk both sorted partitions together, like merging two sorted lists, emitting matches.
+
+```python
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+print(strategy(bigf.join(dimf, "customer_id")))
+plan(orders.join(customers, "customer_id"))
+```
+
+```text
+SortMergeJoin
+== Physical Plan ==
+*(5) Project [customer_id, order_id, amount, name, country]
++- *(5) SortMergeJoin [customer_id], [customer_id], Inner
+   :- *(2) Sort [customer_id ASC NULLS FIRST], false, 0
+   :  +- Exchange hashpartitioning(customer_id, 4), ENSURE_REQUIREMENTS
+   :     +- *(1) Filter isnotnull(customer_id)
+   :        +- *(1) Scan ExistingRDD[order_id,customer_id,amount]
+   +- *(4) Sort [customer_id ASC NULLS FIRST], false, 0
+      +- Exchange hashpartitioning(customer_id, 4), ENSURE_REQUIREMENTS
+         +- *(3) Filter isnotnull(customer_id)
+            +- *(3) Scan ExistingRDD[customer_id,name,country]
+```
+
+It scales to any size because sorted partitions can spill to disk, but you pay for a full shuffle of **both** sides plus two sorts. Note the `Filter isnotnull(customer_id)` that Spark adds for an inner join: NULL keys can never match, so they are dropped before the shuffle.
+
+### Tuning levers
+
+| Lever | What it does |
+|-------|--------------|
+| `spark.sql.shuffle.partitions` (default 200) | Number of partitions after the shuffle. Too few: huge partitions that spill; too many: tiny tasks with overhead. Size so that each post-shuffle partition is roughly in the 100-200 MB range, or let AQE coalesce. |
+| **AQE** (`spark.sql.adaptive.enabled`, default `true`) | Re-plans at run time from real shuffle statistics: coalesces small partitions, switches to a broadcast join when one side turns out small, and splits skewed partitions. |
+| **AQE skew join** (`spark.sql.adaptive.skewJoin.enabled`, default `true`) | A partition is treated as skewed when it is more than `skewedPartitionFactor` (default 5) times the median **and** larger than `skewedPartitionThresholdInBytes` (default 256 MB); Spark splits it and replicates the matching side. |
+| Filter and project early | Fewer rows and columns to shuffle. |
+| Pre-aggregate before the join | Join daily totals instead of raw events when the result allows it. |
+| Handle NULL or hot keys | For outer joins, NULL keys are shuffled into one partition; split them off and union them back. Salt genuinely hot keys. |
+| Bucketing | Pays the shuffle once at write time (next sections). |
+
+AQE at work: the same small, unmeasured DataFrames planned as a sort-merge join become a broadcast join once the shuffle reveals their real size.
+
+```python
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10485760")
+j = orders.join(customers, "customer_id")
+print("before execution:", strategy(j))
+j.collect()
+print("final plan:", strategy(j), "| AQE final:", "isFinalPlan=true" in explain_text(j))
+```
+
+```text
+before execution: SortMergeJoin
+final plan: BroadcastHashJoin | AQE final: True
+```
+
+AQE cannot avoid the shuffles that already ran to measure the data, but it can skip the sort and merge and use local shuffle reads instead. See [Adaptive Query Execution](/spark/adaptive-query-execution/) and [partitions, shuffles and skew](/spark/partitions-shuffles-skew/) for skew and salting in depth.
+
+### Pitfalls
+
+- **Spill**: in the Spark UI, large "Spill (disk)" values on the join stage mean partitions are too big. Increase the shuffle partition count or fix skew.
+- **One straggler task**: a hot key. AQE skew handling helps for inner joins and the non-preserved side of outer joins; it cannot split a skewed key on the side whose rows must all be kept in some outer-join cases, so salting may still be needed.
+- **Join key type mismatch** (`int` vs `string`) forces a cast on one side and can prevent pushdown and bucketing; align types first.
+
+### In interviews
+
+"Walk me through a sort-merge join" and "your join stage has one task running for an hour, what do you do?" The strong answer: shuffle, sort, merge; diagnose skew in the Spark UI; check NULL keys; use AQE skew join, broadcast, or salting.
+
+## How Spark selects a join strategy
+
+### The decision order
+
+For an **equi-join**, Spark's planner tries strategies in roughly this order:
+
+1. **Hints**, in priority order `BROADCAST` > `MERGE` > `SHUFFLE_HASH` > `SHUFFLE_REPLICATE_NL`, if the join type allows them.
+2. **Broadcast hash join** if one buildable side's estimated size is below `autoBroadcastJoinThreshold`.
+3. **Shuffle hash join** if `preferSortMergeJoin` is `false` and one side is small enough to build a per-partition hash map, and much smaller than the other.
+4. **Sort-merge join** if the keys are sortable (the usual result for two large tables).
+5. Otherwise a **cartesian product** or **broadcast nested loop join**.
+
+For a **non-equi join** (no equality condition), only broadcast nested loop join and cartesian product are possible.
+
+At run time, AQE can still change a sort-merge join into a broadcast join, or into a shuffle hash join when every post-shuffle partition fits under `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold` (0 by default, which disables that conversion).
+
+### Hints
+
+```python
+spark.conf.set("spark.sql.adaptive.enabled", "false")
+for hint in ["broadcast", "merge", "shuffle_hash", "shuffle_replicate_nl"]:
+    print(f"{hint:22}", strategy(orders.join(customers.hint(hint), "customer_id")))
+print(strategy(spark.sql(
+    "SELECT /*+ BROADCAST(c) */ * FROM orders o JOIN customers c ON o.customer_id = c.customer_id")))
+print(strategy(orders.join(customers, orders.customer_id < customers.customer_id)))
+```
+
+```text
+broadcast              BroadcastHashJoin
+merge                  SortMergeJoin
+shuffle_hash           ShuffledHashJoin
+shuffle_replicate_nl   CartesianProduct
+BroadcastHashJoin
+CartesianProduct
+```
+
+### Comparison
+
+| Strategy | Shuffle | Memory need | Best for | Join types |
+|----------|---------|-------------|----------|------------|
+| Broadcast hash join | None on the large side | Whole small side on every executor and the driver | Large fact joined to a small dimension | All except full outer (build side restrictions) |
+| Shuffle hash join | Both sides | Hash map of one side's partition | One side much smaller but too big to broadcast; avoids sorting | Most; build side restrictions apply |
+| Sort-merge join | Both sides, plus sort | Low; can spill | Two large tables | All equi-joins |
+| Broadcast nested loop join | None | Small side on every executor | Non-equi joins with a tiny side | All |
+| Cartesian product | Both sides | High; output is rows × rows | Explicit cross joins only | Inner / cross |
+
+### Pitfalls and interview angle
+
+- Hints override statistics, so a hint written for last year's data volume can hurt today. Prefer accurate statistics (`ANALYZE TABLE ... COMPUTE STATISTICS` for catalog tables) and AQE, and keep hints for cases you have measured.
+- Check the **physical plan**, not the code: `explain()` or the SQL tab of the Spark UI shows which strategy actually ran (for AQE, look at the final plan).
+- Interviewers like "how does Spark decide between broadcast and sort-merge?" Mention the size threshold, statistics, hints, join-type restrictions and AQE run-time re-planning.
+
+## Bucketing in Spark
+
+### What it is
+
+**Bucketing** splits a table into a fixed number of buckets by hashing one or more columns at write time, and records the bucket spec in the catalog. Rows with the same key always end up in the same bucket number. Later queries that join or aggregate on that key can use the layout instead of shuffling. You pay the shuffle **once**, when writing, instead of in every query.
+
+Bucketing differs from partitioning: `partitionBy` creates one folder per value (good for low-cardinality filter columns like a date), while `bucketBy` creates a fixed number of files per partition by hash (good for high-cardinality join keys like a customer ID).
+
+### Creating bucketed tables
+
+Bucketing needs a table in a catalog, so you must use `saveAsTable`; a plain `save(path)` does not record the bucket spec.
+
+```python
+(big.write.mode("overwrite").bucketBy(8, "customer_id").sortBy("customer_id")
+    .saveAsTable("orders_bucketed"))
+(dim.write.mode("overwrite").bucketBy(8, "customer_id").sortBy("customer_id")
+    .saveAsTable("customers_bucketed"))
+(spark.sql("DESCRIBE EXTENDED orders_bucketed")
+      .filter("col_name IN ('Num Buckets','Bucket Columns','Sort Columns')").show())
+import os
+print(len([f for f in os.listdir(warehouse + "/orders_bucketed") if f.endswith(".parquet")]))
+```
+
+```text
++--------------+---------------+-------+
+|      col_name|      data_type|comment|
++--------------+---------------+-------+
+|   Num Buckets|              8|       |
+|Bucket Columns|[`customer_id`]|       |
+|  Sort Columns|[`customer_id`]|       |
++--------------+---------------+-------+
+
+16
+```
+
+8 buckets produced **16 files**: each writing task writes its own file for every bucket it holds rows for, so the file count can reach `tasks × buckets`. With 200 tasks and 512 buckets that is up to 102,400 small files. A common fix is to `repartition(n_buckets, "customer_id")` before writing, so that each task holds exactly one bucket.
+
+### Pitfalls
+
+- **Bucket specs are a Spark (Hive-style catalog) feature.** Other engines may not read or honour them, and Spark's bucket hash is not the same as Hive's.
+- **Changing the bucket count means rewriting the table.**
+- **Delta Lake does not support `bucketBy`**; for Delta tables, use partitioning, Z-ordering or liquid clustering instead (covered in the Delta Lake performance lesson).
+- **Small-file explosion** as shown above.
+
+### In interviews
+
+"What is the difference between partitioning and bucketing?" Partitioning: folders by value, used for pruning on filters. Bucketing: fixed number of hashed files, used to avoid shuffles in joins and aggregations on high-cardinality keys. Mention the `saveAsTable` requirement and the file-count trap.
+
+## Bucketed joins
+
+### What makes a join shuffle-free
+
+When both tables are bucketed on the join key **with the same number of buckets**, bucket *i* of one table can only match bucket *i* of the other. Spark reads them as already partitioned and skips the `Exchange` on both sides:
+
+```python
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+bj = spark.table("orders_bucketed").join(spark.table("customers_bucketed"), "customer_id")
+plan(bj)
+```
+
+```text
+== Physical Plan ==
+*(3) Project [customer_id, order_id, amount, segment]
++- *(3) SortMergeJoin [customer_id], [customer_id], Inner
+   :- *(1) Sort [customer_id ASC NULLS FIRST], false, 0
+   :  +- *(1) Filter isnotnull(customer_id)
+   :     +- *(1) ColumnarToRow
+   :        +- FileScan parquet spark_catalog.default.orders_bucketed[order_id,customer_id,amount] Batched: true, Bucketed: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<order_id:bigint,customer_id:bigint,amount:bigint>, SelectedBucketsCount: 8 out of 8
+   +- *(2) Sort [customer_id ASC NULLS FIRST], false, 0
+      +- *(2) Filter isnotnull(customer_id)
+         +- *(2) ColumnarToRow
+            +- FileScan parquet spark_catalog.default.customers_bucketed[customer_id,segment] Batched: true, Bucketed: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<customer_id:bigint,segment:bigint>, SelectedBucketsCount: 8 out of 8
+```
+
+Both scans say `Bucketed: true` and there is **no `Exchange`**. The `Sort` steps remain because each bucket has two files here, so the bucket as a whole is not sorted even though each file is. Compare the same join on the unbucketed Parquet files, which shuffles both sides:
+
+```python
+plan(bigf.join(dimf, "customer_id"))
+```
+
+```text
+== Physical Plan ==
+*(5) Project [customer_id, order_id, amount, segment]
++- *(5) SortMergeJoin [customer_id], [customer_id], Inner
+   :- *(2) Sort [customer_id ASC NULLS FIRST], false, 0
+   :  +- Exchange hashpartitioning(customer_id, 4), ENSURE_REQUIREMENTS
+   :     +- *(1) Filter isnotnull(customer_id)
+   :        +- *(1) ColumnarToRow
+   :           +- FileScan parquet [order_id,customer_id,amount] Batched: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<order_id:bigint,customer_id:bigint,amount:bigint>
+   +- *(4) Sort [customer_id ASC NULLS FIRST], false, 0
+      +- Exchange hashpartitioning(customer_id, 4), ENSURE_REQUIREMENTS
+         +- *(3) Filter isnotnull(customer_id)
+            +- *(3) ColumnarToRow
+               +- FileScan parquet [customer_id,segment] Batched: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<customer_id:bigint,segment:bigint>
+```
+
+If only **one** side is bucketed, Spark keeps that side as is and shuffles only the other side into the same number of partitions (8 here):
+
+```python
+plan(spark.table("orders_bucketed").join(dimf, "customer_id"))
+```
+
+```text
+== Physical Plan ==
+*(4) Project [customer_id, order_id, amount, segment]
++- *(4) SortMergeJoin [customer_id], [customer_id], Inner
+   :- *(1) Sort [customer_id ASC NULLS FIRST], false, 0
+   :  +- *(1) Filter isnotnull(customer_id)
+   :     +- *(1) ColumnarToRow
+   :        +- FileScan parquet spark_catalog.default.orders_bucketed[order_id,customer_id,amount] Batched: true, Bucketed: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<order_id:bigint,customer_id:bigint,amount:bigint>, SelectedBucketsCount: 8 out of 8
+   +- *(3) Sort [customer_id ASC NULLS FIRST], false, 0
+      +- Exchange hashpartitioning(customer_id, 8), ENSURE_REQUIREMENTS
+         +- *(2) Filter isnotnull(customer_id)
+            +- *(2) ColumnarToRow
+               +- FileScan parquet [customer_id,segment] Batched: true, DataFilters: [isnotnull(customer_id)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [IsNotNull(customer_id)], ReadSchema: struct<customer_id:bigint,segment:bigint>
+```
+
+Aggregations on the bucket key also skip the shuffle:
+
+```python
+plan(spark.table("orders_bucketed").groupBy("customer_id").count())
+```
+
+```text
+== Physical Plan ==
+*(1) HashAggregate(keys=[customer_id], functions=[count(1)])
++- *(1) HashAggregate(keys=[customer_id], functions=[partial_count(1)])
+   +- *(1) ColumnarToRow
+      +- FileScan parquet spark_catalog.default.orders_bucketed[customer_id] Batched: true, Bucketed: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[...], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<customer_id:bigint>, SelectedBucketsCount: 8 out of 8
+```
+
+### Conditions for a bucketed join
+
+- Both tables are bucketed on the **join keys** (all of them, in the same order) and read as catalog tables (`spark.table`, SQL), not as paths.
+- **Same number of buckets.** With different counts Spark shuffles at least one side, unless `spark.sql.bucketing.coalesceBucketsInJoin.enabled` (off by default) lets it coalesce the larger count when one is a multiple of the other.
+- **Same key types** on both sides; a cast breaks the match.
+- `spark.sql.sources.bucketing.enabled` must be `true` (the default). Spark may also decide not to use bucketed scans when the query gains nothing from them (`spark.sql.sources.bucketing.autoBucketedScan.enabled`).
+
+### Pitfalls
+
+- **Benefit only for repeated joins.** Bucketing costs a shuffle at write time; it pays off when the same large tables are joined or aggregated on the same key many times.
+- **Too many buckets** for the data volume means tiny files; too few means huge buckets and less parallelism on read (one task per bucket).
+- **Bucketed tables with appends** keep adding files per bucket, so periodic compaction is needed.
+
+### In interviews
+
+"How can you join two huge tables repeatedly without shuffling every time?" Bucket both on the join key with the same bucket count, read them as tables, and confirm with `explain()` that no `Exchange` remains. Mention the alternatives: broadcast when one side is small, and storage-partitioned joins in table formats that support them.
+
+## Practice questions
+
+<details>
+<summary>Find all customers who have never placed an order, in DataFrame code and in SQL.</summary>
+
+`customers.join(orders, "customer_id", "left_anti")`, or in SQL `SELECT * FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id)`. Avoid `NOT IN` with a subquery that can contain NULLs, which returns no rows.
+
+</details>
+
+<details>
+<summary>Why can't Spark broadcast the left table of a left outer join?</summary>
+
+Every left row must appear in the output, including those with no match. If the left side were broadcast, each executor would see all left rows but only its slice of the right side, so it could not know whether a left row matched on another executor. Only the right (non-preserved) side can be broadcast for a left join.
+
+</details>
+
+<details>
+<summary>A tiny lookup DataFrame built with createDataFrame is joined with a sort-merge join. Why, and what can you do?</summary>
+
+Spark has no reliable size estimate for in-memory or complex DataFrames at planning time, so it does not choose a broadcast. Use `F.broadcast(lookup)` when you know it is small, rely on AQE to switch at run time after the shuffle, or materialise the lookup as a table or files so statistics exist.
+
+</details>
+
+<details>
+<summary>Explain the steps of a sort-merge join and where its cost comes from.</summary>
+
+Both sides are shuffled by the join key so equal keys share a partition, each partition is sorted by key, then the sorted streams are merged. The cost is the network and disk I/O of shuffling both tables, plus the sorts and any spill. Skewed keys make single partitions much larger than others.
+
+</details>
+
+<details>
+<summary>What is the difference between partitioning and bucketing a table?</summary>
+
+Partitioning writes a folder per distinct value of low-cardinality columns and lets queries skip folders through partition pruning. Bucketing hashes a (usually high-cardinality) column into a fixed number of buckets recorded in the catalog, so joins and aggregations on that column can avoid shuffles. They can be combined.
+
+</details>
+
+<details>
+<summary>Two tables are bucketed on customer_id, but the join still shows an Exchange. What would you check?</summary>
+
+That both have the same bucket count, are bucketed on exactly the join keys with matching types, are read as catalog tables rather than file paths, and that bucketing is enabled. Also check whether one side went through an operation that changed its partitioning before the join.
+
+</details>
+
+<details>
+<summary>When would a shuffle hash join beat a sort-merge join?</summary>
+
+When one side is much smaller than the other but too big to broadcast, and each of its post-shuffle partitions fits comfortably in memory as a hash map. It skips the sort step. It can run out of memory if a partition of the build side is too large, which is why sort-merge is the default.
+
+</details>
+
+## Key takeaways
+
+- Join on column names to avoid ambiguous columns; use aliases for expressions and self-joins; use `left_semi` and `left_anti` for existence checks.
+- NULL keys never match in equi-joins, and duplicate keys multiply rows: check both before joining.
+- Broadcast hash joins avoid shuffling the large side but need the small side in memory everywhere, and cannot broadcast the preserved side of an outer join.
+- Sort-merge joins shuffle and sort both sides; tune them with shuffle partitions, AQE skew handling, early filtering and NULL-key handling.
+- Spark chooses strategies from hints, size estimates and join type, and AQE can re-plan at run time; always confirm with `explain()`.
+- Bucketing pays the shuffle once at write time; bucketed joins need matching keys, types and bucket counts on catalog tables.
