@@ -222,5 +222,69 @@
   "PARTITION BY clause → New vs Returning Customers": {
     "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
     "heading": "Approach: PARTITION BY for per-customer context"
+  },
+  "Index design (B-tree, composite) → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: index design for category best-seller queries"
+  },
+  "Top-N per group → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: top-N per group and tie rules"
+  },
+  "GROUPING SETS → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: GROUPING SETS for product, category and total in one pass"
+  },
+  "Spilling & memory management → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: spilling and memory for ranking queries"
+  },
+  "Sessionization of events → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: sessionization to link views and purchases"
+  },
+  "Semi-join with EXISTS → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: semi-join with EXISTS for a customer segment"
+  },
+  "Approximate distinct (HLL) → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: approximate distinct counts with HyperLogLog"
+  },
+  "Regex matching in SQL → Top Selling Products": {
+    "ref": "interview-questions:sql/top-selling-products-sql-case-study",
+    "heading": "Approach: regex matching to clean and roll up SKUs"
+  },
+  "Cross Join & cartesian products → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: cross joins to build the date-product grid"
+  },
+  "Avoiding full table scans → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: avoiding full table scans on snapshot tables"
+  },
+  "Slowly changing dimension queries → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: slowly changing dimension queries for point-in-time cost"
+  },
+  "LAG() and LEAD() → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: LAG() and LEAD() for stock movement"
+  },
+  "Index selectivity & cardinality → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: index selectivity and cardinality"
+  },
+  "Year-over-year growth → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: year-over-year growth"
+  },
+  "Conditional aggregation → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: conditional aggregation for opening, closing and averages"
+  },
+  "Cardinality estimation → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: cardinality estimation and correlated columns"
   }
 }
