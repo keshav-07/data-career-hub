@@ -1,0 +1,155 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Best Time to Buy and Sell Stock with Cooldown: State-Machine DP"
+seoTitle: "Stock with Cooldown: State-Machine DP"
+description: "Maximise trading profit with unlimited trades but a one-day cooldown after each sale, using a three-state DP over holding, sold and resting, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Track three states at the end of each day: hold (you own a share), sold (you sold today, so tomorrow is a cooldown) and rest (you own nothing and are free to buy). Transitions: hold = max(hold, rest - price), sold = hold + price, rest = max(rest, sold), all computed from the previous day's values. Start with hold = minus infinity, sold = minus infinity and rest = 0. The answer is max(sold, rest) after the last day, in O(n) time and O(1) space."
+followUps: ["How do you add a transaction fee instead of a cooldown?", "How does the state machine change if at most k transactions are allowed?", "How would you recover the actual buy and sell days?"]
+previous: "interview-questions:dsa/longest-common-subsequence"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of daily share prices. You may make as many trades as you like, holding at most one share at a
+time (sell before buying again). After you sell, you must wait one full day before buying again. Return the maximum
+total profit.
+
+This is widely known as LeetCode 309, "Best Time to Buy and Sell Stock with Cooldown".
+
+Assume up to 5,000 days with prices up to 1,000.
+
+## Examples
+
+```text
+[2, 5, 1, 4]       -> 3   buy at 2 and sell at 5, or buy at 1 and sell at 4; doing both would
+                          mean buying on the cooldown day after the first sale
+[1, 4, 2, 0, 5]    -> 8   buy 1, sell 4 (day 1), cooldown (day 2), buy 0 (day 3), sell 5 (day 4)
+[5, 4, 3]          -> 0   never trade
+[3]                -> 0
+```
+
+## Approach 1: plain recursion over day and holding status
+
+```python
+def max_profit_recursive(prices):
+    def go(day, holding):
+        if day >= len(prices):
+            return 0
+        rest = go(day + 1, holding)                       # do nothing today
+        if holding:
+            act = prices[day] + go(day + 2, False)        # sell, skip tomorrow
+        else:
+            act = -prices[day] + go(day + 1, True)        # buy
+        return max(rest, act)
+    return go(0, False)
+```
+
+Two branches per day without memoisation: O(2^n).
+
+## Approach 2: optimal, state-machine DP
+
+### States and transitions
+
+| State at end of day | Meaning | Comes from |
+|---|---|---|
+| hold | own a share | hold yesterday, or rest yesterday and buy today |
+| sold | sold today | hold yesterday and sell today |
+| rest | own nothing, may buy tomorrow | rest yesterday, or sold yesterday (the cooldown day) |
+
+Recurrence for price p:
+
+- `hold_new = max(hold, rest - p)`
+- `sold_new = hold + p`
+- `rest_new = max(rest, sold)`
+
+Base cases before day 0: `hold = -inf`, `sold = -inf`, `rest = 0`. Answer: `max(sold, rest)` after the last day.
+
+Buying only from `rest` (not from `sold`) is what enforces the cooldown.
+
+### Filled table for [1, 4, 2, 0, 5]
+
+| day | price | hold | sold | rest |
+|---|---|---|---|---|
+| 0 | 1 | -1 | -inf | 0 |
+| 1 | 4 | -1 | 3 | 0 |
+| 2 | 2 | -1 | 1 | 3 |
+| 3 | 0 | 3 | -1 | 3 |
+| 4 | 5 | 3 | 8 | 3 |
+
+Answer: max(8, 3) = 8.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def max_profit_memo(prices):
+    @lru_cache(maxsize=None)
+    def go(day, holding):
+        if day >= len(prices):
+            return 0
+        rest = go(day + 1, holding)
+        if holding:
+            act = prices[day] + go(day + 2, False)
+        else:
+            act = -prices[day] + go(day + 1, True)
+        return max(rest, act)
+    return go(0, False)
+```
+
+### Bottom-up, constant space
+
+```python
+def max_profit(prices):
+    hold, sold, rest = float("-inf"), float("-inf"), 0
+    for p in prices:
+        hold, sold, rest = max(hold, rest - p), hold + p, max(rest, sold)
+    return max(sold, rest)
+```
+
+The tuple assignment uses yesterday's values on the right-hand side, which is exactly what the recurrence needs.
+
+### Complexity
+
+O(n) time. O(1) space for the state machine, O(n) for the memoised version.
+
+## Tests
+
+```python
+for fn in (max_profit, max_profit_memo, max_profit_recursive):
+    assert fn([2, 5, 1, 4]) == 3
+    assert fn([1, 4, 2, 0, 5]) == 8
+    assert fn([5, 4, 3]) == 0                      # falling prices: no trade
+    assert fn([3]) == 0                            # single day
+    assert fn([]) == 0                             # empty
+    assert fn([1, 2]) == 1
+    assert fn([1, 2, 3, 4]) == 3                   # one long hold beats split trades
+
+import random
+random.seed(19)
+for _ in range(100):
+    ps = [random.randint(0, 9) for _ in range(random.randint(0, 10))]
+    assert max_profit(ps) == max_profit_recursive(ps) == max_profit_memo(ps)
+```
+
+## Edge cases and pitfalls
+
+- **Buying from `sold`** ignores the cooldown and overstates profit.
+- **Updating states in place one by one** mixes today's and yesterday's values; update them together.
+- **Initial `hold = 0`** pretends you got a share for free; it must start at minus infinity (or `-prices[0]` on day 0).
+- **Sell-day indexing in recursion.** After selling on day d you may next buy on day d + 2.
+
+## Where this shows up in data engineering
+
+State-machine DP is a good model for any process with modes and rules about moving between them: a job that must
+idle after a heavy run, or a resource that needs a cool-down period before reuse. Writing down the states and
+legal transitions first, as in this table, is also how you design idempotent status columns in pipeline metadata.
