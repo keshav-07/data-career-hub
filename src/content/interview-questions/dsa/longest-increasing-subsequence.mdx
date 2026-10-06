@@ -1,0 +1,178 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Longest Increasing Subsequence: O(n^2) DP and O(n log n) Patience Sorting"
+seoTitle: "Longest Increasing Subsequence: DP to n log n"
+description: "Find the length of the longest strictly increasing subsequence with the classic O(n^2) DP and the O(n log n) tails-array binary search method, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "binary-search"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "High"
+shortAnswer: "The DP is: lis(i) = 1 + the largest lis(j) over j before i with nums[j] smaller than nums[i], or 1 if there is none; the answer is the maximum lis(i). That is O(n^2). The faster method keeps tails, where tails[k] is the smallest possible last value of an increasing subsequence of length k + 1. For each value, binary-search the first tail that is not smaller and replace it, or append when the value is larger than every tail. The length of tails is the answer, in O(n log n) time and O(n) space."
+followUps: ["How do you reconstruct an actual subsequence, not just its length?", "What changes for a non-decreasing subsequence?", "Why is the tails array always sorted?", "How does this solve the Russian doll envelopes problem?"]
+previous: "interview-questions:dsa/word-break"
+next: "interview-questions:dsa/partition-equal-subset-sum"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a list of integers, return the length of the longest subsequence whose values are strictly increasing. A
+subsequence keeps the original order but may skip elements.
+
+This is widely known as LeetCode 300, "Longest Increasing Subsequence".
+
+Assume up to 2,500 values.
+
+## Examples
+
+```text
+[4, 1, 3, 2, 5, 3, 6]   -> 4   (1, 2, 5, 6  or  1, 3, 5, 6  or  1, 2, 3, 6)
+[9, 8, 7]               -> 1
+[2, 2, 2]               -> 1   (strictly increasing: equal values do not extend)
+[]                      -> 0
+```
+
+## Approach 1: plain recursion (take or skip)
+
+```python
+def lis_recursive(nums):
+    def go(i, prev):                     # best from index i, last taken value prev
+        if i == len(nums):
+            return 0
+        best = go(i + 1, prev)           # skip nums[i]
+        if prev is None or nums[i] > prev:
+            best = max(best, 1 + go(i + 1, nums[i]))
+        return best
+    return go(0, None)
+```
+
+Every element is taken or skipped, so this explores up to 2^n branches.
+
+## Approach 2: O(n^2) dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `lis[i]` = length of the longest increasing subsequence that ends at index i.
+- **Recurrence:** `lis[i] = 1 + max(lis[j] for j in range(i) if nums[j] < nums[i])`, or 1 if no such j exists.
+- **Base case:** every `lis[i]` starts at 1 (the element on its own).
+- **Answer:** `max(lis)`, because the best subsequence may end anywhere.
+
+### Filled table for [4, 1, 3, 2, 5, 3, 6]
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|---|
+| value | 4 | 1 | 3 | 2 | 5 | 3 | 6 |
+| lis | 1 | 1 | 2 | 2 | 3 | 3 | 4 |
+
+For i = 6 (value 6), the best earlier smaller value has `lis = 3` (at 5 or 3), so `lis[6] = 4`.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def lis_memo(nums):
+    @lru_cache(maxsize=None)
+    def ending_at(i):
+        return 1 + max((ending_at(j) for j in range(i) if nums[j] < nums[i]), default=0)
+    return max((ending_at(i) for i in range(len(nums))), default=0)
+```
+
+### Bottom-up
+
+```python
+def lis_quadratic(nums):
+    lis = [1] * len(nums)
+    for i in range(len(nums)):
+        for j in range(i):
+            if nums[j] < nums[i] and lis[j] + 1 > lis[i]:
+                lis[i] = lis[j] + 1
+    return max(lis, default=0)
+```
+
+## Approach 3: optimal, tails array with binary search
+
+### Idea
+
+Keep `tails`, where `tails[k]` is the smallest last value of any increasing subsequence of length k + 1 seen so far.
+It is always sorted. For each new value:
+
+- If it is larger than every tail, it extends the longest subsequence: append it.
+- Otherwise, find the first tail that is greater than or equal to it and replace that tail. This keeps the same
+  length but with a smaller ending, which can only help later values.
+
+`bisect_left` finds that position in O(log n).
+
+Trace for `[4, 1, 3, 2, 5, 3, 6]`:
+
+| value | tails after |
+|---|---|
+| 4 | [4] |
+| 1 | [1] |
+| 3 | [1, 3] |
+| 2 | [1, 2] |
+| 5 | [1, 2, 5] |
+| 3 | [1, 2, 3] |
+| 6 | [1, 2, 3, 6] |
+
+Length 4. Note that `tails` is not necessarily a real subsequence; only its length is meaningful.
+
+```python
+from bisect import bisect_left
+
+def length_of_lis(nums):
+    tails = []
+    for value in nums:
+        pos = bisect_left(tails, value)
+        if pos == len(tails):
+            tails.append(value)
+        else:
+            tails[pos] = value
+    return len(tails)
+```
+
+### Complexity
+
+| Method | Time | Space |
+|---|---|---|
+| Recursion | O(2^n) | O(n) |
+| DP | O(n^2) | O(n) |
+| Tails + binary search | O(n log n) | O(n) |
+
+## Tests
+
+```python
+for fn in (length_of_lis, lis_quadratic, lis_memo, lis_recursive):
+    assert fn([4, 1, 3, 2, 5, 3, 6]) == 4
+    assert fn([9, 8, 7]) == 1                    # decreasing
+    assert fn([2, 2, 2]) == 1                    # duplicates do not count
+    assert fn([]) == 0                           # empty
+    assert fn([5]) == 1                          # single element
+    assert fn([1, 2, 3, 4]) == 4                 # already sorted
+    assert fn([-3, -1, -2, 0]) == 3              # negatives
+
+import random
+random.seed(16)
+for _ in range(100):
+    a = [random.randint(0, 9) for _ in range(random.randint(0, 11))]
+    assert length_of_lis(a) == lis_quadratic(a) == lis_recursive(a)
+```
+
+## Edge cases and pitfalls
+
+- **`bisect_right` versus `bisect_left`.** For strictly increasing you need `bisect_left`; `bisect_right` lets equal
+  values extend the sequence, which answers the non-decreasing variant.
+- **Returning `lis[-1]`** instead of `max(lis)` in the DP: the best subsequence need not end at the last element.
+- **Treating `tails` as the answer subsequence.** It is not; to reconstruct, store the predecessor index for each
+  element.
+- **Empty input**: `max` of an empty list raises; use `default=0`.
+
+## Where this shows up in data engineering
+
+The longest increasing run of a key in arrival order measures how close a stream is to sorted, which tells you how
+much reordering a sink must do. The same idea finds the largest set of records consistent with an ordering, for
+example the longest chain of events whose timestamps and sequence numbers agree.

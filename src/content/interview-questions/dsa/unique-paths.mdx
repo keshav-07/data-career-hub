@@ -1,0 +1,156 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Unique Paths: Count Grid Routes with 2D DP or a Binomial Coefficient"
+seoTitle: "Unique Paths: Grid DP and Combinatorics"
+description: "Count the right-and-down routes across an m by n grid with recursion, memoised and bottom-up 2D DP, a one-row DP and the binomial formula, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "A cell can only be entered from above or from the left, so paths(r, c) = paths(r - 1, c) + paths(r, c - 1), with every cell in the first row and first column equal to 1. Filling the grid row by row gives O(m * n) time, and keeping one row reduces space to O(n). Combinatorially, every route is a sequence of m - 1 downs and n - 1 rights, so the answer is C(m + n - 2, m - 1), computable in O(min(m, n))."
+followUps: ["How do you handle blocked cells (Unique Paths II)?", "How would you find the minimum-cost path instead of the count?", "Why does the binomial coefficient count the routes?"]
+previous: "interview-questions:dsa/partition-equal-subset-sum"
+next: "interview-questions:dsa/longest-common-subsequence"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A robot starts in the top-left cell of a grid with `rows` rows and `cols` columns and must reach the bottom-right cell.
+At each move it goes one cell right or one cell down. Count the distinct routes.
+
+This is widely known as LeetCode 62, "Unique Paths".
+
+Assume both dimensions are between 1 and 100 and the answer fits in a 64-bit integer for the tested sizes.
+
+## Examples
+
+```text
+rows 2, cols 3  -> 3   (RRD, RDR, DRR)
+rows 3, cols 3  -> 6
+rows 1, cols 9  -> 1   (a single row: only rights)
+rows 4, cols 5  -> 35
+```
+
+## Approach 1: plain recursion
+
+```python
+def unique_paths_recursive(rows, cols):
+    def go(r, c):
+        if r == 0 or c == 0:
+            return 1
+        return go(r - 1, c) + go(r, c - 1)
+    return go(rows - 1, cols - 1)
+```
+
+The same cells are recomputed exponentially often: roughly O(2^(rows + cols)).
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `paths[r][c]` = number of routes from the start to cell (r, c).
+- **Recurrence:** `paths[r][c] = paths[r - 1][c] + paths[r][c - 1]`.
+- **Base cases:** `paths[0][c] = 1` and `paths[r][0] = 1` (a straight line along the edge).
+- **Answer:** the bottom-right cell.
+
+### Filled table for 3 rows, 4 columns
+
+| r \ c | 0 | 1 | 2 | 3 |
+|---|---|---|---|---|
+| 0 | 1 | 1 | 1 | 1 |
+| 1 | 1 | 2 | 3 | 4 |
+| 2 | 1 | 3 | 6 | 10 |
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def unique_paths_memo(rows, cols):
+    @lru_cache(maxsize=None)
+    def go(r, c):
+        if r == 0 or c == 0:
+            return 1
+        return go(r - 1, c) + go(r, c - 1)
+    return go(rows - 1, cols - 1)
+```
+
+### Bottom-up
+
+```python
+def unique_paths_table(rows, cols):
+    paths = [[1] * cols for _ in range(rows)]
+    for r in range(1, rows):
+        for c in range(1, cols):
+            paths[r][c] = paths[r - 1][c] + paths[r][c - 1]
+    return paths[-1][-1]
+```
+
+### Space optimised (one row)
+
+Before the update, `row[c]` holds the value from the row above, and `row[c - 1]` is already the current row's left
+neighbour.
+
+```python
+def unique_paths(rows, cols):
+    row = [1] * cols
+    for _ in range(1, rows):
+        for c in range(1, cols):
+            row[c] += row[c - 1]
+    return row[-1]
+```
+
+### Combinatorics
+
+Every route has exactly `rows - 1` downs and `cols - 1` rights in some order, so the count is the number of ways to
+choose which moves are downs.
+
+```python
+from math import comb
+
+def unique_paths_formula(rows, cols):
+    return comb(rows + cols - 2, rows - 1)
+```
+
+### Complexity
+
+| Method | Time | Space |
+|---|---|---|
+| Recursion | exponential | O(rows + cols) |
+| 2D DP | O(rows * cols) | O(rows * cols) |
+| 1D DP | O(rows * cols) | O(cols) |
+| Formula | O(min(rows, cols)) multiplications | O(1) |
+
+## Tests
+
+```python
+for fn in (unique_paths, unique_paths_table, unique_paths_memo, unique_paths_formula, unique_paths_recursive):
+    assert fn(2, 3) == 3
+    assert fn(3, 3) == 6
+    assert fn(1, 9) == 1                      # single row
+    assert fn(9, 1) == 1                      # single column
+    assert fn(1, 1) == 1                      # start is the target
+    assert fn(4, 5) == 35
+
+for r in range(1, 15):
+    for c in range(1, 15):
+        assert unique_paths(r, c) == unique_paths_formula(r, c) == unique_paths_table(r, c)
+assert unique_paths(30, 30) == unique_paths_formula(30, 30)
+```
+
+## Edge cases and pitfalls
+
+- **1 by 1 grid**: one route (no moves).
+- **Off-by-one in the formula**: it is C(rows + cols - 2, rows - 1), not C(rows + cols, rows).
+- **Overflow** in fixed-width languages for large grids; compute the binomial with interleaved multiply and divide.
+- **Obstacles** break the formula; use the DP and set blocked cells to 0.
+
+## Where this shows up in data engineering
+
+Not directly. Grid DP is the same shape as edit distance and longest common subsequence, which do appear in data work
+(fuzzy matching, diffing records), so this is a gentle way to learn the two-dimensional table.
