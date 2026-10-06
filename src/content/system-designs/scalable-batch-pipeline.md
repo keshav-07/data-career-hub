@@ -71,6 +71,7 @@ related:
   - "articles:python/idempotent-csv-loader"
   - "projects:large-scale-batch-processing"
 previous: "system-designs:elt-pipeline-with-dbt"
+next: "system-designs:data-quality-framework"
 versionContext: "The watermark example is plain Python run with Python 3; the YAML registry entry is illustrative and was not executed."
 sources:
   - { label: "Apache Airflow: best practices", url: "https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html" }
