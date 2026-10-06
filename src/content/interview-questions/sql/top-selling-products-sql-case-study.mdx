@@ -1,0 +1,743 @@
+---
+seoTitle: "Top Selling Products SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Top Selling Products: SQL Case Study with 8 Approaches"
+description: "Rank top-selling products per category in SQL with returns, ties and messy SKUs, then use GROUPING SETS, EXISTS, sessions, HyperLogLog, indexes and memory tuning."
+technology: ["sql"]
+topic: ["case-study", "e-commerce", "window-functions"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Aggregate net units (quantity minus returned quantity) and net revenue per product over completed orders in the period, then rank products within each category with DENSE_RANK or RANK ordered by the chosen measure, and keep ranks up to N. State the measure (units or revenue), the tie rule and whether variants such as sizes roll up to one product. Include products with zero sales only if the question asks for a full ranking."
+followUps:
+  - "Top 3 by units or by revenue? What changes?"
+  - "Two products tie for third place. How many rows do you return?"
+  - "SKUs come in sizes and colours. How do you rank the base product?"
+  - "How do you get product, category and grand totals in one query?"
+  - "How many distinct customers bought each product, approximately, on billions of rows?"
+  - "Which index makes 'top products in a category last week' fast?"
+prerequisites: ["articles:sql/window-functions", "articles:sql/aggregations-group-by-having"]
+related: ["interview-questions:sql/customer-lifetime-value-sql-case-study", "interview-questions:sql/average-order-value-sql-case-study", "articles:sql/window-functions", "articles:sql/aggregations-group-by-having", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/new-vs-returning-customers-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 and the approximate-distinct example on DuckDB 1.5.6, with scripts/verify-examples.py; outputs and plans are copied from the engines. The postgresql-hll extension example is shown but not executed."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: GROUPING SETS, CUBE and ROLLUP", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
+  - { label: "PostgreSQL 16 documentation: Pattern matching", url: "https://www.postgresql.org/docs/16/functions-matching.html" }
+  - { label: "PostgreSQL 16 documentation: Index-only scans and covering indexes", url: "https://www.postgresql.org/docs/16/indexes-index-only-scans.html" }
+  - { label: "PostgreSQL 16 documentation: Resource consumption (work_mem)", url: "https://www.postgresql.org/docs/16//runtime-config-resource.html" }
+---
+
+"What are our top-selling products?" is the question behind every merchandising dashboard, and in interviews it is the standard test of top-N-per-group logic. The ranking itself is short; the work is in the definition (units or revenue, returns, ties, product variants) and in making it fast. This case study covers both on one small catalogue.
+
+## The business question
+
+Merchandising decides stock, promotion slots and home-page placement from the best-seller list; buyers reorder from it; category managers are judged on it. The definition needs to be explicit:
+
+- **Measure**: net units sold (quantity minus returned quantity). Net revenue is reported alongside, because a cheap item can lead on units and trail on revenue.
+- **Orders counted**: `completed` orders in the period; cancelled orders are excluded.
+- **Product level**: each SKU is a product, but sizes and colours of the same item (for example `TEE-BLK-M` and `TEE-BLK-L`) can be rolled up to a base product on request.
+- **Scope**: gift cards are not merchandise and are excluded from best-seller lists.
+- **Ranking**: top 2 per category by net units, with ties sharing a rank (so a category can return more than two rows).
+- **Zero sellers**: products with no sales do not appear in a top-N list, but must appear in a full ranking or a "worst sellers" list.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE products (
+  product_id INT PRIMARY KEY,
+  sku        TEXT NOT NULL,        -- typed by hand: case and spacing vary
+  name       TEXT NOT NULL,
+  category   TEXT NOT NULL
+);
+
+CREATE TABLE orders (
+  order_id    INT PRIMARY KEY,
+  customer_id INT NOT NULL,
+  order_ts    TIMESTAMP NOT NULL,  -- UTC
+  status      TEXT NOT NULL,
+  channel     TEXT NOT NULL
+);
+
+CREATE TABLE order_lines (
+  order_id     INT NOT NULL REFERENCES orders,
+  product_id   INT NOT NULL REFERENCES products,
+  qty          INT NOT NULL,
+  unit_price   NUMERIC(10,2) NOT NULL,
+  returned_qty INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE loyalty_members (customer_id INT NOT NULL, tier TEXT NOT NULL);   -- may repeat
+
+CREATE TABLE page_views (customer_id INT NOT NULL, product_id INT NOT NULL, view_ts TIMESTAMP NOT NULL);
+
+INSERT INTO products VALUES
+  (1, 'TEE-BLK-M',    'Black tee M',    'Apparel'),
+  (2, 'TEE-BLK-L',    'Black tee L',    'Apparel'),
+  (3, 'TEE-WHT-M',    'White tee M',    'Apparel'),
+  (4, 'HOOD-GRY-L',   'Grey hoodie L',  'Apparel'),
+  (5, 'MUG-001',      'Logo mug',       'Home'),
+  (6, ' mug-002',     'Travel mug',     'Home'),
+  (7, 'BOTTLE_750ML', 'Water bottle',   'Home'),
+  (8, 'GIFT-CARD-50', 'Gift card 50',   'Gift'),
+  (9, 'POSTER-A2',    'Poster',         'Home');
+
+INSERT INTO orders VALUES
+  (1,  1, '2026-07-01 09:20', 'completed', 'web'),
+  (2,  2, '2026-07-01 11:00', 'completed', 'app'),
+  (3,  3, '2026-07-01 15:00', 'completed', 'web'),
+  (4,  1, '2026-07-02 09:05', 'completed', 'web'),
+  (5,  4, '2026-07-02 13:00', 'completed', 'app'),
+  (6,  5, '2026-07-02 14:00', 'cancelled', 'web'),
+  (7,  2, '2026-07-03 10:00', 'completed', 'app'),
+  (8,  6, '2026-07-03 18:00', 'completed', 'web'),
+  (9,  3, '2026-07-04 12:00', 'completed', 'web'),
+  (10, 4, '2026-07-05 20:00', 'completed', 'app');
+
+INSERT INTO order_lines VALUES
+  (1, 1, 2, 20, 0), (1, 5, 1, 12, 0),
+  (2, 2, 1, 20, 0), (2, 7, 1, 25, 0),
+  (3, 3, 3, 18, 1),                       -- one of three returned
+  (4, 5, 2, 12, 0), (4, 8, 1, 50, 0),
+  (5, 4, 1, 55, 0),
+  (6, 1, 5, 20, 0),                       -- cancelled order
+  (7, 6, 2, 15, 0), (7, 1, 1, 20, 0),
+  (8, 7, 2, 25, 0),
+  (9, 4, 1, 55, 0), (9, 2, 1, 20, 0),
+  (10, 5, 1, 12, 0), (10, 6, 1, 15, 0);
+
+INSERT INTO loyalty_members VALUES (1, 'gold'), (1, 'gold'), (3, 'silver'), (4, 'gold');
+
+INSERT INTO page_views VALUES
+  (1, 1, '2026-07-01 09:00'), (1, 2, '2026-07-01 09:05'), (1, 5, '2026-07-01 09:12'),
+  (1, 4, '2026-07-01 21:00'),
+  (1, 5, '2026-07-02 08:50'), (1, 8, '2026-07-02 09:00'),
+  (2, 2, '2026-07-01 10:40'), (2, 7, '2026-07-01 10:50'),
+  (2, 6, '2026-07-03 09:00'), (2, 1, '2026-07-03 09:45'),
+  (3, 3, '2026-07-01 14:50'),
+  (3, 4, '2026-07-04 11:00'), (3, 2, '2026-07-04 11:20'), (3, 3, '2026-07-04 11:40');
+```
+
+By hand, net units: black tee M 3 (the cancelled 5 are excluded), black tee L 2, white tee 2 (3 sold, 1 returned), hoodie 2, logo mug 4, travel mug 3, bottle 3, gift card 1, poster 0.
+
+## Core solution
+
+```sql
+WITH product_sales AS (
+  SELECT p.product_id, p.name, p.category,
+         SUM(l.qty - l.returned_qty)                      AS net_units,
+         SUM((l.qty - l.returned_qty) * l.unit_price)     AS net_revenue
+  FROM order_lines l
+  JOIN orders o   ON o.order_id = l.order_id
+  JOIN products p ON p.product_id = l.product_id
+  WHERE o.status = 'completed'
+    AND o.order_ts >= TIMESTAMP '2026-07-01' AND o.order_ts < TIMESTAMP '2026-07-08'
+    AND p.category <> 'Gift'
+  GROUP BY p.product_id, p.name, p.category
+),
+ranked AS (
+  SELECT *, DENSE_RANK() OVER (PARTITION BY category ORDER BY net_units DESC) AS units_rank
+  FROM product_sales
+)
+SELECT category, units_rank, name, net_units, net_revenue
+FROM ranked
+WHERE units_rank <= 2
+ORDER BY category, units_rank, name;
+```
+
+| category | units_rank | name | net_units | net_revenue |
+|---|---|---|---|---|
+| Apparel | 1 | Black tee M | 3 | 60.00 |
+| Apparel | 2 | Black tee L | 2 | 40.00 |
+| Apparel | 2 | Grey hoodie L | 2 | 110.00 |
+| Apparel | 2 | White tee M | 2 | 36.00 |
+| Home | 1 | Logo mug | 4 | 48.00 |
+| Home | 2 | Travel mug | 3 | 45.00 |
+| Home | 2 | Water bottle | 3 | 75.00 |
+
+Apparel returns four rows: black tee M is first, and three products tie for second with 2 units. Home returns three: the logo mug, then the travel mug and bottle tied. Whether that is right depends on the tie rule, which the next section covers. Revenue tells a different story: the hoodie sells 2 units but earns the most in Apparel.
+
+## Approach: top-N per group and tie rules
+
+**Why it matters.** "Top 2 per category" has three legitimate readings when values tie, and each window function implements one of them:
+
+```sql
+WITH product_sales AS (
+  SELECT p.product_id, p.name, p.category,
+         SUM(l.qty - l.returned_qty)                  AS net_units,
+         SUM((l.qty - l.returned_qty) * l.unit_price) AS net_revenue
+  FROM order_lines l
+  JOIN orders o   ON o.order_id = l.order_id AND o.status = 'completed'
+  JOIN products p ON p.product_id = l.product_id
+  WHERE p.category <> 'Gift'
+  GROUP BY p.product_id, p.name, p.category
+)
+SELECT category, name, net_units, net_revenue,
+       ROW_NUMBER() OVER w AS row_number,
+       RANK()       OVER w AS rank,
+       DENSE_RANK() OVER w AS dense_rank
+FROM product_sales
+WINDOW w AS (PARTITION BY category ORDER BY net_units DESC, net_revenue DESC)
+ORDER BY category, row_number;
+```
+
+| category | name | net_units | net_revenue | row_number | rank | dense_rank |
+|---|---|---|---|---|---|---|
+| Apparel | Black tee M | 3 | 60.00 | 1 | 1 | 1 |
+| Apparel | Grey hoodie L | 2 | 110.00 | 2 | 2 | 2 |
+| Apparel | Black tee L | 2 | 40.00 | 3 | 3 | 3 |
+| Apparel | White tee M | 2 | 36.00 | 4 | 4 | 4 |
+| Home | Logo mug | 4 | 48.00 | 1 | 1 | 1 |
+| Home | Water bottle | 3 | 75.00 | 2 | 2 | 2 |
+| Home | Travel mug | 3 | 45.00 | 3 | 3 | 3 |
+
+- `ROW_NUMBER() <= 2` returns exactly two per category. With `net_revenue` as a tiebreaker the choice is deterministic: the hoodie beats the black tee L. Without a tiebreaker, which tied product appears would be arbitrary and could change between runs.
+- `RANK() <= 2` returns everything tied at a position that starts within the top 2.
+- `DENSE_RANK() <= 2` returns the top two *distinct values* of the measure, which can be many products.
+
+Interviewers usually want you to ask which one the business means. A merchandiser filling two home-page slots needs `ROW_NUMBER` with a business tiebreaker; a "best sellers" report usually wants `RANK`.
+
+Two other ways to write top-N per group in PostgreSQL:
+
+```sql
+SELECT c.category, t.name, t.net_units
+FROM (SELECT DISTINCT category FROM products WHERE category <> 'Gift') c
+CROSS JOIN LATERAL (
+  SELECT p.name, SUM(l.qty - l.returned_qty) AS net_units
+  FROM order_lines l
+  JOIN orders o ON o.order_id = l.order_id AND o.status = 'completed'
+  JOIN products p ON p.product_id = l.product_id
+  WHERE p.category = c.category
+  GROUP BY p.name
+  ORDER BY net_units DESC, p.name
+  LIMIT 2
+) t
+ORDER BY c.category, t.net_units DESC, t.name;
+```
+
+| category | name | net_units |
+|---|---|---|
+| Apparel | Black tee M | 3 |
+| Apparel | Black tee L | 2 |
+| Home | Logo mug | 4 |
+| Home | Travel mug | 3 |
+
+`LATERAL ... LIMIT n` runs the inner query once per category, which is efficient when categories are few and an index supports the inner query. `DISTINCT ON (category)` gives exactly the top one per group. Warehouses add `QUALIFY ROW_NUMBER() OVER (...) <= 2`.
+
+**Pitfalls.** Products with no sales are absent because the query starts from `order_lines`; a full ranking needs `products LEFT JOIN` sales with `COALESCE(net_units, 0)`. Filtering on the rank requires an outer query, because window functions are evaluated after `WHERE`.
+
+## Approach: regex matching to clean and roll up SKUs
+
+**Why it matters.** Product codes are often typed by people and encode attributes: `TEE-BLK-M` is the black tee in size M. Merchandising wants best sellers at the base-product level (all tees), and the codes are messy (`' mug-002'` has a leading space and lower case). Regular expressions extract, validate and normalise them.
+
+PostgreSQL's POSIX regex tools: `~` (matches, case-sensitive), `~*` (case-insensitive), `substring(text FROM pattern)` (first capture group), `regexp_replace` and `regexp_match`.
+
+```sql
+SELECT product_id, sku,
+       upper(trim(sku))                                          AS sku_clean,
+       substring(upper(trim(sku)) FROM '^([A-Z]+)')              AS base_product,
+       substring(upper(trim(sku)) FROM '-(XS|S|M|L|XL)$')        AS size,
+       upper(trim(sku)) ~ '^[A-Z]+(-[A-Z0-9]+)+$'                AS matches_standard,
+       sku ~* '^gift'                                            AS is_gift_card
+FROM products
+ORDER BY product_id;
+```
+
+| product_id | sku | sku_clean | base_product | size | matches_standard | is_gift_card |
+|---|---|---|---|---|---|---|
+| 1 | TEE-BLK-M | TEE-BLK-M | TEE | M | t | f |
+| 2 | TEE-BLK-L | TEE-BLK-L | TEE | L | t | f |
+| 3 | TEE-WHT-M | TEE-WHT-M | TEE | M | t | f |
+| 4 | HOOD-GRY-L | HOOD-GRY-L | HOOD | L | t | f |
+| 5 | MUG-001 | MUG-001 | MUG | NULL | t | f |
+| 6 |  mug-002 | MUG-002 | MUG | NULL | t | f |
+| 7 | BOTTLE_750ML | BOTTLE_750ML | BOTTLE | NULL | f | f |
+| 8 | GIFT-CARD-50 | GIFT-CARD-50 | GIFT | NULL | t | t |
+| 9 | POSTER-A2 | POSTER-A2 | POSTER | NULL | t | f |
+
+`BOTTLE_750ML` fails the standard because it uses an underscore, which is exactly what the validation column is for: count such rows in a data-quality check rather than letting them disappear. Base-product best sellers then group by the extracted prefix:
+
+```sql
+SELECT p.category,
+       substring(upper(trim(p.sku)) FROM '^([A-Z]+)')  AS base_product,
+       SUM(l.qty - l.returned_qty)                     AS net_units,
+       COUNT(DISTINCT p.product_id)                    AS variants_sold,
+       RANK() OVER (PARTITION BY p.category
+                    ORDER BY SUM(l.qty - l.returned_qty) DESC) AS units_rank
+FROM order_lines l
+JOIN orders o   ON o.order_id = l.order_id AND o.status = 'completed'
+JOIN products p ON p.product_id = l.product_id
+WHERE NOT p.sku ~* '^gift'
+GROUP BY p.category, base_product
+ORDER BY p.category, units_rank;
+```
+
+| category | base_product | net_units | variants_sold | units_rank |
+|---|---|---|---|---|
+| Apparel | TEE | 7 | 3 | 1 |
+| Apparel | HOOD | 2 | 1 | 2 |
+| Home | MUG | 7 | 2 | 1 |
+| Home | BOTTLE | 3 | 1 | 2 |
+
+At SKU level the logo mug led Home with 4 units; at base-product level the tee family (7 units across three variants) and the mug family (7 units) lead their categories. The answer to "what sells best" depends on the level, so state it.
+
+**Pitfalls.** Regex functions on a column in `WHERE` prevent ordinary index use; store the cleaned SKU and base product as columns at load time (or index the expression). `~` is case-sensitive, a frequent bug with hand-typed codes. Dialects differ: PostgreSQL uses POSIX regex, BigQuery uses RE2 (`REGEXP_EXTRACT`), Snowflake has `REGEXP_SUBSTR`; character-class shorthand and backreference support vary.
+
+## Approach: GROUPING SETS for product, category and total in one pass
+
+**Why it matters.** A best-seller report usually needs the product rows, a subtotal per category, a total per channel and a grand total. Four `GROUP BY` queries glued with `UNION ALL` read the data four times; `GROUPING SETS` lists every grouping you want and computes them in one statement.
+
+```sql
+SELECT CASE WHEN GROUPING(p.category) = 1 THEN '(all)' ELSE p.category END AS category,
+       CASE WHEN GROUPING(p.name)     = 1 THEN '(all)' ELSE p.name     END AS product,
+       CASE WHEN GROUPING(o.channel)  = 1 THEN '(all)' ELSE o.channel  END AS channel,
+       SUM(l.qty - l.returned_qty)                  AS net_units,
+       SUM((l.qty - l.returned_qty) * l.unit_price) AS net_revenue
+FROM order_lines l
+JOIN orders o   ON o.order_id = l.order_id AND o.status = 'completed'
+JOIN products p ON p.product_id = l.product_id
+WHERE p.category <> 'Gift'
+GROUP BY GROUPING SETS ((p.category, p.name), (p.category), (o.channel), ())
+ORDER BY GROUPING(p.category), category, GROUPING(p.name), net_units DESC, product, channel;
+```
+
+| category | product | channel | net_units | net_revenue |
+|---|---|---|---|---|
+| Apparel | Black tee M | (all) | 3 | 60.00 |
+| Apparel | Black tee L | (all) | 2 | 40.00 |
+| Apparel | Grey hoodie L | (all) | 2 | 110.00 |
+| Apparel | White tee M | (all) | 2 | 36.00 |
+| Apparel | (all) | (all) | 9 | 246.00 |
+| Home | Logo mug | (all) | 4 | 48.00 |
+| Home | Travel mug | (all) | 3 | 45.00 |
+| Home | Water bottle | (all) | 3 | 75.00 |
+| Home | (all) | (all) | 10 | 168.00 |
+| (all) | (all) | (all) | 19 | 414.00 |
+| (all) | (all) | web | 11 | 237.00 |
+| (all) | (all) | app | 8 | 177.00 |
+
+The four grouping sets produce product rows, two category subtotals, two channel totals and one grand total (19 net units). Unlike distinct counts, unit and revenue sums are additive, so these subtotals equal the sums of the rows beneath them, a quick correctness check.
+
+`GROUPING SETS` is the general form: `ROLLUP (category, name)` is shorthand for `((category, name), (category), ())`, and `CUBE (category, channel)` for every combination of the two. Use explicit grouping sets when the report needs a specific, non-hierarchical mix, as here. `GROUPING(col)` returns 1 when `col` is aggregated away in that row, so labels like `'(all)'` cannot be confused with a real `NULL`.
+
+**Pitfalls.** Ranking across a grouping-sets result mixes levels; rank inside each level (partition by `GROUPING(...)` flags) or rank in a separate query. Some BI tools expect one level per query, so check the consumer before shipping a mixed-level table.
+
+## Approach: semi-join with EXISTS for a customer segment
+
+**Why it matters.** "Top products among loyalty members" restricts orders to customers who appear in another table. The natural-looking inner join to `loyalty_members` is wrong here, because customer 1 is listed twice: every one of their order lines is duplicated and their products climb the ranking.
+
+```sql
+SELECT p.name, SUM(l.qty - l.returned_qty) AS net_units_join
+FROM order_lines l
+JOIN orders o           ON o.order_id = l.order_id AND o.status = 'completed'
+JOIN products p         ON p.product_id = l.product_id
+JOIN loyalty_members m  ON m.customer_id = o.customer_id
+WHERE p.category <> 'Gift'
+GROUP BY p.name
+ORDER BY net_units_join DESC, p.name;
+```
+
+| name | net_units_join |
+|---|---|
+| Logo mug | 7 |
+| Black tee M | 4 |
+| Grey hoodie L | 2 |
+| White tee M | 2 |
+| Black tee L | 1 |
+| Travel mug | 1 |
+
+A **semi-join** keeps each left row at most once if at least one match exists, and never multiplies it. `EXISTS` expresses it directly:
+
+```sql
+SELECT p.name, SUM(l.qty - l.returned_qty) AS net_units
+FROM order_lines l
+JOIN orders o   ON o.order_id = l.order_id AND o.status = 'completed'
+JOIN products p ON p.product_id = l.product_id
+WHERE p.category <> 'Gift'
+  AND EXISTS (SELECT 1 FROM loyalty_members m WHERE m.customer_id = o.customer_id)
+GROUP BY p.name
+ORDER BY net_units DESC, p.name;
+```
+
+| name | net_units |
+|---|---|
+| Logo mug | 4 |
+| Black tee M | 2 |
+| Grey hoodie L | 2 |
+| White tee M | 2 |
+| Black tee L | 1 |
+| Travel mug | 1 |
+
+The logo mug drops from 7 to 4 units and the black tee M from 4 to 2: the join had doubled customer 1's purchases. PostgreSQL treats `EXISTS` (and `IN (subquery)`) as a semi-join. It can run it as a `Semi Join` node that stops at the first match, or, as in this plan, first remove duplicates from the inner side (the `HashAggregate` on `customer_id`) and then do an ordinary join; either way each order counts once:
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT COUNT(*) FROM orders o
+WHERE EXISTS (SELECT 1 FROM loyalty_members m WHERE m.customer_id = o.customer_id);
+```
+
+```text
+Aggregate
+  ->  Hash Join
+        Hash Cond: (o.customer_id = m.customer_id)
+        ->  Seq Scan on orders o
+        ->  Hash
+              ->  HashAggregate
+                    Group Key: m.customer_id
+                    ->  Seq Scan on loyalty_members m
+```
+
+**Pitfalls.** `SELECT DISTINCT` after the join also removes the duplicates in some queries, but it collapses genuinely identical lines too and hides the real problem. `IN (SELECT customer_id ...)` is an equivalent semi-join and safe with `NULL`s; it is the negated `NOT IN` that breaks. What goes inside `EXISTS`'s `SELECT` list does not matter; `SELECT 1` is the convention.
+
+## Approach: sessionization to link views and purchases
+
+**Why it matters.** Units sold say what sold; merchandisers also want to know which products convert when people look at them. That requires grouping page views and orders into **sessions**: bursts of activity separated by inactivity. A common rule is that a gap of more than 30 minutes starts a new session.
+
+The recipe: put views and purchases on one timeline per customer, flag each event whose gap from the previous one exceeds 30 minutes, and take a running sum of the flags as the session number.
+
+```sql
+CREATE VIEW sessionized AS
+WITH timeline AS (
+  SELECT customer_id, view_ts AS ts, 'view' AS kind, product_id
+  FROM page_views
+  UNION ALL
+  SELECT o.customer_id, o.order_ts, 'purchase', l.product_id
+  FROM orders o JOIN order_lines l ON l.order_id = o.order_id
+  WHERE o.status = 'completed'
+),
+flagged AS (
+  SELECT *,
+         CASE WHEN ts - LAG(ts) OVER (PARTITION BY customer_id ORDER BY ts, kind DESC)
+                   <= INTERVAL '30 minutes' THEN 0 ELSE 1 END AS new_session
+  FROM timeline
+)
+SELECT *,
+       SUM(new_session) OVER (PARTITION BY customer_id ORDER BY ts, kind DESC
+                              ROWS UNBOUNDED PRECEDING) AS session_no
+FROM flagged;
+```
+
+```sql
+SELECT customer_id, session_no, MIN(ts) AS session_start, MAX(ts) AS session_end,
+       string_agg(kind || ':' || product_id, ' ' ORDER BY ts, kind DESC) AS events
+FROM sessionized
+WHERE customer_id IN (1, 2)
+GROUP BY customer_id, session_no
+ORDER BY customer_id, session_no;
+```
+
+| customer_id | session_no | session_start | session_end | events |
+|---|---|---|---|---|
+| 1 | 1 | 2026-07-01 09:00:00 | 2026-07-01 09:20:00 | view:1 view:2 view:5 purchase:1 purchase:5 |
+| 1 | 2 | 2026-07-01 21:00:00 | 2026-07-01 21:00:00 | view:4 |
+| 1 | 3 | 2026-07-02 08:50:00 | 2026-07-02 09:05:00 | view:5 view:8 purchase:8 purchase:5 |
+| 2 | 1 | 2026-07-01 10:40:00 | 2026-07-01 11:00:00 | view:2 view:7 purchase:2 purchase:7 |
+| 2 | 2 | 2026-07-03 09:00:00 | 2026-07-03 09:00:00 | view:6 |
+| 2 | 3 | 2026-07-03 09:45:00 | 2026-07-03 10:00:00 | view:1 purchase:6 purchase:1 |
+
+The first event of each customer has no previous row, so `LAG` returns `NULL`, the `CASE` falls to `ELSE 1`, and a session starts. Customer 2's 09:00 view and 09:45 view are 45 minutes apart, so they land in separate sessions, and the 10:00 purchase joins the second one. With sessions in place, per-product view-to-purchase conversion counts the sessions in which a product was viewed and also bought:
+
+```sql
+WITH per_session AS (
+  SELECT customer_id, session_no, product_id,
+         bool_or(kind = 'view')     AS viewed,
+         bool_or(kind = 'purchase') AS purchased
+  FROM sessionized
+  GROUP BY customer_id, session_no, product_id
+)
+SELECT p.name,
+       COUNT(*) FILTER (WHERE viewed)               AS sessions_viewed,
+       COUNT(*) FILTER (WHERE viewed AND purchased) AS viewed_and_bought,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE viewed AND purchased)
+             / NULLIF(COUNT(*) FILTER (WHERE viewed), 0), 0) AS view_to_buy_pct
+FROM per_session s
+JOIN products p USING (product_id)
+GROUP BY p.name
+HAVING COUNT(*) FILTER (WHERE viewed) > 0
+ORDER BY view_to_buy_pct DESC NULLS LAST, sessions_viewed DESC, p.name;
+```
+
+| name | sessions_viewed | viewed_and_bought | view_to_buy_pct |
+|---|---|---|---|
+| Black tee M | 2 | 2 | 100 |
+| Logo mug | 2 | 2 | 100 |
+| Gift card 50 | 1 | 1 | 100 |
+| Water bottle | 1 | 1 | 100 |
+| Black tee L | 3 | 2 | 67 |
+| Grey hoodie L | 2 | 1 | 50 |
+| White tee M | 2 | 1 | 50 |
+| Travel mug | 1 | 0 | 0 |
+
+**Pitfalls.** Sort ties deterministically: a view and a purchase at the same second must come out in a fixed order (here `kind DESC` puts the view first). The 30-minute rule is a convention, not a law; analytics tools and companies use different timeouts, and some also cut sessions at midnight or on a campaign change. On large event tables, sessionize incrementally per day, and handle sessions that cross the day boundary.
+
+## Approach: approximate distinct counts with HyperLogLog
+
+**Why it matters.** "How many different customers bought each product?" is a `COUNT(DISTINCT customer_id)` per product. Exact distinct counts need memory proportional to the number of distinct values and are not additive: you cannot add Monday's distinct buyers to Tuesday's. HyperLogLog (HLL) estimates the count from a small fixed-size sketch whose relative error depends on the sketch size (more memory, smaller error), and sketches can be merged across days, products or shards.
+
+Exact, on the sample:
+
+```sql
+SELECT p.name, COUNT(DISTINCT o.customer_id) AS distinct_buyers
+FROM order_lines l
+JOIN orders o   ON o.order_id = l.order_id AND o.status = 'completed'
+JOIN products p ON p.product_id = l.product_id
+GROUP BY p.name
+ORDER BY distinct_buyers DESC, p.name;
+```
+
+| name | distinct_buyers |
+|---|---|
+| Black tee L | 2 |
+| Black tee M | 2 |
+| Grey hoodie L | 2 |
+| Logo mug | 2 |
+| Travel mug | 2 |
+| Water bottle | 2 |
+| Gift card 50 | 1 |
+| White tee M | 1 |
+
+PostgreSQL has no built-in HLL. DuckDB does, as `approx_count_distinct`. On a million rows of pseudo-random buyer ids spread over four products, the estimates are close but not exact:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE big_sales AS
+SELECT (i % 4) + 1 AS product_id, hash(i) % 250000 AS customer_id
+FROM range(1000000) t(i);
+
+SELECT product_id,
+       COUNT(DISTINCT customer_id)        AS exact_buyers,
+       approx_count_distinct(customer_id) AS approx_buyers,
+       ROUND(100.0 * (approx_count_distinct(customer_id) - COUNT(DISTINCT customer_id))
+             / COUNT(DISTINCT customer_id), 2) AS error_pct
+FROM big_sales
+GROUP BY product_id
+ORDER BY product_id;
+```
+
+| product_id | exact_buyers | approx_buyers | error_pct |
+|---|---|---|---|
+| 1 | 157921 | 156949 | -0.62 |
+| 2 | 158220 | 160627 | 1.52 |
+| 3 | 158127 | 160062 | 1.22 |
+| 4 | 157695 | 169707 | 7.62 |
+
+The errors here run from under 1% to almost 8%, in both directions, and vary from product to product. DuckDB's default sketch is small; warehouse HLL functions often let you trade memory for precision, so check the documented error before putting the numbers on a dashboard.
+
+The useful property is mergeability. Store one sketch per product per day; a weekly or category-level distinct count merges the sketches instead of re-reading raw events. In PostgreSQL that is available through the `postgresql-hll` extension (not installed here, so not executed):
+
+{/* noexec */}
+```sql
+CREATE EXTENSION hll;
+CREATE TABLE daily_buyers AS
+SELECT order_date, product_id, hll_add_agg(hll_hash_integer(customer_id)) AS buyers
+FROM sales GROUP BY order_date, product_id;
+
+-- distinct buyers per product for the week, without touching raw sales
+SELECT product_id, hll_cardinality(hll_union_agg(buyers)) AS weekly_buyers
+FROM daily_buyers
+WHERE order_date >= DATE '2026-07-01' AND order_date < DATE '2026-07-08'
+GROUP BY product_id;
+```
+
+Warehouses expose the same idea under names such as `APPROX_COUNT_DISTINCT` and HLL sketch functions; check your vendor's documentation for the exact function names and accuracy settings. **When not to use it**: billing, finance and anything audited needs exact numbers; HLL is for dashboards and exploration, where speed matters more than the last percent.
+
+## Approach: index design for category best-seller queries
+
+**Why it matters.** The dashboard runs "top products in category X over the last 7 days" many times a day. Against a large sales table, an index whose column order matches the query turns a full scan into a short range read.
+
+A denormalised sales table of 400,000 rows, 8 categories, 2,000 products and about 180 days:
+
+```sql
+CREATE TABLE sales_big AS
+SELECT g AS line_id,
+       DATE '2026-01-01' + (g % 180)                 AS sale_date,
+       'cat_' || (g % 8)                             AS category,
+       (g * 31) % 2000 + 1                           AS product_id,
+       (g % 3) + 1                                   AS qty
+FROM generate_series(1, 400000) AS g;
+```
+
+The query filters by category (equality) and date (range), and reads product and quantity. Put the equality column first, the range column second, and include the read-only columns:
+
+```sql
+CREATE INDEX sales_big_cat_date ON sales_big (category, sale_date) INCLUDE (product_id, qty);
+VACUUM ANALYZE sales_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT product_id, SUM(qty) AS units
+FROM sales_big
+WHERE category = 'cat_3' AND sale_date >= DATE '2026-06-01' AND sale_date < DATE '2026-06-08'
+GROUP BY product_id
+ORDER BY units DESC
+LIMIT 5;
+```
+
+```text
+Limit (actual rows=5 loops=1)
+  Buffers: shared hit=4 read=14
+  ->  Sort (actual rows=5 loops=1)
+        Sort Key: (sum(qty)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=4 read=14
+        ->  HashAggregate (actual rows=100 loops=1)
+              Group Key: product_id
+              Batches: 1  Memory Usage: 73kB
+              Buffers: shared hit=1 read=14
+              ->  Index Only Scan using sales_big_cat_date on sales_big (actual rows=2222 loops=1)
+                    Index Cond: ((category = 'cat_3'::text) AND (sale_date >= '2026-06-01'::date) AND (sale_date < '2026-06-08'::date))
+                    Heap Fetches: 0
+                    Buffers: shared hit=1 read=14
+Planning:
+  Buffers: shared hit=50
+```
+
+With the columns the other way round, `(sale_date, category)`, the index can still be used, but it must read every category's entries in the date range and discard seven eighths of them:
+
+```sql
+DROP INDEX sales_big_cat_date;
+CREATE INDEX sales_big_date_cat ON sales_big (sale_date, category) INCLUDE (product_id, qty);
+VACUUM ANALYZE sales_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT product_id, SUM(qty) AS units
+FROM sales_big
+WHERE category = 'cat_3' AND sale_date >= DATE '2026-06-01' AND sale_date < DATE '2026-06-08'
+GROUP BY product_id
+ORDER BY units DESC
+LIMIT 5;
+```
+
+```text
+Limit (actual rows=5 loops=1)
+  Buffers: shared hit=4 read=79
+  ->  Sort (actual rows=5 loops=1)
+        Sort Key: (sum(qty)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=4 read=79
+        ->  HashAggregate (actual rows=100 loops=1)
+              Group Key: product_id
+              Batches: 1  Memory Usage: 73kB
+              Buffers: shared hit=1 read=79
+              ->  Index Only Scan using sales_big_date_cat on sales_big (actual rows=2222 loops=1)
+                    Index Cond: ((sale_date >= '2026-06-01'::date) AND (sale_date < '2026-06-08'::date) AND (category = 'cat_3'::text))
+                    Heap Fetches: 0
+                    Buffers: shared hit=1 read=79
+Planning:
+  Buffers: shared hit=50
+```
+
+Compare the `Buffers` lines: the equality-first index touched 18 pages, the date-first index 83, for the same 2,222 rows. **Design notes.** A B-tree on `(a, b)` serves filters on `a` alone and on `a` plus `b`, not on `b` alone. If most queries filter only by date across all categories, `(sale_date)` first is right; design for the queries you run most. In a warehouse, the same thinking applies to clustering or sort keys (cluster by `sale_date`, maybe `category`) so the engine prunes micro-partitions or row groups.
+
+## Approach: spilling and memory for ranking queries
+
+**Why it matters.** Ranking means sorting, and sorts and hash aggregates over large inputs can exceed the per-operation memory budget (`work_mem` in PostgreSQL) and spill to temporary files. Two things matter for best-seller queries: how big the aggregation is, and whether the sort is a full sort or a top-N sort.
+
+Ranking all 400,000 sales lines by quantity with only 64 kB of memory forces a disk sort:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT line_id, qty, RANK() OVER (ORDER BY qty DESC, line_id) AS r
+FROM sales_big;
+```
+
+```text
+WindowAgg (actual rows=400000 loops=1)
+  ->  Sort (actual rows=400000 loops=1)
+        Sort Key: qty DESC, line_id
+        Sort Method: external merge  Disk: 7096kB
+        ->  Seq Scan on sales_big (actual rows=400000 loops=1)
+```
+
+The same memory budget is enough for "top 10 lines" because PostgreSQL keeps only the best 10 rows seen so far (a bounded heap), never the whole input:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT line_id, qty FROM sales_big ORDER BY qty DESC, line_id LIMIT 10;
+```
+
+```text
+Limit (actual rows=10 loops=1)
+  ->  Sort (actual rows=10 loops=1)
+        Sort Key: qty DESC, line_id
+        Sort Method: top-N heapsort  Memory: 25kB
+        ->  Seq Scan on sales_big (actual rows=400000 loops=1)
+```
+
+`Sort Method: top-N heapsort` with a few kilobytes of memory, against `external merge` with megabytes on disk. The lesson for best-seller queries: aggregate to products first (2,000 rows instead of 400,000), then rank; and when only the top N is needed, say so with `LIMIT` so the engine can use a bounded sort:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT product_id, SUM(qty) AS units
+FROM sales_big
+GROUP BY product_id
+ORDER BY units DESC
+LIMIT 10;
+```
+
+```text
+Limit (actual rows=10 loops=1)
+  ->  Sort (actual rows=10 loops=1)
+        Sort Key: (sum(qty)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        ->  HashAggregate (actual rows=2000 loops=1)
+              Group Key: product_id
+              Batches: 5  Memory Usage: 161kB  Disk Usage: 7368kB
+              ->  Seq Scan on sales_big (actual rows=400000 loops=1)
+```
+
+Here the top-N sort above the aggregation stays at 25 kB, but the hash aggregate over 2,000 products does not fit in 64 kB: `Batches: 5` and the `Disk Usage` figure show it spilled. With a normal budget it runs in one batch:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '8MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT product_id, SUM(qty) AS units
+FROM sales_big
+GROUP BY product_id
+ORDER BY units DESC
+LIMIT 10;
+```
+
+```text
+Limit (actual rows=10 loops=1)
+  ->  Sort (actual rows=10 loops=1)
+        Sort Key: (sum(qty)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        ->  HashAggregate (actual rows=2000 loops=1)
+              Group Key: product_id
+              Batches: 1  Memory Usage: 241kB
+              ->  Seq Scan on sales_big (actual rows=400000 loops=1)
+```
+
+**What to do about spills.** Reduce rows before sorting (aggregate, filter by date); use `LIMIT` when you need only the top; raise `work_mem` for the specific job with `SET LOCAL` rather than server-wide, because every sort and hash in every concurrent query can use that much; in distributed engines, a global `ORDER BY` without `LIMIT` funnels all rows to one worker, so rank within partitions (per category) whenever possible.
+
+## Interview tips
+
+**How it is asked.** "Top 3 products by revenue in each category last month", "best seller per day", "products that were in the top 10 two weeks in a row", "which products have never sold", or "the best-sellers dashboard is slow".
+
+**What a strong answer includes.**
+
+1. The measure (units or revenue, net of returns), the period, which orders count and what is excluded.
+2. Aggregation to the product grain before ranking.
+3. An explicit tie rule and the matching window function, with a deterministic tiebreaker.
+4. Clarity about product level (SKU or base product) and zero sellers.
+5. A fast serving plan: matching composite index or clustering, aggregate-then-rank, `LIMIT`.
+
+**Mistakes candidates make.**
+
+- `ORDER BY ... LIMIT 3` over the whole table when the question is per category.
+- `ROW_NUMBER` without a tiebreaker, so ties produce different answers on each run.
+- Counting cancelled or returned units.
+- Joining to a table with duplicate keys (such as a segment list) and inflating sales; use `EXISTS`.
+- Filtering on the rank in the same `SELECT` that computes it.
+- Treating approximate distinct counts as exact.
