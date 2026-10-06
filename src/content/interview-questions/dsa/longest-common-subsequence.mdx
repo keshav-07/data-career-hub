@@ -1,0 +1,178 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Longest Common Subsequence: The Classic Two-String DP Table"
+seoTitle: "Longest Common Subsequence: 2D DP"
+description: "Compute the longest common subsequence of two strings with a 2D DP table, memoised and bottom-up versions, two-row space optimisation and reconstruction."
+technology: ["dsa"]
+topic: ["dynamic-programming", "strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Let lcs(i, j) be the answer for the first i characters of a and the first j characters of b. If a[i - 1] equals b[j - 1], that character extends the answer: lcs(i, j) = lcs(i - 1, j - 1) + 1. Otherwise drop a character from one string: lcs(i, j) = max(lcs(i - 1, j), lcs(i, j - 1)). Row 0 and column 0 are 0. Filling the table is O(m * n) time; keeping two rows cuts space to O(min(m, n)). Walking back through the full table reconstructs the subsequence."
+followUps: ["How do you reconstruct the subsequence itself?", "How does LCS relate to diff tools and to edit distance?", "How does the longest common substring differ?"]
+previous: "interview-questions:dsa/unique-paths"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given two strings, return the length of their longest common subsequence: the longest sequence of characters that
+appears in both strings in the same order, not necessarily next to each other. If they share no characters, the answer
+is 0.
+
+This is widely known as LeetCode 1143, "Longest Common Subsequence".
+
+Assume each string has up to 1,000 lowercase letters.
+
+## Examples
+
+```text
+"orange", "range"   -> 5   ("range")
+"stone", "notes"    -> 2   (for example "te", "oe" or "ne")
+"abc", "xyz"        -> 0
+"", "abc"           -> 0
+```
+
+## Approach 1: plain recursion
+
+```python
+def lcs_recursive(a, b):
+    def go(i, j):                        # LCS of a[:i] and b[:j]
+        if i == 0 or j == 0:
+            return 0
+        if a[i - 1] == b[j - 1]:
+            return go(i - 1, j - 1) + 1
+        return max(go(i - 1, j), go(i, j - 1))
+    return go(len(a), len(b))
+```
+
+When characters differ it branches twice, giving O(2^(m + n)) in the worst case.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `dp[i][j]` = LCS length of `a[:i]` and `b[:j]`.
+- **Recurrence:** if `a[i - 1] == b[j - 1]`, then `dp[i][j] = dp[i - 1][j - 1] + 1`; otherwise
+  `dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])`.
+- **Base cases:** `dp[0][j] = dp[i][0] = 0` (an empty string shares nothing).
+- **Answer:** `dp[m][len(b)]`, the bottom-right cell.
+
+### Filled table for a = "stone", b = "notes"
+
+| | "" | n | o | t | e | s |
+|---|---|---|---|---|---|---|
+| "" | 0 | 0 | 0 | 0 | 0 | 0 |
+| s | 0 | 0 | 0 | 0 | 0 | 1 |
+| t | 0 | 0 | 0 | 1 | 1 | 1 |
+| o | 0 | 0 | 1 | 1 | 1 | 1 |
+| n | 0 | 1 | 1 | 1 | 1 | 1 |
+| e | 0 | 1 | 1 | 1 | 2 | 2 |
+
+Answer 2 (for example "te" or "oe" or "ne").
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def lcs_memo(a, b):
+    @lru_cache(maxsize=None)
+    def go(i, j):
+        if i == 0 or j == 0:
+            return 0
+        if a[i - 1] == b[j - 1]:
+            return go(i - 1, j - 1) + 1
+        return max(go(i - 1, j), go(i, j - 1))
+    return go(len(a), len(b))
+```
+
+### Bottom-up with reconstruction
+
+```python
+def lcs_table(a, b):
+    rows, cols = len(a), len(b)
+    dp = [[0] * (cols + 1) for _ in range(rows + 1)]
+    for i in range(1, rows + 1):
+        for j in range(1, cols + 1):
+            if a[i - 1] == b[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+    # Walk back from the corner to recover one LCS
+    out, i, j = [], rows, cols
+    while i and j:
+        if a[i - 1] == b[j - 1]:
+            out.append(a[i - 1]); i -= 1; j -= 1
+        elif dp[i - 1][j] >= dp[i][j - 1]:
+            i -= 1
+        else:
+            j -= 1
+    return dp[rows][cols], "".join(reversed(out))
+```
+
+### Space optimised (two rows)
+
+Each row only depends on the previous row, so keep two. Put the shorter string along the columns.
+
+```python
+def longest_common_subsequence(a, b):
+    if len(b) > len(a):
+        a, b = b, a
+    prev = [0] * (len(b) + 1)
+    for ch in a:
+        cur = [0] * (len(b) + 1)
+        for j in range(1, len(b) + 1):
+            cur[j] = prev[j - 1] + 1 if ch == b[j - 1] else max(prev[j], cur[j - 1])
+        prev = cur
+    return prev[-1]
+```
+
+### Complexity
+
+- DP: O(m * n) time; O(m * n) space for the full table (needed for reconstruction), O(min(m, n)) with two rows.
+
+## Tests
+
+```python
+def is_subseq(sub, s):
+    it = iter(s)
+    return all(ch in it for ch in sub)
+
+for fn in (longest_common_subsequence, lcs_memo, lcs_recursive, lambda a, b: lcs_table(a, b)[0]):
+    assert fn("orange", "range") == 5
+    assert fn("stone", "notes") == 2
+    assert fn("abc", "xyz") == 0               # nothing shared
+    assert fn("", "abc") == 0                  # empty input
+    assert fn("same", "same") == 4
+    assert fn("a", "a") == 1                   # single character
+
+length, seq = lcs_table("stone", "notes")
+assert length == len(seq) == 2 and is_subseq(seq, "stone") and is_subseq(seq, "notes")
+
+import random
+random.seed(18)
+for _ in range(100):
+    a = "".join(random.choice("abc") for _ in range(random.randint(0, 7)))
+    b = "".join(random.choice("abc") for _ in range(random.randint(0, 7)))
+    n1, s1 = lcs_table(a, b)
+    assert n1 == longest_common_subsequence(a, b) == lcs_recursive(a, b)
+    assert is_subseq(s1, a) and is_subseq(s1, b)
+```
+
+## Edge cases and pitfalls
+
+- **Substring versus subsequence.** The longest common substring requires adjacent characters and resets to 0 on a
+  mismatch.
+- **Index shift.** The table is one larger than each string; `dp[i][j]` compares `a[i - 1]` and `b[j - 1]`.
+- **Reconstruction needs the full table**; the two-row version only gives the length.
+- **Empty strings** give 0.
+
+## Where this shows up in data engineering
+
+LCS is the core of line-based diff tools: lines not in the LCS are the additions and deletions. In data work it
+underpins comparing two versions of a file or a list of records, and it is a building block for fuzzy string
+similarity scores used in matching names and addresses.
