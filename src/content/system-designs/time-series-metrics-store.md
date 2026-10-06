@@ -64,7 +64,7 @@ related:
   - "articles:sql/aggregations-group-by-having"
 versionContext: "Prometheus storage facts checked against the Prometheus storage documentation (docs/storage.md in the project repository). The rollup SQL was run on PostgreSQL 16 with scripts/verify-examples.py as a stand-in for a time-series engine."
 sources:
-  - { label: "Prometheus documentation: storage", url: "https://prometheus.io/docs/prometheus/latest/storage/" }
+  - { label: "Prometheus documentation: storage", url: "https://github.com/prometheus/prometheus/blob/main/docs/storage.md" }
   - { label: "Prometheus remote write specification", url: "https://prometheus.io/docs/specs/remote_write_spec/" }
   - { label: "PostgreSQL: window functions", url: "https://www.postgresql.org/docs/current/functions-window.html" }
 previous: "system-designs:financial-reconciliation-pipeline"

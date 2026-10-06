@@ -64,9 +64,9 @@ related:
   - "articles:kafka/topics-partitions-consumer-groups"
 versionContext: "Search-engine behaviour (bulk API, external versioning, aliases, 1-second default refresh) checked against the OpenSearch documentation source; Elasticsearch behaves the same way for these features. The Python versioning simulation was run with Python 3 via scripts/verify-examples.py."
 sources:
-  - { label: "OpenSearch documentation: Bulk API", url: "https://docs.opensearch.org/latest/api-reference/document-apis/bulk/" }
-  - { label: "OpenSearch documentation: Index document (versioning)", url: "https://docs.opensearch.org/latest/api-reference/document-apis/index-document/" }
-  - { label: "OpenSearch documentation: Index aliases", url: "https://docs.opensearch.org/latest/im-plugin/index-alias/" }
+  - { label: "OpenSearch documentation: Bulk API", url: "https://github.com/opensearch-project/documentation-website/blob/main/_api-reference/document-apis/bulk.md" }
+  - { label: "OpenSearch documentation: Index document (versioning)", url: "https://github.com/opensearch-project/documentation-website/blob/main/_api-reference/document-apis/index-document.md" }
+  - { label: "OpenSearch documentation: Index aliases", url: "https://github.com/opensearch-project/documentation-website/blob/main/_im-plugin/index-alias.md" }
   - { label: "Debezium documentation", url: "https://debezium.io/documentation/" }
 previous: "system-designs:time-series-metrics-store"
 next: "system-designs:notification-alerting-pipeline"
