@@ -69,6 +69,7 @@ sources:
   - { label: "H3 documentation: tables of cell statistics across resolutions", url: "https://h3geo.org/docs/core-library/restable" }
   - { label: "Apache Spark: Structured Streaming programming guide", url: "https://spark.apache.org/docs/4.0.0/streaming/apis-on-dataframes-and-datasets.html" }
 previous: "system-designs:payment-events-pipeline-exactly-once"
+next: "system-designs:social-media-feed-analytics-system"
 ---
 
 ## Approach
