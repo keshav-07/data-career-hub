@@ -1,0 +1,698 @@
+---
+seoTitle: "New vs Returning Customers SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "New vs Returning Customers: SQL Case Study with 8 Approaches"
+description: "Split monthly customers into new and returning in SQL, with time zones, guest checkouts and identity graphs, then compare window, subquery and join plans."
+technology: ["sql"]
+topic: ["case-study", "customer-analytics", "window-functions"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Find each customer's first order date, then for every month count distinct customers who ordered: those whose first order falls in that month are new, those whose first order is earlier are returning. MIN(order_ts) OVER (PARTITION BY customer_id) or a grouped first-order table gives the first order in one pass. Bucket dates in an agreed time zone, and resolve duplicate identities (a guest checkout and a later account with the same email) before computing first orders, or returning customers are counted as new."
+followUps:
+  - "A customer orders twice in their first month. Are they new or returning in that month?"
+  - "How do time zones change which month an order belongs to?"
+  - "A guest checkout and a registered account share an email. How do you count them as one customer?"
+  - "Which customers ordered in three or more consecutive months?"
+  - "Why might a correlated subquery for the first order be slow, and what replaces it?"
+  - "Which join algorithm would PostgreSQL choose to join orders to first orders, and why?"
+prerequisites: ["articles:sql/window-functions"]
+related: ["interview-questions:sql/churn-rate-sql-case-study", "interview-questions:sql/customer-lifetime-value-sql-case-study", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/conversion-funnel-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: JSON functions and operators", url: "https://www.postgresql.org/docs/16/functions-json.html" }
+  - { label: "PostgreSQL 16 documentation: WITH queries (recursive)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: Table expressions", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
+---
+
+"How many of this month's customers are new, and how many came back?" is the simplest view of whether a business is growing by acquisition or by loyalty. The SQL hinges on one fact per customer, the first order date, but real data complicates it: orders near midnight belong to different months in different time zones, and the same person can appear under two customer ids. This case study builds the metric and then works through eight techniques.
+
+## The business question
+
+Marketing tracks new customers to judge acquisition spend; retention and CRM teams track returning customers to judge loyalty programmes. A shift from returning to new can mean a successful campaign or a retention problem, so the split is watched monthly.
+
+The definition used here:
+
+- A customer is **active in a month** if they placed at least one order in it.
+- They are **new** in that month if their first-ever order falls in that month, and **returning** if their first order was in an earlier month. A customer who orders twice in their first month is new in that month, not returning.
+- Each active customer is counted once per month: new and returning add up to active customers.
+- **Months** are calendar months in UTC unless the business says otherwise; a later section shows the customer-local alternative.
+- **Identity**: guest checkouts and registered accounts with the same normalised email, or the same device, are the same person. The resolved version counts people, not customer ids.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE customers (
+  customer_id INT PRIMARY KEY,
+  time_zone   TEXT NOT NULL
+);
+
+CREATE TABLE orders (
+  order_id    INT PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers,
+  order_ts    TIMESTAMPTZ NOT NULL,
+  payload     JSONB NOT NULL          -- raw checkout payload
+);
+
+INSERT INTO customers VALUES
+  (1, 'Europe/London'), (2, 'Europe/London'), (3, 'America/Los_Angeles'),
+  (4, 'Europe/London'), (5, 'Europe/London'), (6, 'Europe/London'),
+  (7, 'Asia/Kolkata'),  (8, 'Europe/London');
+
+INSERT INTO orders VALUES
+  (1,  1, '2026-01-05 10:00+00', '{"email":"ana@example.com","device_id":"d-1"}'),
+  (2,  2, '2026-01-20 12:00+00', '{"email":"ben@example.com","device_id":"d-2"}'),
+  (3,  2, '2026-01-25 18:00+00', '{"email":"ben@example.com","device_id":"d-2"}'),
+  (4,  1, '2026-02-10 09:00+00', '{"email":"ana@example.com","device_id":"d-1"}'),
+  (5,  3, '2026-02-01 05:00+00', '{"email":"cai@example.com","device_id":"d-3"}'),  -- 31 Jan in Los Angeles
+  (6,  4, '2026-02-14 15:00+00', '{"email":" Dana@Example.com ","guest":true,"device_id":"d-4"}'),
+  (7,  3, '2026-02-20 20:00+00', '{"email":"cai@example.com","device_id":"d-3"}'),
+  (8,  1, '2026-03-03 11:00+00', '{"email":"ana@example.com","device_id":"d-1"}'),
+  (9,  2, '2026-03-15 13:00+00', '{"email":"ben@example.com","device_id":"d-2"}'),
+  (10, 5, '2026-03-02 08:00+00', '{"email":"dana@example.com","device_id":"d-5"}'),   -- same person as 4
+  (11, 7, '2026-03-10 07:00+00', '{"email":"eli@example.com","device_id":"d-7"}'),
+  (12, 1, '2026-04-20 16:00+00', '{"email":"ana@example.com","device_id":"d-1"}'),
+  (13, 6, '2026-04-02 10:00+00', '{"email":"dee.w@example.com","device_id":"d-5"}'),  -- shares 5's device
+  (14, 7, '2026-04-11 06:00+00', '{"email":"eli@example.com","device_id":"d-7"}'),
+  (15, 8, '2026-04-05 19:00+00', '{"email":null,"device_id":null}');
+```
+
+By hand, by customer id and UTC month: January has customers 1 and 2, both new. February has 1 (returning), 3 and 4 (new). March has 1 and 2 (returning), 5 and 7 (new). April has 1 and 7 (returning), 6 and 8 (new).
+
+## Core solution
+
+Compute each customer's first order month once, list the distinct customers per month, and compare.
+
+```sql
+WITH first_order AS (
+  SELECT customer_id,
+         date_trunc('month', MIN(order_ts) AT TIME ZONE 'UTC')::date AS first_month
+  FROM orders
+  GROUP BY customer_id
+),
+active AS (
+  SELECT DISTINCT customer_id,
+         date_trunc('month', order_ts AT TIME ZONE 'UTC')::date AS month
+  FROM orders
+)
+SELECT a.month,
+       COUNT(*)                                          AS active_customers,
+       COUNT(*) FILTER (WHERE a.month = f.first_month)   AS new_customers,
+       COUNT(*) FILTER (WHERE a.month > f.first_month)   AS returning_customers,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE a.month > f.first_month) / COUNT(*), 1) AS returning_pct
+FROM active a
+JOIN first_order f USING (customer_id)
+GROUP BY a.month
+ORDER BY a.month;
+```
+
+| month | active_customers | new_customers | returning_customers | returning_pct |
+|---|---|---|---|---|
+| 2026-01-01 | 2 | 2 | 0 | 0.0 |
+| 2026-02-01 | 3 | 2 | 1 | 33.3 |
+| 2026-03-01 | 4 | 2 | 2 | 50.0 |
+| 2026-04-01 | 4 | 2 | 2 | 50.0 |
+
+`DISTINCT` in `active` makes customer 2's two January orders count once, and comparing months (not timestamps) makes that second January order part of a new customer's month. Later sections fix two remaining problems: the time zone of the month boundary, and customers 5 and 6 being the same person as customer 4.
+
+## Approach: PARTITION BY for per-customer context
+
+**Why it matters.** The core solution needed a separate grouped CTE to find first orders. A window function with `PARTITION BY customer_id` attaches the per-customer first order to every order row without collapsing rows, so you can label each order in one pass. `PARTITION BY` splits rows into independent groups, and the window function restarts for each group.
+
+```sql
+SELECT order_id, customer_id,
+       (order_ts AT TIME ZONE 'UTC')::date                         AS order_date,
+       ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_ts) AS order_number,
+       MIN(order_ts) OVER (PARTITION BY customer_id)                AS first_order_ts,
+       CASE WHEN date_trunc('month', order_ts AT TIME ZONE 'UTC')
+               = date_trunc('month', MIN(order_ts) OVER (PARTITION BY customer_id) AT TIME ZONE 'UTC')
+            THEN 'new' ELSE 'returning' END                         AS customer_type_in_month,
+       COUNT(*) OVER (PARTITION BY customer_id)                     AS lifetime_orders
+FROM orders
+WHERE customer_id IN (1, 2, 3)
+ORDER BY customer_id, order_ts;
+```
+
+| order_id | customer_id | order_date | order_number | first_order_ts | customer_type_in_month | lifetime_orders |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 2026-01-05 | 1 | 2026-01-05 10:00:00+00 | new | 4 |
+| 4 | 1 | 2026-02-10 | 2 | 2026-01-05 10:00:00+00 | returning | 4 |
+| 8 | 1 | 2026-03-03 | 3 | 2026-01-05 10:00:00+00 | returning | 4 |
+| 12 | 1 | 2026-04-20 | 4 | 2026-01-05 10:00:00+00 | returning | 4 |
+| 2 | 2 | 2026-01-20 | 1 | 2026-01-20 12:00:00+00 | new | 3 |
+| 3 | 2 | 2026-01-25 | 2 | 2026-01-20 12:00:00+00 | new | 3 |
+| 9 | 2 | 2026-03-15 | 3 | 2026-01-20 12:00:00+00 | returning | 3 |
+| 5 | 3 | 2026-02-01 | 1 | 2026-02-01 05:00:00+00 | new | 2 |
+| 7 | 3 | 2026-02-20 | 2 | 2026-02-01 05:00:00+00 | new | 2 |
+
+Order 3 is customer 2's second order (`order_number` 2) but still `new`, because it is in the first month. Note the difference between the two window kinds: `MIN(...) OVER (PARTITION BY customer_id)` with no `ORDER BY` covers the whole partition, while `ROW_NUMBER()` needs an `ORDER BY` to mean anything.
+
+Different partitions answer different questions in the same query. Partition by month to get each month's totals next to each row:
+
+```sql
+WITH labelled AS (
+  SELECT DISTINCT customer_id,
+         date_trunc('month', order_ts AT TIME ZONE 'UTC')::date AS month,
+         date_trunc('month', MIN(order_ts) OVER (PARTITION BY customer_id) AT TIME ZONE 'UTC')::date AS first_month
+  FROM orders
+)
+SELECT month, customer_id,
+       CASE WHEN month = first_month THEN 'new' ELSE 'returning' END AS customer_type,
+       COUNT(*) OVER (PARTITION BY month)                            AS active_in_month,
+       COUNT(*) FILTER (WHERE month = first_month) OVER (PARTITION BY month) AS new_in_month
+FROM labelled
+WHERE month = DATE '2026-03-01'
+ORDER BY customer_id;
+```
+
+| month | customer_id | customer_type | active_in_month | new_in_month |
+|---|---|---|---|---|
+| 2026-03-01 | 1 | returning | 4 | 2 |
+| 2026-03-01 | 2 | returning | 4 | 2 |
+| 2026-03-01 | 5 | new | 4 | 2 |
+| 2026-03-01 | 7 | new | 4 | 2 |
+
+**Pitfalls.** `PARTITION BY` is not `GROUP BY`: the row count does not change, so a following `DISTINCT` or aggregation is needed when you want one row per group. The window is computed after `WHERE`; filtering to March in the same query level as `MIN(...) OVER` would compute the "first order" from March rows only. Here the window runs in the CTE over all orders, and the filter is outside.
+
+## Approach: scalar subqueries for the first order
+
+**Why it matters.** A scalar subquery is a subquery that returns exactly one value, used where a single value is expected (in `SELECT`, `WHERE` or `CASE`). "The date of this customer's first order" is naturally one value per row, and many people write it this way first.
+
+```sql
+SELECT o.order_id, o.customer_id,
+       (o.order_ts AT TIME ZONE 'UTC')::date AS order_date,
+       (SELECT MIN(o2.order_ts AT TIME ZONE 'UTC')::date
+        FROM orders o2
+        WHERE o2.customer_id = o.customer_id)        AS first_order_date,
+       (SELECT COUNT(*) FROM orders o3
+        WHERE o3.customer_id = o.customer_id
+          AND o3.order_ts < o.order_ts)              AS previous_orders
+FROM orders o
+WHERE o.order_ts >= TIMESTAMPTZ '2026-03-01 00:00+00'
+  AND o.order_ts <  TIMESTAMPTZ '2026-04-01 00:00+00'
+ORDER BY o.customer_id;
+```
+
+| order_id | customer_id | order_date | first_order_date | previous_orders |
+|---|---|---|---|---|
+| 8 | 1 | 2026-03-03 | 2026-01-05 | 2 |
+| 9 | 2 | 2026-03-15 | 2026-01-20 | 2 |
+| 10 | 5 | 2026-03-02 | 2026-03-02 | 0 |
+| 11 | 7 | 2026-03-10 | 2026-03-10 | 0 |
+
+A scalar subquery in `SELECT` is correlated when it refers to the outer row (`o.customer_id`); PostgreSQL then evaluates it once per outer row (cached only for identical parameter values in some cases). It returns `NULL` when no row matches, and raises an error if it returns more than one row:
+
+```sql
+SELECT (SELECT customer_id FROM orders WHERE customer_id IN (1, 2) LIMIT 1) AS one_value;
+```
+
+| one_value |
+|---|
+| 1 |
+
+{/* expect-error */}
+```sql
+SELECT (SELECT customer_id FROM orders WHERE customer_id IN (1, 2)) AS too_many_rows;
+```
+
+```text
+ERROR:  more than one row returned by a subquery used as an expression
+```
+
+An uncorrelated scalar subquery is computed once, which makes it a neat way to bring a single number into every row, such as the overall share of returning customers to compare each month against:
+
+```sql
+SELECT date_trunc('month', order_ts AT TIME ZONE 'UTC')::date AS month,
+       COUNT(DISTINCT customer_id)                            AS active_customers,
+       (SELECT COUNT(DISTINCT customer_id) FROM orders)       AS all_time_customers
+FROM orders
+GROUP BY 1
+ORDER BY 1;
+```
+
+| month | active_customers | all_time_customers |
+|---|---|---|
+| 2026-01-01 | 2 | 8 |
+| 2026-02-01 | 3 | 8 |
+| 2026-03-01 | 4 | 8 |
+| 2026-04-01 | 4 | 8 |
+
+**In interviews.** Scalar subqueries are readable and correct, but on millions of rows a correlated one per row can be slow; the window and grouped-join versions compute the same thing in one pass. The performance section below measures the difference.
+
+## Approach: date truncation and bucketing
+
+**Why it matters.** "Month" is not a property of a timestamp; it depends on the calendar and the time zone. Order 5 was placed at 05:00 UTC on 1 February, which is 21:00 on 31 January for customer 3 in Los Angeles. A UTC report says customer 3 was new in February; a customer-local report says January. Neither is wrong, but every report in the company should use the same rule.
+
+`date_trunc(unit, ts)` rounds down to the start of the unit. For a `timestamptz`, convert to the wanted zone first with `AT TIME ZONE`, then truncate:
+
+```sql
+SELECT o.order_id, o.customer_id, c.time_zone,
+       o.order_ts AT TIME ZONE 'UTC'                                AS utc_time,
+       o.order_ts AT TIME ZONE c.time_zone                          AS local_time,
+       date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date     AS utc_month,
+       date_trunc('month', o.order_ts AT TIME ZONE c.time_zone)::date AS local_month
+FROM orders o
+JOIN customers c USING (customer_id)
+WHERE o.order_id IN (5, 11, 14)
+ORDER BY o.order_id;
+```
+
+| order_id | customer_id | time_zone | utc_time | local_time | utc_month | local_month |
+|---|---|---|---|---|---|---|
+| 5 | 3 | America/Los_Angeles | 2026-02-01 05:00:00 | 2026-01-31 21:00:00 | 2026-02-01 | 2026-01-01 |
+| 11 | 7 | Asia/Kolkata | 2026-03-10 07:00:00 | 2026-03-10 12:30:00 | 2026-03-01 | 2026-03-01 |
+| 14 | 7 | Asia/Kolkata | 2026-04-11 06:00:00 | 2026-04-11 11:30:00 | 2026-04-01 | 2026-04-01 |
+
+The new-versus-returning split by customer-local month moves customer 3 into January:
+
+```sql
+WITH local_orders AS (
+  SELECT o.customer_id, date_trunc('month', o.order_ts AT TIME ZONE c.time_zone)::date AS month
+  FROM orders o JOIN customers c USING (customer_id)
+),
+labelled AS (
+  SELECT DISTINCT customer_id, month, MIN(month) OVER (PARTITION BY customer_id) AS first_month
+  FROM local_orders
+)
+SELECT month,
+       COUNT(*) FILTER (WHERE month = first_month) AS new_customers,
+       COUNT(*) FILTER (WHERE month > first_month) AS returning_customers
+FROM labelled
+GROUP BY month
+ORDER BY month;
+```
+
+| month | new_customers | returning_customers |
+|---|---|---|
+| 2026-01-01 | 3 | 0 |
+| 2026-02-01 | 1 | 2 |
+| 2026-03-01 | 2 | 2 |
+| 2026-04-01 | 2 | 2 |
+
+Other buckets interviewers ask for:
+
+```sql
+SELECT order_id,
+       (order_ts AT TIME ZONE 'UTC')::date                                AS order_date,
+       date_trunc('week', order_ts AT TIME ZONE 'UTC')::date              AS iso_week_start,   -- Monday
+       to_char(order_ts AT TIME ZONE 'UTC', 'IYYY-"W"IW')                 AS iso_week,
+       date_trunc('quarter', order_ts AT TIME ZONE 'UTC')::date           AS quarter_start,
+       date_bin(INTERVAL '14 days', order_ts AT TIME ZONE 'UTC', TIMESTAMP '2026-01-05')::date AS fortnight_start
+FROM orders
+WHERE order_id IN (1, 4, 8, 12)
+ORDER BY order_id;
+```
+
+| order_id | order_date | iso_week_start | iso_week | quarter_start | fortnight_start |
+|---|---|---|---|---|---|
+| 1 | 2026-01-05 | 2026-01-05 | 2026-W02 | 2026-01-01 | 2026-01-05 |
+| 4 | 2026-02-10 | 2026-02-09 | 2026-W07 | 2026-01-01 | 2026-02-02 |
+| 8 | 2026-03-03 | 2026-03-02 | 2026-W10 | 2026-01-01 | 2026-03-02 |
+| 12 | 2026-04-20 | 2026-04-20 | 2026-W17 | 2026-04-01 | 2026-04-13 |
+
+`date_trunc('week', ...)` starts weeks on Monday (ISO). `date_bin` (PostgreSQL 14 and later) buckets into any fixed interval from a chosen origin, which suits fiscal fortnights or 15-minute intervals; it does not handle months, because they vary in length.
+
+**Pitfalls.** `EXTRACT(MONTH FROM ts)` alone merges the same month of different years. Casting a `timestamptz` to `date` uses the session's `TimeZone` setting, so the same query gives different answers on different servers; always name the zone. Daylight-saving changes make some local days 23 or 25 hours long, which matters for hourly buckets but not for monthly ones. In warehouses, `DATE_TRUNC` exists almost everywhere, but argument order differs (BigQuery: `DATE_TRUNC(date, MONTH)`).
+
+## Approach: JSON parsing to extract identity keys
+
+**Why it matters.** The checkout payload is JSON, and the fields needed to recognise a returning person (email, device id, guest flag) live inside it. They need extracting and normalising before they can be compared.
+
+```sql
+SELECT order_id, customer_id,
+       payload ->> 'email'                               AS raw_email,
+       lower(trim(payload ->> 'email'))                  AS email_norm,
+       payload ->> 'device_id'                           AS device_id,
+       COALESCE((payload ->> 'guest')::boolean, false)   AS is_guest,
+       jsonb_typeof(payload -> 'email')                  AS email_json_type
+FROM orders
+WHERE order_id IN (6, 10, 13, 15)
+ORDER BY order_id;
+```
+
+| order_id | customer_id | raw_email | email_norm | device_id | is_guest | email_json_type |
+|---|---|---|---|---|---|---|
+| 6 | 4 |  Dana@Example.com  | dana@example.com | d-4 | t | string |
+| 10 | 5 | dana@example.com | dana@example.com | d-5 | f | string |
+| 13 | 6 | dee.w@example.com | dee.w@example.com | d-5 | f | string |
+| 15 | 8 | NULL | NULL | NULL | f | null |
+
+`->>` returns text, so the email can be trimmed and lower-cased; without that, `" Dana@Example.com "` and `"dana@example.com"` look like different people. `"guest"` is missing on most payloads, which `->>` turns into `NULL`, so `COALESCE` supplies the default. Order 15's email is a JSON `null` (type `null`), different from a missing key (no type at all), although both become SQL `NULL`. `jsonb_to_record` turns several fields into typed columns at once:
+
+```sql
+SELECT o.order_id, j.email, j.device_id, j.guest
+FROM orders o,
+     jsonb_to_record(o.payload) AS j(email TEXT, device_id TEXT, guest BOOLEAN)
+WHERE o.order_id IN (6, 15)
+ORDER BY o.order_id;
+```
+
+| order_id | email | device_id | guest |
+|---|---|---|---|
+| 6 |  Dana@Example.com  | d-4 | t |
+| 15 | NULL | NULL | NULL |
+
+**Pitfalls.** A cast such as `(payload ->> 'guest')::boolean` fails on values like `"yes"`, so validate at ingestion or use `CASE`. Store the normalised identity keys in typed columns during loading, so every downstream query does not have to repeat the parsing.
+
+## Approach: graph traversal to resolve identities
+
+**Why it matters.** Customer 4 checked out as a guest with Dana's email; customer 5 is Dana's registered account (same email); customer 6 used customer 5's device with a different email. They form a chain 4 — 5 — 6, so all three are one person whose first order was on 14 February. Treating them as separate ids counts Dana as new three times. Identity resolution is a graph problem: customer ids are nodes, shared identifiers are edges, and each person is a **connected component**, found by traversing the graph.
+
+```sql
+CREATE TABLE identity_keys AS
+SELECT DISTINCT customer_id, 'email:' || lower(trim(payload ->> 'email')) AS id_key
+FROM orders WHERE payload ->> 'email' IS NOT NULL
+UNION
+SELECT DISTINCT customer_id, 'device:' || (payload ->> 'device_id')
+FROM orders WHERE payload ->> 'device_id' IS NOT NULL;
+
+CREATE TABLE identity_edges AS              -- both directions, so traversal is undirected
+SELECT DISTINCT a.customer_id AS src, b.customer_id AS dst
+FROM identity_keys a
+JOIN identity_keys b ON b.id_key = a.id_key AND b.customer_id <> a.customer_id;
+```
+
+A recursive CTE starts from every customer and follows edges until no new customers are reached. Using `UNION` (not `UNION ALL`) discards rows already found, which also stops the cycles that undirected edges create. The component id is the smallest customer id reachable:
+
+```sql
+WITH RECURSIVE reach AS (
+  SELECT customer_id AS start_id, customer_id AS reached_id FROM customers
+  UNION
+  SELECT r.start_id, e.dst
+  FROM reach r
+  JOIN identity_edges e ON e.src = r.reached_id
+)
+SELECT start_id AS customer_id,
+       MIN(reached_id) AS person_id,
+       array_agg(reached_id ORDER BY reached_id) AS same_person_ids
+FROM reach
+GROUP BY start_id
+ORDER BY start_id;
+```
+
+| customer_id | person_id | same_person_ids |
+|---|---|---|
+| 1 | 1 | \{1\} |
+| 2 | 2 | \{2\} |
+| 3 | 3 | \{3\} |
+| 4 | 4 | \{4,5,6\} |
+| 5 | 4 | \{4,5,6\} |
+| 6 | 4 | \{4,5,6\} |
+| 7 | 7 | \{7\} |
+| 8 | 8 | \{8\} |
+
+Customer 6 reaches customer 4 through customer 5 in two hops, which is why a single self-join on shared keys is not enough. Rerun the core metric on `person_id`:
+
+```sql
+WITH RECURSIVE reach AS (
+  SELECT customer_id AS start_id, customer_id AS reached_id FROM customers
+  UNION
+  SELECT r.start_id, e.dst FROM reach r JOIN identity_edges e ON e.src = r.reached_id
+),
+person AS (SELECT start_id AS customer_id, MIN(reached_id) AS person_id FROM reach GROUP BY start_id),
+person_orders AS (
+  SELECT p.person_id, date_trunc('month', o.order_ts AT TIME ZONE 'UTC')::date AS month
+  FROM orders o JOIN person p USING (customer_id)
+),
+labelled AS (
+  SELECT DISTINCT person_id, month, MIN(month) OVER (PARTITION BY person_id) AS first_month
+  FROM person_orders
+)
+SELECT month,
+       COUNT(*)                                    AS active_people,
+       COUNT(*) FILTER (WHERE month = first_month) AS new_people,
+       COUNT(*) FILTER (WHERE month > first_month) AS returning_people
+FROM labelled
+GROUP BY month
+ORDER BY month;
+```
+
+| month | active_people | new_people | returning_people |
+|---|---|---|---|
+| 2026-01-01 | 2 | 2 | 0 |
+| 2026-02-01 | 3 | 2 | 1 |
+| 2026-03-01 | 4 | 1 | 3 |
+| 2026-04-01 | 4 | 1 | 3 |
+
+March now has one new person instead of two, and April one instead of two: Dana's later orders are correctly returning.
+
+**Pitfalls.** Shared identifiers can over-merge: a family sharing a tablet, or a generic email such as `orders@company.com`, would join unrelated people into one giant component. Real identity graphs exclude keys shared by more than a few ids and weight edge types. Recursive traversal is fine for thousands of nodes; for millions, iterate a label-propagation update (each node takes the minimum label of its neighbours) in batches until nothing changes, or use a graph engine. Always cap depth or rely on `UNION` deduplication to guarantee termination.
+
+## Approach: detecting consecutive-month streaks
+
+**Why it matters.** The most valuable returning customers order every month. "Who has ordered in three or more consecutive months?" is a gaps-and-islands question: convert each active month to a sequence number, subtract a per-customer row number, and consecutive months share the difference.
+
+```sql
+WITH active AS (
+  SELECT DISTINCT customer_id, date_trunc('month', order_ts AT TIME ZONE 'UTC')::date AS month
+  FROM orders
+),
+numbered AS (
+  SELECT customer_id, month,
+         (EXTRACT(YEAR FROM month) * 12 + EXTRACT(MONTH FROM month))::int AS month_index,
+         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY month)     AS rn
+  FROM active
+),
+streaks AS (
+  SELECT customer_id, MIN(month) AS streak_start, MAX(month) AS streak_end, COUNT(*) AS months
+  FROM numbered
+  GROUP BY customer_id, month_index - rn
+)
+SELECT * FROM streaks
+WHERE months >= 2
+ORDER BY months DESC, customer_id, streak_start;
+```
+
+| customer_id | streak_start | streak_end | months |
+|---|---|---|---|
+| 1 | 2026-01-01 | 2026-04-01 | 4 |
+| 7 | 2026-03-01 | 2026-04-01 | 2 |
+
+Customer 1 ordered in all four months. Customer 2 ordered in January and March, so their two months are separate islands of one and do not appear. Converting months to an integer index is the key step: subtracting a row number from a date would count days, not months.
+
+The current streak, which a CRM team uses to trigger "you're on a roll" messages, is the island that ends in the latest month:
+
+```sql
+WITH active AS (
+  SELECT DISTINCT customer_id, date_trunc('month', order_ts AT TIME ZONE 'UTC')::date AS month
+  FROM orders
+),
+numbered AS (
+  SELECT customer_id, month,
+         (EXTRACT(YEAR FROM month) * 12 + EXTRACT(MONTH FROM month))::int
+           - ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY month) AS island
+  FROM active
+)
+SELECT customer_id, COUNT(*) AS current_streak_months
+FROM numbered n
+GROUP BY customer_id, island
+HAVING MAX(month) = DATE '2026-04-01'
+ORDER BY current_streak_months DESC, customer_id;
+```
+
+| customer_id | current_streak_months |
+|---|---|
+| 1 | 4 |
+| 7 | 2 |
+| 6 | 1 |
+| 8 | 1 |
+
+**Pitfalls.** Deduplicate to one row per customer per month first, or two orders in one month break the arithmetic. Decide whether the current, incomplete month counts. If one skipped month should be tolerated, flag breaks with `LAG(month)` and a gap threshold, then take a running `SUM` of the break flags as the island id.
+
+## Approach: window function performance tuning
+
+**Why it matters.** On a large orders table, the three ways to get each customer's first order behave very differently: a correlated scalar subquery runs once per row, a window function sorts the table by customer, and a grouped first-order table aggregates once and joins. Measure on 300,000 orders for 30,000 customers.
+
+```sql
+CREATE TABLE orders_big AS
+SELECT g AS order_id,
+       ((g::bigint * 7919) % 30000 + 1)::int AS customer_id,
+       TIMESTAMPTZ '2025-01-01 00:00+00' + (g * INTERVAL '97 seconds') AS order_ts
+FROM generate_series(1, 300000) AS g;
+VACUUM ANALYZE orders_big;
+```
+
+The window version without a helpful index sorts all 300,000 rows by customer and time:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FILTER (WHERE order_ts = first_ts) AS first_orders
+FROM (SELECT order_ts, MIN(order_ts) OVER (PARTITION BY customer_id) AS first_ts
+      FROM orders_big) t;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  WindowAgg (actual rows=300000 loops=1)
+        ->  Sort (actual rows=300000 loops=1)
+              Sort Key: orders_big.customer_id
+              Sort Method: quicksort  Memory: 24007kB
+              ->  Seq Scan on orders_big (actual rows=300000 loops=1)
+```
+
+With an index on `(customer_id, order_ts)`, the rows can be read already in partition order, and the sort disappears from the plan:
+
+```sql
+CREATE INDEX orders_big_cust_ts ON orders_big (customer_id, order_ts);
+VACUUM ANALYZE orders_big;
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FILTER (WHERE order_ts = first_ts) AS first_orders
+FROM (SELECT order_ts, MIN(order_ts) OVER (PARTITION BY customer_id) AS first_ts
+      FROM orders_big) t;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  WindowAgg (actual rows=300000 loops=1)
+        ->  Index Only Scan using orders_big_cust_ts on orders_big (actual rows=300000 loops=1)
+              Heap Fetches: 0
+```
+
+The correlated scalar subquery for the same answer runs its subplan once per outer row; `loops=300000` on the subquery's nodes is the giveaway, even though each loop is a cheap index probe:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) AS first_orders
+FROM orders_big o
+WHERE o.order_ts = (SELECT MIN(o2.order_ts) FROM orders_big o2 WHERE o2.customer_id = o.customer_id);
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Seq Scan on orders_big o (actual rows=30000 loops=1)
+        Filter: (order_ts = (SubPlan 2))
+        Rows Removed by Filter: 270000
+        SubPlan 2
+          ->  Result (actual rows=1 loops=300000)
+                InitPlan 1 (returns $1)
+                  ->  Limit (actual rows=1 loops=300000)
+                        ->  Index Only Scan using orders_big_cust_ts on orders_big o2 (actual rows=1 loops=300000)
+                              Index Cond: ((customer_id = o.customer_id) AND (order_ts IS NOT NULL))
+                              Heap Fetches: 0
+```
+
+PostgreSQL has already helped here: it turned `MIN(order_ts)` into "read the first index entry for this customer" (the `Limit` over an `Index Only Scan`), so each loop is tiny. Without that index, each of the 300,000 loops would scan the table, which is the case that makes correlated subqueries notorious. The window version touches each row once either way.
+
+**Tuning checklist for window queries.**
+
+- **Index or cluster on `(partition columns, order columns)`** so the engine can skip the sort; in warehouses, cluster or sort the table on the partition key.
+- **Use one window specification for several functions** (a named `WINDOW w AS (...)`) so they share one sort.
+- **Aggregate before windowing** when the question is per customer: `GROUP BY customer_id` produces 30,000 rows, and any further window works on those.
+- **Filter early.** Restricting to the reporting period in the inner query reduces the rows sorted, but only if the logic allows it: a customer's first order may predate the period, so first orders must be computed over all history (or maintained in a `customer_first_order` table updated incrementally).
+- **Watch memory.** A window sort that exceeds `work_mem` spills to disk (`external merge` in the plan).
+
+## Approach: join algorithms (hash, merge, nested loop)
+
+**Why it matters.** The grouped version joins each month's orders to a first-order table. Which physical join algorithm the database picks decides how that join scales, and interviewers ask you to explain the three.
+
+```sql
+CREATE TABLE first_orders AS
+SELECT customer_id, MIN(order_ts) AS first_ts FROM orders_big GROUP BY customer_id;
+ALTER TABLE first_orders ADD PRIMARY KEY (customer_id);
+ANALYZE first_orders;
+```
+
+**Hash join**: build a hash table on the smaller input, then probe it with each row of the larger one. It needs no ordering and no index, works only for equality conditions, and is the usual choice for joining two large unsorted inputs:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF)
+SELECT COUNT(*) FILTER (WHERE o.order_ts = f.first_ts) AS new_customer_orders
+FROM orders_big o
+JOIN first_orders f USING (customer_id)
+WHERE o.order_ts >= TIMESTAMPTZ '2025-03-01 00:00+00';
+```
+
+```text
+Aggregate
+  ->  Hash Join
+        Hash Cond: (o.customer_id = f.customer_id)
+        ->  Seq Scan on orders_big o
+              Filter: (order_ts >= '2025-03-01 00:00:00+00'::timestamp with time zone)
+        ->  Hash
+              ->  Seq Scan on first_orders f
+```
+
+**Merge join**: walk two inputs that are both sorted on the join key, advancing whichever is behind. It is attractive when both sides are already ordered (here, both have an index on `customer_id`) or when the result must be sorted by the key anyway; it also supports range-style merge conditions in some engines. Disabling the hash join shows the planner's next choice:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET enable_hashjoin = off;
+EXPLAIN (COSTS OFF)
+SELECT COUNT(*) FILTER (WHERE o.order_ts = f.first_ts) AS new_customer_orders
+FROM orders_big o
+JOIN first_orders f USING (customer_id)
+WHERE o.order_ts >= TIMESTAMPTZ '2025-03-01 00:00+00';
+```
+
+```text
+Aggregate
+  ->  Merge Join
+        Merge Cond: (o.customer_id = f.customer_id)
+        ->  Index Only Scan using orders_big_cust_ts on orders_big o
+              Index Cond: (order_ts >= '2025-03-01 00:00:00+00'::timestamp with time zone)
+        ->  Index Scan using first_orders_pkey on first_orders f
+```
+
+**Nested loop**: for each row of the outer input, look up matching rows in the inner input, ideally with an index. It is the best plan when the outer side is small, such as the orders of a handful of customers, and the only algorithm that handles arbitrary non-equality conditions. With a large outer side and no inner index, it degrades to comparing every pair:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT o.order_id, o.order_ts = f.first_ts AS is_first_order
+FROM orders_big o
+JOIN first_orders f USING (customer_id)
+WHERE o.customer_id IN (17, 4242, 29999);
+```
+
+```text
+Nested Loop (actual rows=30 loops=1)
+  ->  Bitmap Heap Scan on orders_big o (actual rows=30 loops=1)
+        Recheck Cond: (customer_id = ANY ('{17,4242,29999}'::integer[]))
+        Heap Blocks: exact=30
+        ->  Bitmap Index Scan on orders_big_cust_ts (actual rows=30 loops=1)
+              Index Cond: (customer_id = ANY ('{17,4242,29999}'::integer[]))
+  ->  Index Scan using first_orders_pkey on first_orders f (actual rows=1 loops=30)
+        Index Cond: (customer_id = o.customer_id)
+```
+
+| Algorithm | Best when | Needs | Cost grows with |
+|---|---|---|---|
+| Hash join | Large, unsorted inputs; equality key | Memory for the hash table (spills in batches if not) | Size of both inputs, roughly linearly |
+| Merge join | Both inputs already sorted on the key | Sorted input (index or explicit sort) | Both inputs, plus any sort |
+| Nested loop | Small outer input and an index on the inner | An inner index to be fast | Outer rows × cost of each inner lookup |
+
+The `enable_*` settings used above are planner switches for experiments, not production settings. When PostgreSQL picks a bad algorithm, the usual cause is a wrong row estimate (check estimated against actual rows in `EXPLAIN ANALYZE`), which is fixed with fresh statistics, not by disabling join types. Distributed engines add their own vocabulary for the same choice: broadcast hash join (copy the small side to every worker) versus shuffle hash or sort-merge join (repartition both sides by key).
+
+## Interview tips
+
+**How it is asked.** "For each month, count new and returning customers", "what percentage of revenue comes from returning customers", "label each order as first or repeat", or "our new-customer count looks too high" (an identity problem).
+
+**What a strong answer includes.**
+
+1. The definition of new and returning per month, including a customer's multiple orders in their first month.
+2. First order computed over all history, not just the reporting window.
+3. Distinct customers per month, with new + returning = active.
+4. An explicit time zone for month boundaries.
+5. Identity resolution as a known source of error, and a one-pass plan for scale.
+
+**Mistakes candidates make.**
+
+- Labelling every order after the first as "returning", so a customer's second order in their first month counts as a returning customer.
+- Computing the first order after filtering to the report month, which makes everyone new.
+- Using `ROW_NUMBER() = 1` per month instead of per customer.
+- Ignoring time zones at month boundaries.
+- Counting customer ids as people when guests and accounts overlap.
+- Writing a correlated subquery per row on a large table without considering the plan.

@@ -94,5 +94,133 @@
   "Spilling & memory management → Customer Lifetime Value": {
     "ref": "interview-questions:sql/customer-lifetime-value-sql-case-study",
     "heading": "Approach: spilling and memory management"
+  },
+  "Hierarchical / org-chart queries → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: hierarchical queries for customer-level churn"
+  },
+  "Subqueries in FROM (derived tables) → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: subqueries in FROM (derived tables)"
+  },
+  "MVCC concepts → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: MVCC when cancellations update the table"
+  },
+  "LATERAL / CROSS APPLY joins → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: LATERAL joins for per-row lookups"
+  },
+  "Cumulative distribution → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: cumulative distribution of tenure at churn"
+  },
+  "Avoiding full table scans → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: avoiding full table scans"
+  },
+  "Slowly changing dimension queries → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: slowly changing dimension queries for churn by plan"
+  },
+  "Window function basics (OVER) → Churn Rate": {
+    "ref": "interview-questions:sql/churn-rate-sql-case-study",
+    "heading": "Approach: window function basics with OVER"
+  },
+  "Reading EXPLAIN / execution plans → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: reading EXPLAIN plans"
+  },
+  "Median & percentile (PERCENTILE_CONT) → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: median and percentiles with PERCENTILE_CONT"
+  },
+  "UNPIVOT columns to rows → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: UNPIVOT columns to rows for AOV composition"
+  },
+  "CTE materialization trade-offs → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: CTE materialisation trade-offs"
+  },
+  "Gaps and Islands problem → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: gaps and islands for above-target AOV streaks"
+  },
+  "Anti-join (NOT EXISTS / LEFT JOIN NULL) → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: anti-joins to exclude orders and find first orders"
+  },
+  "Handling skew in aggregations → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: handling skew in aggregations"
+  },
+  "Array & nested data handling → Average Order Value": {
+    "ref": "interview-questions:sql/average-order-value-sql-case-study",
+    "heading": "Approach: arrays and nested data"
+  },
+  "Self Join patterns → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: self-join patterns for ordered steps"
+  },
+  "Query rewriting for performance → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: query rewriting for performance"
+  },
+  "Market basket / co-occurrence → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: market basket co-occurrence in carts"
+  },
+  "NTILE() bucketing → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: NTILE() bucketing by engagement"
+  },
+  "Covering indexes → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: covering indexes for funnel lookups"
+  },
+  "Deduplicate keeping latest record → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: deduplicate keeping the latest record"
+  },
+  "Multiple chained CTEs → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Core solution: multiple chained CTEs"
+  },
+  "Anti-pattern detection → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: anti-pattern detection"
+  },
+  "Graph traversal in SQL → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: graph traversal to resolve identities"
+  },
+  "Scalar subqueries → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: scalar subqueries for the first order"
+  },
+  "Window function performance tuning → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: window function performance tuning"
+  },
+  "JSON parsing in SQL → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: JSON parsing to extract identity keys"
+  },
+  "Date truncation & bucketing → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: date truncation and bucketing"
+  },
+  "Join algorithms (hash, merge, nested loop) → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: join algorithms (hash, merge, nested loop)"
+  },
+  "Detecting consecutive streaks → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: detecting consecutive-month streaks"
+  },
+  "PARTITION BY clause → New vs Returning Customers": {
+    "ref": "interview-questions:sql/new-vs-returning-customers-sql-case-study",
+    "heading": "Approach: PARTITION BY for per-customer context"
   }
 }

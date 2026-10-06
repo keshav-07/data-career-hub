@@ -23,13 +23,14 @@ followUps:
 prerequisites: ["articles:sql/joins", "articles:sql/window-functions"]
 related: ["interview-questions:sql/monthly-revenue-sql-case-study", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
 previous: "interview-questions:sql/monthly-revenue-sql-case-study"
+next: "interview-questions:sql/churn-rate-sql-case-study"
 versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
 sources:
   - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
-  - { label: "PostgreSQL 16 documentation: Materialized views", url: "https://www.postgresql.org/docs/16/rules-materializedviews.html" }
-  - { label: "PostgreSQL 16 documentation: Multicolumn indexes", url: "https://www.postgresql.org/docs/16/indexes-multicolumn.html" }
+  - { label: "PostgreSQL 16 documentation: REFRESH MATERIALIZED VIEW", url: "https://www.postgresql.org/docs/16/sql-refreshmaterializedview.html" }
+  - { label: "PostgreSQL 16 documentation: Indexes", url: "https://www.postgresql.org/docs/16/indexes.html" }
   - { label: "PostgreSQL 16 documentation: Index-only scans and covering indexes", url: "https://www.postgresql.org/docs/16/indexes-index-only-scans.html" }
-  - { label: "PostgreSQL 16 documentation: Resource consumption (work_mem, hash_mem_multiplier)", url: "https://www.postgresql.org/docs/16/runtime-config-resource.html" }
+  - { label: "PostgreSQL 16 documentation: Resource consumption (work_mem, hash_mem_multiplier)", url: "https://www.postgresql.org/docs/16//runtime-config-resource.html" }
   - { label: "PostgreSQL 16 documentation: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
 ---
 
