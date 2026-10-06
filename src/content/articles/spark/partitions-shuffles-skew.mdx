@@ -154,10 +154,21 @@ for name, size in shuffle_files:
 ```
 
 ```text
-OUTPUT_SHUFFLE_FILES
+shuffle_0_18_0.checksum.ADLER32 64
+shuffle_0_18_0.data 1262
+shuffle_0_18_0.index 72
+shuffle_0_19_0.checksum.ADLER32 64
+shuffle_0_19_0.data 1262
+shuffle_0_19_0.index 72
+shuffle_0_20_0.checksum.ADLER32 64
+shuffle_0_20_0.data 1262
+shuffle_0_20_0.index 72
+shuffle_0_21_0.checksum.ADLER32 64
+shuffle_0_21_0.data 1262
+shuffle_0_21_0.index 72
 ```
 
-The name is `shuffle_<shuffleId>_<mapId>_<reduceId>`; the reduce id is always 0 because one file holds all reduce partitions. Each index file is 72 bytes: nine 8-byte offsets marking the boundaries of eight reduce partitions. The checksum files let Spark diagnose corrupt shuffle blocks.
+The name is `shuffle_<shuffleId>_<mapId>_<reduceId>`. The map id is the map task's unique attempt id (18 to 21 here, because earlier jobs in the session already used lower ids), and the reduce id is always 0 because one file holds all reduce partitions. Each index file is 72 bytes: nine 8-byte offsets marking the boundaries of eight reduce partitions. The checksum files let Spark diagnose corrupt shuffle blocks.
 
 ### The reduce side: fetch and merge
 
@@ -226,7 +237,9 @@ print("repartition(4, user_id):", sizes(events.repartition(4, "user_id")))
 ```
 
 ```text
-OUTPUT_REPARTITION
+coalesce(3):     [25000, 37500, 37500]
+repartition(3):  [33335, 33332, 33333]
+repartition(4, user_id): [9760, 70060, 9520, 10660]
 ```
 
 `coalesce(3)` glued eight equal partitions into three unequal ones. `repartition(3)` balanced them through a shuffle. Hash partitioning by `user_id` put all 60,000 rows of the hot user in one partition: hashing never splits a key.
@@ -239,7 +252,17 @@ events.coalesce(3).explain()
 ```
 
 ```text
-OUTPUT_REPARTITION_PLANS
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- Exchange RoundRobinPartitioning(4), REPARTITION_BY_NUM, [plan_id=150]
+   +- Project [id#0L, CASE WHEN ((id#0L % 10) < 6) THEN 0 ELSE (id#0L % 5000) END AS user_id#1L, cast((id#0L % 50) as int) AS amount#2]
+      +- Range (0, 100000, step=1, splits=8)
+
+
+== Physical Plan ==
+Coalesce 3
++- *(1) Project [id#0L, CASE WHEN ((id#0L % 10) < 6) THEN 0 ELSE (id#0L % 5000) END AS user_id#1L, cast((id#0L % 50) as int) AS amount#2]
+   +- *(1) Range (0, 100000, step=1, splits=8)
 ```
 
 ### The coalesce trap
@@ -307,7 +330,8 @@ print("AQE on: ", small.rdd.getNumPartitions())
 ```
 
 ```text
-OUTPUT_SHUFFLE_PARTITIONS
+AQE off: 8
+AQE on:  1
 ```
 
 With AQE off, 50 groups were spread over the configured 8 partitions. With AQE on, Spark saw that the whole shuffle was a few kilobytes and merged it into one partition.
@@ -347,7 +371,14 @@ events.groupBy("user_id").count().orderBy(F.desc("count")).show(3)
 ```
 
 ```text
-OUTPUT_SKEW_COUNTS
++-------+-----+
+|user_id|count|
++-------+-----+
+|      0|60000|
+|     26|   20|
+|     28|   20|
++-------+-----+
+only showing top 3 rows
 ```
 
 You can also see where rows land after hash partitioning with `spark_partition_id()`:
@@ -359,7 +390,18 @@ You can also see where rows land after hash partitioning with `spark_partition_i
 ```
 
 ```text
-OUTPUT_PARTITION_COUNTS
++---------+-----+
+|partition|count|
++---------+-----+
+|        0| 4680|
+|        1| 5180|
+|        2| 4900|
+|        3| 5280|
+|        4| 5080|
+|        5|64880|
+|        6| 4620|
+|        7| 5380|
++---------+-----+
 ```
 
 ### Detect it in task metrics
@@ -387,7 +429,9 @@ print("median:", statistics.median(recs), "max:", max(recs))
 ```
 
 ```text
-OUTPUT_SKEW_TASKS
+[Row(country='in', count=13340), Row(country='uk', count=73340), Row(country='us', count=13320)]
+records per join task: [5216, 5270, 5506, 5709, 5820, 5950, 6054, 65475]
+median: 5764.5 max: 65475
 ```
 
 One join task read more than ten times the median. On a real cluster that task's duration would dominate the stage.
@@ -429,7 +473,9 @@ print("rows that differ:", salted_totals.exceptAll(plain_totals).count())
 ```
 
 ```text
-OUTPUT_SALT_AGG
+[Row(user_id=0, total=1350000)]
+[Row(user_id=0, total=1350000)]
+rows that differ: 0
 ```
 
 This works only for aggregations that can be combined in two steps: sum, count, min, max, and averages done as sum and count. A distinct count cannot simply be summed across salts.
@@ -460,7 +506,10 @@ print("median:", statistics.median(recs), "max:", max(recs))
 ```
 
 ```text
-OUTPUT_SALT_JOIN
+users rows after replicating the hot key: 5007
+[Row(country='in', count=13340), Row(country='uk', count=73340), Row(country='us', count=13320)]
+records per join task: [5328, 5442, 5565, 13286, 13398, 13494, 20210, 28284]
+median: 13342.0 max: 28284
 ```
 
 Same result, and the largest task now reads far fewer records. With only 8 partitions some salts land together; with hundreds of partitions on a cluster the spread is more even.
@@ -502,7 +551,31 @@ by_country.explain()
 ```
 
 ```text
-OUTPUT_AQE_SKEW
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   ResultQueryStage 3
+   +- *(6) HashAggregate(keys=[country#5], functions=[sum(amount#2)])
+      +- ShuffleQueryStage 2
+         +- Exchange hashpartitioning(country#5, 8), ENSURE_REQUIREMENTS, [plan_id=1113]
+            +- *(5) HashAggregate(keys=[country#5], functions=[partial_sum(amount#2)])
+               +- *(5) Project [amount#2, country#5]
+                  +- *(5) SortMergeJoin(skew=true) [user_id#1L], [user_id#4L], Inner
+                     :- *(3) Sort [user_id#1L ASC NULLS FIRST], false, 0
+                     :  +- AQEShuffleRead skewed
+                     :     +- ShuffleQueryStage 0
+                     :        +- Exchange hashpartitioning(user_id#1L, 8), ENSURE_REQUIREMENTS, [plan_id=993]
+                     :           +- *(1) Project [CASE WHEN ((id#0L % 10) < 6) THEN 0 ELSE (id#0L % 5000) END AS user_id#1L, cast((id#0L % 50) as int) AS amount#2]
+                     :              +- *(1) Filter CASE WHEN ((id#0L % 10) < 6) THEN true ELSE isnotnull((id#0L % 5000)) END
+                     :                 +- *(1) Range (0, 100000, step=1, splits=8)
+                     +- *(4) Sort [user_id#4L ASC NULLS FIRST], false, 0
+                        +- AQEShuffleRead
+                           +- ShuffleQueryStage 1
+                              +- Exchange hashpartitioning(user_id#4L, 8), ENSURE_REQUIREMENTS, [plan_id=1000]
+                                 +- *(2) Project [id#3L AS user_id#4L, element_at([uk,in,us], cast(((id#3L % 3) + 1) as int), None, true) AS country#5]
+                                    +- *(2) Range (0, 5000, step=1, splits=2)
++- == Initial Plan ==
+   (trimmed: the same plan without query stages or skew handling)
 ```
 
 `SortMergeJoin(skew=true)` and `AQEShuffleRead skewed` show that AQE split the hot partition on the events side and replicated the matching users partition. In the UI the join stage shows more tasks than shuffle partitions.
@@ -522,7 +595,16 @@ events.join(F.broadcast(users), "user_id").explain()
 ```
 
 ```text
-OUTPUT_BROADCAST
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- Project [user_id#1L, id#0L, amount#2, country#5]
+   +- BroadcastHashJoin [user_id#1L], [user_id#4L], Inner, BuildRight, false, false
+      :- Project [id#0L, CASE WHEN ((id#0L % 10) < 6) THEN 0 ELSE (id#0L % 5000) END AS user_id#1L, cast((id#0L % 50) as int) AS amount#2]
+      :  +- Filter CASE WHEN ((id#0L % 10) < 6) THEN true ELSE isnotnull((id#0L % 5000)) END
+      :     +- Range (0, 100000, step=1, splits=8)
+      +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=1168]
+         +- Project [id#3L AS user_id#4L, element_at([uk,in,us], cast(((id#3L % 3) + 1) as int), None, true) AS country#5]
+            +- Range (0, 5000, step=1, splits=2)
 ```
 
 ### What AQE skew handling does not cover
