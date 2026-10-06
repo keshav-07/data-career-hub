@@ -23,6 +23,7 @@ followUps:
 prerequisites: ["articles:sql/aggregations-group-by-having"]
 related: ["interview-questions:sql/monthly-revenue-sql-case-study", "articles:sql/aggregations-group-by-having", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
 previous: "interview-questions:sql/churn-rate-sql-case-study"
+next: "interview-questions:sql/conversion-funnel-sql-case-study"
 versionContext: "Queries run on PostgreSQL 16.14 and the UNPIVOT example on DuckDB 1.5.6, with scripts/verify-examples.py; outputs and plans are copied from the engines."
 sources:
   - { label: "PostgreSQL 16 documentation: Aggregate functions (percentile_cont)", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
@@ -557,12 +558,12 @@ GROUP BY c.segment;
 ```
 
 ```text
-HashAggregate  (cost=6495.12..6495.15 rows=2 width=49) (actual rows=2 loops=1)
+HashAggregate  (cost=6489.57..6489.60 rows=2 width=49) (actual rows=2 loops=1)
   Group Key: c.segment
   Batches: 1  Memory Usage: 24kB
-  ->  Hash Join  (cost=578.00..5054.37 rows=192100 width=15) (actual rows=192000 loops=1)
+  ->  Hash Join  (cost=578.00..5054.16 rows=191388 width=15) (actual rows=192000 loops=1)
         Hash Cond: (o.customer_id = c.customer_id)
-        ->  Seq Scan on orders_big o  (cost=0.00..3972.00 rows=192100 width=10) (actual rows=192000 loops=1)
+        ->  Seq Scan on orders_big o  (cost=0.00..3972.00 rows=192020 width=10) (actual rows=192000 loops=1)
               Filter: (status = 'completed'::text)
               Rows Removed by Filter: 8000
         ->  Hash  (cost=328.00..328.00 rows=20000 width=13) (actual rows=20000 loops=1)

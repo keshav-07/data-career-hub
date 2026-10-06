@@ -158,5 +158,37 @@
   "Array & nested data handling → Average Order Value": {
     "ref": "interview-questions:sql/average-order-value-sql-case-study",
     "heading": "Approach: arrays and nested data"
+  },
+  "Self Join patterns → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: self-join patterns for ordered steps"
+  },
+  "Query rewriting for performance → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: query rewriting for performance"
+  },
+  "Market basket / co-occurrence → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: market basket co-occurrence in carts"
+  },
+  "NTILE() bucketing → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: NTILE() bucketing by engagement"
+  },
+  "Covering indexes → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: covering indexes for funnel lookups"
+  },
+  "Deduplicate keeping latest record → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: deduplicate keeping the latest record"
+  },
+  "Multiple chained CTEs → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Core solution: multiple chained CTEs"
+  },
+  "Anti-pattern detection → Conversion Funnel": {
+    "ref": "interview-questions:sql/conversion-funnel-sql-case-study",
+    "heading": "Approach: anti-pattern detection"
   }
 }

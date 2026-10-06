@@ -1,0 +1,653 @@
+---
+seoTitle: "Conversion Funnel SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Conversion Funnel: SQL Case Study with 8 Approaches"
+description: "Build an ordered, time-bounded conversion funnel in SQL from raw events, then dedupe, self-join, bucket with NTILE, find co-occurring products and tune with indexes."
+technology: ["sql"]
+topic: ["case-study", "product-analytics", "funnels"]
+difficulty: "Hard"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "A conversion funnel counts distinct users who complete each step in order, within a time window from the first step. Deduplicate the raw events first, find each user's first view, then the first add-to-cart after it, the first checkout after that, and the first purchase after that, all inside the window. Count users per step and divide each step by the previous one (step conversion) and by the first step (overall conversion). Users who skip a step or act out of order do not count for later steps."
+followUps:
+  - "Should a user who purchased without viewing a product count as converted?"
+  - "How do you enforce that steps happen in order and within seven days?"
+  - "The events table contains resent duplicates. How do you keep only the latest version?"
+  - "Do highly engaged users convert better? Split them into quartiles."
+  - "Which products are most often in the same cart, and do those carts convert?"
+  - "The funnel query reads the events table four times. How do you make it one pass?"
+prerequisites: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions"]
+related: ["interview-questions:sql/average-order-value-sql-case-study", "interview-questions:sql/daily-active-users-sql-case-study", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/average-order-value-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
+sources:
+  - { label: "PostgreSQL 16 documentation: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Window functions (ntile, row_number)", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Aggregate functions (FILTER)", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
+  - { label: "PostgreSQL 16 documentation: Index-only scans and covering indexes", url: "https://www.postgresql.org/docs/16/indexes-index-only-scans.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+---
+
+A conversion funnel shows how many people make it through each step of a journey, such as product view, add to cart, checkout and purchase, and where they drop out. It is one of the most common product-analytics SQL questions because it combines deduplication, ordering in time, windows and careful counting. This case study builds a correct funnel from messy event data, then works through eight related techniques.
+
+## The business question
+
+**"Of the people who looked at a product, how many added it to the cart, started checkout and bought, and where do we lose them?"** Product and growth teams use the funnel to pick what to fix: a big drop between cart and checkout points at shipping costs or forced sign-up; a drop between checkout and purchase points at payment problems.
+
+The definition used here:
+
+- **Steps**, in order: `view_product` → `add_to_cart` → `begin_checkout` → `purchase`.
+- **Entry**: a user enters the funnel at their first `view_product`. Users who start mid-funnel (an add-to-cart from a shared link with no view) are not in it.
+- **Order**: each step must happen after the previous step's timestamp. A purchase timestamped before the add-to-cart does not count.
+- **Window**: every step must happen within 7 days of the entry view.
+- **Counting**: distinct users per step, not events.
+- **Duplicates**: the tracking pipeline sometimes resends an event with the same `event_id`; keep only the latest received version.
+- **Conversion**: step conversion = step / previous step; overall conversion = step / first step.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE events (
+  event_id    INT NOT NULL,          -- not unique: resent events repeat it
+  user_id     INT NOT NULL,
+  event_name  TEXT NOT NULL,
+  product_id  TEXT,                  -- set on add_to_cart
+  device      TEXT NOT NULL,
+  event_ts    TIMESTAMP NOT NULL,    -- when it happened (UTC)
+  received_at TIMESTAMP NOT NULL     -- when the pipeline received it
+);
+
+INSERT INTO events VALUES
+  -- user 1: the full journey
+  (101, 1, 'view_product',   NULL, 'web', '2026-06-01 10:00', '2026-06-01 10:00'),
+  (102, 1, 'add_to_cart',    'P1', 'web', '2026-06-01 10:05', '2026-06-01 10:05'),
+  (103, 1, 'begin_checkout', NULL, 'web', '2026-06-01 10:10', '2026-06-01 10:10'),
+  (104, 1, 'purchase',       NULL, 'web', '2026-06-01 10:15', '2026-06-01 10:15'),
+  -- user 2: two items, abandons at checkout
+  (201, 2, 'view_product',   NULL, 'app', '2026-06-01 11:00', '2026-06-01 11:00'),
+  (202, 2, 'add_to_cart',    'P1', 'app', '2026-06-01 11:02', '2026-06-01 11:02'),
+  (203, 2, 'add_to_cart',    'P2', 'app', '2026-06-01 11:03', '2026-06-01 11:03'),
+  (204, 2, 'begin_checkout', NULL, 'app', '2026-06-01 11:10', '2026-06-01 11:10'),
+  -- user 3: stops at the cart
+  (301, 3, 'view_product',   NULL, 'web', '2026-06-02 09:00', '2026-06-02 09:00'),
+  (302, 3, 'add_to_cart',    'P2', 'web', '2026-06-02 09:10', '2026-06-02 09:10'),
+  -- user 4: views only; event 403 was resent with a corrected device
+  (401, 4, 'view_product',   NULL, 'web', '2026-06-02 12:00', '2026-06-02 12:00'),
+  (403, 4, 'view_product',   NULL, 'web', '2026-06-02 12:30', '2026-06-02 12:30'),
+  (403, 4, 'view_product',   NULL, 'app', '2026-06-02 12:30', '2026-06-02 13:45'),
+  -- user 5: a purchase timestamped before the add-to-cart, and no checkout
+  (501, 5, 'view_product',   NULL, 'app', '2026-06-03 09:00', '2026-06-03 09:00'),
+  (502, 5, 'add_to_cart',    'P3', 'app', '2026-06-03 09:05', '2026-06-03 09:05'),
+  (503, 5, 'purchase',       NULL, 'app', '2026-06-03 08:00', '2026-06-03 09:20'),
+  -- user 6: checks out 9 days after the first view, outside the 7-day window
+  (601, 6, 'view_product',   NULL, 'web', '2026-06-03 10:00', '2026-06-03 10:00'),
+  (602, 6, 'add_to_cart',    'P1', 'web', '2026-06-03 10:30', '2026-06-03 10:30'),
+  (603, 6, 'add_to_cart',    'P3', 'web', '2026-06-03 10:31', '2026-06-03 10:31'),
+  (604, 6, 'begin_checkout', NULL, 'web', '2026-06-12 08:00', '2026-06-12 08:00'),
+  (605, 6, 'purchase',       NULL, 'web', '2026-06-12 08:05', '2026-06-12 08:05'),
+  -- user 7: full journey, purchase event delivered twice
+  (701, 7, 'view_product',   NULL, 'app', '2026-06-04 14:00', '2026-06-04 14:00'),
+  (702, 7, 'view_product',   NULL, 'app', '2026-06-04 14:01', '2026-06-04 14:01'),
+  (703, 7, 'add_to_cart',    'P1', 'app', '2026-06-04 14:05', '2026-06-04 14:05'),
+  (704, 7, 'add_to_cart',    'P2', 'app', '2026-06-04 14:06', '2026-06-04 14:06'),
+  (705, 7, 'begin_checkout', NULL, 'app', '2026-06-04 14:20', '2026-06-04 14:20'),
+  (706, 7, 'purchase',       NULL, 'app', '2026-06-04 14:25', '2026-06-04 14:25'),
+  (706, 7, 'purchase',       NULL, 'app', '2026-06-04 14:25', '2026-06-04 14:26'),
+  -- user 8: adds to cart without ever viewing
+  (801, 8, 'add_to_cart',    'P2', 'web', '2026-06-05 16:00', '2026-06-05 16:00');
+```
+
+By hand: users 1–7 view (7 users). Users 1, 2, 3, 5, 6 and 7 add to cart after viewing (6). Users 1, 2 and 7 reach checkout inside the window (user 6 is too late): 3. Users 1 and 7 purchase after checkout: 2. User 5's purchase is out of order and user 8 never entered.
+
+## Core solution: multiple chained CTEs
+
+**Why chained CTEs.** A funnel is a pipeline: clean the events, find each step's first qualifying time relative to the previous step, then count. Writing each stage as its own CTE, with each one reading the previous, keeps every rule in one visible place and lets you test the stages one by one by selecting from them.
+
+```sql
+WITH deduped AS (                       -- 1. one row per event_id, the latest received
+  SELECT DISTINCT ON (event_id) *
+  FROM events
+  ORDER BY event_id, received_at DESC
+),
+entered AS (                            -- 2. funnel entry: first product view per user
+  SELECT user_id, MIN(event_ts) AS view_ts
+  FROM deduped WHERE event_name = 'view_product'
+  GROUP BY user_id
+),
+carted AS (                             -- 3. first add-to-cart after the view, within 7 days
+  SELECT e.user_id, e.view_ts, MIN(d.event_ts) AS cart_ts
+  FROM entered e
+  JOIN deduped d ON d.user_id = e.user_id AND d.event_name = 'add_to_cart'
+                AND d.event_ts > e.view_ts AND d.event_ts <= e.view_ts + INTERVAL '7 days'
+  GROUP BY e.user_id, e.view_ts
+),
+checked_out AS (                        -- 4. first checkout after the cart
+  SELECT c.user_id, c.view_ts, MIN(d.event_ts) AS checkout_ts
+  FROM carted c
+  JOIN deduped d ON d.user_id = c.user_id AND d.event_name = 'begin_checkout'
+                AND d.event_ts > c.cart_ts AND d.event_ts <= c.view_ts + INTERVAL '7 days'
+  GROUP BY c.user_id, c.view_ts
+),
+purchased AS (                          -- 5. first purchase after the checkout
+  SELECT k.user_id, MIN(d.event_ts) AS purchase_ts
+  FROM checked_out k
+  JOIN deduped d ON d.user_id = k.user_id AND d.event_name = 'purchase'
+                AND d.event_ts > k.checkout_ts AND d.event_ts <= k.view_ts + INTERVAL '7 days'
+  GROUP BY k.user_id
+),
+step_counts AS (                        -- 6. one row per step
+  SELECT 1 AS step_no, 'view_product' AS step, COUNT(*) AS users FROM entered
+  UNION ALL SELECT 2, 'add_to_cart',    COUNT(*) FROM carted
+  UNION ALL SELECT 3, 'begin_checkout', COUNT(*) FROM checked_out
+  UNION ALL SELECT 4, 'purchase',       COUNT(*) FROM purchased
+)
+SELECT step_no, step, users,
+       ROUND(100.0 * users / LAG(users) OVER (ORDER BY step_no), 1) AS step_conversion_pct,
+       ROUND(100.0 * users / FIRST_VALUE(users) OVER (ORDER BY step_no), 1) AS overall_pct
+FROM step_counts
+ORDER BY step_no;
+```
+
+| step_no | step | users | step_conversion_pct | overall_pct |
+|---|---|---|---|---|
+| 1 | view_product | 7 | NULL | 100.0 |
+| 2 | add_to_cart | 6 | 85.7 | 85.7 |
+| 3 | begin_checkout | 3 | 50.0 | 42.9 |
+| 4 | purchase | 2 | 66.7 | 28.6 |
+
+Each stage only sees users who survived the previous one, which enforces the order. The window is measured from the entry view, so user 6's late checkout is excluded. Because each stage keeps one row per user, the counts are distinct users without needing `COUNT(DISTINCT)`.
+
+**Pitfalls.** Later CTEs must read the *deduplicated* stage, not the raw table; a single reference to `events` in stage 5 would bring the duplicate purchase back. Keep CTE names describing their grain. In PostgreSQL 12 and later, CTEs referenced once are inlined into the main query, so chaining costs nothing by itself; `deduped` is referenced several times and is computed once.
+
+## Approach: deduplicate keeping the latest record
+
+**Why it matters.** Event pipelines deliver at least once: retries resend events, and a corrected event can arrive later with the same id. Counting raw rows double counts, and keeping an arbitrary copy can keep the wrong version (user 4's event 403 was corrected from `web` to `app`).
+
+The duplicates in the sample:
+
+```sql
+SELECT event_id, COUNT(*) AS copies, array_agg(device ORDER BY received_at) AS devices_in_arrival_order
+FROM events
+GROUP BY event_id
+HAVING COUNT(*) > 1
+ORDER BY event_id;
+```
+
+| event_id | copies | devices_in_arrival_order |
+|---|---|---|
+| 403 | 2 | \{web,app\} |
+| 706 | 2 | \{app,app\} |
+
+The portable pattern numbers each copy within its key, newest first, and keeps number 1:
+
+```sql
+WITH ranked AS (
+  SELECT e.*,
+         ROW_NUMBER() OVER (PARTITION BY event_id
+                            ORDER BY received_at DESC, device) AS rn
+  FROM events e
+)
+SELECT event_id, user_id, event_name, device, received_at
+FROM ranked
+WHERE rn = 1 AND event_id IN (403, 706);
+```
+
+| event_id | user_id | event_name | device | received_at |
+|---|---|---|---|---|
+| 403 | 4 | view_product | app | 2026-06-02 13:45:00 |
+| 706 | 7 | purchase | app | 2026-06-04 14:26:00 |
+
+`DISTINCT ON (event_id) ... ORDER BY event_id, received_at DESC`, used in the core solution, is PostgreSQL's shorthand for the same thing. Snowflake, BigQuery and DuckDB write it as `QUALIFY ROW_NUMBER() OVER (...) = 1`. To fix the table itself rather than a query, delete every copy that is not the latest:
+
+```sql
+CREATE TABLE events_clean AS SELECT * FROM events;
+
+DELETE FROM events_clean a
+USING events_clean b
+WHERE a.event_id = b.event_id
+  AND a.received_at < b.received_at;
+
+SELECT COUNT(*) AS rows_after, COUNT(DISTINCT event_id) AS distinct_events FROM events_clean;
+```
+
+| rows_after | distinct_events |
+|---|---|
+| 27 | 27 |
+
+**Pitfalls.** Always add a deterministic tiebreaker: if two copies had the same `received_at`, `ROW_NUMBER` would pick one arbitrarily and the `DELETE` above would keep both. Decide the key carefully: deduplicating on `(user_id, event_name, event_ts)` instead of `event_id` would also merge two genuine clicks in the same second. `SELECT DISTINCT *` does not help here, because the copies differ in `received_at` (and sometimes `device`).
+
+## Approach: self-join patterns for ordered steps
+
+**Why it matters.** Before window functions were common, funnels were written as self-joins: join the events table to itself, one alias per step, with time conditions between the aliases. Interviewers still ask for it, and it is the clearest way to express "B happened after A for the same user".
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC),
+first_view AS (
+  SELECT user_id, MIN(event_ts) AS ts FROM d WHERE event_name = 'view_product' GROUP BY user_id
+)
+SELECT COUNT(DISTINCT v.user_id) AS viewed,
+       COUNT(DISTINCT c.user_id) AS carted,
+       COUNT(DISTINCT k.user_id) AS checked_out,
+       COUNT(DISTINCT p.user_id) AS purchased
+FROM first_view v
+LEFT JOIN d c ON c.user_id = v.user_id AND c.event_name = 'add_to_cart'
+             AND c.event_ts > v.ts AND c.event_ts <= v.ts + INTERVAL '7 days'
+LEFT JOIN d k ON k.user_id = c.user_id AND k.event_name = 'begin_checkout'
+             AND k.event_ts > c.event_ts AND k.event_ts <= v.ts + INTERVAL '7 days'
+LEFT JOIN d p ON p.user_id = k.user_id AND p.event_name = 'purchase'
+             AND p.event_ts > k.event_ts AND p.event_ts <= v.ts + INTERVAL '7 days';
+```
+
+| viewed | carted | checked_out | purchased |
+|---|---|---|---|
+| 7 | 6 | 3 | 2 |
+
+The `LEFT JOIN`s keep users who stop early, and `COUNT(DISTINCT ...)` is essential: user 7 has two add-to-cart events, so every later alias is joined twice. The intermediate row count shows the fan-out:
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC),
+first_view AS (
+  SELECT user_id, MIN(event_ts) AS ts FROM d WHERE event_name = 'view_product' GROUP BY user_id
+)
+SELECT v.user_id, COUNT(*) AS joined_rows
+FROM first_view v
+LEFT JOIN d c ON c.user_id = v.user_id AND c.event_name = 'add_to_cart'
+             AND c.event_ts > v.ts AND c.event_ts <= v.ts + INTERVAL '7 days'
+LEFT JOIN d k ON k.user_id = c.user_id AND k.event_name = 'begin_checkout'
+             AND k.event_ts > c.event_ts AND k.event_ts <= v.ts + INTERVAL '7 days'
+GROUP BY v.user_id
+ORDER BY v.user_id;
+```
+
+| user_id | joined_rows |
+|---|---|
+| 1 | 1 |
+| 2 | 2 |
+| 3 | 1 |
+| 4 | 1 |
+| 5 | 1 |
+| 6 | 2 |
+| 7 | 2 |
+
+With four steps and a few repeated events per step, the join multiplies rows per user; on real data with dozens of page views per user it explodes. That is why the chained-CTE version collapses each step to one row per user before joining the next, and why the next section rewrites it again.
+
+Other self-join patterns worth knowing: comparing each row with the *previous* event of the same user (now usually `LAG`), finding pairs of users who share an attribute, and the co-occurrence join in the market basket section below.
+
+## Approach: query rewriting for performance
+
+**Why it matters.** On a production events table, the self-join version scans the table once per step and the joins grow with event counts. A funnel can usually be rewritten as **one pass**: aggregate each user's events once, computing the first time of each step with conditional aggregation, then apply the ordering rules on that small per-user row.
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC),
+per_user AS (                                         -- one row per user, one scan
+  SELECT user_id,
+         MIN(event_ts) FILTER (WHERE event_name = 'view_product') AS view_ts,
+         array_agg(event_ts ORDER BY event_ts) FILTER (WHERE event_name = 'add_to_cart')    AS carts,
+         array_agg(event_ts ORDER BY event_ts) FILTER (WHERE event_name = 'begin_checkout') AS checkouts,
+         array_agg(event_ts ORDER BY event_ts) FILTER (WHERE event_name = 'purchase')       AS purchases
+  FROM d
+  GROUP BY user_id
+),
+steps AS (
+  SELECT p.user_id, p.view_ts, c.cart_ts, k.checkout_ts, x.purchase_ts
+  FROM per_user p
+  LEFT JOIN LATERAL (SELECT MIN(t) AS cart_ts FROM unnest(p.carts) t
+                     WHERE t > p.view_ts AND t <= p.view_ts + INTERVAL '7 days') c ON true
+  LEFT JOIN LATERAL (SELECT MIN(t) AS checkout_ts FROM unnest(p.checkouts) t
+                     WHERE t > c.cart_ts AND t <= p.view_ts + INTERVAL '7 days') k ON true
+  LEFT JOIN LATERAL (SELECT MIN(t) AS purchase_ts FROM unnest(p.purchases) t
+                     WHERE t > k.checkout_ts AND t <= p.view_ts + INTERVAL '7 days') x ON true
+  WHERE p.view_ts IS NOT NULL
+)
+SELECT COUNT(*) AS viewed, COUNT(cart_ts) AS carted,
+       COUNT(checkout_ts) AS checked_out, COUNT(purchase_ts) AS purchased
+FROM steps;
+```
+
+| viewed | carted | checked_out | purchased |
+|---|---|---|---|
+| 7 | 6 | 3 | 2 |
+
+Same answer, and the raw events are read once. The difference shows on a larger table: 400,000 synthetic events for 50,000 users.
+
+```sql
+CREATE TABLE events_big AS
+SELECT g AS event_id,
+       g % 50000 + 1 AS user_id,
+       (ARRAY['view_product','view_product','view_product','add_to_cart','add_to_cart',
+              'begin_checkout','purchase','view_product'])[(g / 50000) % 8 + 1] AS event_name,
+       TIMESTAMP '2026-06-01' + ((g / 50000) * INTERVAL '1 hour') + (g % 60) * INTERVAL '1 minute' AS event_ts
+FROM generate_series(1, 400000) AS g;
+ANALYZE events_big;
+```
+
+Every user has the same eight-event sequence: four views, two adds, a checkout and a purchase. The self-join version, cut down to three steps, reads the table three times and pairs every view with every later add before `COUNT(DISTINCT)` cleans up:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(DISTINCT v.user_id), COUNT(DISTINCT c.user_id), COUNT(DISTINCT p.user_id)
+FROM events_big v
+LEFT JOIN events_big c ON c.user_id = v.user_id AND c.event_name = 'add_to_cart'   AND c.event_ts > v.event_ts
+LEFT JOIN events_big p ON p.user_id = c.user_id AND p.event_name = 'purchase'      AND p.event_ts > c.event_ts
+WHERE v.event_name = 'view_product';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Sort (actual rows=349999 loops=1)
+        Sort Key: v.user_id
+        Sort Method: quicksort  Memory: 25570kB
+        ->  Hash Right Join (actual rows=349999 loops=1)
+              Hash Cond: (c.user_id = v.user_id)
+              Join Filter: (c.event_ts > v.event_ts)
+              Rows Removed by Join Filter: 100002
+              ->  Hash Left Join (actual rows=100000 loops=1)
+                    Hash Cond: (c.user_id = p.user_id)
+                    Join Filter: (p.event_ts > c.event_ts)
+                    ->  Seq Scan on events_big c (actual rows=100000 loops=1)
+                          Filter: (event_name = 'add_to_cart'::text)
+                          Rows Removed by Filter: 300000
+                    ->  Hash (actual rows=50000 loops=1)
+                          Buckets: 65536  Batches: 1  Memory Usage: 2856kB
+                          ->  Seq Scan on events_big p (actual rows=50000 loops=1)
+                                Filter: (event_name = 'purchase'::text)
+                                Rows Removed by Filter: 350000
+              ->  Hash (actual rows=200000 loops=1)
+                    Buckets: 262144  Batches: 1  Memory Usage: 11423kB
+                    ->  Seq Scan on events_big v (actual rows=200000 loops=1)
+                          Filter: (event_name = 'view_product'::text)
+                          Rows Removed by Filter: 200000
+```
+
+The one-pass version (here simplified to the same three steps) reads the table once and aggregates to 50,000 rows:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+WITH per_user AS (
+  SELECT user_id,
+         MIN(event_ts) FILTER (WHERE event_name = 'view_product') AS view_ts,
+         MAX(event_ts) FILTER (WHERE event_name = 'add_to_cart')  AS last_cart_ts,
+         MAX(event_ts) FILTER (WHERE event_name = 'purchase')     AS last_purchase_ts
+  FROM events_big
+  GROUP BY user_id
+)
+SELECT COUNT(view_ts),
+       COUNT(*) FILTER (WHERE last_cart_ts > view_ts),
+       COUNT(*) FILTER (WHERE last_cart_ts > view_ts AND last_purchase_ts > last_cart_ts)
+FROM per_user;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  HashAggregate (actual rows=50000 loops=1)
+        Group Key: events_big.user_id
+        Batches: 1  Memory Usage: 9745kB
+        ->  Seq Scan on events_big (actual rows=400000 loops=1)
+```
+
+The self-join plan scans the table three times and its top join produces 349,999 intermediate rows that must then be sorted for the distinct counts. The rewrite scans once and hashes straight down to 50,000 per-user rows. (The simplified "last cart after first view" logic is exact only for this three-step check; the full version above keeps the strict ordering.)
+
+**General rewrites for funnels.**
+
+- Replace one scan per step (self-joins, `UNION` of per-step queries, correlated subqueries) with one scan and `FILTER` / `CASE` aggregates.
+- Reduce to one row per user per step before any join.
+- Filter on the raw timestamp range of the analysis period so partitions and indexes prune.
+- Many warehouses offer funnel-friendly functions: `MATCH_RECOGNIZE` (Snowflake, Oracle, Trino) expresses ordered patterns directly, and ClickHouse has `windowFunnel`.
+
+## Approach: covering indexes for funnel lookups
+
+**Why it matters.** Funnels are often queried per step and per period: "first add-to-cart per user in June". If an index contains every column the query reads, PostgreSQL can answer it from the index alone with an index-only scan, never touching the much larger table.
+
+The query reads `event_name`, `event_ts` and `user_id`. A composite index leading with the equality column (`event_name`), then the range column (`event_ts`), with `user_id` added as a non-key `INCLUDE` column, covers it:
+
+```sql
+CREATE INDEX events_big_step ON events_big (event_name, event_ts) INCLUDE (user_id);
+VACUUM ANALYZE events_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT user_id, MIN(event_ts)
+FROM events_big
+WHERE event_name = 'add_to_cart'
+  AND event_ts >= TIMESTAMP '2026-06-01 03:00' AND event_ts < TIMESTAMP '2026-06-01 04:00'
+GROUP BY user_id;
+```
+
+```text
+HashAggregate (actual rows=50000 loops=1)
+  Group Key: user_id
+  Batches: 1  Memory Usage: 4881kB
+  Buffers: shared hit=1 read=304
+  ->  Index Only Scan using events_big_step on events_big (actual rows=50000 loops=1)
+        Index Cond: ((event_name = 'add_to_cart'::text) AND (event_ts >= '2026-06-01 03:00:00'::timestamp without time zone) AND (event_ts < '2026-06-01 04:00:00'::timestamp without time zone))
+        Heap Fetches: 0
+        Buffers: shared hit=1 read=304
+Planning:
+  Buffers: shared hit=40
+```
+
+`Index Only Scan` and `Heap Fetches: 0` mean the table was not read. If the query also selected a column outside the index (for example `device`), PostgreSQL would have to visit the table for every matching row:
+
+```sql
+ALTER TABLE events_big ADD COLUMN device TEXT DEFAULT 'web';
+VACUUM ANALYZE events_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT user_id, device, MIN(event_ts)
+FROM events_big
+WHERE event_name = 'add_to_cart'
+  AND event_ts >= TIMESTAMP '2026-06-01 03:00' AND event_ts < TIMESTAMP '2026-06-01 04:00'
+GROUP BY user_id, device;
+```
+
+```text
+HashAggregate (actual rows=50000 loops=1)
+  Group Key: user_id, device
+  Batches: 1  Memory Usage: 4881kB
+  Buffers: shared hit=673
+  ->  Bitmap Heap Scan on events_big (actual rows=50000 loops=1)
+        Recheck Cond: ((event_name = 'add_to_cart'::text) AND (event_ts >= '2026-06-01 03:00:00'::timestamp without time zone) AND (event_ts < '2026-06-01 04:00:00'::timestamp without time zone))
+        Heap Blocks: exact=369
+        Buffers: shared hit=673
+        ->  Bitmap Index Scan on events_big_step (actual rows=50000 loops=1)
+              Index Cond: ((event_name = 'add_to_cart'::text) AND (event_ts >= '2026-06-01 03:00:00'::timestamp without time zone) AND (event_ts < '2026-06-01 04:00:00'::timestamp without time zone))
+              Buffers: shared hit=304
+Planning:
+  Buffers: shared hit=65
+```
+
+**Trade-offs.** Every index slows inserts, and event tables are insert-heavy, so cover the few queries that matter rather than every column. Index-only scans depend on the visibility map, which `VACUUM` maintains; on a table with constant inserts and no recent vacuum, the plan may still say "Index Only Scan" but show many heap fetches. In columnar warehouses there are no B-tree indexes; the equivalent is clustering or sorting the table by `(event_name, event_ts)` so the engine can skip micro-partitions or row groups.
+
+## Approach: NTILE() bucketing by engagement
+
+**Why it matters.** "Do users who browse more convert better?" Split users into equal-sized groups by number of product views and compare conversion. `NTILE(n)` assigns each row a bucket number from 1 to n in the given order, with bucket sizes differing by at most one.
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC),
+per_user AS (
+  SELECT user_id,
+         COUNT(*) FILTER (WHERE event_name = 'view_product') AS views,
+         COUNT(*) FILTER (WHERE event_name = 'add_to_cart')  AS adds,
+         bool_or(event_name = 'purchase')                    AS purchased
+  FROM d
+  GROUP BY user_id
+  HAVING COUNT(*) FILTER (WHERE event_name = 'view_product') > 0
+),
+bucketed AS (
+  SELECT *, NTILE(3) OVER (ORDER BY views + adds, user_id) AS engagement_tercile
+  FROM per_user
+)
+SELECT engagement_tercile,
+       COUNT(*)                                        AS users,
+       string_agg(user_id::text, ',' ORDER BY user_id) AS user_ids,
+       MIN(views + adds) AS min_actions, MAX(views + adds) AS max_actions,
+       COUNT(*) FILTER (WHERE purchased)               AS any_purchase
+FROM bucketed
+GROUP BY engagement_tercile
+ORDER BY engagement_tercile;
+```
+
+| engagement_tercile | users | user_ids | min_actions | max_actions | any_purchase |
+|---|---|---|---|---|---|
+| 1 | 3 | 1,3,4 | 2 | 2 | 1 |
+| 2 | 2 | 2,5 | 2 | 3 | 1 |
+| 3 | 2 | 6,7 | 3 | 4 | 2 |
+
+Seven users split into terciles of 3, 2 and 2: when rows do not divide evenly, the first buckets get one extra row. Users 1, 3, 4 and 5 all had two actions, yet user 5 lands in the second tercile, because `NTILE` cuts by position, not by value; the `user_id` tiebreaker only makes the cut deterministic. The `any_purchase` column also counts user 5's out-of-order purchase and user 6's late one, which the strict funnel rejects. Use the funnel's `purchase_ts`, not raw purchase events, for a real analysis.
+
+**Pitfalls.** With few users or many ties, quantile buckets are misleading; for value-based bands use `CASE` thresholds or `WIDTH_BUCKET`. `NTILE` buckets have equal *counts*, not equal *ranges*, so "top quartile" can span a wide range of values. On seven users, none of these differences means anything, and saying so is part of a good answer.
+
+## Approach: market basket co-occurrence in carts
+
+**Why it matters.** Merchandisers want to know which products end up in the same cart and whether those carts convert, to plan bundles and recommendations. A cart here is all products a user added within the funnel window. Self-join the cart items to themselves with `a.product < b.product` to get each unordered pair once:
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC),
+cart_items AS (
+  SELECT DISTINCT user_id, product_id
+  FROM d WHERE event_name = 'add_to_cart'
+),
+buyers AS (
+  SELECT DISTINCT user_id FROM d WHERE event_name = 'purchase'
+)
+SELECT a.product_id AS product_a, b.product_id AS product_b,
+       COUNT(*)                                        AS carts_with_both,
+       string_agg(a.user_id::text, ',' ORDER BY a.user_id) AS users,
+       COUNT(bu.user_id)                               AS carts_with_a_purchase
+FROM cart_items a
+JOIN cart_items b ON b.user_id = a.user_id AND a.product_id < b.product_id
+LEFT JOIN buyers bu ON bu.user_id = a.user_id
+GROUP BY a.product_id, b.product_id
+ORDER BY carts_with_both DESC, product_a, product_b;
+```
+
+| product_a | product_b | carts_with_both | users | carts_with_a_purchase |
+|---|---|---|---|---|
+| P1 | P2 | 2 | 2,7 | 1 |
+| P1 | P3 | 1 | 6 | 1 |
+
+P1 and P2 appear together in two carts (users 2 and 7) and one of them bought; P1 and P3 appear together once (user 6). To see whether a pair matters beyond popularity, compare with single-product frequencies (support, confidence and lift):
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC),
+cart_items AS (SELECT DISTINCT user_id, product_id FROM d WHERE event_name = 'add_to_cart'),
+n AS (SELECT COUNT(DISTINCT user_id) AS carts FROM cart_items),
+singles AS (SELECT product_id, COUNT(*) AS carts FROM cart_items GROUP BY product_id),
+pairs AS (
+  SELECT a.product_id AS pa, b.product_id AS pb, COUNT(*) AS together
+  FROM cart_items a JOIN cart_items b ON b.user_id = a.user_id AND a.product_id < b.product_id
+  GROUP BY 1, 2
+)
+SELECT pa, pb, together,
+       ROUND(together::numeric / n.carts, 2)                    AS support,
+       ROUND(together::numeric / sa.carts, 2)                   AS confidence_a_to_b,
+       ROUND(together::numeric * n.carts / (sa.carts * sb.carts), 2) AS lift
+FROM pairs
+CROSS JOIN n
+JOIN singles sa ON sa.product_id = pa
+JOIN singles sb ON sb.product_id = pb
+ORDER BY lift DESC, pa, pb;
+```
+
+| pa | pb | together | support | confidence_a_to_b | lift |
+|---|---|---|---|---|---|
+| P1 | P2 | 2 | 0.29 | 0.50 | 0.88 |
+| P1 | P3 | 1 | 0.14 | 0.25 | 0.88 |
+
+There are 7 carts (users 1, 2, 3, 5, 6, 7 and 8). P1 is in 4 of them and P2 in 4, so if the products were independent you would expect them together in about 4 × 4 / 7 ≈ 2.3 carts; seeing them twice gives a lift of 0.88, slightly *below* independence. The most frequent pair is not evidence of a bundle. With real volumes, set a minimum support threshold to drop one-off pairs such as P1 and P3, then rank the remaining pairs by lift.
+
+## Approach: anti-pattern detection
+
+**Why it matters.** Interviewers often hand you a broken funnel query and ask what is wrong. Recognising SQL anti-patterns quickly, and checking the data for funnel anomalies, is the skill being tested.
+
+Here is a plausible-looking funnel with several problems:
+
+```sql
+SELECT event_name, COUNT(*) AS users
+FROM events
+WHERE event_name IN ('view_product', 'add_to_cart', 'begin_checkout', 'purchase')
+GROUP BY event_name
+ORDER BY users DESC;
+```
+
+| event_name | users |
+|---|---|
+| add_to_cart | 10 |
+| view_product | 10 |
+| purchase | 5 |
+| begin_checkout | 4 |
+
+What is wrong with it:
+
+1. **`COUNT(*)` counts events, not users**: user 7's two views and two adds each count twice.
+2. **No deduplication**: the resent events 403 and 706 are counted twice.
+3. **No order or entry rule**: user 8's add-to-cart without a view, user 5's out-of-order purchase and user 6's late purchase all count.
+4. **Sorting by count instead of step order**, which hides the funnel shape and breaks as soon as a later step outnumbers an earlier one (here add-to-cart already ties with view).
+
+Other anti-patterns that appear in funnel code:
+
+| Anti-pattern | Why it hurts | Fix |
+|---|---|---|
+| `SELECT DISTINCT` to hide join duplicates | Masks fan-out and costs a sort | Fix the join grain |
+| Function on a filtered column (`DATE(event_ts) = ...`) | Prevents index and partition pruning | Half-open timestamp range |
+| `NOT IN (subquery)` with possible `NULL`s | Returns no rows | `NOT EXISTS` |
+| `OR` across columns in a join condition | Forces nested loops | Split into `UNION ALL` or separate joins |
+| `SELECT *` from wide event tables | Reads every column in columnar stores | Name the columns |
+| Comma joins with the condition missing | Silent Cartesian product | Explicit `JOIN ... ON` |
+
+The data also has anti-patterns of its own, which a funnel job should check and report on every run:
+
+```sql
+WITH d AS (SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id, received_at DESC)
+SELECT 'purchase before any add_to_cart' AS anomaly, p.user_id
+FROM d p
+WHERE p.event_name = 'purchase'
+  AND NOT EXISTS (SELECT 1 FROM d c WHERE c.user_id = p.user_id
+                  AND c.event_name = 'add_to_cart' AND c.event_ts < p.event_ts)
+UNION ALL
+SELECT 'cart without any view', c.user_id
+FROM d c
+WHERE c.event_name = 'add_to_cart'
+  AND NOT EXISTS (SELECT 1 FROM d v WHERE v.user_id = c.user_id AND v.event_name = 'view_product')
+UNION ALL
+SELECT 'late arrival (over 1 hour)', user_id
+FROM d WHERE received_at - event_ts > INTERVAL '1 hour'
+ORDER BY anomaly, user_id;
+```
+
+| anomaly | user_id |
+|---|---|
+| cart without any view | 8 |
+| late arrival (over 1 hour) | 4 |
+| late arrival (over 1 hour) | 5 |
+| purchase before any add_to_cart | 5 |
+
+A rising count of out-of-order events usually means a client clock problem or a tracking bug, which is worth catching before it moves the conversion rate.
+
+## Interview tips
+
+**How it is asked.** "Given an events table, compute the funnel from view to purchase", "conversion rate per step by device", "funnel within 7 days", "why does our funnel show more carts than views?", or "the funnel query takes an hour".
+
+**What a strong answer includes.**
+
+1. Clarifying the step list, entry rule, ordering, time window and whether steps can be skipped.
+2. Deduplication by event id before anything else.
+3. One row per user per step, built in order (chained CTEs or one-pass aggregation).
+4. Distinct users, step and overall conversion, ordered by step.
+5. Awareness of cost: one scan, covering index or clustering on step and time.
+
+**Mistakes candidates make.**
+
+- Counting events instead of users.
+- Ignoring order, so a purchase before the cart counts.
+- Measuring the window from each previous step instead of from entry (or not agreeing which).
+- Joining raw step events to each other and getting a fan-out.
+- Ordering results by count rather than by step.
+- Treating `NTILE` buckets as value ranges.
