@@ -1,0 +1,148 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Climbing Stairs: Count Ways with a Fibonacci-Style DP"
+seoTitle: "Climbing Stairs: Fibonacci DP"
+description: "Count the ways to climb a staircase taking one or two steps at a time, from plain recursion to memoised, bottom-up and constant-space DP, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "To stand on step i your last move came from step i - 1 or step i - 2, so ways(i) = ways(i - 1) + ways(i - 2), with ways(0) = 1 and ways(1) = 1. That is the Fibonacci recurrence. Fill it bottom-up and keep only the last two values for O(n) time and O(1) space; plain recursion without memoisation is exponential."
+followUps: ["How does the recurrence change if you may take 1, 2 or 3 steps, or any step size from a given set?", "How would you compute the answer for very large n modulo a prime in O(log n)?", "What if some steps are broken and cannot be stood on?"]
+previous: "interview-questions:dsa/alien-dictionary"
+next: "interview-questions:dsa/min-cost-climbing-stairs"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A staircase has `n` steps. Each move climbs either one step or two steps. Count the number of distinct sequences of
+moves that take you from the ground (step 0) to the top (step n).
+
+This is widely known as LeetCode 70, "Climbing Stairs". It is the standard first dynamic programming question, and
+[Min Cost Climbing Stairs](/interview/dsa/min-cost-climbing-stairs/) adds costs to it.
+
+Assume n between 1 and 45 (the answer then fits comfortably in 32 bits).
+
+## Examples
+
+```text
+n = 1 -> 1   (1)
+n = 3 -> 3   (1+1+1, 1+2, 2+1)
+n = 4 -> 5   (1+1+1+1, 1+1+2, 1+2+1, 2+1+1, 2+2)
+n = 6 -> 13
+```
+
+## Approach 1: plain recursion
+
+```python
+def climb_recursive(steps):
+    if steps <= 1:
+        return 1
+    return climb_recursive(steps - 1) + climb_recursive(steps - 2)
+```
+
+Correct, but the same subproblems are recomputed again and again: the call tree has about 1.6^n nodes. n = 40 already
+takes hundreds of millions of calls.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `ways[i]` = number of ways to reach step i exactly.
+- **Recurrence:** `ways[i] = ways[i - 1] + ways[i - 2]`, because the last move was either a single step from i - 1
+  or a double step from i - 2, and those two groups do not overlap.
+- **Base cases:** `ways[0] = 1` (one way to stand at the start: do nothing) and `ways[1] = 1`.
+- **Answer:** `ways[steps]`.
+
+### Filled table for n = 6
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|---|
+| ways | 1 | 1 | 2 | 3 | 5 | 8 | 13 |
+
+### Memoised (top-down)
+
+```python
+from functools import lru_cache
+
+def climb_memo(steps):
+    @lru_cache(maxsize=None)
+    def ways(i):
+        if i <= 1:
+            return 1
+        return ways(i - 1) + ways(i - 2)
+    return ways(steps)
+```
+
+### Bottom-up
+
+```python
+def climb_table(steps):
+    ways = [0] * (steps + 1)
+    ways[0] = 1
+    if steps >= 1:
+        ways[1] = 1
+    for i in range(2, steps + 1):
+        ways[i] = ways[i - 1] + ways[i - 2]
+    return ways[-1]
+```
+
+### Space optimised
+
+Each value only needs the previous two, so keep two variables.
+
+```python
+def climb_stairs(steps):
+    prev2, prev1 = 1, 1          # ways(i - 2), ways(i - 1), starting at i = 2
+    for _ in range(2, steps + 1):
+        prev2, prev1 = prev1, prev1 + prev2
+    return prev1
+```
+
+### Complexity
+
+- Memoised and bottom-up: O(n) time, O(n) space.
+- Space optimised: O(n) time, O(1) space.
+- Recursion without memo: O(φ^n) time, about O(1.62^n).
+
+## Tests
+
+```python
+expected = {0: 1, 1: 1, 2: 2, 3: 3, 4: 5, 5: 8, 6: 13, 10: 89}
+for fn in (climb_stairs, climb_table, climb_memo, climb_recursive):
+    for steps, ways in expected.items():
+        assert fn(steps) == ways, (fn.__name__, steps)
+
+assert climb_stairs(45) == 1836311903          # top of the stated range
+assert climb_table(30) == climb_memo(30) == climb_stairs(30)
+
+# Brute-force check by enumerating move sequences
+from itertools import product
+for steps in range(1, 11):
+    count = sum(
+        1
+        for length in range(1, steps + 1)
+        for moves in product((1, 2), repeat=length)
+        if sum(moves) == steps
+    )
+    assert count == climb_stairs(steps)
+```
+
+## Edge cases and pitfalls
+
+- **Base cases.** `ways(0) = 1` is the convention that makes the recurrence work for n = 2; using 0 gives wrong answers.
+- **Off-by-one** between "number of steps" and "array index". The table needs n + 1 entries.
+- **Recursion without memoisation** times out for n around 40.
+- **Large n.** Python integers do not overflow, but in Java or C++ the 32-bit range is exceeded above n = 45 and the
+  question often asks for the answer modulo 10^9 + 7.
+- **Generalisation.** With allowed step sizes S, the recurrence becomes the sum of `ways[i - s]` for s in S.
+
+## Where this shows up in data engineering
+
+There is no direct pipeline use. The habit it builds, storing a computed result once and reusing it instead of
+recomputing it, is the same reasoning behind incremental models and materialised intermediate tables.

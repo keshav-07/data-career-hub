@@ -1,0 +1,179 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Decode Ways: Count Digit-to-Letter Decodings with Prefix DP"
+seoTitle: "Decode Ways: Prefix DP for Digit Strings"
+description: "Count how many ways a digit string can be decoded when 1 to 26 map to A to Z, handling zeros carefully, with recursion, memoised, bottom-up DP and tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Let ways(i) be the number of decodings of the first i digits. The last letter used either one digit (valid if it is 1 to 9) or two digits (valid if they form 10 to 26), so ways(i) = (ways(i - 1) if s[i - 1] != '0') + (ways(i - 2) if 10 <= int(s[i - 2:i]) <= 26). Base cases: ways(0) = 1 and ways(1) = 1 if the first digit is not 0, else 0. Keeping the last two values gives O(n) time and O(1) space."
+followUps: ["How does the problem change if a '*' wildcard can stand for 1 to 9 (Decode Ways II)?", "How would you list the decodings, and how many could there be?", "Why is ways(0) = 1 the right base case?"]
+previous: "interview-questions:dsa/palindromic-substrings"
+next: "interview-questions:dsa/coin-change"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+A message of capital letters was encoded by replacing A with 1, B with 2, and so on up to Z with 26, and joining the
+numbers without separators. Given the digit string, count the number of different letter messages it could have come
+from. A group may not start with 0, so `"06"` is not a valid group. If the string cannot be decoded at all, the count
+is 0.
+
+This is widely known as LeetCode 91, "Decode Ways".
+
+Assume up to 100 digits.
+
+## Examples
+
+```text
+"15"   -> 2   (1,5 = AE; 15 = O)
+"2611" -> 4   (2,6,1,1; 26,1,1; 2,6,11; 26,11)
+"105"  -> 1   (10,5 only: "05" is not allowed)
+"30"   -> 0   (3,0 fails because 0 alone is not a letter; 30 > 26)
+"0"    -> 0
+```
+
+## Approach 1: plain recursion
+
+```python
+def num_decodings_recursive(s):
+    def go(i):                         # ways to decode s[i:]
+        if i == len(s):
+            return 1
+        if s[i] == "0":
+            return 0
+        total = go(i + 1)
+        if i + 1 < len(s) and int(s[i:i + 2]) <= 26:
+            total += go(i + 2)
+        return total
+    return go(0)
+```
+
+Like Fibonacci, the two recursive calls overlap heavily; the time is exponential in the worst case (for example a long
+run of 1s).
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `ways[i]` = number of decodings of the prefix `s[:i]`.
+- **Recurrence:** `ways[i] = (ways[i - 1] if s[i - 1] != "0" else 0) + (ways[i - 2] if "10" <= s[i - 2:i] <= "26" else 0)`.
+- **Base cases:** `ways[0] = 1` (the empty prefix has one decoding: nothing), `ways[1] = 1` if `s[0] != "0"`, else 0.
+- **Answer:** the last entry.
+
+### Filled table for "2611"
+
+| i | 0 | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|---|
+| prefix | "" | 2 | 26 | 261 | 2611 |
+| single digit OK? | | 2: yes | 6: yes | 1: yes | 1: yes |
+| pair OK? | | | 26: yes | 61: no | 11: yes |
+| ways | 1 | 1 | 2 | 2 | 4 |
+
+`ways[4] = ways[3] + ways[2] = 2 + 2 = 4`.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def num_decodings_memo(s):
+    @lru_cache(maxsize=None)
+    def go(i):
+        if i == len(s):
+            return 1
+        if s[i] == "0":
+            return 0
+        total = go(i + 1)
+        if i + 1 < len(s) and int(s[i:i + 2]) <= 26:
+            total += go(i + 2)
+        return total
+    return go(0)
+```
+
+### Bottom-up
+
+```python
+def num_decodings_table(s):
+    if not s:
+        return 0
+    ways = [0] * (len(s) + 1)
+    ways[0] = 1
+    ways[1] = 0 if s[0] == "0" else 1
+    for i in range(2, len(s) + 1):
+        if s[i - 1] != "0":
+            ways[i] += ways[i - 1]
+        if "10" <= s[i - 2:i] <= "26":
+            ways[i] += ways[i - 2]
+    return ways[-1]
+```
+
+Comparing two-character strings works because both have exactly two digits, so string order equals numeric order.
+
+### Space optimised
+
+```python
+def num_decodings(s):
+    if not s or s[0] == "0":
+        return 0
+    prev2, prev1 = 1, 1                 # ways[i - 2], ways[i - 1]
+    for i in range(2, len(s) + 1):
+        cur = 0
+        if s[i - 1] != "0":
+            cur += prev1
+        if "10" <= s[i - 2:i] <= "26":
+            cur += prev2
+        if cur == 0:
+            return 0                    # an invalid zero; nothing after can fix it
+        prev2, prev1 = prev1, cur
+    return prev1
+```
+
+### Complexity
+
+- Bottom-up and memoised: O(n) time and space.
+- Space optimised: O(n) time, O(1) space.
+
+## Tests
+
+```python
+for fn in (num_decodings, num_decodings_table, num_decodings_memo, num_decodings_recursive):
+    assert fn("15") == 2
+    assert fn("2611") == 4
+    assert fn("105") == 1
+    assert fn("30") == 0                       # unreachable: invalid zero
+    assert fn("0") == 0
+    assert fn("7") == 1                        # single digit
+    assert fn("100") == 0                      # "00" cannot be split
+    assert fn("2101") == 1                     # 2,10,1
+    assert fn("27") == 1                       # 27 > 26
+
+assert num_decodings("") == 0 and num_decodings_table("") == 0   # empty: convention 0
+assert num_decodings("1" * 30) == 1346269      # Fibonacci growth
+
+import random
+random.seed(13)
+for _ in range(200):
+    s = "".join(random.choice("0123456") for _ in range(random.randint(1, 10)))
+    assert num_decodings(s) == num_decodings_recursive(s) == num_decodings_table(s)
+```
+
+## Edge cases and pitfalls
+
+- **Zeros.** A 0 must pair with a preceding 1 or 2. `"30"`, `"00"` and a leading `"0"` decode in zero ways.
+- **Leading zero in a pair.** `"05"` is not 5; check that the pair is between 10 and 26, not just at most 26.
+- **Empty string.** The answer depends on the convention; LeetCode's constraints exclude it. Here it returns 0, and
+  you should say what you chose.
+- **Base case `ways[0] = 1`** makes the two-digit case at i = 2 work.
+
+## Where this shows up in data engineering
+
+Parsing a stream of tokens without delimiters, where some tokens are one character and some are two, is the same
+shape: fixed-width or prefix-coded fields in legacy files, or ambiguous concatenated codes in identifiers. The DP is a
+reminder to count ambiguities before trusting a parse, and that zero-padding rules matter.

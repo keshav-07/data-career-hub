@@ -32,7 +32,7 @@ Assume a string of up to 16 lowercase letters.
 ```text
 "noon"  -> ["n","o","o","n"], ["n","oo","n"], ["noon"]
 "abc"   -> ["a","b","c"]
-"aab"   -> ["a","a","b"], ["aa","b"]
+"eel"   -> ["e","e","l"], ["ee","l"]
 "z"     -> ["z"]
 ```
 
@@ -72,9 +72,9 @@ Let `pal[i][j]` be true when `s[i..j]` (inclusive) is a palindrome.
 - Recurrence: `pal[i][j] = s[i] == s[j] and pal[i + 1][j - 1]` for longer substrings.
 - Fill order: `i` from the end of the string backwards, so `pal[i + 1][...]` is ready.
 
-For `"aab"` (T marks a palindrome):
+For `"eel"` (T marks a palindrome):
 
-| i \ j | 0 (a) | 1 (a) | 2 (b) |
+| i \ j | 0 (e) | 1 (e) | 2 (l) |
 |---|---|---|---|
 | 0 | T | T | F |
 | 1 | | T | F |
@@ -133,7 +133,7 @@ def norm(result):
 for fn in (partition, partition_brute):
     assert norm(fn("noon")) == norm([["n", "o", "o", "n"], ["n", "oo", "n"], ["noon"]])
     assert norm(fn("abc")) == [("a", "b", "c")]
-    assert norm(fn("aab")) == norm([["a", "a", "b"], ["aa", "b"]])
+    assert norm(fn("eel")) == norm([["e", "e", "l"], ["ee", "l"]])
     assert fn("z") == [["z"]]                       # single character
     assert fn("") == [[]]                           # empty string: one empty partition
 

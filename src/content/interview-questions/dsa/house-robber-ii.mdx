@@ -1,0 +1,165 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "House Robber II: Non-Adjacent Maximum Sum When Houses Form a Circle"
+seoTitle: "House Robber II: Circular Take-or-Skip DP"
+description: "Solve the circular version of House Robber by running the linear DP twice, once without the first house and once without the last, with tests and pitfalls."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "In a circle the first and last houses are neighbours, so at least one of them is not taken. Solve the linear House Robber problem twice, once on houses 0..n-2 and once on houses 1..n-1, and return the larger result. A single house is a special case: return its value. Each linear run is O(n) time and O(1) space, so the whole solution is too."
+followUps: ["Why is it enough to consider those two ranges?", "How would you generalise the trick to a circular array with other constraints?", "How would you solve it with a DP that tracks whether the first house was taken?"]
+previous: "interview-questions:dsa/house-robber"
+next: "interview-questions:dsa/longest-palindromic-substring"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Houses stand in a circle, so the first and the last are next to each other. Each holds a non-negative amount of money.
+Choose houses so that no two chosen houses are neighbours, and return the largest possible total.
+
+This is widely known as LeetCode 213, "House Robber II". It builds directly on
+[House Robber](/interview/dsa/house-robber/).
+
+Assume 1 to 100 houses with values up to 1,000.
+
+## Examples
+
+```text
+[4, 2, 5]          -> 5    (4 and 5 are neighbours in the circle; take 5 alone)
+[2, 9, 4, 8]       -> 17   (9 + 8)
+[6, 1, 1, 6]       -> 7    (6 + 1; both 6s are neighbours)
+[11]               -> 11
+```
+
+## Approach 1: try both choices for house 0 with recursion
+
+Either house 0 is taken (then house 1 and the last house are excluded), or it is not (then the rest is a line).
+
+```python
+def rob_circle_recursive(nums):
+    if len(nums) == 1:
+        return nums[0]
+
+    def line(lo, hi):                  # best on nums[lo:hi], plain recursion
+        if lo >= hi:
+            return 0
+        return max(line(lo + 1, hi), nums[lo] + line(lo + 2, hi))
+
+    take_first = nums[0] + line(2, len(nums) - 1)
+    skip_first = line(1, len(nums))
+    return max(take_first, skip_first)
+```
+
+Correct but exponential, for the same reason as the linear recursion.
+
+## Approach 2: optimal, two linear DP runs
+
+### Why two runs are enough
+
+In any valid choice, the first and last houses are not both taken. So the best choice either avoids the last house
+(it lies within houses 0..n-2) or avoids the first (it lies within houses 1..n-1). Both ranges are straight lines, and
+the linear DP solves each.
+
+### State, recurrence and base cases (per run)
+
+- **State:** `best[i]` = maximum from the first i houses of the range.
+- **Recurrence:** `best[i] = max(best[i - 1], best[i - 2] + value)`.
+- **Base cases:** `best[0] = 0`, `best[1]` = the first value in the range.
+
+### Filled tables for [2, 9, 4, 8]
+
+| range | values | best after each house | result |
+|---|---|---|---|
+| 0..2 | 2, 9, 4 | 2, 9, 9 | 9 |
+| 1..3 | 9, 4, 8 | 9, 9, 17 | 17 |
+
+Answer: max(9, 17) = 17.
+
+### Python solution
+
+```python
+from functools import lru_cache
+
+def rob_line(values):
+    prev2 = prev1 = 0
+    for value in values:
+        prev2, prev1 = prev1, max(prev1, prev2 + value)
+    return prev1
+
+
+def rob_circle(nums):
+    if not nums:
+        return 0
+    if len(nums) == 1:
+        return nums[0]
+    return max(rob_line(nums[:-1]), rob_line(nums[1:]))
+
+
+def rob_circle_memo(nums):
+    """Memoised version of the two-range idea."""
+    if len(nums) == 1:
+        return nums[0]
+
+    def solve(lo, hi):
+        @lru_cache(maxsize=None)
+        def go(i):
+            if i >= hi:
+                return 0
+            return max(go(i + 1), nums[i] + go(i + 2))
+        return go(lo)
+
+    return max(solve(0, len(nums) - 1), solve(1, len(nums)))
+```
+
+Slicing copies the list (O(n) extra space). Passing start and end indices into the loop keeps it at O(1).
+
+### Complexity
+
+O(n) time. O(1) extra space with indices, O(n) with slices as written.
+
+## Tests
+
+```python
+for fn in (rob_circle, rob_circle_memo, rob_circle_recursive):
+    assert fn([4, 2, 5]) == 5
+    assert fn([2, 9, 4, 8]) == 17
+    assert fn([6, 1, 1, 6]) == 7
+    assert fn([11]) == 11                         # single house
+    assert fn([3, 7]) == 7                        # two houses are neighbours
+    assert fn([0, 0, 0]) == 0
+
+assert rob_circle([]) == 0                        # empty
+
+# Brute force: all subsets with no adjacent pair in the circle
+import random
+random.seed(12)
+for _ in range(40):
+    vals = [random.randint(0, 15) for _ in range(random.randint(1, 9))]
+    n = len(vals)
+    brute = 0
+    for mask in range(1 << n):
+        chosen = [i for i in range(n) if mask >> i & 1]
+        ok = all((mask >> i & 1) + (mask >> ((i + 1) % n) & 1) < 2 for i in range(n)) if n > 1 else True
+        if ok:
+            brute = max(brute, sum(vals[i] for i in chosen))
+    assert rob_circle(vals) == brute
+```
+
+## Edge cases and pitfalls
+
+- **One house.** Both ranges are empty, so return the single value explicitly.
+- **Two houses** are adjacent in both directions; the answer is the larger one.
+- **Running only one range.** Excluding just the last house misses answers that need the last house.
+- **Index ranges.** `nums[:-1]` and `nums[1:]`; an off-by-one silently includes both ends.
+
+## Where this shows up in data engineering
+
+Circular constraints show up with cyclic schedules, such as hours of a day or days of a week, where slot 23 is next to
+slot 0. The trick of breaking the circle by fixing one element's choice and solving the resulting lines is the general
+technique to remember.

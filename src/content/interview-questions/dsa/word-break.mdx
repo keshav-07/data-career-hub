@@ -1,0 +1,148 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Word Break: Can a String Be Split into Dictionary Words? Prefix DP"
+seoTitle: "Word Break: Segmentation with Prefix DP"
+description: "Decide whether a string can be segmented into dictionary words with a boolean prefix DP, from exponential recursion to memoised and bottom-up versions, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Let ok(i) mean the first i characters can be split into dictionary words. ok(0) is true, and ok(i) is true if some j < i has ok(j) true and s[j:i] in the dictionary. Put the words in a set and only try lengths up to the longest word. Filling the table left to right takes O(n * L) set lookups of strings up to length L, so O(n * L^2) time, and O(n) space."
+followUps: ["How would you return one valid segmentation, or all of them (Word Break II)?", "How would a trie speed up the inner loop?", "How does BFS over start positions solve the same problem?"]
+previous: "interview-questions:dsa/maximum-product-subarray"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string and a list of dictionary words, decide whether the string can be cut into a sequence of one or more
+dictionary words with nothing left over. A word may be used any number of times.
+
+This is widely known as LeetCode 139, "Word Break".
+
+Assume a string of up to 300 characters and up to 1,000 dictionary words of up to 20 characters.
+
+## Examples
+
+```text
+"sunflower", ["sun", "flower", "flow"]       -> True   (sun + flower)
+"icecreamcone", ["ice", "cream", "icecream", "cone"] -> True
+"datapipe", ["data", "pip", "pipeline"]      -> False  ("pipe" is not a word)
+"aaaa", ["a", "aa"]                          -> True
+```
+
+## Approach 1: plain recursion
+
+Try every dictionary word as a prefix and recurse on the rest.
+
+```python
+def word_break_recursive(s, words):
+    def go(start):
+        if start == len(s):
+            return True
+        return any(s.startswith(w, start) and go(start + len(w)) for w in words)
+    return go(0)
+```
+
+On inputs like `"aaaa...ab"` with words `["a", "aa", "aaa"]`, the same suffix is examined exponentially many times.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `ok[i]` is true when `s[:i]` can be segmented.
+- **Recurrence:** `ok[i] = any(ok[j] and s[j:i] in words for j in range(max(0, i - L), i))`, where L is the longest
+  word length.
+- **Base case:** `ok[0] = True` (the empty prefix needs no words).
+- **Answer:** the last entry, `ok` at index n.
+
+### Filled table for "sunflower" with words sun, flower and flow
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| prefix ends with | | s | u | n | f | l | o | w | e | r |
+| ok | T | F | F | T | F | F | F | T | F | T |
+
+`ok[3]` from "sun"; `ok[7]` from `ok[3]` and "flow"; `ok[9]` from `ok[3]` and "flower".
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def word_break_memo(s, words):
+    words = set(words)
+    longest = max(map(len, words), default=0)
+
+    @lru_cache(maxsize=None)
+    def go(start):
+        if start == len(s):
+            return True
+        for end in range(start + 1, min(len(s), start + longest) + 1):
+            if s[start:end] in words and go(end):
+                return True
+        return False
+
+    return go(0)
+```
+
+### Bottom-up
+
+```python
+def word_break(s, words):
+    words = set(words)
+    longest = max(map(len, words), default=0)
+    ok = [True] + [False] * len(s)
+    for i in range(1, len(s) + 1):
+        for j in range(max(0, i - longest), i):
+            if ok[j] and s[j:i] in words:
+                ok[i] = True
+                break
+    return ok[-1]
+```
+
+There is no standard constant-space version: any earlier position may be needed.
+
+### Complexity
+
+- Time: O(n * L) candidate splits, each costing O(L) to slice and hash, so O(n * L^2). Without the longest-word bound
+  it is O(n^3).
+- Space: O(n) for the table plus the word set.
+
+## Tests
+
+```python
+for fn in (word_break, word_break_memo, word_break_recursive):
+    assert fn("sunflower", ["sun", "flower", "flow"])
+    assert fn("icecreamcone", ["ice", "cream", "icecream", "cone"])
+    assert not fn("datapipe", ["data", "pip", "pipeline"])
+    assert fn("aaaa", ["a", "aa"])
+    assert fn("", ["x"])                              # empty string: zero words
+    assert not fn("x", [])                            # empty dictionary
+    assert fn("go", ["go"])                           # single word
+    assert not fn("gone", ["go", "one"])              # overlapping words cannot share letters
+    assert fn("icecreamcone", ["ice", "creamcone", "icecream"])   # greedy longest match would fail
+
+# The classic exponential trap is fast with DP
+trap = "a" * 40 + "b"
+assert not word_break(trap, ["a", "aa", "aaa", "aaaa"])
+assert not word_break_memo(trap, ["a", "aa", "aaa", "aaaa"])
+```
+
+## Edge cases and pitfalls
+
+- **Using a list for the dictionary** makes each lookup O(number of words).
+- **Greedy longest match** fails. With words `["ice", "creamcone", "icecream"]`, greedily taking `"icecream"` from
+  `"icecreamcone"` leaves `"cone"`, which is not a word; the valid split is `ice + creamcone`.
+- **Empty string.** By convention it can be segmented (zero words). LeetCode's constraints exclude it.
+- **Not bounding j by the longest word** is still correct but slower.
+
+## Where this shows up in data engineering
+
+Segmenting concatenated tokens appears when parsing identifiers without separators, such as splitting legacy column
+names like `custaddrline1` into known abbreviations, or tokenising hashtags. The DP tells you whether any valid
+split exists before you choose one.

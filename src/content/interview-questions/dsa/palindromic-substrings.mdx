@@ -1,0 +1,160 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Palindromic Substrings: Count Every Palindrome by Expanding Around Centres"
+seoTitle: "Palindromic Substrings: Count by Centres"
+description: "Count all palindromic substrings of a string, with brute force, an interval DP table and the constant-space expand-around-centre method, plus tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "Medium"
+shortAnswer: "Each palindromic substring has exactly one centre, either a character or the gap between two characters. For each of the 2n - 1 centres, expand outwards while both ends match and add one for every successful step. That counts each palindrome once in O(n^2) time and O(1) space. The interval DP pal[i][j] = (s[i] == s[j]) and pal[i + 1][j - 1] gives the same count in O(n^2) time and space."
+followUps: ["How would you count only distinct palindromic substrings?", "How does Manacher's algorithm give the count in O(n)?", "How would you return the counts per length?"]
+previous: "interview-questions:dsa/longest-palindromic-substring"
+next: "interview-questions:dsa/decode-ways"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string, count how many of its substrings are palindromes. Substrings at different positions count separately,
+even if they contain the same characters.
+
+This is widely known as LeetCode 647, "Palindromic Substrings". It uses the same tools as
+[Longest Palindromic Substring](/interview/dsa/longest-palindromic-substring/).
+
+Assume up to 1,000 characters.
+
+## Examples
+
+```text
+"xyz"   -> 3   (x, y, z)
+"ooo"   -> 6   (o, o, o, oo, oo, ooo)
+"refer" -> 7   (r, e, f, e, r, efe, refer)
+""      -> 0
+```
+
+## Approach 1: check every substring
+
+```python
+def count_substrings_brute(s):
+    count = 0
+    for i in range(len(s)):
+        for j in range(i, len(s)):
+            piece = s[i:j + 1]
+            if piece == piece[::-1]:
+                count += 1
+    return count
+```
+
+O(n^3): n^2 substrings, O(n) to check each.
+
+## Approach 2: interval DP
+
+### State, recurrence and base cases
+
+- **State:** `pal[i][j]` = whether `s[i..j]` is a palindrome.
+- **Recurrence:** `pal[i][j] = s[i] == s[j] and (j - i < 2 or pal[i + 1][j - 1])`.
+- **Base cases:** covered by `j - i < 2`: single characters, and pairs of equal characters.
+- **Answer:** the number of true cells.
+
+### Filled table for "ooo"
+
+| i \ j | 0 | 1 | 2 |
+|---|---|---|---|
+| 0 | T | T | T |
+| 1 | | T | T |
+| 2 | | | T |
+
+Six true cells, so 6.
+
+### Bottom-up
+
+```python
+def count_substrings_dp(s):
+    size = len(s)
+    pal = [[False] * size for _ in range(size)]
+    count = 0
+    for i in range(size - 1, -1, -1):
+        for j in range(i, size):
+            if s[i] == s[j] and (j - i < 2 or pal[i + 1][j - 1]):
+                pal[i][j] = True
+                count += 1
+    return count
+```
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def count_substrings_memo(s):
+    @lru_cache(maxsize=None)
+    def is_pal(i, j):
+        if i >= j:
+            return True
+        return s[i] == s[j] and is_pal(i + 1, j - 1)
+    return sum(is_pal(i, j) for i in range(len(s)) for j in range(i, len(s)))
+```
+
+## Approach 3: optimal in space, expand around centres
+
+```python
+def count_substrings(s):
+    count = 0
+    for centre in range(2 * len(s) - 1):
+        lo = centre // 2
+        hi = lo + centre % 2          # even centre index: a character; odd: the gap after it
+        while lo >= 0 and hi < len(s) and s[lo] == s[hi]:
+            count += 1
+            lo -= 1
+            hi += 1
+    return count
+```
+
+Iterating over 2n - 1 centres with one loop handles both odd and even lengths without duplicate code.
+
+### Complexity
+
+| Method | Time | Space |
+|---|---|---|
+| Brute force | O(n^3) | O(n) for the slice |
+| Interval DP | O(n^2) | O(n^2) |
+| Expand around centres | O(n^2) | O(1) |
+
+## Tests
+
+```python
+for fn in (count_substrings, count_substrings_dp, count_substrings_memo, count_substrings_brute):
+    assert fn("xyz") == 3
+    assert fn("ooo") == 6
+    assert fn("refer") == 7
+    assert fn("") == 0                           # empty
+    assert fn("q") == 1                          # single character
+    assert fn("abab") == 6                       # a, b, a, b, aba, bab
+
+# All-equal string of length k has k * (k + 1) / 2 palindromic substrings
+assert count_substrings("z" * 50) == 50 * 51 // 2
+
+import random
+random.seed(10)
+for _ in range(100):
+    s = "".join(random.choice("abc") for _ in range(random.randint(0, 10)))
+    assert count_substrings(s) == count_substrings_brute(s) == count_substrings_dp(s)
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting even centres** undercounts strings like `"oo"`.
+- **Counting distinct palindromes by mistake.** `"ooo"` has 6 palindromic substrings but only 3 distinct ones.
+- **DP fill order**, as in every interval DP: inner intervals first.
+- **Worst case** is a string of one repeated letter, where every substring is a palindrome; your solution should still
+  be O(n^2), not worse.
+
+## Where this shows up in data engineering
+
+There is no direct pipeline use. The centre-expansion idea, growing a window outward while a condition holds, is a
+useful cousin of the sliding-window techniques used on event streams.

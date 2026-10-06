@@ -1,0 +1,160 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Swim in Rising Water: Minimax Path with a Modified Dijkstra"
+seoTitle: "Swim in Rising Water: Minimax Dijkstra"
+description: "Find the earliest time you can cross a grid of elevations by minimising the highest cell on the path, with a heap-based Dijkstra variant, binary search and tests."
+technology: ["dsa"]
+topic: ["graphs", "shortest-path"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "The time needed for a path is the highest elevation on it, so you want the path whose maximum is smallest. Run Dijkstra where a path's cost is the maximum cell value so far: pop the cell with the smallest cost from a min-heap, and push each unvisited neighbour with max(current cost, neighbour's elevation). The first time the bottom-right cell is popped, its cost is the answer. This is O(n^2 log n) on an n by n grid with O(n^2) space. Binary search on the time with a BFS check, or union-find adding cells in elevation order, also work."
+followUps: ["Why does Dijkstra still work when the path cost is a maximum instead of a sum?", "How would the binary-search-plus-BFS solution look and what is its complexity?", "How would union-find solve it by adding cells in order of elevation?"]
+previous: "interview-questions:dsa/min-cost-to-connect-all-points"
+next: "interview-questions:dsa/alien-dictionary"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You have an n by n grid of distinct non-negative elevations. At time t the water everywhere is at level t, and you
+can swim between two neighbouring cells (up, down, left, right) only if both elevations are at most t. Swimming takes no
+time. Starting in the top-left cell, return the least time at which you can reach the bottom-right cell.
+
+This is widely known as LeetCode 778, "Swim in Rising Water".
+
+Assume n up to 50 and elevations forming a permutation of 0 to n^2 - 1.
+
+## Examples
+
+```text
+0 3
+2 1
+-> 2   (either route passes a cell of height 2 or 3; going down through 2 is better)
+
+0 1 2
+7 8 3
+6 5 4
+path 0 -> 1 -> 2 -> 3 -> 4 has maximum 4
+-> 4
+
+[[0]] -> 0
+```
+
+## Approach 1: binary search on the time
+
+For a candidate time t, BFS from the start through cells with elevation at most t. The smallest t for which the target
+is reachable is the answer, and reachability only improves as t grows, so binary search applies.
+
+```python
+from collections import deque
+
+def swim_binary_search(grid):
+    n = len(grid)
+
+    def reachable(t):
+        if grid[0][0] > t:
+            return False
+        seen = {(0, 0)}
+        queue = deque([(0, 0)])
+        while queue:
+            r, c = queue.popleft()
+            if (r, c) == (n - 1, n - 1):
+                return True
+            for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+                if 0 <= nr < n and 0 <= nc < n and (nr, nc) not in seen and grid[nr][nc] <= t:
+                    seen.add((nr, nc))
+                    queue.append((nr, nc))
+        return False
+
+    lo, hi = grid[0][0], n * n - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if reachable(mid):
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+```
+
+This is O(n^2 log n^2) = O(n^2 log n) too, and it is a perfectly good answer. Dijkstra below solves it in one pass.
+
+## Approach 2: optimal, Dijkstra on the maximum
+
+### Template
+
+```text
+cost(start) = grid[start]; heap = [(cost, start)]; visited = {}
+while heap:
+    t, cell = heappop(heap)
+    if cell is the target: return t
+    if cell visited: continue; mark visited
+    for each neighbour nb not visited:
+        heappush(heap, (max(t, grid[nb]), nb))
+```
+
+Dijkstra only needs path costs that never decrease when you extend a path. A running maximum has that property, just
+like a running sum with non-negative weights.
+
+### Python solution
+
+```python
+import heapq
+
+def swim_in_water(grid):
+    n = len(grid)
+    heap = [(grid[0][0], 0, 0)]
+    visited = set()
+    while heap:
+        t, r, c = heapq.heappop(heap)
+        if (r, c) == (n - 1, n - 1):
+            return t
+        if (r, c) in visited:
+            continue
+        visited.add((r, c))
+        for nr, nc in ((r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)):
+            if 0 <= nr < n and 0 <= nc < n and (nr, nc) not in visited:
+                heapq.heappush(heap, (max(t, grid[nr][nc]), nr, nc))
+    return -1
+```
+
+### Complexity
+
+- Time: O(n^2 log n), since each of the n^2 cells is pushed a few times and each heap operation is O(log n^2).
+- Space: O(n^2) for the heap and the visited set.
+
+## Tests
+
+```python
+for fn in (swim_in_water, swim_binary_search):
+    assert fn([[0, 3], [2, 1]]) == 2
+    assert fn([[0, 1, 2], [7, 8, 3], [6, 5, 4]]) == 4
+    assert fn([[0]]) == 0                                   # single cell
+    assert fn([[3, 0], [1, 2]]) == 3                        # start is the highest cell
+    snake = [[0, 9, 10, 11], [1, 14, 13, 12], [2, 15, 3, 4], [5, 6, 7, 8]]
+    assert fn(snake) == 8                                   # down the left, along the bottom
+
+import random
+random.seed(4)
+for _ in range(30):
+    n = random.randint(1, 5)
+    vals = list(range(n * n)); random.shuffle(vals)
+    g = [vals[i * n:(i + 1) * n] for i in range(n)]
+    assert swim_in_water(g) == swim_binary_search(g)
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting the start cell's elevation.** You cannot leave until t is at least `grid[0][0]`; seed the heap with it.
+- **Summing instead of taking the maximum** turns it into an ordinary shortest path and gives the wrong answer.
+- **Returning when pushing the target** rather than when popping it can return a value that is not minimal.
+- **One-cell grid** returns that cell's elevation.
+
+## Where this shows up in data engineering
+
+The minimax ("bottleneck") path is the right model when a route is only as good as its weakest link: the highest
+latency hop, or the lowest bandwidth link when moving data between regions. Maximising the minimum capacity is the same
+algorithm with the comparisons reversed.

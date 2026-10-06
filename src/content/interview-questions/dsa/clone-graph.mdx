@@ -31,10 +31,13 @@ Assume up to 100 nodes with unique values from 1 to 100.
 ## Examples
 
 ```text
-A square: 1 - 2
-          |   |
-          4 - 3
-adjacency: 1:[2,4]  2:[1,3]  3:[2,4]  4:[1,3]
+A triangle with a tail:
+
+  5 - 6
+   \ /
+    7 - 8
+
+adjacency: 5:[6,7]  6:[5,7]  7:[5,6,8]  8:[7]
 The clone has the same adjacency, but every node is a new object.
 
 A single node with no neighbours: clone it alone.
@@ -154,11 +157,11 @@ def all_nodes(start):
                 seen.add(nb); stack.append(nb)
     return seen
 
-square = {1: [2, 4], 2: [1, 3], 3: [2, 4], 4: [1, 3]}
+shape = {5: [6, 7], 6: [5, 7], 7: [5, 6, 8], 8: [7]}
 for fn in (clone_graph, clone_graph_dfs, clone_graph_two_pass):
-    original = build(square)[1]
+    original = build(shape)[5]
     copy = fn(original)
-    assert to_adj(copy) == square                       # same structure (with a cycle)
+    assert to_adj(copy) == shape                       # same structure (with a cycle)
     assert not (all_nodes(copy) & all_nodes(original))  # no shared objects
     assert fn(None) is None                             # empty graph
     lone = fn(Node(7))

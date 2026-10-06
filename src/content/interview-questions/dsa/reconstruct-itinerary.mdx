@@ -1,0 +1,165 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Reconstruct Itinerary: Eulerian Path with Hierholzer's Algorithm"
+seoTitle: "Reconstruct Itinerary: Hierholzer's Algorithm"
+description: "Rebuild a trip that uses every ticket exactly once, choosing the alphabetically smallest itinerary, with backtracking and Hierholzer's Eulerian path algorithm."
+technology: ["dsa"]
+topic: ["graphs", "eulerian-path"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "Medium"
+shortAnswer: "Using every ticket exactly once is an Eulerian path in a directed multigraph. Sort each airport's destinations and run Hierholzer's algorithm: from the current airport keep taking the smallest unused ticket; when an airport has no tickets left, append it to the route and step back. The finished route is built in reverse, so reverse it at the end. Sorting dominates, giving O(E log E) time and O(E) space."
+followUps: ["Why does greedy smallest-first fail without the post-order trick?", "How do you find the start airport when it is not given?", "How do you check in advance that an Eulerian path exists?"]
+previous: "interview-questions:dsa/cheapest-flights-within-k-stops"
+next: "interview-questions:dsa/min-cost-to-connect-all-points"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a list of airline tickets, each a pair `[from, to]` of airport codes. All tickets belong to one
+traveller whose trip starts at `"JFK"`. Rebuild the itinerary: a sequence of airports that uses every ticket exactly
+once. If several itineraries work, return the one that is smallest in alphabetical order when read as a list of
+codes. You may assume at least one valid itinerary exists.
+
+This is widely known as LeetCode 332, "Reconstruct Itinerary".
+
+Assume up to 300 tickets with three-letter codes.
+
+## Examples
+
+```text
+tickets: [JFK, ORD], [ORD, DEN], [DEN, SEA]
+-> JFK, ORD, DEN, SEA
+
+tickets: [JFK, AMS], [JFK, BOS], [BOS, JFK]
+smallest-first greedy would go JFK -> AMS and get stuck with two tickets unused.
+valid itinerary: JFK, BOS, JFK, AMS
+
+tickets: [JFK, LAX], [LAX, JFK], [JFK, LAX], [LAX, JFK]  (repeated tickets)
+-> JFK, LAX, JFK, LAX, JFK
+```
+
+## Approach 1: backtracking in sorted order
+
+Sort tickets, then DFS: at each airport try destinations in alphabetical order, use a ticket, recurse, and give the
+ticket back if the branch fails to use every ticket. The first complete itinerary found is the smallest.
+
+```python
+from collections import defaultdict
+
+def find_itinerary_backtrack(tickets):
+    graph = defaultdict(list)
+    for src, dst in sorted(tickets):
+        graph[src].append(dst)
+    used = {src: [False] * len(dsts) for src, dsts in graph.items()}
+    route = ["JFK"]
+
+    def dfs(airport):
+        if len(route) == len(tickets) + 1:
+            return True
+        dests = graph.get(airport, [])
+        for i, nxt in enumerate(dests):
+            if used[airport][i] or (i > 0 and dests[i - 1] == nxt and not used[airport][i - 1]):
+                continue                       # skip identical unused tickets already tried
+            used[airport][i] = True
+            route.append(nxt)
+            if dfs(nxt):
+                return True
+            route.pop()
+            used[airport][i] = False
+        return False
+
+    dfs("JFK")
+    return route
+```
+
+It is correct, but in bad cases it backtracks a lot; the worst case is exponential.
+
+## Approach 2: optimal, Hierholzer's algorithm
+
+### Why it works
+
+Every ticket is an edge, and using each edge once is an **Eulerian path**. Hierholzer's algorithm walks edges until it
+gets stuck. The only place it can get stuck first is the true end of the path, so that airport goes last. Appending
+airports when they run out of outgoing edges (post-order) and reversing gives the path, with any detours spliced in
+correctly. Taking the smallest destination first, combined with post-order, yields the alphabetically smallest
+itinerary.
+
+### Template
+
+```text
+sort each adjacency list (or use a min-heap)
+stack = [start]; route = []
+while stack:
+    top = stack[-1]
+    if top has unused edges: stack.append(next smallest destination, consuming the edge)
+    else: route.append(stack.pop())
+return reversed(route)
+```
+
+### Python solution
+
+```python
+def find_itinerary(tickets):
+    graph = defaultdict(list)
+    for src, dst in sorted(tickets, reverse=True):
+        graph[src].append(dst)                # reverse order so pop() gives the smallest
+    stack, route = ["JFK"], []
+    while stack:
+        airport = stack[-1]
+        if graph[airport]:
+            stack.append(graph[airport].pop())
+        else:
+            route.append(stack.pop())
+    return route[::-1]
+```
+
+Trace for `[JFK, AMS], [JFK, BOS], [BOS, JFK]`: the stack goes JFK, AMS; AMS is stuck, so the route gets AMS. Back at
+JFK, take BOS, then BOS -> JFK; JFK has nothing left, so the route gets JFK, then BOS, then JFK. Reversed: JFK, BOS,
+JFK, AMS.
+
+### Complexity
+
+- Time: O(E log E) for sorting; the walk itself is O(E).
+- Space: O(E) for the graph, the stack and the route.
+
+## Tests
+
+```python
+for fn in (find_itinerary, find_itinerary_backtrack):
+    assert fn([["JFK", "ORD"], ["ORD", "DEN"], ["DEN", "SEA"]]) == ["JFK", "ORD", "DEN", "SEA"]
+    assert fn([["JFK", "AMS"], ["JFK", "BOS"], ["BOS", "JFK"]]) == ["JFK", "BOS", "JFK", "AMS"]
+    assert fn([["JFK", "LAX"], ["LAX", "JFK"], ["JFK", "LAX"], ["LAX", "JFK"]]) == ["JFK", "LAX", "JFK", "LAX", "JFK"]
+    assert fn([]) == ["JFK"]                                  # no tickets
+    assert fn([["JFK", "AAA"]]) == ["JFK", "AAA"]             # single ticket
+    # A loop back to JFK must be used before the one-way exit to OSL
+    t = [["JFK", "MUC"], ["MUC", "JFK"], ["JFK", "CDG"], ["CDG", "MUC"], ["MUC", "OSL"]]
+    assert fn(t) == ["JFK", "CDG", "MUC", "JFK", "MUC", "OSL"]
+
+# Every ticket is used exactly once
+from collections import Counter
+t = [["JFK", "B"], ["B", "C"], ["C", "JFK"], ["JFK", "D"], ["D", "JFK"], ["JFK", "B"], ["B", "JFK"]]
+r = find_itinerary(t)
+assert Counter(zip(r, r[1:])) == Counter(map(tuple, t))
+assert r == find_itinerary_backtrack(t)
+```
+
+## Edge cases and pitfalls
+
+- **Greedy smallest-first without post-order** walks into a dead end (AMS above) while tickets remain.
+- **Repeated tickets.** The same pair may appear twice; it is a multigraph, so keep duplicates in the list.
+- **Recursion depth.** The recursive Hierholzer version recurses once per ticket; the stack version avoids limits.
+- **Airports with no outgoing tickets** must still be handled (a `defaultdict` gives an empty list).
+- **Existence.** A directed Eulerian path exists only if at most one node has out-degree minus in-degree equal to 1
+  (the start), at most one has -1 (the end), all others are balanced, and the edges are connected. The problem promises
+  this; mention it if asked.
+
+## Where this shows up in data engineering
+
+Rarely as such. The closest uses are reconstructing a session or trip from unordered event pairs (each event links a
+previous state to the next) and genome-style assembly in bioinformatics pipelines, which are Eulerian path problems at
+scale.

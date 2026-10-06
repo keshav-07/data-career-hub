@@ -1,0 +1,157 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "House Robber: Maximum Non-Adjacent Sum with Take-or-Skip DP"
+seoTitle: "House Robber: Take-or-Skip DP"
+description: "Pick values from a row so no two chosen are adjacent and the total is largest, using take-or-skip dynamic programming in O(n) time and O(1) space, with tests."
+technology: ["dsa"]
+topic: ["dynamic-programming"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "High"
+shortAnswer: "Let best(i) be the most you can collect from the first i houses. For house i - 1 you either skip it (best(i - 1)) or take it, which forbids its left neighbour (best(i - 2) + value). So best(i) = max(best(i - 1), best(i - 2) + nums[i - 1]) with best(0) = 0 and best(1) = nums[0]. Keeping the last two values gives O(n) time and O(1) space."
+followUps: ["How do you handle houses arranged in a circle (House Robber II)?", "How would you return which houses were chosen?", "How does the problem change on a binary tree (House Robber III)?"]
+previous: "interview-questions:dsa/min-cost-climbing-stairs"
+next: "interview-questions:dsa/house-robber-ii"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Houses stand in a row and each holds a non-negative amount of money. You may take money from any set of houses as long
+as no two chosen houses are next to each other. Return the largest total you can take.
+
+This is widely known as LeetCode 198, "House Robber". In other words: the maximum sum of a subsequence with no two
+adjacent elements. [House Robber II](/interview/dsa/house-robber-ii/) puts the houses in a circle.
+
+Assume up to 100 houses with values up to 400.
+
+## Examples
+
+```text
+[6, 1, 2, 9]        -> 15   (6 + 9)
+[3, 10, 3, 1, 2]    -> 12   (10 + 2)
+[5, 5, 10, 100, 10, 5] -> 110 (5 + 100 + 5)
+[8]                 -> 8
+[]                  -> 0
+```
+
+## Approach 1: plain recursion
+
+At each house decide: take it and jump two ahead, or skip it.
+
+```python
+def rob_recursive(nums):
+    def go(i):
+        if i >= len(nums):
+            return 0
+        return max(go(i + 1), nums[i] + go(i + 2))
+    return go(0)
+```
+
+Exponential time, about O(1.6^n), because `go(i)` is recomputed many times.
+
+## Approach 2: optimal, dynamic programming
+
+### State, recurrence and base cases
+
+- **State:** `best[i]` = maximum total from the first i houses (houses 0..i-1).
+- **Recurrence:** `best[i] = max(best[i - 1], best[i - 2] + nums[i - 1])`: skip house i - 1, or take it and add the
+  best from houses that end two earlier.
+- **Base cases:** `best[0] = 0` (no houses) and `best[1] = nums[0]`.
+- **Answer:** the last entry, `best` at index n.
+
+### Filled table for [3, 10, 3, 1, 2]
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| house value | | 3 | 10 | 3 | 1 | 2 |
+| best | 0 | 3 | 10 | 10 | 11 | 12 |
+
+`best[5] = max(best[4], best[3] + 2) = max(11, 12) = 12`.
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def rob_memo(nums):
+    @lru_cache(maxsize=None)
+    def go(i):
+        if i >= len(nums):
+            return 0
+        return max(go(i + 1), nums[i] + go(i + 2))
+    return go(0)
+```
+
+### Bottom-up
+
+```python
+def rob_table(nums):
+    if not nums:
+        return 0
+    best = [0] * (len(nums) + 1)
+    best[1] = nums[0]
+    for i in range(2, len(nums) + 1):
+        best[i] = max(best[i - 1], best[i - 2] + nums[i - 1])
+    return best[-1]
+```
+
+### Space optimised
+
+```python
+def rob(nums):
+    prev2 = prev1 = 0              # best[i - 2], best[i - 1]
+    for value in nums:
+        prev2, prev1 = prev1, max(prev1, prev2 + value)
+    return prev1
+```
+
+Starting both at 0 handles the base cases automatically: after the first house, `prev1` is `nums[0]`.
+
+### Complexity
+
+- Bottom-up and memoised: O(n) time and space.
+- Space optimised: O(n) time, O(1) space.
+
+## Tests
+
+```python
+for fn in (rob, rob_table, rob_memo, rob_recursive):
+    assert fn([6, 1, 2, 9]) == 15
+    assert fn([3, 10, 3, 1, 2]) == 12
+    assert fn([5, 5, 10, 100, 10, 5]) == 110
+    assert fn([8]) == 8                            # single house
+    assert fn([]) == 0                             # empty
+    assert fn([0, 0, 0]) == 0
+    assert fn([2, 7]) == 7                         # two houses: take the larger
+
+# Brute force over all non-adjacent subsets
+from itertools import combinations
+import random
+random.seed(8)
+for _ in range(40):
+    vals = [random.randint(0, 20) for _ in range(random.randint(0, 9))]
+    brute = 0
+    for k in range(len(vals) + 1):
+        for idx in combinations(range(len(vals)), k):
+            if all(b - a > 1 for a, b in zip(idx, idx[1:])):
+                brute = max(brute, sum(vals[i] for i in idx))
+    assert rob(vals) == brute
+```
+
+## Edge cases and pitfalls
+
+- **Greedy fails.** Taking every other house (all even or all odd positions) misses `[5, 5, 10, 100, 10, 5]`, and
+  always grabbing the largest value can block two medium neighbours that sum to more.
+- **Empty and single-house inputs**: guard against indexing `nums[0]` or `nums[1]` blindly.
+- **Order of the tuple update.** In the space-optimised loop, compute the new value from the old `prev1` and `prev2`
+  simultaneously, as the tuple assignment does.
+
+## Where this shows up in data engineering
+
+"Choose items to maximise value subject to a no-two-adjacent rule" appears in scheduling maintenance windows or
+batch jobs that cannot run on consecutive slots. More generally it is the template for any linear sequence decision
+with a one-step cooling-off constraint.

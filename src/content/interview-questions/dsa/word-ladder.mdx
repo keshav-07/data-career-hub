@@ -1,0 +1,220 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Word Ladder: Shortest Word Transformation with BFS and Wildcard Buckets"
+seoTitle: "Word Ladder: BFS with Wildcard Patterns"
+description: "Find the shortest chain of one-letter edits from a start word to an end word using BFS over wildcard pattern buckets, with bidirectional BFS and tests."
+technology: ["dsa"]
+topic: ["graphs", "bfs"]
+difficulty: "Hard"
+questionType: ["coding"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+shortAnswer: "Treat each word as a node and connect words that differ in exactly one position. The shortest transformation is a shortest path in an unweighted graph, so use BFS from the start word, counting levels. To find neighbours quickly, group dictionary words by wildcard patterns such as h*t, so each word's neighbours are the words sharing one of its L patterns. With N words of length L the time is O(N * L^2) (L patterns per word, each costing O(L) to build) and the space is O(N * L^2) for the buckets."
+followUps: ["How does bidirectional BFS reduce the work, and when should you expand the smaller side?", "How would you return one actual shortest ladder, or all of them (Word Ladder II)?", "Why is DFS the wrong tool for this question?"]
+previous: "interview-questions:dsa/redundant-connection"
+next: "interview-questions:dsa/network-delay-time"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+You are given a start word, an end word and a dictionary of words, all the same length and lowercase. A ladder is a
+sequence of words that begins with the start word, where each next word differs from the previous one in exactly one
+letter and every word after the start is in the dictionary. Return the number of words in the shortest ladder that
+ends at the end word, or 0 if none exists.
+
+This is widely known as LeetCode 127, "Word Ladder".
+
+Assume words of up to 10 letters and a dictionary of up to 5,000 words.
+
+## Examples
+
+```text
+start "cold", end "warm"
+dictionary: ["cord", "card", "ward", "warm", "word", "worm", "wore"]
+one shortest ladder: cold -> cord -> card -> ward -> warm   -> 5 words
+(cold -> cord -> word -> worm -> warm is also 5)
+
+start "lead", end "gold", dictionary ["load", "goad"]
+-> 0   ("gold" is not in the dictionary)
+
+start "same", end "same", dictionary ["same"]
+-> 1 under the convention used here (the ladder is just the start word);
+   confirm the convention with your interviewer
+```
+
+## Approach 1: BFS comparing against every dictionary word
+
+BFS from the start word; to find neighbours, compare the current word with every unvisited dictionary word.
+
+```python
+from collections import deque
+
+def ladder_length_brute(begin, end, words):
+    words = set(words)
+    if end not in words:
+        return 0
+    if begin == end:
+        return 1
+
+    def one_apart(a, b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+
+    unvisited = set(words)
+    unvisited.discard(begin)
+    queue = deque([(begin, 1)])
+    while queue:
+        word, steps = queue.popleft()
+        for cand in list(unvisited):
+            if one_apart(word, cand):
+                if cand == end:
+                    return steps + 1
+                unvisited.remove(cand)
+                queue.append((cand, steps + 1))
+    return 0
+```
+
+Each word scans all N words at O(L) per comparison, so this is O(N^2 * L). With thousands of words it is slow.
+
+## Approach 2: optimal, BFS over wildcard buckets
+
+### Building edges cheaply
+
+Replace each position with `*` to get L patterns per word: `cold` gives `*old`, `c*ld`, `co*d`, `col*`. Two words are
+neighbours exactly when they share a pattern. A dictionary from pattern to words is built once in O(N * L^2).
+
+### BFS template (shortest path in an unweighted graph)
+
+```text
+queue = [start]; visited = {start}; depth = 1
+while queue:
+    for _ in range(len(queue)):           # one level
+        node = queue.popleft()
+        if node == target: return depth
+        for nb in neighbours(node):
+            if nb not in visited: visited.add(nb); queue.append(nb)
+    depth += 1
+return 0
+```
+
+BFS finds the shortest path because it explores all nodes at distance d before any node at distance d + 1.
+
+### Python solution
+
+```python
+from collections import defaultdict
+
+def ladder_length(begin, end, words):
+    words = set(words)
+    if end not in words:
+        return 0
+    if begin == end:
+        return 1
+    size = len(begin)
+    buckets = defaultdict(list)
+    for w in words | {begin}:
+        for i in range(size):
+            buckets[w[:i] + "*" + w[i + 1:]].append(w)
+
+    visited = {begin}
+    queue = deque([begin])
+    depth = 1
+    while queue:
+        for _ in range(len(queue)):
+            word = queue.popleft()
+            for i in range(size):
+                pattern = word[:i] + "*" + word[i + 1:]
+                for nb in buckets[pattern]:
+                    if nb == end:
+                        return depth + 1
+                    if nb not in visited:
+                        visited.add(nb)
+                        queue.append(nb)
+                buckets[pattern] = []         # this bucket is fully explored
+        depth += 1
+    return 0
+```
+
+Clearing a bucket after use is a safe optimisation: every word in it has been reached at this depth or earlier.
+
+### Bidirectional BFS
+
+Searching from both ends and always expanding the smaller frontier visits far fewer nodes when the branching factor is
+large. Generating neighbours by trying all 26 letters per position avoids building buckets:
+
+```python
+from string import ascii_lowercase
+
+def ladder_length_bidirectional(begin, end, words):
+    words = set(words)
+    if end not in words:
+        return 0
+    if begin == end:
+        return 1
+    front, back = {begin}, {end}
+    words.discard(begin)
+    words.discard(end)
+    depth = 1
+    while front and back:
+        if len(front) > len(back):
+            front, back = back, front
+        nxt = set()
+        for word in front:
+            for i in range(len(word)):
+                for ch in ascii_lowercase:
+                    cand = word[:i] + ch + word[i + 1:]
+                    if cand in back:
+                        return depth + 1
+                    if cand in words:
+                        words.remove(cand)
+                        nxt.add(cand)
+        front = nxt
+        depth += 1
+    return 0
+```
+
+### Complexity
+
+- Bucket BFS: O(N * L^2) time and space (N words, L patterns each, O(L) to build each pattern string).
+- Bidirectional with letter substitution: O(N * 26 * L^2) in the worst case, usually much less in practice because
+  both frontiers stay small.
+
+## Tests
+
+```python
+dictionary = ["cord", "card", "ward", "warm", "word", "worm", "wore"]
+for fn in (ladder_length, ladder_length_brute, ladder_length_bidirectional):
+    assert fn("cold", "warm", dictionary) == 5
+    assert fn("lead", "gold", ["load", "goad"]) == 0          # end not in dictionary
+    assert fn("abc", "xyz", ["xyz"]) == 0                     # unreachable
+    assert fn("ab", "ac", ["ac"]) == 2                        # one step
+    assert fn("same", "same", ["same"]) == 1                  # start equals end
+    assert fn("map", "mop", []) == 0                          # empty dictionary
+    # Disconnected dictionary: two islands of words
+    assert fn("aaa", "ccc", ["aab", "abb", "ccb", "ccc"]) == 0
+    assert fn("aaa", "abb", ["aab", "abb", "ccb", "ccc"]) == 3
+
+# Agreement on a larger generated dictionary
+import random
+random.seed(11)
+pool = list({"".join(random.choice("abc") for _ in range(3)) for _ in range(40)})
+for target in pool[:10]:
+    assert ladder_length("aaa", target, pool) == ladder_length_brute("aaa", target, pool) \
+        == ladder_length_bidirectional("aaa", target, pool)
+```
+
+## Edge cases and pitfalls
+
+- **End word missing from the dictionary**: answer 0 immediately.
+- **Counting edges instead of words.** The answer counts words, so a single step is 2.
+- **Marking visited when popping** lets the same word enter the queue many times and can explode the queue.
+- **Using DFS.** DFS finds a path, not the shortest one, unless you explore everything.
+- **Start word not in the dictionary** is allowed; it still needs its own patterns for the first step.
+
+## Where this shows up in data engineering
+
+BFS levels answer "how many hops apart" questions in lineage graphs, such as how far a dashboard is from a raw source.
+The bucket trick is the same as blocking in entity resolution: instead of comparing every pair of records, group
+records by cheap keys (here, wildcard patterns) and only compare within a group.

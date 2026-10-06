@@ -1,0 +1,175 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Longest Palindromic Substring: Expand Around Centres or Interval DP"
+seoTitle: "Longest Palindromic Substring"
+description: "Find the longest substring that reads the same both ways, with brute force, an interval DP table and the O(1)-space expand-around-centre method, plus tests."
+technology: ["dsa"]
+topic: ["dynamic-programming", "strings"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+shortAnswer: "Every palindrome has a centre: a single character (odd length) or a gap between two characters (even length). For each of the 2n - 1 centres, expand outwards while the characters on both sides match, and keep the longest span. That is O(n^2) time and O(1) space. The interval DP, where pal[i][j] is true when s[i] == s[j] and pal[i + 1][j - 1] is true, is also O(n^2) but needs O(n^2) memory. Manacher's algorithm achieves O(n) if asked."
+followUps: ["How does Manacher's algorithm reach O(n)?", "How would you count all palindromic substrings instead?", "How is this different from the longest palindromic subsequence?"]
+previous: "interview-questions:dsa/house-robber-ii"
+next: "interview-questions:dsa/palindromic-substrings"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string, return its longest contiguous substring that reads the same forwards and backwards. If several have
+the maximum length, any one of them is acceptable (the solutions here return the leftmost).
+
+This is widely known as LeetCode 5, "Longest Palindromic Substring". Its counting twin is
+[Palindromic Substrings](/interview/dsa/palindromic-substrings/).
+
+Assume up to 1,000 characters.
+
+## Examples
+
+```text
+"cdeffedx"         -> "deffed"       (even length, centre between the two f)
+"kayaks"           -> "kayak"        (odd length, centre y)
+"abcd"             -> "a"            (every single character is a palindrome)
+"" -> ""
+```
+
+## Approach 1: check every substring
+
+```python
+def longest_palindrome_brute(s):
+    best = ""
+    for i in range(len(s)):
+        for j in range(i + len(best), len(s)):
+            piece = s[i:j + 1]
+            if piece == piece[::-1]:
+                best = piece
+    return best
+```
+
+O(n^2) substrings times O(n) to check each: O(n^3).
+
+## Approach 2: interval DP
+
+### State, recurrence and base cases
+
+- **State:** `pal[i][j]` is true when `s[i..j]` (inclusive) is a palindrome.
+- **Recurrence:** `pal[i][j] = s[i] == s[j] and pal[i + 1][j - 1]` for length at least 3.
+- **Base cases:** length 1 is always true; length 2 is true when the two characters match.
+- **Order:** by increasing length, or with i going from right to left, so the inner interval is ready.
+
+### Filled table for "abba" (T = palindrome)
+
+| i \ j | 0 a | 1 b | 2 b | 3 a |
+|---|---|---|---|---|
+| 0 a | T | F | F | T |
+| 1 b | | T | T | F |
+| 2 b | | | T | F |
+| 3 a | | | | T |
+
+`pal[0][3]` is true because `s[0] == s[3]` and `pal[1][2]` is true.
+
+### Bottom-up
+
+```python
+def longest_palindrome_dp(s):
+    size = len(s)
+    if size == 0:
+        return ""
+    pal = [[False] * size for _ in range(size)]
+    start, length = 0, 1
+    for i in range(size - 1, -1, -1):
+        for j in range(i, size):
+            if s[i] == s[j] and (j - i < 2 or pal[i + 1][j - 1]):
+                pal[i][j] = True
+                if j - i + 1 > length or (j - i + 1 == length and i < start):
+                    start, length = i, j - i + 1
+    return s[start:start + length]
+```
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def longest_palindrome_memo(s):
+    @lru_cache(maxsize=None)
+    def is_pal(i, j):
+        if i >= j:
+            return True
+        return s[i] == s[j] and is_pal(i + 1, j - 1)
+
+    for length in range(len(s), 0, -1):
+        for i in range(len(s) - length + 1):
+            if is_pal(i, i + length - 1):
+                return s[i:i + length]
+    return ""
+```
+
+## Approach 3: optimal in space, expand around centres
+
+The DP table is mostly wasted memory. Instead, grow each palindrome from its centre.
+
+```python
+def longest_palindrome(s):
+    if not s:
+        return ""
+
+    def expand(lo, hi):
+        while lo >= 0 and hi < len(s) and s[lo] == s[hi]:
+            lo -= 1
+            hi += 1
+        return lo + 1, hi                 # slice bounds of the palindrome
+
+    best_lo, best_hi = 0, 1
+    for centre in range(len(s)):
+        for lo, hi in (expand(centre, centre), expand(centre, centre + 1)):
+            if hi - lo > best_hi - best_lo:
+                best_lo, best_hi = lo, hi
+    return s[best_lo:best_hi]
+```
+
+### Complexity
+
+| Method | Time | Space |
+|---|---|---|
+| Brute force | O(n^3) | O(1) |
+| Interval DP | O(n^2) | O(n^2) |
+| Expand around centres | O(n^2) | O(1) |
+| Manacher (not shown) | O(n) | O(n) |
+
+## Tests
+
+```python
+for fn in (longest_palindrome, longest_palindrome_dp, longest_palindrome_memo, longest_palindrome_brute):
+    assert fn("cdeffedx") == "deffed"
+    assert fn("kayaks") == "kayak"
+    assert fn("abcd") == "a"                     # no palindrome longer than 1
+    assert fn("") == ""                          # empty
+    assert fn("z") == "z"                        # single character
+    assert fn("abba") == "abba"                  # whole string, even length
+    assert fn("aaaa") == "aaaa"
+
+import random
+random.seed(6)
+for _ in range(100):
+    s = "".join(random.choice("ab") for _ in range(random.randint(0, 12)))
+    assert len(longest_palindrome(s)) == len(longest_palindrome_brute(s)) == len(longest_palindrome_dp(s))
+```
+
+## Edge cases and pitfalls
+
+- **Forgetting even-length centres** loses answers like `"abba"`.
+- **Off-by-one after expansion.** The loop stops one step past the palindrome on each side, so the bounds are
+  `lo + 1` and `hi`.
+- **DP fill order.** Filling by row from the top reads cells that are not computed yet.
+- **Subsequence versus substring.** A subsequence may skip characters; that is a different DP.
+- **Memory.** A 1,000 by 1,000 boolean table is a million entries; the centre method avoids it.
+
+## Where this shows up in data engineering
+
+There is no common pipeline use. The interval-DP pattern (answer for `[i, j]` built from `[i + 1, j - 1]`) is the
+reusable idea, and it reappears in Burst Balloons and in parsing problems.
