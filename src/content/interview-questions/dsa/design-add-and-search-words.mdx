@@ -1,0 +1,186 @@
+---
+title: "Design Add and Search Words: Trie Search with Wildcards"
+seoTitle: "Design Add and Search Words with a Trie"
+description: "Store words and answer searches where a dot matches any letter, using a trie with depth-first branching on wildcards. Python design, complexity and tests."
+technology: ["dsa"]
+topic: ["binary-trees", "tries"]
+difficulty: "Medium"
+questionType: ["coding", "architecture"]
+estimatedMinutes: 25
+interviewRelevance: "Medium"
+shortAnswer: "Insert words into a trie with an end-of-word flag. To search, walk the pattern character by character: a normal letter follows one child, while a dot tries every child of the current node, depth first, and the search succeeds if any branch reaches the end of the pattern at a word-ending node. Adding is O(L). Searching is O(L) without dots and, in the worst case, proportional to the number of trie nodes within L levels when dots appear."
+followUps: ["How would you speed up patterns that are all dots, such as '...'?", "How would you support '*' meaning any sequence of letters?", "How would you bucket words by length to prune the search?", "What is the memory cost compared with a list of words?"]
+versionContext: "Python 3 solutions verified with assert-based tests"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+previous: "interview-questions:dsa/implement-trie-prefix-tree"
+---
+
+## Problem
+
+Design a class `WordDictionary` with two operations:
+
+- `add_word(word)` stores a lowercase word.
+- `search(pattern)` returns `True` if any stored word matches the pattern. The pattern has the same length as the word it matches, and every character is either a lowercase letter, which must match exactly, or `.`, which matches any single letter.
+
+This is widely known as LeetCode 211 (Design Add and Search Words Data Structure). It extends a basic trie with a branching search.
+
+Constraints for this version: words of 1 to 25 letters, patterns with at most 3 dots, up to 10,000 calls.
+
+## Examples
+
+```text
+add_word("load")
+add_word("lead")
+add_word("loan")
+search("lead")    -> True
+search("l..d")    -> True    matches load and lead
+search(".oa.")    -> True    matches load and loan
+search("lo")      -> False   length must match
+search("l...s")   -> False
+search("....")    -> True
+```
+
+## Approach 1: brute force
+
+Keep the words in a list (or grouped by length) and compare the pattern with each candidate, character by character.
+
+```python
+from collections import defaultdict
+
+class WordDictionaryList:
+    def __init__(self):
+        self.by_length = defaultdict(set)
+
+    def add_word(self, word):
+        self.by_length[len(word)].add(word)
+
+    def search(self, pattern):
+        for word in self.by_length[len(pattern)]:
+            if all(p == "." or p == c for p, c in zip(pattern, word)):
+                return True
+        return False
+```
+
+Grouping by length is already a useful filter, but each search is still O(N * L) for `N` words of that length.
+
+## Approach 2: optimal
+
+**Key insight.** In a trie, a letter in the pattern narrows the search to a single child, and only a dot forces you to explore several children. Depth-first search over the trie, branching only at dots, prunes every word that disagrees with a fixed letter as soon as the first disagreement appears, and shares work across words with common prefixes.
+
+**Walkthrough** for `search("l..d")` with `load`, `lead`, `loan` stored:
+
+| Position | Pattern char | Nodes considered |
+|---|---|---|
+| 0 | `l` | `l` |
+| 1 | `.` | `lo`, `le` |
+| 2 | `.` | `loa`, `lea` |
+| 3 | `d` | `load` (word end), found |
+
+```python
+class TrieNode:
+    __slots__ = ("children", "is_word")
+
+    def __init__(self):
+        self.children = {}
+        self.is_word = False
+
+class WordDictionary:
+    def __init__(self):
+        self.root = TrieNode()
+
+    def add_word(self, word):
+        node = self.root
+        for ch in word:
+            node = node.children.setdefault(ch, TrieNode())
+        node.is_word = True
+
+    def search(self, pattern):
+        def dfs(node, i):
+            for pos in range(i, len(pattern)):
+                ch = pattern[pos]
+                if ch == ".":
+                    # try every child for this position, then continue from pos + 1
+                    return any(dfs(child, pos + 1) for child in node.children.values())
+                node = node.children.get(ch)
+                if node is None:
+                    return False
+            return node.is_word
+
+        return dfs(self.root, 0)
+```
+
+The loop walks plain letters without recursion and only recurses at a dot, which keeps the call depth bounded by the number of dots. An explicit stack version is equally valid:
+
+```python
+def search_iterative(trie, pattern):
+    stack = [(trie.root, 0)]
+    while stack:
+        node, i = stack.pop()
+        if i == len(pattern):
+            if node.is_word:
+                return True
+            continue
+        ch = pattern[i]
+        if ch == ".":
+            stack.extend((child, i + 1) for child in node.children.values())
+        elif ch in node.children:
+            stack.append((node.children[ch], i + 1))
+    return False
+```
+
+**Complexity.** `add_word` is O(L). `search` is O(L) without dots. With `d` dots it can visit up to 26^d branches in the worst case, but it never visits more than the trie nodes that exist at those depths, so in practice it is bounded by the size of the trie. Memory is O(total characters stored).
+
+### Design discussion
+
+- **Length buckets.** Keeping one trie per word length (or storing the set of remaining lengths at each node) lets `search` skip branches that cannot have the right length.
+- **All-dot patterns** reduce to "is there any word of length L"; a set of stored lengths answers that in O(1).
+- **A `*` wildcard** (any sequence) turns this into general pattern matching; at each `*` node you either consume a character and stay on the `*`, or move past it, which is dynamic programming over the trie.
+
+## Tests
+
+```python
+import random
+
+def check(cls, search=None):
+    d = cls()
+    find = (lambda p: search(d, p)) if search else d.search
+    for w in ["load", "lead", "loan"]:
+        d.add_word(w)
+    assert find("lead") and find("load") and find("loan")
+    assert find("l..d") and find(".oa.") and find("....") and find("lo.n")
+    assert not find("lo") and not find("l...s") and not find("lean")
+    assert not find(".....") and not find("x...")
+    d.add_word("a")
+    assert find("a") and find(".") and not find("b")
+    d.add_word("load")                           # duplicate add
+    assert find("load")
+    assert not cls().search("...")               # empty dictionary
+
+check(WordDictionaryList)
+check(WordDictionary)
+check(WordDictionary, search=search_iterative)
+
+rng = random.Random(19)
+ref, trie = WordDictionaryList(), WordDictionary()
+for _ in range(3000):
+    w = "".join(rng.choice("abc") for _ in range(rng.randint(1, 5)))
+    if rng.random() < 0.3:
+        ref.add_word(w); trie.add_word(w)
+    else:
+        pattern = "".join(c if rng.random() < 0.6 else "." for c in w)
+        assert ref.search(pattern) == trie.search(pattern) == search_iterative(trie, pattern), pattern
+print("all add-and-search tests passed")
+```
+
+## Edge cases and pitfalls
+
+- **Returning too early.** At a dot, a failed first child must not end the search; use `any(...)` across all children.
+- **Prefix matches.** Reaching the end of the pattern is not enough; the node must have `is_word` set, or `l..` would match `load`.
+- **Length mismatch.** A pattern longer than every stored word must return `False` without errors.
+- **Memory versus speed.** For small dictionaries the length-bucket list is simpler and fast enough; say so.
+
+## Where this shows up in data engineering
+
+Wildcard matching over stored keys appears in object-store and file-system listings (glob patterns such as `s3://bucket/logs/2026-10-*/part-*.parquet`), topic subscriptions with wildcards in messaging systems, and `LIKE 'l__d'` queries, where `_` is SQL's single-character wildcard. The pruning idea, using fixed characters to narrow the search before expanding wildcards, is why a pattern with a fixed prefix lists or scans far less than one that starts with a wildcard.
