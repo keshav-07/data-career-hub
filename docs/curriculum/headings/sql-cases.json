@@ -254,5 +254,37 @@
   "Regex matching in SQL → Top Selling Products": {
     "ref": "interview-questions:sql/top-selling-products-sql-case-study",
     "heading": "Approach: regex matching to clean and roll up SKUs"
+  },
+  "Cross Join & cartesian products → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: cross joins to build the date-product grid"
+  },
+  "Avoiding full table scans → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: avoiding full table scans on snapshot tables"
+  },
+  "Slowly changing dimension queries → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: slowly changing dimension queries for point-in-time cost"
+  },
+  "LAG() and LEAD() → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: LAG() and LEAD() for stock movement"
+  },
+  "Index selectivity & cardinality → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: index selectivity and cardinality"
+  },
+  "Year-over-year growth → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: year-over-year growth"
+  },
+  "Conditional aggregation → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: conditional aggregation for opening, closing and averages"
+  },
+  "Cardinality estimation → Inventory Turnover": {
+    "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
+    "heading": "Approach: cardinality estimation and correlated columns"
   }
 }
