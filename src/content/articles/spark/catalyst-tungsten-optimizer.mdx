@@ -1,0 +1,400 @@
+---
+title: "Catalyst, Tungsten and Code Generation: How Spark SQL Optimises Queries"
+seoTitle: "Catalyst, Tungsten and Spark SQL Optimisation"
+description: "How Spark SQL optimises a query: Catalyst's plan phases, Tungsten memory and whole-stage code generation, cost-based optimisation, pushdown, pruning and UDF costs."
+technology: ["spark", "pyspark"]
+topic: ["catalyst", "optimizer", "performance"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Trace a query through Catalyst's parsed, analysed, optimised and physical plans"
+  - "Explain what Tungsten and whole-stage code generation do and how to see them in a plan"
+  - "Collect table and column statistics and explain when the cost-based optimiser uses them"
+  - "Read PushedFilters, PartitionFilters and ReadSchema to confirm pushdown and column pruning"
+  - "Explain why SQL and DataFrame code perform the same, and what makes Python UDFs slower"
+prerequisites: ["articles:spark/execution-model-jobs-stages-tasks"]
+related: ["articles:pyspark/udfs-and-safer-alternatives", "interview-questions:pyspark/avoid-python-udfs", "articles:pyspark/joins-and-join-strategy"]
+previous: "articles:spark/caching-broadcast-accumulators"
+next: "articles:spark/adaptive-query-execution"
+sources:
+  - { label: "Apache Spark documentation: Performance tuning (Spark SQL)", url: "https://spark.apache.org/docs/latest/sql-performance-tuning.html" }
+  - { label: "Apache Spark documentation: Configuration", url: "https://spark.apache.org/docs/latest/configuration.html" }
+  - { label: "Apache Spark documentation: Tuning", url: "https://spark.apache.org/docs/latest/tuning.html" }
+  - { label: "Apache Spark documentation: SQL migration guide", url: "https://spark.apache.org/docs/latest/sql-migration-guide.html" }
+versionContext: "All examples run on PySpark 4.2.0 in local mode (local[2]) against small local Parquet files and an in-memory catalog. Temporary file paths in plans are replaced with <data> for readability; expression ids such as #8 differ between runs."
+---
+
+When you write `df.filter(...).groupBy(...)` or the equivalent SQL, you describe *what* you want. Spark SQL's optimiser, **Catalyst**, decides *how*: it rewrites the query, picks physical operators, and hands the result to **Tungsten**, the execution layer that generates compact Java code for it. Knowing what these layers do tells you which code styles Spark can optimise, which it cannot, and how to prove from a plan that an optimisation happened.
+
+## Sample data
+
+Orders written as Parquet partitioned by date, read back as a DataFrame. `show_plan` prints a plan with the temporary path shortened.
+
+```python
+import contextlib, io, os, tempfile
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("catalyst-tungsten")
+         .config("spark.sql.shuffle.partitions", "4")
+         .config("spark.sql.warehouse.dir", tempfile.mkdtemp())
+         .getOrCreate())
+
+base = tempfile.mkdtemp()
+path = os.path.join(base, "orders")
+
+(spark.range(0, 100_000, numPartitions=4)
+     .select(F.col("id").alias("order_id"),
+             (F.col("id") % 1000).alias("customer_id"),
+             ((F.col("id") * 7) % 500).cast("double").alias("amount"),
+             F.when(F.col("id") % 4 == 0, "web").otherwise("store").alias("channel"),
+             F.expr("date_add(DATE'2026-01-01', cast(id % 30 as int))").alias("order_date"))
+     .write.partitionBy("order_date").parquet(path))
+
+orders = spark.read.parquet(path)
+
+def show_plan(df, mode=None):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        df.explain(mode) if mode else df.explain()
+    print(buf.getvalue().replace("file:" + base, "<data>").rstrip())
+```
+
+## The Catalyst optimiser
+
+### What it is
+
+Catalyst is the query optimiser inside Spark SQL. Every DataFrame, Dataset and SQL query becomes a tree of operators, and Catalyst transforms that tree in four phases:
+
+| Phase | Input → output | What happens |
+|-------|----------------|--------------|
+| **Parsing** | SQL text or DataFrame calls → unresolved logical plan | Syntax only; table and column names are not checked yet |
+| **Analysis** | → analysed logical plan | Names are resolved against the catalog and the DataFrame schemas; types are checked and implicit casts added. Misspelt columns fail here |
+| **Logical optimisation** | → optimised logical plan | Rule-based rewrites: predicate pushdown, column pruning, constant folding, null-filter inference, combining filters and projections, simplifying expressions, rewriting subqueries as joins |
+| **Physical planning** | → physical plan | Chooses operators (broadcast hash join versus sort-merge join, hash versus sort aggregate), inserts `Exchange` and `Sort` nodes where the data distribution requires them, using size estimates |
+
+After physical planning, Tungsten generates code, and Adaptive Query Execution can revise the physical plan at run time.
+
+### Seeing the phases
+
+`explain("extended")` prints all four. Watch what changes between them:
+
+```python
+q = (orders.filter((F.col("amount") > 100 + 50) & (F.col("channel") == "web"))
+           .select("order_id", "amount"))
+show_plan(q, "extended")
+```
+
+```text
+OUTPUT_EXTENDED
+```
+
+Between the analysed and optimised plans, Catalyst **folded** the constant `cast(150 as double)` into `150.0` and **inferred** `isnotnull` filters, since a `NULL` can never satisfy `> 150`. In the physical plan, the filters appear in `PushedFilters` (sent to the Parquet reader) and `ReadSchema` lists only three of the five columns. The `*(1)` marks operators fused by whole-stage code generation.
+
+### Other explain modes
+
+| Mode | Shows |
+|------|-------|
+| `explain()` or `"simple"` | Physical plan only |
+| `"extended"` | All four plans |
+| `"formatted"` | Physical plan outline plus a numbered details section per operator (easiest to read for big plans) |
+| `"cost"` | Optimised logical plan with size and row-count statistics |
+| `"codegen"` | The generated Java source per code-generation stage |
+
+### Pitfalls
+
+- **Catalyst cannot see inside a Python UDF**, a Python lambda on an RDD, or an opaque Scala closure in a typed `Dataset.map`. Filters after those cannot be pushed below them.
+- **Analysis errors appear immediately** (a wrong column name fails at the `select`), but runtime errors (a bad cast under ANSI mode) appear only at the action.
+- **Plans with thousands of operators**, such as from long loops of `withColumn`, make analysis and optimisation slow. Build columns in one `select`, or checkpoint long iterative plans.
+
+### In interviews
+
+"What does Catalyst do?" Name the four phases, give two or three rule examples (predicate pushdown, column pruning, constant folding), and say that physical planning chooses join strategies using statistics. Bonus: mention that Catalyst rules are pattern-matching functions over immutable trees, applied in batches until the plan stops changing.
+
+## The Tungsten execution engine
+
+### What it is
+
+**Project Tungsten** is the set of execution-layer improvements that make Spark use CPU and memory efficiently. Its three main ideas:
+
+1. **Explicit binary memory management.** Rows are stored in a compact binary format (`UnsafeRow`) rather than as Java objects, and Spark manages memory pages itself, on or off the JVM heap. This cuts object overhead and garbage collection, and lets sorting and hashing work directly on bytes.
+2. **Cache-aware algorithms.** Sort and hash-aggregation structures are laid out so that the CPU cache is used well, for example sorting on a compact key prefix stored next to a pointer.
+3. **Code generation.** Instead of interpreting a tree of expression objects row by row, Spark generates Java code specialised to the query and compiles it at run time (with the Janino compiler).
+
+These are why DataFrame operations often beat hand-written RDD code: an RDD of Python or Java objects gets none of this.
+
+### Where you see Tungsten
+
+- Generated-code stages marked `*(n)` in plans.
+- The `UnsafeRowWriter` and column vector classes in `explain("codegen")` output.
+- Off-heap memory settings: `spark.memory.offHeap.enabled` (default `false`) and `spark.memory.offHeap.size` let Tungsten allocate execution and storage memory outside the JVM heap, which reduces GC work for large executors.
+- Columnar in-memory caching and vectorised Parquet and ORC readers (`ColumnarToRow` in plans), which read batches of column values rather than one row at a time.
+
+### In interviews
+
+"What is Tungsten?" Say: Spark's execution-engine layer for CPU and memory efficiency, with binary row formats and self-managed memory (less GC), cache-aware sorting and hashing, and whole-stage code generation. Contrast with Catalyst: Catalyst decides *what plan* to run; Tungsten makes that plan *run fast*.
+
+## Whole-stage code generation
+
+### What it is
+
+**Whole-stage code generation** fuses a chain of operators inside one stage (scan, filter, project, partial aggregate) into a **single generated Java function** with a tight loop. Instead of each operator calling the next one per row through virtual function calls (the "Volcano" iterator model), the fused code keeps values in local variables and CPU registers, the way hand-written code would.
+
+In plans, each fused group gets a number: `*(1)`, `*(2)`. Operators without the star (an `Exchange`, a Python UDF evaluation, some complex expressions) break the chain.
+
+### Looking at the generated code
+
+`explain("codegen")` prints the source of each fused stage. Trimmed, the inner loop of a filter on `amount > 400` reads like hand-written Java:
+
+```python
+show_plan(orders.filter("amount > 400").select("order_id", "amount"), "codegen")
+```
+
+```text
+OUTPUT_CODEGEN
+```
+
+(Trimmed to the summary line and the inner loop; the full output is a few hundred lines.) The filter is two `if (...) continue;` checks inside a `for` loop over a column batch, with no per-row function calls.
+
+### When code generation is skipped
+
+- An operator does not support it (some generators, Python UDFs, certain aggregate functions). The plan shows that operator without a `*`.
+- The generated method would be too large. Spark falls back to interpreted execution when a method exceeds `spark.sql.codegen.hugeMethodLimit`, and stops fusing very wide schemas above `spark.sql.codegen.maxFields` (100 by default). Queries over hundreds of columns can lose codegen.
+- You disable it: `spark.sql.codegen.wholeStage=false` (default `true`), useful only for debugging.
+
+### In interviews
+
+"What is whole-stage code generation?" Explain operator fusion into one generated function per stage, the `*(n)` marker in plans, and why it is faster (no virtual calls per row, data stays in registers, compiler-friendly loops). Mention that Python UDFs and very wide schemas break or disable it.
+
+## Cost-based optimisation
+
+### What it is
+
+Catalyst's rules do not need statistics. **Cost-based optimisation (CBO)** adds decisions that do: estimating how many rows each operator produces and choosing join order and join strategy accordingly. Statistics come from `ANALYZE TABLE` and are stored in the catalog.
+
+| Setting | Default in 4.2 | Effect |
+|---------|----------------|--------|
+| `spark.sql.cbo.enabled` | `false` | Use column statistics for row-count estimates |
+| `spark.sql.cbo.joinReorder.enabled` | `false` | Reorder multi-way inner joins by estimated cost |
+| `spark.sql.statistics.histogram.enabled` | `false` | Collect histograms with column statistics for better selectivity estimates |
+| `spark.sql.cbo.starSchemaDetection` | `false` | Detect fact and dimension tables to order star joins |
+
+Even with CBO off, Spark uses **size in bytes** (from file sizes or `ANALYZE TABLE ... COMPUTE STATISTICS`) to decide broadcast joins against `spark.sql.autoBroadcastJoinThreshold`.
+
+### Collecting and using statistics
+
+```python
+orders.write.saveAsTable("orders_t")
+query = "SELECT * FROM orders_t WHERE amount > 400"
+
+def stats_lines(df):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        df.explain("cost")
+    return [line.split("Statistics")[1] for line in buf.getvalue().splitlines() if "Statistics(" in line]
+
+print("no stats:   ", stats_lines(spark.sql(query)))
+spark.sql("ANALYZE TABLE orders_t COMPUTE STATISTICS FOR COLUMNS amount, customer_id")
+spark.conf.set("spark.sql.cbo.enabled", "true")
+print("with stats: ", stats_lines(spark.sql(query)))
+
+spark.sql("DESCRIBE EXTENDED orders_t amount").show()
+spark.conf.set("spark.sql.cbo.enabled", "false")
+```
+
+```text
+OUTPUT_CBO
+```
+
+Without statistics, the filter's estimate is just the file size. With column statistics and CBO on, Spark knows `amount` ranges from 0 to 499 and estimates that `amount > 400` keeps about a fifth of 100,000 rows: 19,800, which is exactly right here because the values are uniform. On skewed data, histograms improve such estimates.
+
+### Statistics versus AQE
+
+AQE (on by default since 3.2) measures real sizes at each shuffle and can switch to a broadcast join or coalesce partitions at run time, which covers many cases CBO was designed for. CBO still matters for decisions made **before** the first shuffle, chiefly the **order of multi-way joins**, which AQE does not change.
+
+### Pitfalls
+
+- **Stale statistics** are worse than none: a table analysed when small and since grown can be broadcast and run out of memory. Re-analyse after big loads, or rely on AQE.
+- Statistics live in the catalog, so they only exist for catalog tables, not for paths read directly with `spark.read.parquet(path)`.
+- Collecting column statistics scans the table; schedule it.
+
+### In interviews
+
+"Does Spark have a cost-based optimiser?" Yes, off by default; it uses `ANALYZE TABLE` statistics for cardinality estimates, join reordering and join strategy. Explain how AQE overlaps with it, and the risk of stale statistics.
+
+## Predicate and projection pushdown
+
+### What it is
+
+**Pushdown** moves work into the data source so less data reaches Spark at all.
+
+- **Predicate pushdown**: filters are handed to the reader. For Parquet and ORC, the reader uses per-row-group min and max statistics to skip whole row groups; for JDBC, the filter becomes a SQL `WHERE` clause run by the database.
+- **Projection pushdown**: only the needed columns are requested from the source (the source-side half of column pruning).
+- **Partition pruning**: filters on partition columns skip entire directories before any file is opened.
+
+### Reading the scan node
+
+A filter on the partition column and on a data column, side by side:
+
+```python
+q2 = orders.filter("order_date = DATE'2026-01-05' AND amount > 400").select("customer_id")
+show_plan(q2)
+```
+
+```text
+OUTPUT_PUSHDOWN
+```
+
+| Field | Meaning here |
+|-------|-------------|
+| `PartitionFilters` | `order_date = 2026-01-05`: only one of 30 date folders is listed and read |
+| `PushedFilters` | `GreaterThan(amount,400.0)`: Parquet can skip row groups whose max `amount` is at most 400 |
+| `DataFilters` | Filters Spark still applies row by row after reading (pushed filters are advisory, so Spark re-checks them) |
+| `ReadSchema` | Only `customer_id` and `amount` are read from the files |
+
+### What blocks pushdown
+
+- **Functions on the column**: `F.year(col("ts")) == 2026` or `upper(name) = 'X'` usually cannot be pushed; rewrite as a range on the raw column (`ts >= '2026-01-01' AND ts < '2027-01-01'`).
+- **Python UDFs in the filter**: Spark cannot translate them.
+- **Casts that change the column's type**, such as comparing a string column with a number, can prevent pushdown and, under ANSI mode (the default since Spark 4.0), can also raise errors.
+- **Sources without support**: CSV and JSON readers support fewer pushdowns than Parquet and ORC; JDBC pushes filters but not all functions.
+- `spark.sql.parquet.filterPushdown` turned off (it defaults to `true`).
+
+### In interviews
+
+"How do you check that a filter was pushed down?" Look at the scan node of the physical plan for `PushedFilters` and `PartitionFilters`, and at the SQL tab's scan metrics (files and bytes read). Explain why `year(ts) = 2026` may not push down and how to rewrite it.
+
+## Column pruning
+
+### What it is
+
+**Column pruning** removes columns a query never uses, at every level of the plan, so they are never read, shuffled, cached or serialized. With columnar formats (Parquet, ORC, Delta) unread columns cost almost nothing, because each column is stored separately.
+
+Compare the two `ReadSchema` values above: the first query read three columns, the second only two, even though both started from the same five-column DataFrame. Catalyst also prunes **nested fields**: selecting `address.city` from a struct reads only that field from Parquet (`spark.sql.optimizer.nestedSchemaPruning.enabled`, on by default).
+
+### What defeats it
+
+- `select("*")` or `df.collect()` of whole rows, when only a few columns are needed.
+- Caching a wide DataFrame and querying a few columns: the cache stores every column.
+- Row-based formats (CSV, JSON): the reader must still parse every line, though it can skip converting unused fields.
+- A Python UDF that takes a whole row (`struct("*")`) forces every column through serialization.
+
+### In interviews
+
+Column pruning is often asked together with pushdown: "Why is Parquet faster than CSV for analytics?" Columnar storage enables column pruning, row-group statistics enable predicate pushdown, and compression per column reduces I/O.
+
+## SQL versus DataFrame performance
+
+### Same optimiser, same plan
+
+SQL strings and DataFrame calls are two front ends to the same Catalyst pipeline, so equivalent queries produce the **same physical plan** and the same performance:
+
+```python
+orders.createOrReplaceTempView("orders")
+
+sql_df = spark.sql("""
+    SELECT customer_id, SUM(amount) AS total
+    FROM orders WHERE channel = 'web'
+    GROUP BY customer_id""")
+
+api_df = (orders.filter(F.col("channel") == "web")
+                .groupBy("customer_id").agg(F.sum("amount").alias("total")))
+
+import re
+def physical(df):
+    plan = df._jdf.queryExecution().executedPlan().toString()
+    return re.sub(r"#\d+L?|plan_id=\d+", "", plan)
+
+print("identical physical plans:", physical(sql_df) == physical(api_df))
+```
+
+```text
+OUTPUT_SAME_PLAN
+```
+
+(Expression ids and plan ids are stripped before comparing, since they differ by construction.) Choose between SQL and the DataFrame API for readability, testing and reuse, not speed.
+
+### What actually changes performance
+
+| Code style | Optimised by Catalyst? | Code generation? | Cost |
+|------------|------------------------|------------------|------|
+| SQL or DataFrame built-in functions | Yes | Yes | Baseline |
+| Scala/Java typed `Dataset` with lambdas | Partly: lambdas are opaque | Partly | Object serialization for each lambda |
+| Python UDF (Arrow-optimised) | Opaque to the optimiser | No, runs in Python workers | Batches through Arrow to Python and back |
+| pandas UDF | Opaque | No | Vectorised Arrow batches; usually much faster than row UDFs |
+| RDD with Python lambdas | Not at all | No | Every row pickled to and from Python |
+
+The Python UDF cost is visible in a plan. In this Spark 4.2 run, `spark.sql.execution.pythonUDF.arrow.enabled` reports `true`, so a plain `@udf` runs as `ArrowEvalPython`; a filter on the UDF result even evaluates the UDF twice:
+
+```python
+@F.udf("double")
+def add_vat(x):
+    return x * 1.2
+
+show_plan(orders.select((F.col("amount") * 1.2).alias("gross")))
+print()
+show_plan(orders.select(add_vat("amount").alias("gross")).filter("gross > 10"))
+```
+
+```text
+OUTPUT_UDF
+```
+
+The built-in expression is one fused codegen stage. The UDF version leaves the JVM for Python twice, once for the filter and once for the projection, and splits code generation into three stages. If a UDF is expensive or non-deterministic, compute it once in a column and cache or checkpoint, or better, replace it with built-in functions (see [UDFs and safer alternatives](/pyspark/udfs-and-safer-alternatives/)).
+
+### In interviews
+
+"Is Spark SQL faster than the DataFrame API?" No: both compile to the same optimised plan, which you can prove with `explain()`. The real performance gap is between built-in expressions and opaque code (Python UDFs, typed lambdas, RDDs), because the optimiser and code generator cannot see inside them.
+
+## Practice questions
+
+<details>
+<summary>Name the four phases of Catalyst and what can fail in each.</summary>
+
+Parsing turns SQL or API calls into an unresolved logical plan (syntax errors fail here). Analysis resolves names and types against the catalog (unknown tables or columns, type mismatches fail here). Logical optimisation applies rule-based rewrites such as pushdown, pruning and constant folding (it should never change results). Physical planning chooses operators and join strategies and adds exchanges. Data-dependent errors, such as ANSI cast failures, appear only when the plan executes.
+
+</details>
+
+<details>
+<summary>What is the difference between Catalyst and Tungsten?</summary>
+
+Catalyst is the optimiser: it decides the plan, rewriting the query and choosing physical operators. Tungsten is the execution engine work that runs the plan efficiently: binary row formats and explicit memory management to reduce object overhead and GC, cache-aware sorting and hashing, and whole-stage code generation.
+
+</details>
+
+<details>
+<summary>A query filters with year(event_ts) = 2026 on a large Parquet table and reads every row group. Why, and how do you fix it?</summary>
+
+Wrapping the column in a function usually prevents the filter from being pushed to the Parquet reader as a simple comparison, so row-group statistics cannot be used. Rewrite as a range on the raw column: `event_ts >= '2026-01-01' AND event_ts < '2027-01-01'`, then confirm the comparison appears in `PushedFilters`. If the table is partitioned by a date column, filter on that column too so `PartitionFilters` prunes directories.
+
+</details>
+
+<details>
+<summary>When does the cost-based optimiser help, given that AQE exists?</summary>
+
+CBO works before execution using catalog statistics, so it can choose the order of multi-way joins and a join strategy before any shuffle runs, which AQE cannot change. AQE corrects decisions at shuffle boundaries using measured sizes. CBO is off by default; enabling it requires `ANALYZE TABLE ... FOR COLUMNS` and keeping statistics fresh.
+
+</details>
+
+<details>
+<summary>How can you tell from a plan that whole-stage code generation is used, and what breaks it?</summary>
+
+Operators inside a fused stage are prefixed with `*(n)`, and `explain("codegen")` lists the generated subtrees. Operators without the star break the chain, such as Python UDF evaluation (`ArrowEvalPython` or `BatchEvalPython`) and exchanges; very wide schemas beyond `spark.sql.codegen.maxFields` or methods beyond `spark.sql.codegen.hugeMethodLimit` fall back to non-fused execution.
+
+</details>
+
+<details>
+<summary>A teammate rewrites a DataFrame pipeline in SQL to make it faster. What do you tell them?</summary>
+
+SQL and the DataFrame API go through the same Catalyst optimiser and produce the same physical plan, so the rewrite alone will not change speed; compare `explain()` output to prove it. Look instead for opaque code (Python UDFs, RDD conversions), missing pushdown or pruning, unnecessary shuffles and skew.
+
+</details>
+
+## Key takeaways
+
+- Catalyst turns queries into parsed, analysed, optimised and physical plans; `explain("extended")` shows all four.
+- Tungsten runs plans efficiently with binary rows, managed memory and whole-stage code generation, marked `*(n)` in plans.
+- The cost-based optimiser is off by default; it needs `ANALYZE TABLE` statistics and mainly helps join ordering.
+- Confirm pushdown and pruning in the scan node: `PartitionFilters`, `PushedFilters` and `ReadSchema`.
+- SQL and DataFrame code give the same plan; Python UDFs, typed lambdas and RDDs are what the optimiser cannot see into.
