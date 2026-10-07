@@ -134,5 +134,37 @@
  "Task state lifecycle": {
   "ref": "articles:airflow/xcom-variables-connections",
   "heading": "Task state lifecycle"
+ },
+ "SequentialExecutor": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "SequentialExecutor (removed)"
+ },
+ "LocalExecutor": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "LocalExecutor"
+ },
+ "CeleryExecutor": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "CeleryExecutor"
+ },
+ "KubernetesExecutor": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "KubernetesExecutor"
+ },
+ "CeleryKubernetes hybrid": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "CeleryKubernetes hybrid and multiple executors"
+ },
+ "Parallelism & pools": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "Parallelism and pools"
+ },
+ "Resource management": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "Resource management"
+ },
+ "Scaling Airflow": {
+  "ref": "articles:airflow/executors-scaling",
+  "heading": "Scaling Airflow"
  }
 }

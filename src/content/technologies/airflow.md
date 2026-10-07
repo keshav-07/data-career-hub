@@ -5,10 +5,10 @@ description: "Airflow schedules and orchestrates pipelines as DAGs. Learn schedu
 group: streaming
 order: 6
 keyFacts: ["Workflows are Python-defined DAGs","Retries are only safe if tasks are idempotent","Orchestrate work; do not run heavy processing inside Airflow"]
-whatToLearnFirst: ["articles:airflow/dag-fundamentals-taskflow", "articles:airflow/dags-scheduling-retries","articles:airflow/xcom-variables-connections"]
+whatToLearnFirst: ["articles:airflow/dag-fundamentals-taskflow", "articles:airflow/dags-scheduling-retries","articles:airflow/xcom-variables-connections","articles:airflow/executors-scaling"]
 relatedTechnologies: ["python","kafka","spark"]
 monogram: "Af"
-lessons: ["articles:airflow/dag-fundamentals-taskflow","articles:airflow/operators-hooks-providers","articles:airflow/sensors-deferrable-operators","articles:airflow/dags-scheduling-retries","articles:airflow/xcom-variables-connections"]
+lessons: ["articles:airflow/dag-fundamentals-taskflow","articles:airflow/operators-hooks-providers","articles:airflow/sensors-deferrable-operators","articles:airflow/dags-scheduling-retries","articles:airflow/xcom-variables-connections","articles:airflow/executors-scaling"]
 updatedDate: 2026-10-05
 ---
 
