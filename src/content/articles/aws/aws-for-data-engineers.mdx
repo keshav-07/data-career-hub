@@ -55,11 +55,15 @@ Choose the ingestion service by the shape of the source:
 - **SaaS applications** such as Salesforce: Amazon AppFlow, or a third-party ingestion tool.
 - **Files**: direct uploads to S3 (multipart for large files), often triggering an S3 event notification.
 
+Read: [Amazon Kinesis](/aws/kinesis/) · [AWS data services landscape: DMS, MSK, SQS and SNS](/aws/aws-data-services-landscape/)
+
 ## Store
 
 Amazon S3 is the centre of gravity. Raw files land in a raw (bronze) area, cleaned data is written as Parquet or as an open table format such as Apache Iceberg in a curated (silver) area, and business-ready tables sit in a gold area. S3 has been strongly consistent for reads after writes and for listings since December 2020, which is why table formats and Spark can safely run on it without the old "consistent view" workarounds.
 
 Two newer options matter. **S3 Tables** store Iceberg tables in a dedicated table bucket with automatic compaction and snapshot clean-up. **Redshift managed storage** holds warehouse tables for RA3 nodes and Redshift Serverless, separate from compute.
+
+Read: [Amazon S3 for Data Engineers](/aws/s3-for-data-engineers/) · [Modern AWS data services: S3 Tables and Iceberg](/aws/modern-aws-data-services/)
 
 ## Process
 
@@ -73,12 +77,16 @@ Two newer options matter. **S3 Tables** store Iceberg tables in a dedicated tabl
 | Containerised batch jobs that are not Spark | AWS Batch |
 | SQL transformations inside the warehouse | Redshift (often with dbt) or Athena CTAS and `INSERT INTO` |
 
+Read: [AWS Lambda for data pipelines](/aws/lambda-for-data-pipelines/) · [AWS Glue](/aws/glue-catalog-crawlers-etl/) · [Amazon EMR](/aws/emr/)
+
 ## Query and serve
 
 - **Athena** runs SQL directly on files in S3, with no cluster. It is ideal for exploration, ad hoc questions and moderate, spiky workloads.
 - **Redshift** is a columnar warehouse for heavy, concurrent BI workloads, joins across large fact tables and predictable dashboard latency. Spectrum lets Redshift read S3 tables too.
 - **QuickSight** builds dashboards on Athena, Redshift and other sources.
 - **OpenSearch Service** serves search and log analytics rather than relational SQL.
+
+Read: [Amazon Athena](/aws/athena/) · [Amazon Redshift](/aws/redshift/)
 
 ## Orchestrate
 
@@ -89,13 +97,19 @@ Pipelines need ordering, retries, backfills and alerts.
 - **Glue workflows and triggers** are enough for simple chains of Glue jobs and crawlers.
 - **EventBridge** routes events (a file arrived, a job failed) and runs schedules.
 
+Read: [AWS Step Functions](/aws/step-functions/) · [Airflow DAGs, scheduling and retries](/airflow/dags-scheduling-retries/)
+
 ## Govern and secure
 
 IAM is the foundation: every service call is an authenticated principal performing an action on a resource. Pipelines run as **roles** that issue temporary credentials. **Lake Formation** adds database, table, column, row and cell-level permissions over the Data Catalog, plus tag-based access control with LF-Tags and cross-account sharing. **KMS** manages encryption keys, **Secrets Manager** stores database passwords and API tokens, and **CloudTrail** records who called which API.
 
+Read: [AWS IAM for Data Engineers](/aws/iam-for-data-engineers/) · [AWS Lake Formation](/aws/lake-formation/)
+
 ## Monitor
 
 CloudWatch collects metrics from every service and your own custom metrics, stores logs and lets you query them with Logs Insights. Alarms notify you through SNS. EventBridge rules react to state changes such as "Glue job FAILED". For cost, Cost Explorer shows where money went, Budgets warns before it goes, and cost allocation tags attribute spend to pipelines and teams.
+
+Read: [Monitoring with CloudWatch and EventBridge](/aws/cloudwatch-monitoring/) · [Cost Explorer and budgets](/aws/aws-data-services-landscape/#cost-explorer-and-budgets)
 
 ## A reference architecture
 

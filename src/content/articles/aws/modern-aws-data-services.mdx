@@ -1,0 +1,489 @@
+---
+title: "Modern AWS Data Services: Iceberg, Data Quality, Serverless and IaC"
+seoTitle: "Modern AWS Data Services: Iceberg, DQ and IaC"
+description: "Modern AWS data services: S3 Tables and Iceberg, Glue Data Quality, DataBrew, AppFlow, Batch, OpenSearch, QuickSight, Secrets Manager, CDK and cost allocation tags."
+technology: ["aws", "data-lakes"]
+topic: ["iceberg", "data-quality", "infrastructure-as-code"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Build Iceberg tables on AWS with S3 Tables, Glue and Athena, and know who runs table maintenance"
+  - "Write Glue Data Quality rules in DQDL and act on the results"
+  - "Place DataBrew, AppFlow, AWS Batch, OpenSearch and QuickSight correctly in a data platform"
+  - "Keep credentials in Secrets Manager and define infrastructure with CloudFormation or the CDK"
+  - "Attribute cost to pipelines with activated cost allocation tags"
+prerequisites: ["articles:aws/glue-catalog-crawlers-etl", "articles:aws/athena", "articles:aws/lake-formation"]
+related: ["articles:delta-lake/delta-vs-traditional-lake-tables", "articles:etl-elt/data-quality-checks-contracts", "articles:delta-lake/schema-evolution-patterns", "system-designs:scalable-lakehouse"]
+previous: "articles:aws/aws-data-services-landscape"
+versionContext: "Service status and features checked against the AWS documentation and What's New posts in October 2026; DataBrew and AppFlow were not on AWS's services-in-maintenance list when checked. AWS CLI, Athena SQL, Glue scripts, CloudFormation and CDK code need an AWS account and were written from the documentation and not executed; JSON documents were checked to parse and Python code to compile. The data quality rule evaluator and the tag checker are small local models that run on Python 3.11, not the AWS services."
+sources:
+  - { label: "Amazon S3 User Guide: Working with S3 Tables and table buckets", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html" }
+  - { label: "AWS Glue: Data Quality Definition Language (DQDL) reference", url: "https://docs.aws.amazon.com/glue/latest/dg/dqdl.html" }
+  - { label: "AWS Glue: EvaluateDataQuality class", url: "https://docs.aws.amazon.com/glue/latest/dg/aws-glue-api-crawler-pyspark-transforms-EvaluateDataQuality.html" }
+  - { label: "AWS Glue: Using the Iceberg framework", url: "https://docs.aws.amazon.com/glue/latest/dg/aws-glue-programming-etl-format-iceberg.html" }
+  - { label: "AWS General Reference: Services in maintenance", url: "https://docs.aws.amazon.com/general/latest/gr/maintenance_services.html" }
+  - { label: "AWS Prescriptive Guidance: AWS Glue DataBrew", url: "https://docs.aws.amazon.com/prescriptive-guidance/latest/serverless-etl-aws-glue/databrew.html" }
+---
+
+The core services (S3, Glue, Athena, Redshift, EMR) have been around for years. Around them, AWS has added open table formats, managed data quality, serverless compute options and better tooling for running a platform as code. This lesson covers the newer and supporting services a modern AWS data platform uses, and how to judge whether a service is worth building on.
+
+The serverless versions of the warehouse and Spark platforms are covered in their own lessons: see [Redshift Serverless](/aws/redshift/#redshift-serverless) and [EMR Serverless](/aws/emr/#emr-serverless).
+
+## Sample code
+
+Two small local models run here: a data quality rule evaluator and a tag compliance checker. Everything that calls AWS (S3 Tables, Athena, Glue, CloudFormation, the CDK, Secrets Manager) is shown but not executed.
+
+## S3 Tables and Iceberg on AWS
+
+**What it is.** Apache Iceberg is an open table format: a table is a set of Parquet data files plus metadata files that list them, which gives ACID commits, schema and partition evolution, hidden partitioning and time travel on object storage. AWS supports Iceberg across Glue, Athena, EMR, Redshift and Firehose, and offers **Amazon S3 Tables**, a bucket type built for Iceberg.
+
+**How it works.** There are two ways to run Iceberg on AWS:
+
+| | Iceberg in a general purpose bucket | S3 Tables (table buckets) |
+|---|---|---|
+| Storage | Your S3 bucket and prefixes | A **table bucket**, with **namespaces** and **tables** as first-class resources |
+| Catalogue | Glue Data Catalog (or another Iceberg catalogue) | Built-in, integrated with the Glue Data Catalog for AWS analytics services, plus an Iceberg REST endpoint |
+| Maintenance | You run compaction, snapshot expiry and orphan file removal (or enable Glue table optimisers) | Managed: compaction, snapshot management and unreferenced file removal, configured by policy |
+| Permissions | IAM and Lake Formation on the catalogue and bucket | Table-level permissions on the table bucket, plus Lake Formation through the catalogue integration |
+
+{/* noexec */}
+```bash
+aws s3tables create-table-bucket --name analytics-tables --region eu-west-1
+aws s3tables create-namespace \
+  --table-bucket-arn arn:aws:s3tables:eu-west-1:111122223333:bucket/analytics-tables \
+  --namespace sales
+aws s3tables create-table \
+  --table-bucket-arn arn:aws:s3tables:eu-west-1:111122223333:bucket/analytics-tables \
+  --namespace sales --name orders --format ICEBERG
+```
+
+Iceberg tables in a general purpose bucket can be created and maintained from Athena:
+
+{/* noexec */}
+```sql
+CREATE TABLE curated.orders_iceberg (
+  order_id bigint,
+  status   string,
+  amount   decimal(10,2),
+  order_ts timestamp
+)
+PARTITIONED BY (day(order_ts))
+LOCATION 's3://example-lake/curated/orders_iceberg/'
+TBLPROPERTIES ('table_type' = 'ICEBERG');
+
+MERGE INTO curated.orders_iceberg AS t
+USING staging.orders_changes AS c
+ON t.order_id = c.order_id
+WHEN MATCHED AND c.op = 'D' THEN DELETE
+WHEN MATCHED THEN UPDATE SET status = c.status, amount = c.amount, order_ts = c.order_ts
+WHEN NOT MATCHED AND c.op <> 'D' THEN INSERT (order_id, status, amount, order_ts)
+  VALUES (c.order_id, c.status, c.amount, c.order_ts);
+
+SELECT count(*) FROM curated.orders_iceberg FOR TIMESTAMP AS OF TIMESTAMP '2026-10-04 00:00:00 UTC';
+OPTIMIZE curated.orders_iceberg REWRITE DATA USING BIN_PACK;
+VACUUM curated.orders_iceberg;
+```
+
+In Glue jobs, enable Iceberg with the `--datalake-formats iceberg` job parameter and the Iceberg Spark catalogue settings. Glue 5.1 and 6.0 support Iceberg format version 3 (deletion vectors, default column values, row lineage); in Glue 6.0 the new v3 types work through DataFrames only.
+
+**Pitfalls.**
+
+- Iceberg without maintenance: every commit adds files and snapshots, so queries slow down and storage grows. Use S3 Tables or enable table optimisers, or schedule `OPTIMIZE` and `VACUUM`.
+- S3 lifecycle expiration on Iceberg data prefixes, which deletes files that live snapshots still reference.
+- Mixing engines and versions that support different Iceberg features (format v3, for example); check every reader before upgrading a table.
+
+**In interviews.** Explain what Iceberg adds over plain Parquet (atomic commits, schema evolution, hidden partitions, time travel, row-level changes), then compare self-managed Iceberg with S3 Tables on who runs maintenance. Mention that Lake Formation governed tables were retired in favour of these formats.
+
+## Glue Data Quality
+
+**What it is.** AWS Glue Data Quality evaluates rules against data in the Data Catalog or inside Glue jobs, and reports a score per ruleset. Rules are written in the **Data Quality Definition Language (DQDL)**, and Glue can recommend rules by profiling a table.
+
+**How it works.** A ruleset is a list named `Rules`. Common rule types include `RowCount`, `IsComplete`, `IsUnique`, `Completeness`, `ColumnValues`, `Uniqueness`, `ColumnLength`, `CustomSql`, `ReferentialIntegrity` and `DetectAnomalies` (which learns normal values of a metric over runs).
+
+```text
+Rules = [
+    RowCount > 0,
+    IsComplete "order_id",
+    IsUnique "order_id",
+    ColumnValues "status" in ["placed", "paid", "shipped"],
+    ColumnValues "amount" >= 0,
+    Completeness "email" > 0.4
+]
+```
+
+In a Glue job, the `EvaluateDataQuality` transform runs a ruleset on a frame and can publish results to CloudWatch and EventBridge, so a failing check stops the pipeline or raises an alert:
+
+{/* noexec */}
+```python
+from awsgluedq.transforms import EvaluateDataQuality
+
+ruleset = """Rules = [ RowCount > 0, IsComplete "order_id", IsUnique "order_id" ]"""
+results = EvaluateDataQuality.apply(
+    frame=curated_orders,
+    ruleset=ruleset,
+    publishing_options={
+        "dataQualityEvaluationContext": "curated_orders",
+        "enableDataQualityCloudWatchMetrics": True,
+        "enableDataQualityResultsPublishing": True,
+    },
+)
+failed = results.toDF().filter("Outcome = 'Failed'").count()
+if failed:
+    raise RuntimeError(f"{failed} data quality rules failed for curated_orders")
+```
+
+This local model evaluates the same six rules on four sample rows, to show what each rule checks (it is not the Glue engine):
+
+```python
+# A tiny evaluator for a few DQDL-style rules, to show what a ruleset checks. Not the Glue engine.
+rows = [
+    {"order_id": 1, "status": "placed", "amount": 20.0, "email": "a@example.com"},
+    {"order_id": 2, "status": "paid", "amount": 35.5, "email": None},
+    {"order_id": 2, "status": "paid", "amount": 35.5, "email": None},
+    {"order_id": 4, "status": "lost", "amount": -3.0, "email": "d@example.com"},
+]
+
+def completeness(col):
+    return sum(r[col] is not None for r in rows) / len(rows)
+
+rules = {
+    "RowCount > 0": len(rows) > 0,
+    'IsComplete "order_id"': completeness("order_id") == 1.0,
+    'IsUnique "order_id"': len({r["order_id"] for r in rows}) == len(rows),
+    'ColumnValues "status" in ["placed", "paid", "shipped"]':
+        all(r["status"] in ("placed", "paid", "shipped") for r in rows),
+    'ColumnValues "amount" >= 0': all(r["amount"] >= 0 for r in rows),
+    'Completeness "email" > 0.4': completeness("email") > 0.4,
+}
+for rule, passed in rules.items():
+    print(f"{'PASS' if passed else 'FAIL'}  {rule}")
+print(f"score: {sum(rules.values())}/{len(rules)}")
+```
+
+```text
+PASS  RowCount > 0
+PASS  IsComplete "order_id"
+FAIL  IsUnique "order_id"
+FAIL  ColumnValues "status" in ["placed", "paid", "shipped"]
+FAIL  ColumnValues "amount" >= 0
+PASS  Completeness "email" > 0.4
+score: 3/6
+```
+
+**Pitfalls.**
+
+- Rules that only run after publishing, so bad data has already reached users. Evaluate before the final write or before swapping in the new partition.
+- Thresholds copied from a recommendation without review, which fail every night and get ignored.
+- Data quality checks with no owner and no action on failure.
+
+**In interviews.** Show a DQDL ruleset with completeness, uniqueness, allowed values and row counts, and explain where it runs in the pipeline (a gate before publishing) and how failures alert (EventBridge and CloudWatch).
+
+## Glue DataBrew
+
+**What it is.** AWS Glue DataBrew is a visual, no-code data preparation tool. Analysts and data scientists explore a sample of a dataset, build a **recipe** of steps from a large library of built-in transformations (cleaning, formatting, joins, pivots, PII masking), and run it as a **job** on the full dataset, writing to S3. **Profile jobs** compute column statistics and data quality summaries.
+
+**Status.** DataBrew was not on AWS's list of services in maintenance when this lesson was checked, but AWS's recent investment in this area has gone into Glue Studio, Glue Data Quality and the SageMaker Unified Studio experience. Check the services-in-maintenance page before starting new work on it.
+
+**Where it fits.** Self-service preparation by non-engineers, quick profiling of a new source, and one-off clean-ups. Production pipelines owned by data engineers usually belong in Glue or EMR code under version control, with tests and CI/CD; a DataBrew recipe can be the prototype that engineers then implement.
+
+**Pitfalls.** Recipes edited in the console with no review, becoming hidden production logic. If a recipe runs on a schedule, treat it as code: export it, version it and own it.
+
+**In interviews.** Describe DataBrew as visual data preparation with recipes and profile jobs, aimed at analysts, and say when you would move logic into engineered pipelines instead.
+
+## AWS AppFlow
+
+**What it is.** Amazon AppFlow is a managed integration service that moves data between SaaS applications (for example Salesforce, ServiceNow, Zendesk, Slack and SAP through OData) and AWS services such as S3 and Redshift, without writing API clients.
+
+**How it works.** You create a **connection** to the SaaS application (OAuth or API keys stored for you), then a **flow** with a source object, a destination, field mappings, filters and validations. Flows run on demand, on a schedule (with **incremental** transfer of changed records), or on events from sources that support them. Data can land in S3 as Parquet, partitioned by run.
+
+**Status.** AppFlow was not on AWS's services-in-maintenance list when checked; check the list and the connector catalogue for the SaaS sources you need, since connector coverage and API limits differ by application.
+
+**Pitfalls.**
+
+- SaaS API rate limits and quotas still apply; large historical backfills may need to be split.
+- Incremental flows depend on the source exposing a reliable modified-timestamp field; deletes may not be captured.
+- Schema changes in the SaaS application (a new custom field) need mapping updates.
+
+**In interviews.** AppFlow answers "ingest Salesforce into the lake without writing an API client". Name its limits (connector coverage, API quotas, incremental semantics) and the alternatives (third-party ingestion tools, custom Lambda or Glue jobs).
+
+## AWS Batch
+
+**What it is.** AWS Batch runs containerised batch jobs at any scale. You submit jobs to a queue; Batch provisions compute, runs the containers and retries failures. Unlike Lambda there is no 15-minute limit, and unlike Spark there is no distributed data framework, which makes it ideal for "run this container over each of these 10,000 inputs".
+
+**How it works.**
+
+- **Compute environments**: managed EC2 (On-Demand or Spot), AWS Fargate, or Amazon EKS.
+- **Job queues** with priorities map to compute environments.
+- **Job definitions** specify the container image, vCPUs, memory, IAM role, retries and timeout.
+- **Array jobs** run the same job many times with an index, and **dependencies** chain jobs. Step Functions can submit and wait for Batch jobs with `.sync`.
+
+{/* noexec */}
+```bash
+aws batch submit-job --job-name score-files-2026-10-05 \
+  --job-queue spot-batch --job-definition score-files:3 \
+  --array-properties size=500 \
+  --retry-strategy attempts=3 \
+  --container-overrides 'environment=[{name=RUN_DATE,value=2026-10-05}]'
+```
+
+**Pitfalls.** Spot interruptions retry the job from the start, so make jobs idempotent and reasonably short, and use retry strategies. Very small jobs pay container start-up overhead each time; group work into fewer, larger jobs.
+
+**In interviews.** Place Batch between Lambda (short, event-driven) and Spark (distributed data processing): long-running or heavy containerised work that is embarrassingly parallel.
+
+## Amazon OpenSearch
+
+**What it is.** Amazon OpenSearch Service runs OpenSearch (the open-source fork of Elasticsearch) for full-text search, log and observability analytics, and vector search. It comes as provisioned **domains** or **OpenSearch Serverless** collections (search, time series or vector search).
+
+**How it works.** Data engineers feed it: from Firehose, from **OpenSearch Ingestion** pipelines (managed, based on Data Prepper), from zero-ETL integrations with sources such as DynamoDB and S3, or from Lambda and Glue jobs. Index design (mappings, shards, index per time period, lifecycle policies to roll old indexes to cheaper storage or delete them) decides performance and cost.
+
+**Where it fits.** Search boxes, log analytics, near-real-time dashboards over recent events, and vector retrieval for applications. It is not a replacement for a warehouse: joins and large analytical aggregations belong in Athena or Redshift.
+
+**Pitfalls.** Too many small shards, unbounded indexes without lifecycle policies, and dynamic mappings that explode the number of fields.
+
+**In interviews.** Say what OpenSearch is good at (search, logs, recent-data aggregations, vectors), how data gets in (Firehose, OpenSearch Ingestion, zero-ETL), and why you would not use it as the warehouse.
+
+## QuickSight for data engineers
+
+**What it is.** Amazon QuickSight is AWS's BI service for dashboards and reports. AWS has been bringing it into a wider product family under the Amazon Quick Suite name, so console naming may differ; the BI concepts below are the same.
+
+**How it works, from the data engineer's side.**
+
+- **Data sources**: Athena, Redshift, RDS, S3, Snowflake and others. Datasets are either queried directly (**direct query**) or imported into **SPICE**, QuickSight's in-memory engine.
+- **Refreshes**: SPICE datasets refresh on a schedule or by API (`CreateIngestion`). Trigger the refresh at the end of your pipeline instead of on a fixed clock, so dashboards never show half-loaded data. Incremental refresh is available for large datasets.
+- **Security**: row-level security and column-level security on datasets, and Lake Formation permissions when reading through Athena.
+- **Your job**: deliver clean, documented, business-ready tables (the gold layer), with stable names and types, so dashboards do not encode transformation logic.
+
+{/* noexec */}
+```bash
+aws quicksight create-ingestion --aws-account-id 111122223333 \
+  --data-set-id orders-daily --ingestion-id run-2026-10-05
+```
+
+**Pitfalls.** Direct query dashboards on unpartitioned Athena tables that scan the lake on every page view; heavy logic in calculated fields that nobody tests.
+
+**In interviews.** Explain SPICE versus direct query, how to trigger refreshes from the pipeline, and why the modelling belongs upstream.
+
+## Secrets Manager
+
+**What it is.** AWS Secrets Manager stores credentials (database passwords, API tokens, OAuth secrets) encrypted with KMS, controls access with IAM and resource policies, audits every retrieval in CloudTrail, and can **rotate** secrets automatically.
+
+**How it works.** Pipelines fetch a secret at run time by name or ARN instead of reading it from code or environment variables. RDS and Aurora can manage the master password in Secrets Manager for you, with rotation; for other secrets, rotation runs a Lambda function on a schedule. Glue connections, Redshift, DMS endpoints and many other services can reference secrets directly.
+
+{/* noexec */}
+```python
+import json
+import boto3
+
+def get_db_credentials(secret_id="prod/orders-db/readonly"):
+    sm = boto3.client("secretsmanager")
+    secret = json.loads(sm.get_secret_value(SecretId=secret_id)["SecretString"])
+    return secret["username"], secret["password"], secret["host"], int(secret["port"])
+```
+
+| | Secrets Manager | Systems Manager Parameter Store (SecureString) |
+|---|---|---|
+| Rotation | Built in (managed or Lambda-based) | Not built in |
+| Cross-account access | Resource policies | Limited |
+| Cost | Per secret per month plus API calls | Standard parameters have no storage charge |
+| Use for | Database credentials, API keys that rotate | Configuration values and simple secrets |
+
+**Pitfalls.**
+
+- Fetching the secret for every record or invocation, which adds latency and API cost; cache it per process (AWS provides caching libraries) and refresh on authentication failure.
+- Logging the credentials in debug output.
+- Rotation that breaks long-running jobs holding old credentials; rotation strategies with two users (alternating) avoid this.
+
+**In interviews.** Explain why secrets never go in code, how rotation works, and Secrets Manager versus Parameter Store.
+
+## Infrastructure as code: CloudFormation and CDK
+
+**What it is.** Infrastructure as code (IaC) defines buckets, roles, Glue jobs, state machines and alarms in version-controlled files that are reviewed and deployed automatically. **AWS CloudFormation** takes JSON or YAML templates and creates **stacks**; the **AWS CDK** lets you write Python or TypeScript that synthesises CloudFormation. Terraform is a popular third-party alternative.
+
+**How it works.** A CloudFormation template declares resources and their properties; CloudFormation works out the order, creates or updates them, rolls back on failure, and shows **change sets** before applying changes and **drift** when someone edits resources by hand.
+
+{/* noexec */}
+```json
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Curated zone bucket and Glue database",
+  "Resources": {
+    "CuratedBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "VersioningConfiguration": { "Status": "Enabled" },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            { "ServerSideEncryptionByDefault": { "SSEAlgorithm": "aws:kms" }, "BucketKeyEnabled": true }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true, "BlockPublicPolicy": true, "IgnorePublicAcls": true, "RestrictPublicBuckets": true
+        },
+        "Tags": [ { "Key": "team", "Value": "data-platform" }, { "Key": "pipeline", "Value": "orders" } ]
+      }
+    },
+    "CuratedDatabase": {
+      "Type": "AWS::Glue::Database",
+      "Properties": {
+        "CatalogId": { "Ref": "AWS::AccountId" },
+        "DatabaseInput": { "Name": "curated", "Description": "Cleaned lake tables" }
+      }
+    }
+  },
+  "Outputs": { "BucketName": { "Value": { "Ref": "CuratedBucket" } } }
+}
+```
+
+The same in the CDK for Python, with a Glue job and tags applied to everything in the stack:
+
+{/* noexec */}
+```python
+from aws_cdk import App, Stack, Tags, aws_glue as glue, aws_iam as iam, aws_s3 as s3
+from constructs import Construct
+
+class OrdersPipelineStack(Stack):
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+        bucket = s3.Bucket(
+            self, "CuratedBucket",
+            encryption=s3.BucketEncryption.KMS_MANAGED,
+            bucket_key_enabled=True,
+            versioned=True,
+            enforce_ssl=True,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+        )
+        role = iam.Role(self, "GlueJobRole", assumed_by=iam.ServicePrincipal("glue.amazonaws.com"))
+        bucket.grant_read_write(role)
+        glue.CfnJob(
+            self, "OrdersJob",
+            name="raw-to-curated-orders",
+            role=role.role_arn,
+            glue_version="5.1",
+            worker_type="G.1X",
+            number_of_workers=10,
+            command=glue.CfnJob.JobCommandProperty(
+                name="glueetl",
+                python_version="3",
+                script_location=f"s3://{bucket.bucket_name}/jobs/orders.py",
+            ),
+            default_arguments={"--job-bookmark-option": "job-bookmark-enable"},
+        )
+
+app = App()
+stack = OrdersPipelineStack(app, "orders-pipeline")
+Tags.of(stack).add("team", "data-platform")
+Tags.of(stack).add("pipeline", "orders")
+app.synth()
+```
+
+Deploy with `cdk diff` (review changes) and `cdk deploy`, ideally from CI after review.
+
+**Pitfalls.**
+
+- Console changes that drift from the code and are overwritten on the next deploy.
+- Deleting a stack that owns a bucket full of data. Set deletion and retention policies (for example `RemovalPolicy.RETAIN` in the CDK) on stateful resources.
+- One giant stack for everything; split by lifecycle (network, storage, pipelines) so a pipeline change cannot touch the network.
+
+**In interviews.** Explain why IaC matters for data platforms (review, repeatability, environments, audit), compare CloudFormation templates with CDK code, and mention change sets, drift detection and retention policies for data stores.
+
+## Cost allocation tags
+
+**What it is.** Cost allocation tags are resource tags that AWS Billing uses to break down cost. **User-defined** tags are the ones you apply (for example `team`, `pipeline`, `environment`); **AWS-generated** tags (such as `aws:createdBy`) are applied by AWS.
+
+**How it works.**
+
+1. Choose a small set of required keys and allowed values.
+2. Apply them everywhere, preferably automatically through IaC (`Tags.of(stack).add(...)` in the CDK, or stack-level tags in CloudFormation), and propagate them to resources created at run time (EMR clusters, Glue job runs, Athena workgroups).
+3. **Activate** the tag keys as cost allocation tags in the Billing and Cost Management console (from the management account in an organisation). Tags appear in billing data only after activation, can take up to a day to show, and do not apply to costs from before activation.
+4. Group Cost Explorer and budgets by these tags, and enforce them with AWS Organizations **tag policies** and checks in CI.
+
+A simple compliance check, the kind you would run in CI or on a schedule against the Resource Groups Tagging API output:
+
+```python
+REQUIRED = {"team", "pipeline", "environment"}
+ALLOWED_ENV = {"dev", "staging", "prod"}
+
+resources = [
+    {"arn": "arn:aws:glue:eu-west-1:111122223333:job/raw-to-curated-orders",
+     "tags": {"team": "data-platform", "pipeline": "orders", "environment": "prod"}},
+    {"arn": "arn:aws:s3:::example-lake", "tags": {"team": "data-platform", "environment": "prod"}},
+    {"arn": "arn:aws:athena:eu-west-1:111122223333:workgroup/analytics",
+     "tags": {"team": "analytics", "pipeline": "adhoc", "environment": "production"}},
+]
+
+for r in resources:
+    problems = sorted(REQUIRED - r["tags"].keys())
+    env = r["tags"].get("environment")
+    if env and env not in ALLOWED_ENV:
+        problems.append(f"environment={env} not allowed")
+    print(f"{'OK  ' if not problems else 'FIX '} {r['arn'].split(':')[2]:<7} {problems or ''}")
+```
+
+```text
+OK   glue    
+FIX  s3      ['pipeline']
+FIX  athena  ['environment=production not allowed']
+```
+
+**Pitfalls.**
+
+- Tags applied but never activated, so Cost Explorer shows nothing.
+- Inconsistent values (`prod`, `production`, `Prod`), which split reports. Enforce allowed values.
+- Shared resources (one Redshift cluster, one NAT gateway) that no single tag describes; allocate them by usage or accept a shared-platform line.
+
+**In interviews.** Describe the tag strategy (few keys, enforced values, applied by IaC, activated in Billing) and how it answers "what does the orders pipeline cost per month?".
+
+## Practice questions
+
+<details>
+<summary>What does Iceberg give you over a plain Parquet table in S3, and what does S3 Tables add on top?</summary>
+
+Iceberg adds atomic commits through metadata, schema and partition evolution, hidden partitioning, time travel and row-level updates and deletes with `MERGE`. S3 Tables adds a bucket type where Iceberg tables are first-class resources with built-in maintenance (compaction, snapshot management, unreferenced file removal), table-level permissions and catalogue integration, so you do not run maintenance jobs yourself.
+
+</details>
+
+<details>
+<summary>Where should data quality checks run in a Glue pipeline, and what happens when they fail?</summary>
+
+Before data is published: after transforming into a staging location or a new snapshot, run an `EvaluateDataQuality` ruleset, and only promote the data if it passes. Publish results to CloudWatch and EventBridge, fail the job (or the Step Functions state) on critical rules, and alert the owner. Non-critical rules can warn without blocking.
+
+</details>
+
+<details>
+<summary>When would you use AWS Batch instead of Lambda or Glue?</summary>
+
+For containerised jobs that run longer than Lambda's 15 minutes or need more resources, but are not distributed data processing: for example running a scoring model or a vendor tool over thousands of files as an array job on Spot. Use Lambda for short event-driven work and Glue or EMR for joins and large transformations.
+
+</details>
+
+<details>
+<summary>How should a Glue job get the password for a source database?</summary>
+
+From Secrets Manager: reference the secret in the Glue connection or fetch it at run time with the job's IAM role (which has `secretsmanager:GetSecretValue` on that secret only, and `kms:Decrypt` on its key). Never put it in job parameters, code or environment variables. Enable rotation and cache the value for the run.
+
+</details>
+
+<details>
+<summary>Your team tags everything, but Cost Explorer cannot group by the pipeline tag. Why?</summary>
+
+The tag key has not been activated as a cost allocation tag in the Billing console (from the management account). After activation it can take up to a day to appear, and costs from before activation are not tagged retroactively. Also check that the tag is applied to the resources that generate the cost, including run-time resources such as EMR clusters.
+
+</details>
+
+<details>
+<summary>How do you judge whether an AWS service such as DataBrew or AppFlow is safe to build on?</summary>
+
+Check AWS's services-in-maintenance and lifecycle pages (services there are closed to new customers), recent release notes and What's New posts for continued investment, coverage of your sources and features, and the exit path if it changes. Examples of services that changed status are S3 Select (closed to new customers in 2024), Kinesis Data Analytics for SQL (discontinued) and Lake Formation governed tables (retired).
+
+</details>
+
+## Key takeaways
+
+- Iceberg is the transactional table format across Glue, Athena, EMR and Redshift; S3 Tables runs Iceberg maintenance for you.
+- Glue Data Quality rules in DQDL should gate publishing and alert through EventBridge and CloudWatch.
+- DataBrew (visual prep) and AppFlow (SaaS ingestion) suit specific users and sources; check their status and limits before building on them.
+- AWS Batch runs long, parallel container jobs; OpenSearch serves search and logs; QuickSight consumes the gold layer.
+- Keep credentials in Secrets Manager and every resource in CloudFormation or CDK code, with retention policies on data stores.
+- Activate a small set of enforced cost allocation tags so every pipeline's cost is visible.
