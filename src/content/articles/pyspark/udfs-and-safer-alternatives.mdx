@@ -1,97 +1,524 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "PySpark UDFs and Safer Alternatives"
-description: "When Python UDFs are slow or risky in PySpark, how built-in functions and pandas UDFs compare, and what Arrow-optimised UDFs in Spark 4 change."
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "PySpark UDFs, pandas UDFs and the Pandas API on Spark"
+seoTitle: "PySpark UDFs, pandas UDFs and pandas-on-Spark"
+description: "When to write Python UDFs in PySpark, how Arrow and pandas UDFs reduce their cost, how applyInPandas and UDTFs work, and when the pandas API on Spark fits."
 inventoryId: "TECH-15"
 technology: ["pyspark", "spark"]
-topic: ["udfs", "performance"]
+topic: ["udfs", "pandas-udfs", "pandas-api-on-spark", "performance"]
 difficulty: "Intermediate"
-prerequisites: ["articles:pyspark/dataframes-and-schemas"]
+learningObjectives:
+  - "Explain why Python UDFs are slower and less optimisable than built-in functions"
+  - "Write safe scalar UDFs: NULL handling, return types and registration for SQL"
+  - "Choose between scalar, iterator and grouped-aggregate pandas UDFs, applyInPandas and mapInPandas"
+  - "Describe what Arrow-optimised UDFs in Spark 4.2 change, and what they do not"
+  - "Use the pandas API on Spark appropriately, including its default index and conversion costs"
+prerequisites: ["articles:pyspark/dataframes-and-schemas", "articles:pyspark/aggregations-pivot-views"]
 related: ["interview-questions:pyspark/avoid-python-udfs", "articles:spark/adaptive-query-execution"]
-sources: [{"label": "PySpark documentation: Python user-defined functions", "url": "https://spark.apache.org/docs/latest/api/python/user_guide/udfandudtf.html"}, {"label": "PySpark documentation: pandas UDFs (Apache Arrow)", "url": "https://spark.apache.org/docs/latest/api/python/user_guide/sql/arrow_pandas.html"}]
-versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs; pandas UDFs need pandas and PyArrow installed on the cluster"
+previous: "articles:pyspark/window-functions"
+sources:
+  - { label: "PySpark user guide: UDFs and UDTFs", url: "https://spark.apache.org/docs/latest/api/python/user_guide/udfandudtf.html" }
+  - { label: "PySpark documentation: Apache Arrow in PySpark (pandas UDFs, Arrow UDFs)", url: "https://spark.apache.org/docs/latest/api/python/tutorial/sql/arrow_pandas.html" }
+  - { label: "PySpark API reference: pyspark.sql.functions.pandas_udf", url: "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.pandas_udf.html" }
+  - { label: "PySpark documentation: Python user-defined table functions", url: "https://spark.apache.org/docs/latest/api/python/tutorial/sql/python_udtf.html" }
+  - { label: "Pandas API on Spark: Best practices", url: "https://spark.apache.org/docs/latest/api/python/tutorial/pandas_on_spark/best_practices.html" }
+versionContext: "All examples run on PySpark 4.2.0 in local mode with pandas 3.0.6 and PyArrow 25.0.1 (PySpark 4.2 prints a FutureWarning that pandas 3 is not yet fully supported; warnings are suppressed in the examples). Arrow serialisation for regular Python UDFs is on by default from Spark 4.2; in earlier versions you opt in with useArrow=True or spark.sql.execution.pythonUDF.arrow.enabled."
 ---
 
-A **user-defined function (UDF)** lets you run your own Python code on each value of a column. It is sometimes necessary, but it should be the last option, not the first.
+Spark's built-in functions cover most transformations, but sometimes you need Python: a parsing library, a scoring model, business logic that is clearer in code. PySpark offers several ways to run Python on a DataFrame, and they differ a lot in speed and safety. This lesson covers plain UDFs, pandas (vectorised) UDFs and their grouped and map variants, table functions, and the pandas API on Spark, which lets pandas-style code run on a cluster.
 
-## Why plain Python UDFs cost more
+## Sample data
 
-Built-in functions (`F.upper`, `F.when`, `F.regexp_extract` and hundreds more) run inside Spark's JVM engine, where the optimiser understands them and can generate efficient code. A Python UDF is a black box:
-
-- data must be **serialised** from the JVM to a Python worker process and back;
-- the optimiser **cannot see inside** it, so it cannot push filters through it or reason about its output;
-- errors and `None` handling are your responsibility.
-
-Compare the plans:
+The setup also points Spark's Python workers at the same interpreter as the driver. Mismatched Python environments between driver and workers are a classic cause of "module not found" errors inside UDFs.
 
 ```python
-from pyspark.sql import SparkSession, functions as F
-
-spark = SparkSession.builder.master("local[2]").appName("example").getOrCreate()
-from pyspark.sql.types import StringType
-
-df = spark.createDataFrame([("asha",), ("ben",), (None,)], ["customer"])
-
-upper_udf = F.udf(lambda s: s.upper() if s is not None else None, StringType())
-df.select(upper_udf("customer")).explain()     # an EvalPython step appears
-df.select(F.upper("customer")).explain()        # just a Project inside the JVM
-```
-
-The UDF version shows a separate Python evaluation step (`BatchEvalPython`, or `ArrowEvalPython` when Arrow is used); the built-in version is a single projection.
-
-## Option 1: use built-in functions
-
-Most "I need a UDF" cases are covered by built-ins: string handling, dates, `when`/`otherwise`, regular expressions, arrays and maps (`transform`, `filter`, `aggregate`), JSON parsing. Search the `pyspark.sql.functions` reference before writing a UDF.
-
-```python
-df.select(
-    F.when(F.col("customer").isNull(), "unknown")
-     .otherwise(F.initcap("customer"))
-     .alias("customer")
-).show()
-```
-
-## Option 2: pandas (vectorised) UDFs
-
-If you truly need Python logic, a **pandas UDF** processes a whole batch as a pandas Series, using Apache Arrow for efficient transfer:
-
-```python
+import os, sys, re, io, contextlib, warnings
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)   # workers use the driver's Python
+warnings.filterwarnings("ignore")
 import pandas as pd
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StringType, IntegerType
 
+spark = (SparkSession.builder.master("local[2]").appName("udfs")
+         .config("spark.sql.shuffle.partitions", "4").getOrCreate())
+spark.sparkContext.setLogLevel("ERROR")
+
+def plan(df):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        df.explain()
+    text = re.sub(r"#\d+L?", "", buf.getvalue())
+    print(re.sub(r", \[plan_id=\d+\]", "", text).strip())
+
+orders = spark.createDataFrame(
+    [(1, "asha", "IN-560001", 120.0), (2, "ben", "UK-SW1A", 15.0),
+     (3, None, "IN-110001", 35.5), (4, "dara", None, 210.0)],
+    "order_id INT, customer STRING, postcode STRING, amount DOUBLE")
+```
+
+## UDFs and pandas UDFs
+
+### What a UDF is and why it costs more
+
+A **user-defined function (UDF)** wraps a Python function so Spark can apply it to a column. Spark's engine runs in the JVM, so to call Python it must:
+
+1. **serialise** batches of rows from the JVM and send them to a separate Python worker process on each executor;
+2. run your function in Python, one row at a time for a plain UDF;
+3. serialise the results back to the JVM.
+
+On top of that cost, the optimiser **cannot see inside** the function. It cannot push a filter on the result down to the file scan, cannot reorder around it, and cannot generate code for it.
+
+```python
+@F.udf(returnType=StringType())
+def country_of(postcode):
+    if postcode is None:
+        return None
+    return postcode.split("-")[0]
+
+orders.select("order_id", country_of("postcode").alias("country")).show()
+plan(orders.select(country_of("postcode").alias("country")))
+plan(orders.select(F.split_part("postcode", F.lit("-"), F.lit(1)).alias("country")))
+```
+
+```text
++--------+-------+
+|order_id|country|
++--------+-------+
+|       1|     IN|
+|       2|     UK|
+|       3|     IN|
+|       4|   NULL|
++--------+-------+
+
+== Physical Plan ==
+*(2) Project [pythonUDF0 AS country]
++- ArrowEvalPython [country_of(postcode)], [pythonUDF0], 101
+   +- *(1) Project [postcode]
+      +- *(1) Scan ExistingRDD[order_id,customer,postcode,amount]
+== Physical Plan ==
+*(1) Project [element_at(stringsplitsql(postcode, -), 1, Some(), false) AS country]
++- *(1) Scan ExistingRDD[order_id,customer,postcode,amount]
+```
+
+The UDF adds a separate `ArrowEvalPython` operator, which breaks whole-stage code generation into two stages. The built-in `split_part` is a single JVM projection. The rule of thumb in order of preference:
+
+1. **Built-in functions** (`pyspark.sql.functions`): strings, dates, regex, JSON, arrays and maps (`transform`, `filter`, `aggregate`), `when`/`otherwise`.
+2. **pandas UDFs** (or Arrow UDFs) when you need Python: vectorised over batches.
+3. **Plain Python UDFs** for row-by-row logic that cannot be vectorised.
+
+The optimiser cannot look through the UDF even for a simple filter on its output. Here the UDF is evaluated twice, once for the filter and once for the projection:
+
+```python
+plan(orders.select(country_of("postcode").alias("c")).filter("c = 'IN'"))
+```
+
+```text
+== Physical Plan ==
+*(3) Project [pythonUDF0 AS c]
++- ArrowEvalPython [country_of(postcode)], [pythonUDF0], 101
+   +- *(2) Project [postcode]
+      +- *(2) Filter (pythonUDF0 = IN)
+         +- ArrowEvalPython [country_of(postcode)], [pythonUDF0], 101
+            +- *(1) Project [postcode]
+               +- *(1) Scan ExistingRDD[order_id,customer,postcode,amount]
+```
+
+UDFs are assumed to be deterministic. If yours is not (random numbers, current time, calls to a service), mark it with `.asNondeterministic()` so Spark does not duplicate or reorder calls in ways that change results.
+
+### Arrow-optimised Python UDFs in Spark 4.2
+
+Plain UDFs originally exchanged data with Python using pickled rows. Since Spark 4.2, **Arrow** (a columnar in-memory format) is used by default for this transfer (`spark.sql.execution.pythonUDF.arrow.enabled = true`; earlier versions needed `useArrow=True`). Your function still runs once per row with ordinary Python values; only the transfer is faster. Disabling it shows the older operator:
+
+```python
+print(spark.conf.get("spark.sql.execution.pythonUDF.arrow.enabled"))
+spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+plan(orders.select(country_of("postcode")))
+spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
+```
+
+```text
+true
+== Physical Plan ==
+*(2) Project [pythonUDF0 AS country_of(postcode)]
++- BatchEvalPython [country_of(postcode)], [pythonUDF0]
+   +- *(1) Project [postcode]
+      +- *(1) Scan ExistingRDD[order_id,customer,postcode,amount]
+```
+
+Arrow serialisation also changes **type coercion**, which matters when the declared return type does not match what the function returns. With pickled transfer, a mismatch quietly becomes NULL; with Arrow, values are converted (here, doubles truncated to integers):
+
+```python
+legacy = F.udf(lambda x: x * 2, IntegerType(), useArrow=False)
+arrow = F.udf(lambda x: x * 2, IntegerType(), useArrow=True)
+orders.select("amount", legacy("amount").alias("legacy"), arrow("amount").alias("arrow")).show()
+```
+
+```text
++------+------+-----+
+|amount|legacy|arrow|
++------+------+-----+
+| 120.0|  NULL|  240|
+|  15.0|  NULL|   30|
+|  35.5|  NULL|   71|
+| 420.0|  NULL|  420|
++------+------+-----+
+```
+
+Neither result is what you want: `35.5 * 2 = 71.0` was silently truncated in one case and lost in the other. Declare the return type that matches what the function returns (`DoubleType` here), and test it. When upgrading to Spark 4.2, UDFs that relied on mismatches producing NULL can change behaviour.
+
+### NULLs and exceptions
+
+Spark passes NULL as `None`. A function that does not handle it raises, and **one bad row fails the whole job**:
+
+```python
+upper_unsafe = F.udf(lambda s: s.upper(), StringType())
+try:
+    orders.select(upper_unsafe("customer")).collect()
+except Exception as e:
+    print(type(e).__name__, "AttributeError" in str(e))
+```
+
+```text
+PythonException True
+```
+
+Handle `None` explicitly, decide what to return for invalid input, and unit-test the plain Python function before wrapping it.
+
+### Using UDFs from SQL
+
+`spark.udf.register(name, f)` makes a UDF callable in SQL:
+
+```python
+spark.udf.register("country_of", country_of)
+orders.createOrReplaceTempView("orders")
+spark.sql("SELECT order_id, country_of(postcode) AS country FROM orders WHERE order_id < 3").show()
+```
+
+```text
++--------+-------+
+|order_id|country|
++--------+-------+
+|       1|     IN|
+|       2|     UK|
++--------+-------+
+```
+
+### pandas UDFs (vectorised UDFs)
+
+A **pandas UDF** receives a whole batch of values as a `pandas.Series` (transferred with Arrow) and returns a Series of the same length. The per-row Python overhead disappears and you can use vectorised pandas and NumPy operations. The kind of pandas UDF is inferred from the **type hints**:
+
+| Type hints | Kind | Use |
+|------------|------|-----|
+| `pd.Series -> pd.Series` | Scalar | Column-to-column transformation |
+| `Iterator[pd.Series] -> Iterator[pd.Series]` | Scalar iterator | Same, with expensive setup done once per partition |
+| `pd.Series -> scalar` | Grouped aggregate | Custom aggregation in `groupBy().agg()` or windows |
+
+```python
 @F.pandas_udf("double")
-def add_tax(amount: pd.Series) -> pd.Series:
+def with_tax(amount: pd.Series) -> pd.Series:
     return amount * 1.18
 
-prices = spark.createDataFrame([(100.0,), (250.0,)], ["amount"])
-prices.select(add_tax("amount").alias("with_tax")).show()
+@F.pandas_udf("string")
+def country_vec(postcode: pd.Series) -> pd.Series:
+    return postcode.str.split("-").str[0]
+
+orders.select("order_id", F.round(with_tax("amount"), 2).alias("with_tax"),
+              country_vec("postcode").alias("country")).show()
+plan(orders.select(with_tax("amount")))
 ```
 
-Batch processing amortises the per-row overhead and lets you use vectorised NumPy/pandas operations.
+```text
++--------+--------+-------+
+|order_id|with_tax|country|
++--------+--------+-------+
+|       1|   141.6|     IN|
+|       2|    17.7|     UK|
+|       3|   41.89|     IN|
+|       4|   247.8|   NULL|
++--------+--------+-------+
 
-## What changed in Spark 4
+== Physical Plan ==
+*(2) Project [pythonUDF0 AS with_tax(amount)]
++- ArrowEvalPython [with_tax(amount)], [pythonUDF0], 200
+   +- *(1) Project [amount]
+      +- *(1) Scan ExistingRDD[order_id,customer,postcode,amount]
+```
 
-In recent Spark releases, regular Python UDFs can also use Arrow for data transfer (`spark.sql.execution.pythonUDF.arrow.enabled`, which defaults to `true` in Spark 4.2 when PyArrow is available). That reduces serialisation cost, but the UDF is still opaque to the optimiser and still runs in Python, so built-ins remain the better choice whenever they can express the logic.
+The iterator form lets you load something expensive, such as a model or a lookup table, once per partition rather than once per batch:
 
-## When a UDF is reasonable
+```python
+from typing import Iterator
 
-- Calling a well-tested Python library (for example a parser) that has no Spark equivalent.
-- Complex business logic that would be unreadable as nested expressions, on data volumes where the cost is acceptable.
+@F.pandas_udf("double")
+def scaled(batches: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    factor = 0.5          # expensive setup (a model, a lookup table) runs once per partition
+    for amount in batches:
+        yield amount * factor
 
-In those cases: handle `None` explicitly, declare the return type, keep the function pure, and unit-test it as ordinary Python.
+orders.select("order_id", scaled("amount").alias("half")).show()
+```
 
-## Common mistakes
+```text
++--------+-----+
+|order_id| half|
++--------+-----+
+|       1| 60.0|
+|       2|  7.5|
+|       3|17.75|
+|       4|105.0|
++--------+-----+
+```
 
-1. Writing a UDF for something a built-in already does.
-2. Forgetting `None` handling, so one null crashes the job.
-3. Declaring the wrong return type and getting silent `NULL`s.
-4. Calling external services (APIs, databases) from inside a UDF, row by row.
+A grouped-aggregate pandas UDF reduces each group's Series to one value:
 
-## Interview relevance
+```python
+@F.pandas_udf("double")
+def median_amount(amount: pd.Series) -> float:
+    return float(amount.median())
 
-"When should you avoid Python UDFs?" is a frequent PySpark question. See the [interview answer](/interview/pyspark/avoid-python-udfs/).
+with_country = orders.withColumn("country", F.split_part("postcode", F.lit("-"), F.lit(1)))
+(with_country.groupBy("country").agg(median_amount("amount").alias("median"))
+    .orderBy("country").show())
+```
 
-## Key takeaway
+```text
++-------+------+
+|country|median|
++-------+------+
+|   NULL| 210.0|
+|     IN| 77.75|
+|     UK|  15.0|
++-------+------+
+```
 
-Prefer built-in functions, then pandas UDFs, and use plain Python UDFs only when nothing else can express the logic.
+Built-in `percentile_approx` or `median` would be cheaper here; a grouped-aggregate UDF needs all values of a group in memory on one worker.
+
+### Function APIs: applyInPandas and mapInPandas
+
+These take a regular Python function over pandas DataFrames, not a column expression:
+
+- `groupBy(...).applyInPandas(func, schema)`: each **group** arrives as one pandas DataFrame; return any number of rows. Good for per-group models or logic that needs the whole group.
+- `mapInPandas(func, schema)`: an iterator of pandas DataFrames per **partition**; return any number of rows. Good for row-wise enrichment that adds or removes rows.
+
+```python
+def top_order(pdf: pd.DataFrame) -> pd.DataFrame:
+    return pdf.nlargest(1, "amount")[["country", "order_id", "amount"]]
+
+(with_country.groupBy("country")
+    .applyInPandas(top_order, schema="country STRING, order_id INT, amount DOUBLE")
+    .orderBy("country").show())
+
+def add_flag(batches):
+    for pdf in batches:
+        pdf["big"] = pdf["amount"] > 100
+        yield pdf
+
+orders.mapInPandas(add_flag,
+    schema="order_id INT, customer STRING, postcode STRING, amount DOUBLE, big BOOLEAN").show()
+```
+
+```text
++-------+--------+------+
+|country|order_id|amount|
++-------+--------+------+
+|   NULL|       4| 210.0|
+|     IN|       1| 120.0|
+|     UK|       2|  15.0|
++-------+--------+------+
+
++--------+--------+---------+------+-----+
+|order_id|customer| postcode|amount|  big|
++--------+--------+---------+------+-----+
+|       1|    asha|IN-560001| 120.0| true|
+|       2|     ben|  UK-SW1A|  15.0|false|
+|       3|    NULL|IN-110001|  35.5|false|
+|       4|    dara|     NULL| 210.0| true|
++--------+--------+---------+------+-----+
+```
+
+`applyInPandas` shuffles by the grouping key and loads **each whole group into memory** on one worker; a skewed key (one country with most orders) can exhaust it. (The top-order problem itself is better solved with a window and `row_number`.)
+
+### Table functions (UDTFs)
+
+A **Python UDTF** (Spark 3.5+) returns a table instead of a single value: its `eval` method yields zero or more rows per input. Use one when one input row should produce several output rows, for example exploding a custom format:
+
+```python
+from pyspark.sql.functions import udtf
+
+@udtf(returnType="order_id INT, part STRING")
+class SplitPostcode:
+    def eval(self, order_id: int, postcode: str):
+        if postcode:
+            for part in postcode.split("-"):
+                yield order_id, part
+
+SplitPostcode(F.lit(1), F.lit("IN-560001")).show()
+```
+
+```text
++--------+------+
+|order_id|  part|
++--------+------+
+|       1|    IN|
+|       1|560001|
++--------+------+
+```
+
+Registered with `spark.udtf.register`, a UDTF can be called in SQL with `LATERAL` to apply it to each row of a table. For simple splitting, built-ins such as `explode(split(...))` remain faster (see the nested data lesson). Recent releases also add **Arrow UDFs** (`arrow_udf`, `arrow_udtf`) that work directly on PyArrow arrays instead of pandas objects.
+
+### Choosing
+
+| Option | Runs | Relative cost | When |
+|--------|------|---------------|------|
+| Built-in functions | JVM, code-generated | Lowest | Always first |
+| pandas UDF / Arrow UDF | Python, vectorised batches | Moderate | Python logic that can be vectorised |
+| Python UDF (Arrow transfer) | Python, row by row | Higher | Row-wise logic that cannot be vectorised |
+| `applyInPandas` | Python, whole group | Depends on group size | Per-group models or logic needing the whole group |
+| `mapInPandas` / UDTF | Python, per partition / per row | Moderate | Changing the number of rows |
+
+### Pitfalls
+
+- **Writing a UDF for something a built-in does.** Check `pyspark.sql.functions` first; it has hundreds of functions.
+- **Wrong return type**: values silently become NULL (pickled) or are coerced (Arrow).
+- **Not handling `None`**: one NULL fails the job.
+- **Calling external services row by row** from a UDF: thousands of concurrent requests, no batching, retries rerun calls. Use `mapInPandas` with batching, or do the enrichment outside Spark.
+- **Environment mismatches**: pandas, PyArrow and your libraries must be installed on every executor with compatible versions.
+- **Large closures**: objects referenced by the function are serialised with it to every task; broadcast large lookups instead.
+
+### In interviews
+
+"Why avoid Python UDFs?" is one of the most common PySpark questions. A strong answer: serialisation between JVM and Python, row-by-row execution, opacity to Catalyst (no pushdown, no code generation), and NULL/type pitfalls; then the alternatives in order (built-ins, pandas UDFs, Arrow) and when a UDF is still reasonable. Mention that Spark 4.2 uses Arrow for regular UDF transfer by default, which reduces but does not remove the cost. See the [interview answer](/interview/pyspark/avoid-python-udfs/).
+
+## The pandas API on Spark
+
+### What it is
+
+`pyspark.pandas` (formerly the Koalas project, part of PySpark since 3.2) implements much of the pandas API on top of Spark DataFrames. Code that looks like pandas runs distributed, so a team with pandas notebooks can scale them without rewriting everything in the DataFrame API.
+
+```python
+import pyspark.pandas as ps
+
+psdf = ps.DataFrame({"region": ["north", "north", "south", "south", "north"],
+                     "rep": ["asha", "ben", "chen", "dara", "asha"],
+                     "amount": [100, 150, 200, 50, 150]})
+print(type(psdf).__name__)
+print(psdf.groupby("region")["amount"].sum().sort_index())
+print(psdf[psdf.amount > 100].sort_values("amount").head(3))
+```
+
+```text
+DataFrame
+region
+north    400
+south    250
+Name: amount, dtype: int64
+  region   rep  amount
+1  north   ben     150
+4  north  asha     150
+2  south  chen     200
+```
+
+### How it works: the index
+
+pandas DataFrames always have an index, and Spark DataFrames have no row order or index. pandas-on-Spark therefore keeps an extra index column and translates each operation into Spark plans. Operations that align on the index, such as assigning a column computed by `groupby().transform`, become **joins** on that index:
+
+```python
+psdf["share"] = psdf.groupby("region")["amount"].transform(lambda s: s / s.sum())
+print(psdf.sort_values(["region", "rep"])[["region", "rep", "amount"]].assign(share=psdf["share"].round(2)))
+psdf.spark.explain()
+```
+
+When a Spark DataFrame is converted with `pandas_api()`, Spark must invent an index. The default type is `distributed-sequence`: a globally sequential 0, 1, 2… index computed in a distributed way, which still costs an extra pass over the data. `distributed` is cheaper (unique, not sequential); `sequence` uses a window without partitioning and puts all data in one partition, so avoid it on large data. Better still, name an existing column as the index (`pandas_api(index_col="order_id")`).
+
+```python
+print(ps.get_option("compute.default_index_type"))
+sdf = psdf.to_spark()
+sdf.printSchema()
+back = orders.pandas_api(index_col="order_id")
+print(back.dtypes)
+print(back.index)
+```
+
+### Moving between APIs
+
+| Call | Moves data to the driver? |
+|------|---------------------------|
+| `spark_df.pandas_api()` / `psdf.to_spark()` | No, both stay distributed |
+| `spark_df.toPandas()` / `psdf.to_pandas()` | **Yes**: everything is collected into one pandas DataFrame |
+| `ps.from_pandas(pdf)` / `spark.createDataFrame(pdf)` | Data starts on the driver and is distributed |
+
+`toPandas()` uses Arrow by default in Spark 4 (`spark.sql.execution.arrow.pyspark.enabled`), which makes the transfer faster but does not reduce the memory needed on the driver.
+
+### Pitfalls
+
+- **Not all of pandas is supported**, and some functions behave differently; for example, the string shortcut `transform("sum")` used above in pandas raises a `TypeError` in pandas-on-Spark, so a function was passed instead. Check the API reference for each function you rely on.
+- **Order-dependent operations** (`head`, `iloc`, `shift`, cumulative functions) need an ordering and can trigger expensive sorts or single-partition windows.
+- **Combining two DataFrames** with different origins (`psdf1.a + psdf2.b`) requires a join on the index; Spark 4 allows it by default (`compute.ops_on_diff_frames` is `True`), but it is a hidden join.
+- **Version support**: PySpark releases support a range of pandas versions; with a newer pandas than tested (PySpark 4.2 warns about pandas 3), some behaviour may differ.
+
+### When to use it
+
+| Use the pandas API on Spark | Use the DataFrame API |
+|-----------------------------|-----------------------|
+| Scaling an existing pandas notebook or library with minimal rewrite | New production pipelines |
+| Exploratory work by pandas users | Performance-critical jobs where you want to see and control the plan |
+| Using pandas-style plotting and statistics on large data | Streaming (pandas-on-Spark is batch only) |
+
+### In interviews
+
+Questions are usually "how would you scale pandas code?" or "what is the difference between `toPandas()` and the pandas API on Spark?". Strong answers explain that pandas-on-Spark stays distributed while `toPandas` collects to the driver, mention the default index cost and its options, and say that new pipelines are usually written with the DataFrame API.
+
+## Practice questions
+
+<details>
+<summary>Why is a Python UDF slower than an equivalent built-in function?</summary>
+
+Data must be serialised from the JVM to a Python worker and back, the function runs row by row in the Python interpreter, and the optimiser cannot see inside it, so it cannot push filters through it, reorder it, or include it in whole-stage code generation. Arrow transfer (default for UDFs in Spark 4.2) reduces the serialisation cost only.
+
+</details>
+
+<details>
+<summary>A UDF declared as IntegerType returns float values. What happens?</summary>
+
+With the classic pickled transfer, values that do not match the declared type become NULL silently. With Arrow-optimised UDFs (default in Spark 4.2), they are coerced, for example truncated to integers. Either way the data is wrong; declare the type the function actually returns and test it.
+
+</details>
+
+<details>
+<summary>When would you choose a pandas UDF over a Python UDF, and when applyInPandas?</summary>
+
+A pandas UDF processes Arrow batches as pandas Series, so vectorisable logic runs much faster than row-by-row Python. Use `applyInPandas` when the logic needs an entire group at once (for example fitting a model per customer), accepting that each group must fit in a worker's memory and that the data is shuffled by the key.
+
+</details>
+
+<details>
+<summary>How do you load a machine learning model once per executor task rather than once per row?</summary>
+
+Use an iterator-of-Series pandas UDF (or `mapInPandas`) and load the model before looping over the batches, so it happens once per partition. Broadcasting the model file or caching it in a module-level variable in the worker are common complements.
+
+</details>
+
+<details>
+<summary>What is the difference between toPandas() and pandas_api()?</summary>
+
+`toPandas()` collects all rows into a single pandas DataFrame on the driver, which fails for data larger than driver memory. `pandas_api()` returns a pandas-on-Spark DataFrame that stays distributed and translates pandas-style calls into Spark plans.
+
+</details>
+
+<details>
+<summary>Why can converting a Spark DataFrame with pandas_api() be slow, and how do you avoid it?</summary>
+
+Spark DataFrames have no index, so pandas-on-Spark attaches a default one. The default `distributed-sequence` index needs an extra distributed computation, and `sequence` forces data into one partition. Specify an existing unique column with `index_col`, or use the `distributed` index type when sequential values are not needed.
+
+</details>
+
+## Key takeaways
+
+- Prefer built-in functions; Python UDFs add serialisation, row-by-row execution and an optimiser blind spot.
+- Spark 4.2 uses Arrow for regular UDF transfer by default, which is faster but changes how return-type mismatches behave.
+- Handle `None`, declare correct return types, mark non-deterministic UDFs, and test the plain Python function.
+- pandas UDFs are vectorised; their kind comes from type hints, and the iterator form amortises setup per partition.
+- `applyInPandas` needs each group in memory and `mapInPandas` and UDTFs change the number of rows; use them when column functions cannot.
+- The pandas API on Spark stays distributed but maintains an index that can cost extra passes; `toPandas()` collects everything to the driver.
