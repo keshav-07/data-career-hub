@@ -71,6 +71,7 @@ sources:
   - { label: "H3 documentation source: overview of the H3 indexing system", url: "https://github.com/uber/h3/blob/master/website/docs/core-library/overview.md" }
   - { label: "H3 documentation source: tables of cell statistics", url: "https://github.com/uber/h3/blob/master/website/docs/library/restable.md" }
 previous: "system-designs:real-time-leaderboard"
+next: "system-designs:ad-bidding-analytics-pipeline"
 ---
 
 ## Approach
