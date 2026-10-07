@@ -1,0 +1,129 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Partition Labels: Split a String So Each Letter Stays in One Part"
+seoTitle: "Partition Labels: Greedy Last Occurrence"
+description: "Split a string into as many parts as possible so no letter appears in two parts, using last-occurrence indices and a greedy sweep that closes parts early, with tests."
+technology: ["dsa"]
+topic: ["greedy"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 15
+interviewRelevance: "Medium"
+shortAnswer: "Record the last index of every letter. Sweep the string, extending the current part's end to the last occurrence of each letter you see. When the index reaches that end, every letter in the part has no later occurrence, so close the part and start a new one. This yields the maximum number of parts in O(n) time and O(alphabet) space. It is the same as merging each letter's first-to-last interval."
+followUps: ["Why does closing a part as early as possible maximise the number of parts?", "How is this the same as merging overlapping intervals?", "How would you return the parts as strings instead of lengths?"]
+previous: "interview-questions:dsa/merge-triplets-to-form-target"
+next: "interview-questions:dsa/valid-parenthesis-string"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a string of lowercase letters, split it into as many consecutive parts as possible so that each letter appears in
+at most one part. Return the lengths of the parts in order.
+
+This is widely known as LeetCode 763, "Partition Labels".
+
+Assume up to 500 characters.
+
+## Examples
+
+```text
+"abacdcfe"   -> [3, 3, 1, 1]   ("aba", "cdc", "f", "e")
+"xyzzyx"     -> [6]            (x appears at both ends)
+"abc"        -> [1, 1, 1]
+```
+
+## Approach 1: letter intervals, then merge
+
+Each letter spans from its first to its last occurrence. Overlapping spans must share a part, so merge overlapping
+intervals; each merged interval is one part.
+
+```python
+def partition_labels_intervals(s):
+    first, last = {}, {}
+    for i, ch in enumerate(s):
+        first.setdefault(ch, i)
+        last[ch] = i
+    spans = sorted((first[ch], last[ch]) for ch in first)
+    parts = []
+    for start, end in spans:
+        if parts and start <= parts[-1][1]:
+            parts[-1][1] = max(parts[-1][1], end)
+        else:
+            parts.append([start, end])
+    return [end - start + 1 for start, end in parts]
+```
+
+This is already O(n) plus sorting at most 26 intervals. The sweep below avoids building intervals.
+
+## Approach 2: optimal, greedy sweep
+
+### Why it works
+
+A part that contains letter c must extend at least to c's last occurrence. So the earliest a part can end is the
+maximum last occurrence over its letters. Closing the part exactly there is always safe and leaves the most room for
+later parts, so it maximises the count.
+
+### Python solution
+
+```python
+def partition_labels(s):
+    last = {ch: i for i, ch in enumerate(s)}
+    sizes = []
+    start = end = 0
+    for i, ch in enumerate(s):
+        end = max(end, last[ch])
+        if i == end:
+            sizes.append(end - start + 1)
+            start = i + 1
+    return sizes
+```
+
+Trace for `"abacdcfe"`: last = a:2, b:1, c:5, d:4, f:6, e:7. The end grows to 2 by index 0, the sweep reaches index 2,
+close [0..2]. Then c pushes the end to 5; close [3..5]. Then f and e each close immediately.
+
+### Complexity
+
+O(n) time, O(1) extra space (at most 26 letters).
+
+## Tests
+
+```python
+for fn in (partition_labels, partition_labels_intervals):
+    assert fn("abacdcfe") == [3, 3, 1, 1]
+    assert fn("xyzzyx") == [6]
+    assert fn("abc") == [1, 1, 1]
+    assert fn("") == []                          # empty string
+    assert fn("q") == [1]                        # single character
+    assert fn("aaaa") == [4]
+    assert fn("abba" + "cd" + "ee") == [4, 1, 1, 2]
+
+import random
+random.seed(31)
+for _ in range(200):
+    s = "".join(random.choice("abcde") for _ in range(random.randint(0, 12)))
+    parts = partition_labels(s)
+    assert parts == partition_labels_intervals(s) and sum(parts) == len(s)
+    # each letter lives in exactly one part
+    pos, seen = 0, set()
+    for size in parts:
+        letters = set(s[pos:pos + size])
+        assert not (letters & seen)
+        seen |= letters
+        pos += size
+```
+
+## Edge cases and pitfalls
+
+- **Closing the part when a letter's own last index is reached** rather than the running maximum splits letters
+  across parts.
+- **Returning strings or indices** when lengths are asked for, or vice versa; read the question.
+- **Empty input** returns an empty list.
+
+## Where this shows up in data engineering
+
+This is how you pick safe split points in a sorted or ordered stream: you can only cut a file where no key spans the
+cut, for example when splitting a large sorted export into files so that all rows of one customer land in the same
+file. Track the last row of each key and cut only where the running maximum is reached.
