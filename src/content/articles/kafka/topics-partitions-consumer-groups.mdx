@@ -303,7 +303,7 @@ Without `--members`, the same command lists each partition with its committed of
 | 6 | 1 | one consumer reads all 6 |
 
 - **Partitions cap a group's parallelism.** Idle consumers are still useful as hot standbys, but they add no throughput.
-- **Membership changes trigger a rebalance.** When a consumer joins, leaves or stops heartbeating, partitions are reassigned. Under the classic protocol this can briefly pause the group; the newer consumer protocol (generally available since Kafka 4.0) makes it incremental. See consumer groups and rebalancing.
+- **Membership changes trigger a rebalance.** When a consumer joins, leaves or stops heartbeating, partitions are reassigned. Under the classic protocol this can briefly pause the group; the newer consumer protocol (generally available since Kafka 4.0) makes it incremental. See [consumer groups and rebalancing](/kafka/consumer-groups-rebalancing/).
 - **Progress is stored per group.** Each group commits its own offsets to the internal `__consumer_offsets` topic, so a restarted consumer resumes where its group left off.
 - **Share groups are a different thing.** Kafka 4.2 made *share groups* (KIP-932, "queues for Kafka") production-ready: members of a share group can read the same partition and acknowledge records one by one, like a work queue. This lesson, and most pipelines, use ordinary consumer groups.
 

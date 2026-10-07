@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/producers"]
 related: ["articles:etl-elt/idempotency-in-data-pipelines", "articles:etl-elt/pipeline-observability", "interview-questions:kafka/at-least-once-delivery"]
 previous: "articles:kafka/producers"
+next: "articles:kafka/consumer-groups-rebalancing"
 sources:
   - { label: "Apache Kafka documentation: Consumer configs", url: "https://kafka.apache.org/41/configuration/consumer-configs/" }
   - { label: "Apache Kafka documentation: Message delivery semantics", url: "https://kafka.apache.org/documentation/#semantics" }
@@ -206,7 +207,7 @@ on shutdown: wakeup() from another thread -> poll throws WakeupException -> comm
 
 ### In interviews
 
-"Why does my consumer keep rebalancing?" A strong answer checks processing time against `max.poll.interval.ms`, and the session timeout and heartbeat settings, and mentions static membership and the new consumer protocol (see rebalancing).
+"Why does my consumer keep rebalancing?" A strong answer checks processing time against `max.poll.interval.ms`, and the session timeout and heartbeat settings, and mentions static membership and the new consumer protocol (see [rebalancing](/kafka/consumer-groups-rebalancing/)).
 
 ## Offset management
 
