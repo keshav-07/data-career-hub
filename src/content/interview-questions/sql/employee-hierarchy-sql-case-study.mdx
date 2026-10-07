@@ -1,0 +1,688 @@
+---
+seoTitle: "Employee Hierarchy SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Employee Hierarchy: SQL Case Study with 8 Approaches"
+description: "Compute span of control and headcount under each manager in SQL, then handle reporting history, calendars, arrays, dynamic pivots, skewed trees and planner statistics."
+technology: ["sql"]
+topic: ["case-study", "hierarchies", "recursive-cte"]
+difficulty: "Hard"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Walk the manager_id tree with a recursive CTE that starts at the top (manager_id IS NULL) and joins each level's employees to their reports, carrying the level and the path. From the result, count direct reports (rows whose manager is the person) and total reports (rows whose path contains the person). Detect cycles and orphans (employees whose manager does not exist), and use the reporting-history table with a calendar when the question is headcount at a point in time."
+followUps:
+  - "How do you list everyone under a given manager, at any depth?"
+  - "Which employees earn more than their manager?"
+  - "How do you find a manager's team size at the end of every month last year?"
+  - "An employee left and was rehired under the same manager. How do you merge the reporting periods?"
+  - "How do you pivot headcount by level when the number of levels is not known in advance?"
+  - "Why is the planner's row estimate for a recursive CTE often wrong?"
+prerequisites: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions"]
+related: ["interview-questions:sql/churn-rate-sql-case-study", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/inventory-turnover-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 (one dynamic-pivot example uses psql's \\gexec) and one pivot on DuckDB 1.5.6, with scripts/verify-examples.py; outputs and plans are copied from the engines."
+sources:
+  - { label: "PostgreSQL 16 documentation: WITH queries (recursive, SEARCH and CYCLE)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Statistics used by the planner", url: "https://www.postgresql.org/docs/16/planner-stats.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "DuckDB documentation: PIVOT statement", url: "https://duckdb.org/docs/current/sql/statements/pivot" }
+---
+
+Org-chart questions are an interview staple: "list everyone under this manager", "count each manager's reports", "find people who earn more than their boss". The data is a single table where each employee points to their manager, which makes it a tree that SQL can only walk with recursion. This case study computes span of control and total headcount, then uses eight techniques for the follow-ups, including history, calendars and the performance problems of deep or skewed trees.
+
+## The business question
+
+**"How large is each manager's organisation, and how is it structured?"** HR and finance use span of control (number of direct reports) to spot managers with too many or too few reports, total headcount under each leader for budgeting, and depth (levels from the top) for organisation design.
+
+Definitions:
+
+- **Direct reports** of a manager: employees whose `manager_id` is that manager.
+- **Total reports**: everyone below the manager at any depth, excluding the manager.
+- **Level**: 0 for the top of the tree (the CEO, `manager_id IS NULL`), 1 for their direct reports, and so on.
+- **Orphans**: employees whose `manager_id` points to someone not in the table. They are not part of the tree and must be reported, not silently dropped.
+- **Point in time**: "current" uses the `employees` table; "as of a date" uses the reporting history, where each row says who an employee reported to over a date range (`valid_to` exclusive, `NULL` = current).
+
+## Schema and sample data
+
+```sql
+CREATE TABLE employees (
+  employee_id INT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  manager_id  INT,                     -- no foreign key: imports contain orphans
+  dept        TEXT NOT NULL,
+  salary      INT NOT NULL,            -- in thousands
+  skills      TEXT[] NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE reporting_history (
+  employee_id INT NOT NULL,
+  manager_id  INT,
+  valid_from  DATE NOT NULL,
+  valid_to    DATE                     -- exclusive; NULL = current
+);
+
+INSERT INTO employees VALUES
+  (1,  'Ava', NULL, 'Exec',    300, '{strategy}'),
+  (2,  'Raj', 1,    'Eng',     220, '{architecture,go}'),
+  (3,  'Mia', 1,    'Finance', 210, '{accounting}'),
+  (4,  'Leo', 2,    'Eng',     160, '{sql,python}'),
+  (5,  'Zoe', 2,    'Eng',     165, '{python,spark}'),
+  (6,  'Sam', 4,    'Eng',     120, '{sql}'),
+  (7,  'Kim', 4,    'Eng',     170, '{sql,spark,python}'),   -- earns more than Leo
+  (8,  'Ivy', 5,    'Eng',     125, '{spark}'),
+  (9,  'Tom', 3,    'Finance', 110, '{accounting,sql}'),
+  (10, 'Nia', 3,    'Finance', 115, '{}'),
+  (11, 'Eli', 5,    'Eng',     130, '{python}'),
+  (12, 'Joe', 99,   'Eng',     100, '{go}');                 -- manager 99 does not exist
+
+INSERT INTO reporting_history VALUES
+  (1, NULL, '2024-01-01', NULL), (2, 1, '2024-01-01', NULL), (3, 1, '2024-01-01', NULL),
+  (4, 2, '2024-01-01', NULL),    (5, 2, '2024-01-01', NULL),
+  (6, 4, '2024-06-01', '2025-04-01'),     -- Sam moves to Zoe for a quarter...
+  (6, 5, '2025-04-01', '2025-07-01'),
+  (6, 4, '2025-07-01', NULL),             -- ...and back to Leo
+  (7, 4, '2024-03-01', NULL),
+  (8, 5, '2024-02-01', '2025-03-01'),     -- Ivy: a re-org split her row in two...
+  (8, 5, '2025-03-01', '2025-06-01'),
+  (8, 5, '2025-08-01', NULL),             -- ...then she left for two months and was rehired
+  (9, 3, '2024-01-01', NULL), (10, 3, '2025-02-15', NULL),
+  (11, 5, '2025-05-10', NULL);
+```
+
+## Core solution
+
+Start from the top, join each level to the employees who report to it, and carry the level and the path of ids.
+
+```sql
+WITH RECURSIVE org AS (
+  SELECT employee_id, name, manager_id, 0 AS level, ARRAY[employee_id] AS path
+  FROM employees
+  WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.employee_id, e.name, e.manager_id, o.level + 1, o.path || e.employee_id
+  FROM employees e
+  JOIN org o ON e.manager_id = o.employee_id
+)
+SELECT m.employee_id, m.name, m.level,
+       (SELECT COUNT(*) FROM org d WHERE d.manager_id = m.employee_id)                 AS direct_reports,
+       (SELECT COUNT(*) FROM org t WHERE m.employee_id = ANY (t.path)
+                                     AND t.employee_id <> m.employee_id)               AS total_reports
+FROM org m
+ORDER BY m.path;
+```
+
+| employee_id | name | level | direct_reports | total_reports |
+|---|---|---|---|---|
+| 1 | Ava | 0 | 2 | 10 |
+| 2 | Raj | 1 | 2 | 6 |
+| 4 | Leo | 2 | 2 | 2 |
+| 6 | Sam | 3 | 0 | 0 |
+| 7 | Kim | 3 | 0 | 0 |
+| 5 | Zoe | 2 | 2 | 2 |
+| 8 | Ivy | 3 | 0 | 0 |
+| 11 | Eli | 3 | 0 | 0 |
+| 3 | Mia | 1 | 2 | 2 |
+| 9 | Tom | 2 | 0 | 0 |
+| 10 | Nia | 2 | 0 | 0 |
+
+Ordering by the path array prints the tree depth-first, with each manager directly above their organisation. Joe (12) is missing: his manager 99 does not exist, so the recursion never reaches him. Find orphans explicitly:
+
+```sql
+SELECT e.employee_id, e.name, e.manager_id AS missing_manager_id
+FROM employees e
+WHERE e.manager_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM employees m WHERE m.employee_id = e.manager_id);
+```
+
+| employee_id | name | missing_manager_id |
+|---|---|---|
+| 12 | Joe | 99 |
+
+**Cycles.** If a data error made Ava report to Kim, the recursion would loop forever. PostgreSQL 14 and later provide `CYCLE employee_id SET is_cycle USING cycle_path`, which stops at a repeated id; on any engine you can add `WHERE NOT e.employee_id = ANY (o.path)` to the recursive member, and a depth limit as a safety net.
+
+## Approach: correlated subqueries for manager comparisons
+
+**Why it matters.** Many hierarchy questions compare a row with a value derived from related rows: "earns more than their manager", "has more direct reports than the average manager", "earns above their department's average". A **correlated subquery** refers to the outer row and is evaluated for each one, which expresses these comparisons directly.
+
+```sql
+SELECT e.name, e.salary,
+       (SELECT m.name   FROM employees m WHERE m.employee_id = e.manager_id) AS manager,
+       (SELECT m.salary FROM employees m WHERE m.employee_id = e.manager_id) AS manager_salary
+FROM employees e
+WHERE e.salary > (SELECT m.salary FROM employees m WHERE m.employee_id = e.manager_id);
+```
+
+| name | salary | manager | manager_salary |
+|---|---|---|---|
+| Kim | 170 | Leo | 160 |
+
+Kim earns more than Leo. Employees without a manager (Ava) or with a missing one (Joe) drop out, because the subquery returns `NULL` and `salary > NULL` is not true; say so if the interviewer expects them.
+
+Correlation also works in `HAVING`-like comparisons across groups:
+
+```sql
+SELECT e.name, e.dept, e.salary,
+       ROUND((SELECT AVG(x.salary) FROM employees x WHERE x.dept = e.dept), 1) AS dept_avg
+FROM employees e
+WHERE e.salary > (SELECT AVG(x.salary) FROM employees x WHERE x.dept = e.dept)
+ORDER BY e.dept, e.salary DESC;
+```
+
+| name | dept | salary | dept_avg |
+|---|---|---|---|
+| Raj | Eng | 220 | 148.8 |
+| Kim | Eng | 170 | 148.8 |
+| Zoe | Eng | 165 | 148.8 |
+| Leo | Eng | 160 | 148.8 |
+| Mia | Finance | 210 | 145.0 |
+
+And `EXISTS` with correlation answers "managers who have at least one report earning over 150":
+
+```sql
+SELECT m.name
+FROM employees m
+WHERE EXISTS (SELECT 1 FROM employees r WHERE r.manager_id = m.employee_id AND r.salary > 150)
+ORDER BY m.name;
+```
+
+| name |
+|---|
+| Ava |
+| Leo |
+| Raj |
+
+**Pitfalls and performance.** A correlated subquery that returns more than one row raises an error in a scalar position. Conceptually it runs once per outer row; PostgreSQL may turn `EXISTS`/`IN` forms into semi-joins, but scalar subqueries in `SELECT` usually run as a subplan per row, so on large tables the join form (`JOIN employees m ON m.employee_id = e.manager_id`) or a window function (`AVG(salary) OVER (PARTITION BY dept)`) is the faster equivalent.
+
+## Approach: ROW_NUMBER() for the current manager and sibling order
+
+**Why it matters.** Hierarchy data often arrives as a history or a feed with several rows per employee. `ROW_NUMBER()` numbers rows within a partition in a chosen order, which picks exactly one row per employee (the latest assignment) and also orders siblings for display.
+
+```sql
+WITH latest AS (
+  SELECT h.*,
+         ROW_NUMBER() OVER (PARTITION BY employee_id ORDER BY valid_from DESC) AS rn
+  FROM reporting_history h
+)
+SELECT employee_id, manager_id, valid_from, valid_to
+FROM latest
+WHERE rn = 1 AND employee_id IN (6, 8, 10)
+ORDER BY employee_id;
+```
+
+| employee_id | manager_id | valid_from | valid_to |
+|---|---|---|---|
+| 6 | 4 | 2025-07-01 | NULL |
+| 8 | 5 | 2025-08-01 | NULL |
+| 10 | 3 | 2025-02-15 | NULL |
+
+The latest row is the current assignment only if its `valid_to` is `NULL`; an employee who has left has a closed latest row. Within the tree, `ROW_NUMBER` gives each manager's reports a stable display order and makes "the most senior report" or "the newest report" a simple filter:
+
+```sql
+SELECT m.name AS manager, e.name AS report, e.salary,
+       ROW_NUMBER() OVER (PARTITION BY e.manager_id ORDER BY e.salary DESC, e.employee_id) AS pay_rank_in_team
+FROM employees e
+JOIN employees m ON m.employee_id = e.manager_id
+ORDER BY m.name, pay_rank_in_team;
+```
+
+| manager | report | salary | pay_rank_in_team |
+|---|---|---|---|
+| Ava | Raj | 220 | 1 |
+| Ava | Mia | 210 | 2 |
+| Leo | Kim | 170 | 1 |
+| Leo | Sam | 120 | 2 |
+| Mia | Nia | 115 | 1 |
+| Mia | Tom | 110 | 2 |
+| Raj | Zoe | 165 | 1 |
+| Raj | Leo | 160 | 2 |
+| Zoe | Eli | 130 | 1 |
+| Zoe | Ivy | 125 | 2 |
+
+Always add a unique tiebreaker (`employee_id` here); otherwise two reports with the same salary can swap places between runs, and "the top-paid report" changes without the data changing.
+
+## Approach: gaps and islands in reporting history
+
+**Why it matters.** Reporting history is noisy: a re-org can split one continuous assignment into two rows (Ivy's February split), and people move away and come back (Sam returns to Leo; Ivy leaves for two months). "How long has Ivy reported to Zoe without a break?" needs contiguous rows merged into **islands**, with real breaks (**gaps**) kept.
+
+The standard method: flag a row as starting a new island when it does not continue the previous row (different manager, or a gap in dates), then take a running sum of the flags as an island id.
+
+```sql
+WITH ordered AS (
+  SELECT h.*,
+         LAG(manager_id) OVER w AS prev_manager,
+         LAG(valid_to)   OVER w AS prev_valid_to
+  FROM reporting_history h
+  WINDOW w AS (PARTITION BY employee_id ORDER BY valid_from)
+),
+flagged AS (
+  SELECT *,
+         CASE WHEN prev_valid_to = valid_from AND prev_manager IS NOT DISTINCT FROM manager_id
+              THEN 0 ELSE 1 END AS starts_island
+  FROM ordered
+),
+islands AS (
+  SELECT *, SUM(starts_island) OVER (PARTITION BY employee_id ORDER BY valid_from) AS island_id
+  FROM flagged
+)
+SELECT employee_id, manager_id, island_id,
+       MIN(valid_from) AS island_start,
+       CASE WHEN bool_or(valid_to IS NULL) THEN NULL ELSE MAX(valid_to) END AS island_end,
+       COUNT(*) AS source_rows
+FROM islands
+WHERE employee_id IN (6, 8)
+GROUP BY employee_id, manager_id, island_id
+ORDER BY employee_id, island_start;
+```
+
+| employee_id | manager_id | island_id | island_start | island_end | source_rows |
+|---|---|---|---|---|---|
+| 6 | 4 | 1 | 2024-06-01 | 2025-04-01 | 1 |
+| 6 | 5 | 2 | 2025-04-01 | 2025-07-01 | 1 |
+| 6 | 4 | 3 | 2025-07-01 | NULL | 1 |
+| 8 | 5 | 1 | 2024-02-01 | 2025-06-01 | 2 |
+| 8 | 5 | 2 | 2025-08-01 | NULL | 1 |
+
+Ivy's two contiguous rows under Zoe merge into one island from February 2024 to June 2025; her rehire in August starts a new island. Sam has three islands because his manager changed twice. The gaps themselves (Ivy's absence) come from comparing each island's start with the previous island's end:
+
+```sql
+SELECT employee_id, valid_to AS gap_start, next_from AS gap_end, next_from - valid_to AS gap_days
+FROM (
+  SELECT employee_id, valid_to,
+         LEAD(valid_from) OVER (PARTITION BY employee_id ORDER BY valid_from) AS next_from
+  FROM reporting_history
+) t
+WHERE next_from > valid_to
+ORDER BY employee_id;
+```
+
+| employee_id | gap_start | gap_end | gap_days |
+|---|---|---|---|
+| 8 | 2025-06-01 | 2025-08-01 | 61 |
+
+**Pitfalls.** Use `IS NOT DISTINCT FROM` when comparing a column that can be `NULL` (the CEO's manager), because `NULL = NULL` is not true. Decide what counts as continuous: here the next row must start exactly when the previous ends; some HR systems allow a one-day gap or use inclusive end dates, which changes the condition.
+
+## Approach: a generated calendar for headcount over time
+
+**Why it matters.** "How many people reported to Leo and to Zoe at the end of each month in 2025?" A team with nobody in it for a month must still show a row, and each month must use the history valid on that date. `generate_series` produces the calendar; a range join to the history gives point-in-time membership.
+
+```sql
+WITH month_ends AS (
+  SELECT (d + INTERVAL '1 month' - INTERVAL '1 day')::date AS month_end
+  FROM generate_series(DATE '2025-01-01', DATE '2025-09-01', INTERVAL '1 month') AS d
+),
+managers AS (SELECT employee_id, name FROM employees WHERE employee_id IN (4, 5))
+SELECT me.month_end,
+       COUNT(h.employee_id) FILTER (WHERE mg.employee_id = 4) AS leo_team,
+       COUNT(h.employee_id) FILTER (WHERE mg.employee_id = 5) AS zoe_team,
+       string_agg(h.employee_id::text, ',' ORDER BY h.employee_id) FILTER (WHERE mg.employee_id = 5) AS zoe_members
+FROM month_ends me
+CROSS JOIN managers mg
+LEFT JOIN reporting_history h
+       ON h.manager_id = mg.employee_id
+      AND h.valid_from <= me.month_end
+      AND (h.valid_to IS NULL OR h.valid_to > me.month_end)
+GROUP BY me.month_end
+ORDER BY me.month_end;
+```
+
+| month_end | leo_team | zoe_team | zoe_members |
+|---|---|---|---|
+| 2025-01-31 | 2 | 1 | 8 |
+| 2025-02-28 | 2 | 1 | 8 |
+| 2025-03-31 | 2 | 1 | 8 |
+| 2025-04-30 | 1 | 2 | 6,8 |
+| 2025-05-31 | 1 | 3 | 6,8,11 |
+| 2025-06-30 | 1 | 2 | 6,11 |
+| 2025-07-31 | 2 | 1 | 11 |
+| 2025-08-31 | 2 | 2 | 8,11 |
+| 2025-09-30 | 2 | 2 | 8,11 |
+
+Zoe's team grows while Sam is on loan (April to June) and when Eli joins in May; Ivy's absence takes it down to two at the end of June and to one at the end of July, and her return brings it back to two. The `CROSS JOIN` of calendar and managers before the `LEFT JOIN` is what guarantees a row (and a zero) for every month and manager.
+
+**Calendar tables.** `generate_series` is fine for ad hoc work. In a warehouse, keep a permanent calendar (date dimension) table with one row per day and attributes such as month end, fiscal period, working day and holiday flags; "headcount at each fiscal month end" then becomes a filter on that table instead of date arithmetic, and every report uses the same calendar. The `- INTERVAL '1 day'` trick above computes month ends correctly for every month length; adding a fixed 30 days does not.
+
+## Approach: arrays and nested data for paths and org charts
+
+**Why it matters.** Hierarchies are naturally nested, and arrays let SQL carry that structure: the path from the CEO to each employee, the list of direct reports, a JSON org chart for a front-end, and multi-valued attributes such as skills.
+
+The path array from the core solution answers "chain of command" questions directly, and `array_to_string` with a lookup turns ids into names:
+
+```sql
+WITH RECURSIVE org AS (
+  SELECT employee_id, ARRAY[employee_id] AS path, ARRAY[name] AS name_path
+  FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.employee_id, o.path || e.employee_id, o.name_path || e.name
+  FROM employees e JOIN org o ON e.manager_id = o.employee_id
+  WHERE NOT e.employee_id = ANY (o.path)                     -- cycle guard
+)
+SELECT employee_id,
+       array_to_string(name_path, ' > ')   AS chain_of_command,
+       cardinality(path) - 1               AS levels_below_ceo,
+       path[2]                             AS top_level_leader_id     -- arrays are 1-based
+FROM org
+WHERE employee_id IN (7, 9, 11)
+ORDER BY employee_id;
+```
+
+| employee_id | chain_of_command | levels_below_ceo | top_level_leader_id |
+|---|---|---|---|
+| 7 | Ava > Raj > Leo > Kim | 3 | 2 |
+| 9 | Ava > Mia > Tom | 2 | 3 |
+| 11 | Ava > Raj > Zoe > Eli | 3 | 2 |
+
+`path[2]` is the executive each employee rolls up to, which is the usual grouping for "headcount by executive". Building nested JSON is the reverse operation: aggregate children into an array inside each parent.
+
+```sql
+SELECT jsonb_pretty(jsonb_build_object(
+         'manager', m.name,
+         'reports', (SELECT jsonb_agg(jsonb_build_object('name', r.name, 'skills', to_jsonb(r.skills))
+                                      ORDER BY r.name)
+                     FROM employees r WHERE r.manager_id = m.employee_id))) AS team_json
+FROM employees m
+WHERE m.employee_id = 5;
+```
+
+```text
+{
+    "manager": "Zoe",
+    "reports": [
+        {
+            "name": "Eli",
+            "skills": [
+                "python"
+            ]
+        },
+        {
+            "name": "Ivy",
+            "skills": [
+                "spark"
+            ]
+        }
+    ]
+}
+```
+
+Multi-valued attributes are queried with array operators: `&&` (overlap), `@>` (contains) and `unnest` for counting.
+
+```sql
+WITH RECURSIVE under_raj AS (
+  SELECT employee_id FROM employees WHERE employee_id = 2
+  UNION ALL
+  SELECT e.employee_id FROM employees e JOIN under_raj u ON e.manager_id = u.employee_id
+)
+SELECT s.skill, COUNT(*) AS people,
+       array_agg(e.name ORDER BY e.name) AS who
+FROM employees e
+JOIN under_raj u USING (employee_id)
+CROSS JOIN LATERAL unnest(e.skills) AS s(skill)
+GROUP BY s.skill
+ORDER BY people DESC, s.skill;
+```
+
+| skill | people | who |
+|---|---|---|
+| python | 4 | \{Eli,Kim,Leo,Zoe\} |
+| spark | 3 | \{Ivy,Kim,Zoe\} |
+| sql | 3 | \{Kim,Leo,Sam\} |
+| architecture | 1 | \{Raj\} |
+| go | 1 | \{Raj\} |
+
+**Pitfalls.** `unnest` drops rows whose array is empty (Nia has no skills); use `LEFT JOIN LATERAL ... ON true` if they must stay. Arrays are not a substitute for a proper bridge table when the multi-valued attribute is filtered and joined heavily; a GIN index on the array column makes `@>` and `&&` filters fast. Engines differ: BigQuery and DuckDB use `UNNEST` and `ARRAY_AGG`, Snowflake uses `ARRAY_AGG` and `LATERAL FLATTEN`, Spark uses `collect_list` and `explode`.
+
+## Approach: pivoting dynamic columns
+
+**Why it matters.** HR asks for headcount with one row per department and one column per level. The set of levels changes as the organisation grows, so the column list cannot be written in advance. Standard SQL requires the output columns at parse time; a **dynamic pivot** builds the query text from the data and then runs it.
+
+The static version, for comparison, hard-codes the levels with conditional aggregation:
+
+```sql
+WITH RECURSIVE org AS (
+  SELECT employee_id, dept, 0 AS level FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.employee_id, e.dept, o.level + 1 FROM employees e JOIN org o ON e.manager_id = o.employee_id
+)
+SELECT dept,
+       COUNT(*) FILTER (WHERE level = 0) AS level_0,
+       COUNT(*) FILTER (WHERE level = 1) AS level_1,
+       COUNT(*) FILTER (WHERE level = 2) AS level_2,
+       COUNT(*) FILTER (WHERE level = 3) AS level_3
+FROM org
+GROUP BY dept
+ORDER BY dept;
+```
+
+| dept | level_0 | level_1 | level_2 | level_3 |
+|---|---|---|---|---|
+| Eng | 0 | 1 | 2 | 4 |
+| Exec | 1 | 0 | 0 | 0 |
+| Finance | 0 | 1 | 2 | 0 |
+
+To make it dynamic in PostgreSQL, generate the `FILTER` columns with `string_agg` over the distinct levels and execute the result. In `psql`, `\gexec` runs each value of the query's result as a SQL statement; from an application you would build the same string and run it, and inside the database a PL/pgSQL function can `EXECUTE` it and return a cursor.
+
+```sql
+CREATE VIEW org_levels AS
+WITH RECURSIVE org AS (
+  SELECT employee_id, dept, 0 AS level FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.employee_id, e.dept, o.level + 1 FROM employees e JOIN org o ON e.manager_id = o.employee_id
+)
+SELECT * FROM org;
+
+SELECT format(
+  'SELECT dept, %s FROM org_levels GROUP BY dept ORDER BY dept',
+  string_agg(format('COUNT(*) FILTER (WHERE level = %s) AS %I', level, 'level_' || level), ', ' ORDER BY level)
+) AS generated_sql
+FROM (SELECT DISTINCT level FROM org_levels) l
+\gexec
+```
+
+| dept | level_0 | level_1 | level_2 | level_3 |
+|---|---|---|---|---|
+| Eng | 0 | 1 | 2 | 4 |
+| Exec | 1 | 0 | 0 | 0 |
+| Finance | 0 | 1 | 2 | 0 |
+
+The generated statement has exactly as many level columns as the data has levels. `format` with `%I` quotes identifiers safely; never splice raw data values into SQL text with plain string concatenation, because a value containing a quote breaks the query and opens an injection risk.
+
+Engines with a native dynamic `PIVOT` infer the columns themselves. DuckDB, given the same level rows:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE org_levels (employee_id INT, dept VARCHAR, level INT);
+INSERT INTO org_levels VALUES (1,'Exec',0), (2,'Eng',1), (3,'Finance',1), (4,'Eng',2), (5,'Eng',2),
+  (9,'Finance',2), (10,'Finance',2), (6,'Eng',3), (7,'Eng',3), (8,'Eng',3), (11,'Eng',3);
+
+PIVOT org_levels ON 'level_' || level USING COUNT(*) GROUP BY dept ORDER BY dept;
+```
+
+| dept | level_0 | level_1 | level_2 | level_3 |
+|---|---|---|---|---|
+| Eng | 0 | 1 | 2 | 4 |
+| Exec | 1 | 0 | 0 | 0 |
+| Finance | 0 | 1 | 2 | 0 |
+
+Here DuckDB's `COUNT(*)` gives 0 for empty cells, matching the `FILTER` version; with aggregates such as `SUM` an empty cell is `NULL`, so add `COALESCE` where a zero is meant. PostgreSQL's `tablefunc` extension offers `crosstab`, but it still needs the output column list declared, so it does not remove the dynamic step. For dashboards, it is often simpler to return long rows (dept, level, headcount) and let the BI tool pivot.
+
+## Approach: handling skew in hierarchy aggregations
+
+**Why it matters.** Hierarchies are skewed by nature: the CEO is above everyone, a few executives are above most people, and most employees manage nobody. When total reports are computed by expanding each employee into all their ancestors (a **closure table**: one row per ancestor–descendant pair), the top of the tree owns most rows. In a distributed engine, `GROUP BY ancestor_id` sends all of the CEO's rows to one worker. Data quality adds another hot key: thousands of employees with a placeholder manager such as 0 or "unassigned".
+
+Build a synthetic hierarchy of 20,000 employees: a CEO, 20 directors, 400 managers, and individual contributors under the managers, plus 2,000 imported records with the placeholder manager 0.
+
+```sql
+CREATE TABLE emp_big AS
+SELECT 1 AS employee_id, NULL::int AS manager_id
+UNION ALL SELECT g, 1 FROM generate_series(2, 21) g                              -- directors
+UNION ALL SELECT g, 2 + (g % 20) FROM generate_series(22, 421) g                 -- managers
+UNION ALL SELECT g, 22 + (g % 400) FROM generate_series(422, 18000) g            -- individual contributors
+UNION ALL SELECT g, 0 FROM generate_series(18001, 20000) g;                      -- placeholder manager
+ANALYZE emp_big;
+
+CREATE TABLE closure AS
+WITH RECURSIVE c AS (
+  SELECT employee_id AS ancestor_id, employee_id AS descendant_id, 0 AS depth FROM emp_big
+  UNION ALL
+  SELECT c.ancestor_id, e.employee_id, c.depth + 1
+  FROM c JOIN emp_big e ON e.manager_id = c.descendant_id
+)
+SELECT * FROM c WHERE depth > 0;
+ANALYZE closure;
+```
+
+The distribution of closure rows per ancestor shows the skew:
+
+```sql
+SELECT CASE WHEN ancestor_id = 1 THEN 'CEO'
+            WHEN ancestor_id BETWEEN 2 AND 21 THEN 'directors'
+            ELSE 'managers' END                    AS ancestor_group,
+       COUNT(DISTINCT ancestor_id)                 AS ancestors,
+       COUNT(*)                                    AS closure_rows,
+       MAX(per_ancestor)                           AS max_rows_for_one_ancestor
+FROM (SELECT ancestor_id, COUNT(*) OVER (PARTITION BY ancestor_id) AS per_ancestor FROM closure) t
+GROUP BY 1
+ORDER BY closure_rows DESC;
+```
+
+| ancestor_group | ancestors | closure_rows | max_rows_for_one_ancestor |
+|---|---|---|---|
+| CEO | 1 | 17999 | 17999 |
+| directors | 20 | 17979 | 899 |
+| managers | 400 | 17579 | 44 |
+
+```sql
+SELECT manager_id, COUNT(*) AS direct_reports
+FROM emp_big GROUP BY manager_id ORDER BY direct_reports DESC LIMIT 3;
+```
+
+| manager_id | direct_reports |
+|---|---|
+| 0 | 2000 |
+| 64 | 44 |
+| 185 | 44 |
+
+One ancestor (the CEO) holds 17,999 of the closure rows on its own, and the placeholder manager 0 "has" 2,000 direct reports. Fixes:
+
+- **Clean the hot placeholder first.** Rows with manager 0 are a data-quality issue, not a manager; filter or route them to an exception table before aggregating.
+- **Two-phase (salted) aggregation.** Aggregate by `(ancestor_id, salt)` where the salt spreads a hot key over several workers, then sum the partial counts by `ancestor_id`. Counts and sums combine exactly:
+
+```sql
+WITH phase1 AS (
+  SELECT ancestor_id, descendant_id % 8 AS salt, COUNT(*) AS partial_reports
+  FROM closure
+  GROUP BY ancestor_id, descendant_id % 8
+)
+SELECT ancestor_id, COUNT(*) AS salt_buckets, SUM(partial_reports) AS total_reports
+FROM phase1
+WHERE ancestor_id IN (1, 2, 22)
+GROUP BY ancestor_id
+ORDER BY ancestor_id;
+```
+
+| ancestor_id | salt_buckets | total_reports |
+|---|---|---|
+| 1 | 8 | 17999 |
+| 2 | 4 | 899 |
+| 22 | 1 | 44 |
+
+- **Avoid expanding the top at all.** Total reports for a manager equals the sum over their direct reports of (1 + that report's total reports). Computing it bottom-up level by level never materialises the CEO's 17,999 rows; on PostgreSQL alone the closure table is fine at this size, but in distributed engines the bottom-up approach avoids the skew entirely.
+- **Broadcast the small side.** When joining a skewed fact table to the employee dimension, broadcast the dimension instead of shuffling the fact by the hot key.
+
+## Approach: statistics and the optimizer on hierarchy queries
+
+**Why it matters.** The planner chooses join methods and orders from row estimates, and hierarchy queries challenge it in two ways: recursive CTEs have no statistics for the rows they will produce, and `manager_id` is highly skewed, so the row count for "reports of X" depends on X.
+
+Recursive CTE estimates are guesses; compare estimated and actual rows at the `CTE Scan` and `WorkTable Scan` nodes:
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+WITH RECURSIVE under AS (
+  SELECT employee_id FROM emp_big WHERE employee_id = 2
+  UNION ALL
+  SELECT e.employee_id FROM emp_big e JOIN under u ON e.manager_id = u.employee_id
+)
+SELECT COUNT(*) FROM under;
+```
+
+```text
+Aggregate  (cost=4612.73..4612.74 rows=1 width=8) (actual rows=1 loops=1)
+  CTE under
+    ->  Recursive Union  (cost=0.00..4506.06 rows=4741 width=4) (actual rows=900 loops=1)
+          ->  Seq Scan on emp_big  (cost=0.00..378.00 rows=1 width=4) (actual rows=1 loops=1)
+                Filter: (employee_id = 2)
+                Rows Removed by Filter: 19999
+          ->  Hash Join  (cost=0.33..408.06 rows=474 width=4) (actual rows=300 loops=3)
+                Hash Cond: (e.manager_id = u.employee_id)
+                ->  Seq Scan on emp_big e  (cost=0.00..328.00 rows=20000 width=8) (actual rows=20000 loops=3)
+                ->  Hash  (cost=0.20..0.20 rows=10 width=4) (actual rows=300 loops=3)
+                      Buckets: 1024  Batches: 1  Memory Usage: 39kB
+                      ->  WorkTable Scan on under u  (cost=0.00..0.20 rows=10 width=4) (actual rows=300 loops=3)
+  ->  CTE Scan on under  (cost=0.00..94.82 rows=4741 width=0) (actual rows=900 loops=1)
+```
+
+The planner has no way to know how many levels the recursion will run or how many rows each adds. It plans the recursive term with a fixed guess for the work table (`rows=10` at the `WorkTable Scan`, against 300 actual per iteration) and a heuristic for the total, which comes out at 4,741 rows against 900 actual. When a recursive result feeds further joins, a wrong estimate can produce a poor plan; materialising the result into a temporary table and running `ANALYZE` on it gives the following steps real statistics.
+
+For skewed columns, the most-common-values list matters. `ANALYZE` records the most frequent `manager_id` values with their frequencies, so the estimate for the placeholder 0 is accurate while a typical manager gets the average:
+
+```sql
+SELECT n_distinct,
+       (most_common_vals::text::int[])[1:3]       AS top_values,
+       (most_common_freqs)[1:3]                   AS top_frequencies
+FROM pg_stats
+WHERE tablename = 'emp_big' AND attname = 'manager_id';
+```
+
+| n_distinct | top_values | top_frequencies |
+|---|---|---|
+| 422 | \{0,22,44\} | \{0.1,0.0022,0.0022\} |
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) SELECT COUNT(*) FROM emp_big WHERE manager_id = 0;
+```
+
+```text
+Aggregate  (cost=383.00..383.01 rows=1 width=8) (actual rows=1 loops=1)
+  ->  Seq Scan on emp_big  (cost=0.00..378.00 rows=2000 width=0) (actual rows=2000 loops=1)
+        Filter: (manager_id = 0)
+        Rows Removed by Filter: 18000
+```
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF) SELECT COUNT(*) FROM emp_big WHERE manager_id = 300;
+```
+
+```text
+Aggregate  (cost=378.11..378.12 rows=1 width=8) (actual rows=1 loops=1)
+  ->  Seq Scan on emp_big  (cost=0.00..378.00 rows=42 width=0) (actual rows=44 loops=1)
+        Filter: (manager_id = 300)
+        Rows Removed by Filter: 19956
+```
+
+The estimate for manager 0 matches the 2,000 actual rows because 0 is in the MCV list; manager 300's estimate comes from the remaining distinct values spread evenly. The table has 20,000 rows, which `ANALYZE` reads in full at the default statistics target; on larger tables it samples, and rare-but-important values can fall out of the list. Raising the per-column target (`ALTER TABLE ... ALTER COLUMN manager_id SET STATISTICS 500`) keeps more values; extended statistics help with correlated columns such as department and manager.
+
+**In interviews.** Show that you read estimated against actual rows in `EXPLAIN ANALYZE`, know where estimates come from (`pg_stats`: distinct counts, MCVs, histograms) and know the levers: `ANALYZE` after big changes, per-column statistics targets, extended statistics, and materialising intermediate results.
+
+## Interview tips
+
+**How it is asked.** "Return all employees under manager X", "show each employee's level and chain of command", "count direct and indirect reports per manager", "find employees who earn more than their manager", "find the manager with the most reports", or "headcount per team at each month end".
+
+**What a strong answer includes.**
+
+1. A recursive CTE with a clear anchor (the top, or the chosen manager), a recursive join in the right direction, and a level column.
+2. Cycle protection and a depth limit, and an explicit check for orphans.
+3. Correct direct versus total counts.
+4. Point-in-time logic from history when the question mentions dates.
+5. Awareness of skew and estimates for large organisations.
+
+**Mistakes candidates make.**
+
+- Joining in the wrong direction (`o.manager_id = e.employee_id`), which walks up instead of down.
+- Self-joining a fixed number of times, which only works for a known depth.
+- Forgetting the cycle guard, so bad data hangs the query.
+- Dropping the CEO or orphans without saying so.
+- Using the current `manager_id` for a historical headcount.
+- Comparing `manager_id = NULL` instead of `IS NULL`.

@@ -286,5 +286,37 @@
   "Cardinality estimation → Inventory Turnover": {
     "ref": "interview-questions:sql/inventory-turnover-sql-case-study",
     "heading": "Approach: cardinality estimation and correlated columns"
+  },
+  "Gaps and Islands problem → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: gaps and islands in reporting history"
+  },
+  "Correlated subqueries → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: correlated subqueries for manager comparisons"
+  },
+  "Handling skew in aggregations → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: handling skew in hierarchy aggregations"
+  },
+  "Array & nested data handling → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: arrays and nested data for paths and org charts"
+  },
+  "Generate date series / calendar table → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: a generated calendar for headcount over time"
+  },
+  "Statistics & the optimizer → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: statistics and the optimizer on hierarchy queries"
+  },
+  "Pivoting dynamic columns → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: pivoting dynamic columns"
+  },
+  "ROW_NUMBER() → Employee Hierarchy": {
+    "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
+    "heading": "Approach: ROW_NUMBER() for the current manager and sibling order"
   }
 }
