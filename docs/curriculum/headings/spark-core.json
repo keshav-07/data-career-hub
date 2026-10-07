@@ -86,5 +86,29 @@
   "Skew join optimization": {
     "ref": "articles:spark/partitions-shuffles-skew",
     "heading": "Skew join optimisation"
+  },
+  "Persistence & caching levels": {
+    "ref": "articles:spark/caching-broadcast-accumulators",
+    "heading": "Persistence and storage levels"
+  },
+  "Caching strategy": {
+    "ref": "articles:spark/caching-broadcast-accumulators",
+    "heading": "Caching strategy"
+  },
+  "Caching vs recompute trade-off": {
+    "ref": "articles:spark/caching-broadcast-accumulators",
+    "heading": "Caching versus recomputing"
+  },
+  "Checkpointing": {
+    "ref": "articles:spark/caching-broadcast-accumulators",
+    "heading": "Checkpointing"
+  },
+  "Broadcast variables": {
+    "ref": "articles:spark/caching-broadcast-accumulators",
+    "heading": "Broadcast variables"
+  },
+  "Accumulators": {
+    "ref": "articles:spark/caching-broadcast-accumulators",
+    "heading": "Accumulators"
   }
 }
