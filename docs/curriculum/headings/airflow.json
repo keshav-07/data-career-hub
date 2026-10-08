@@ -166,5 +166,29 @@
  "Scaling Airflow": {
   "ref": "articles:airflow/executors-scaling",
   "heading": "Scaling Airflow"
+ },
+ "Backfills & reruns": {
+  "ref": "articles:airflow/operations-backfills-monitoring",
+  "heading": "Backfills and reruns"
+ },
+ "Clearing tasks": {
+  "ref": "articles:airflow/operations-backfills-monitoring",
+  "heading": "Clearing tasks"
+ },
+ "Retries & alerting": {
+  "ref": "articles:airflow/operations-backfills-monitoring",
+  "heading": "Retries and alerting"
+ },
+ "Logging configuration": {
+  "ref": "articles:airflow/operations-backfills-monitoring",
+  "heading": "Logging configuration"
+ },
+ "Metrics (StatsD)": {
+  "ref": "articles:airflow/operations-backfills-monitoring",
+  "heading": "Metrics with StatsD"
+ },
+ "Airflow REST API": {
+  "ref": "articles:airflow/operations-backfills-monitoring",
+  "heading": "Airflow REST API"
  }
 }
