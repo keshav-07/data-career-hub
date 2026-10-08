@@ -66,8 +66,6 @@ related:
   - "articles:data-warehousing/slowly-changing-dimensions"
   - "system-designs:change-data-capture-platform"
   - "system-designs:reporting-analytics-platform"
-previous: "system-designs:scalable-lakehouse"
-next: "system-designs:clickstream-data-platform"
 versionContext: "Rewritten 2026-10-05 to cover the SaaS warehouse scenario. The MRR movements SQL was run on PostgreSQL 16 with scripts/verify-examples.py. Snowflake features (virtual warehouses, multi-cluster warehouses, resource monitors) are described from Snowflake documentation; some depend on the Snowflake edition."
 sources:
   - { label: "Snowflake documentation: virtual warehouses overview", url: "https://docs.snowflake.com/en/user-guide/warehouses-overview" }
