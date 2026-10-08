@@ -14,6 +14,7 @@ interviewRelevance: "Medium"
 shortAnswer: "Track the range of possible open-bracket counts after each character: lo is the smallest, hi the largest. An opening bracket raises both, a closing bracket lowers both, and a star lowers lo (treat it as a close) and raises hi (treat it as an open). If hi drops below 0, too many closes: return false. Clamp lo at 0, because a negative count is never a real option. At the end the string is valid exactly when lo is 0. This is O(n) time and O(1) space; a DP over (index, open count) is O(n^2)."
 followUps: ["Why is it safe to clamp lo at zero?", "How does the two-stack solution (indices of open brackets and stars) work?", "How would you return one valid replacement for the stars?"]
 previous: "interview-questions:dsa/partition-labels"
+next: "interview-questions:dsa/counting-bits"
 versionContext: "Python 3 solutions verified with assert-based tests"
 ---
 

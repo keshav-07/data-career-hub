@@ -1,0 +1,137 @@
+---
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Counting Bits: Set-Bit Counts for 0 to n with a One-Line DP"
+seoTitle: "Counting Bits: Bit DP in O(n)"
+description: "Return the number of 1 bits for every integer from 0 to n in linear time by reusing earlier answers through i >> 1 or i & (i - 1), with tests and pitfalls."
+technology: ["dsa"]
+topic: ["dynamic-programming", "bit-manipulation"]
+difficulty: "Easy"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+shortAnswer: "Each answer can be built from a smaller one. Shifting right drops the lowest bit, so bits(i) = bits(i >> 1) + (i & 1). Alternatively, i & (i - 1) clears the lowest set bit, so bits(i) = bits(i & (i - 1)) + 1. Either recurrence, with bits(0) = 0, fills the whole list in O(n) time; the output list is the only O(n) space. Counting each number separately costs O(n log n)."
+followUps: ["Why does i & (i - 1) clear the lowest set bit?", "How would you count set bits of one 64-bit number quickly?", "How does the 'most significant power of two' recurrence work?"]
+previous: "interview-questions:dsa/valid-parenthesis-string"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given a non-negative integer `limit`, return a list `ans` of length `limit + 1` where `ans[i]` is the number of 1 bits in
+the binary form of i.
+
+This is widely known as LeetCode 338, "Counting Bits".
+
+Assume `limit` up to 100,000.
+
+## Examples
+
+```text
+limit 3   -> [0, 1, 1, 2]                 (0, 1, 10, 11)
+limit 6   -> [0, 1, 1, 2, 1, 2, 2]        (4 = 100, 5 = 101, 6 = 110)
+limit 0   -> [0]
+```
+
+## Approach 1: count each number separately
+
+```python
+def count_bits_naive(limit):
+    result = []
+    for i in range(limit + 1):
+        count, value = 0, i
+        while value:
+            count += value & 1
+            value >>= 1
+        result.append(count)
+    return result
+```
+
+Each number takes O(log i) steps, so O(n log n) overall. (Python 3.10+ has `int.bit_count()`, which is fast but
+still per number.)
+
+## Approach 2: optimal, dynamic programming on bits
+
+### State, recurrence and base case
+
+- **State:** `bits[i]` = number of set bits in i.
+- **Recurrence (shift):** `bits[i] = bits[i >> 1] + (i & 1)`. Shifting right removes the last bit; add it back if it
+  was 1. Since `i >> 1` is smaller than i, its answer is already known.
+- **Recurrence (lowest set bit):** `bits[i] = bits[i & (i - 1)] + 1`. Subtracting 1 flips the lowest set bit and
+  everything below it, so the AND clears exactly that bit.
+- **Base case:** `bits[0] = 0`.
+
+### Filled table for limit 8
+
+| i | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| binary | 0 | 1 | 10 | 11 | 100 | 101 | 110 | 111 | 1000 |
+| i >> 1 | | 0 | 1 | 1 | 2 | 2 | 3 | 3 | 4 |
+| bits | 0 | 1 | 1 | 2 | 1 | 2 | 2 | 3 | 1 |
+
+### Memoised
+
+```python
+from functools import lru_cache
+
+def count_bits_memo(limit):
+    @lru_cache(maxsize=None)
+    def bits(i):
+        return 0 if i == 0 else bits(i >> 1) + (i & 1)
+    return [bits(i) for i in range(limit + 1)]
+```
+
+The recursion depth is only about log2(i), so the recursion limit is not a concern here.
+
+### Bottom-up
+
+```python
+def count_bits(limit):
+    bits = [0] * (limit + 1)
+    for i in range(1, limit + 1):
+        bits[i] = bits[i >> 1] + (i & 1)
+    return bits
+
+
+def count_bits_lowest(limit):
+    bits = [0] * (limit + 1)
+    for i in range(1, limit + 1):
+        bits[i] = bits[i & (i - 1)] + 1
+    return bits
+```
+
+No space optimisation applies, because the output itself has `limit + 1` entries.
+
+### Complexity
+
+O(n) time, O(1) extra space beyond the output.
+
+## Tests
+
+```python
+for fn in (count_bits, count_bits_lowest, count_bits_memo, count_bits_naive):
+    assert fn(0) == [0]                              # smallest input
+    assert fn(1) == [0, 1]
+    assert fn(3) == [0, 1, 1, 2]
+    assert fn(6) == [0, 1, 1, 2, 1, 2, 2]
+    assert fn(8)[-1] == 1                            # a power of two has one bit
+
+big = count_bits(5000)
+assert big == count_bits_lowest(5000) == [bin(i).count("1") for i in range(5001)]
+assert max(count_bits(1023)) == 10                   # 1023 = ten 1 bits
+```
+
+## Edge cases and pitfalls
+
+- **Operator precedence.** In Python `bits[i >> 1] + i & 1` parses as `(bits[i >> 1] + i) & 1`; keep the parentheses
+  around `i & 1`.
+- **limit 0** must return `[0]`, not an empty list.
+- **Negative numbers** are out of scope; Python integers have no fixed width, so `bin(-3)` is `-0b11` and the idea of
+  "set bits" needs a chosen width.
+
+## Where this shows up in data engineering
+
+Bit counting (population count) is used directly in data systems: bitmap indexes and roaring bitmaps count matching
+rows with popcount, and HyperLogLog-style sketches inspect bit patterns of hashes. Knowing the cheap tricks such as
+`i & (i - 1)` helps when reading or tuning that code.
