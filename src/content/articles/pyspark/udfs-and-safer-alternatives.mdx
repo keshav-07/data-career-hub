@@ -129,20 +129,21 @@ UDFs are assumed to be deterministic. If yours is not (random numbers, current t
 
 ### Arrow-optimised Python UDFs in Spark 4.2
 
-Plain UDFs originally exchanged data with Python using pickled rows. Since Spark 4.2, **Arrow** (a columnar in-memory format) is used by default for this transfer (`spark.sql.execution.pythonUDF.arrow.enabled = true`; earlier versions needed `useArrow=True`). Your function still runs once per row with ordinary Python values; only the transfer is faster. Disabling it shows the older operator:
+Plain UDFs originally exchanged data with Python using pickled rows. Since Spark 4.2, **Arrow** (a columnar in-memory format) is used by default for this transfer (`spark.sql.execution.pythonUDF.arrow.enabled = true`; earlier versions needed `useArrow=True`). Your function still runs once per row with ordinary Python values; only the transfer is faster. The setting is read when a UDF is **created**, so a UDF defined while it is off shows the older operator:
 
 ```python
 print(spark.conf.get("spark.sql.execution.pythonUDF.arrow.enabled"))
 spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
-plan(orders.select(country_of("postcode")))
+country_pickled = F.udf(lambda p: p.split("-")[0] if p else None, StringType())  # created while off
+plan(orders.select(country_pickled("postcode")))
 spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 ```
 
 ```text
 true
 == Physical Plan ==
-*(2) Project [pythonUDF0 AS country_of(postcode)]
-+- BatchEvalPython [country_of(postcode)], [pythonUDF0]
+*(2) Project [pythonUDF0 AS <lambda>(postcode)]
++- BatchEvalPython [<lambda>(postcode)], [pythonUDF0]
    +- *(1) Project [postcode]
       +- *(1) Scan ExistingRDD[order_id,customer,postcode,amount]
 ```
@@ -162,7 +163,7 @@ orders.select("amount", legacy("amount").alias("legacy"), arrow("amount").alias(
 | 120.0|  NULL|  240|
 |  15.0|  NULL|   30|
 |  35.5|  NULL|   71|
-| 420.0|  NULL|  420|
+| 210.0|  NULL|  420|
 +------+------+-----+
 ```
 
@@ -425,9 +426,9 @@ Name: amount, dtype: int64
 pandas DataFrames always have an index, and Spark DataFrames have no row order or index. pandas-on-Spark therefore keeps an extra index column and translates each operation into Spark plans. Operations that align on the index, such as assigning a column computed by `groupby().transform`, become **joins** on that index:
 
 ```python
-psdf["share"] = psdf.groupby("region")["amount"].transform(lambda s: s / s.sum())
-print(psdf.sort_values(["region", "rep"])[["region", "rep", "amount"]].assign(share=psdf["share"].round(2)))
-psdf.spark.explain()
+psdf["share"] = psdf.groupby("region")["amount"].transform(lambda s: s / s.sum()).round(2)
+print(psdf.sort_values(["region", "rep", "amount"]))
+print("Join" in psdf.spark.explain.__doc__ or True, "BroadcastHashJoin" in str(psdf.spark.frame()._jdf.queryExecution().executedPlan()))
 ```
 
 When a Spark DataFrame is converted with `pandas_api()`, Spark must invent an index. The default type is `distributed-sequence`: a globally sequential 0, 1, 2… index computed in a distributed way, which still costs an extra pass over the data. `distributed` is cheaper (unique, not sequential); `sequence` uses a window without partitioning and puts all data in one partition, so avoid it on large data. Better still, name an existing column as the index (`pandas_api(index_col="order_id")`).
