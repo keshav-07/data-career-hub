@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Self-Serve Analytics Platform"
-description: "A system-design case study for self-serve analytics: certified datasets, a semantic layer, catalog and access requests, sandboxes, row-level security and cost guardrails."
+description: "A system-design case study for self-serve analytics: certified datasets, a semantic layer, a catalog, sandboxes, row-level security and cost guardrails."
 technology: ["data-engineering", "data-warehousing", "sql"]
 topic: ["platform", "governance", "analytics", "architecture"]
 tags: ["self-serve-analytics", "semantic-layer", "data-catalog", "row-level-security", "data-products", "cost-guardrails"]
