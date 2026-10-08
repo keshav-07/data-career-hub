@@ -72,6 +72,7 @@ sources:
   - { label: "Delta Lake documentation: schema validation", url: "https://docs.delta.io/latest/delta-batch.html#schema-validation" }
   - { label: "dbt documentation: data tests", url: "https://docs.getdbt.com/docs/build/data-tests" }
 previous: "system-designs:backfill-late-data-handling-system"
+next: "system-designs:self-serve-analytics-platform"
 ---
 
 ## Approach
