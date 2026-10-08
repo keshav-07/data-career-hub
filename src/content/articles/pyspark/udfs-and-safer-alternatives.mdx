@@ -428,7 +428,20 @@ pandas DataFrames always have an index, and Spark DataFrames have no row order o
 ```python
 psdf["share"] = psdf.groupby("region")["amount"].transform(lambda s: s / s.sum()).round(2)
 print(psdf.sort_values(["region", "rep", "amount"]))
-print("Join" in psdf.spark.explain.__doc__ or True, "BroadcastHashJoin" in str(psdf.spark.frame()._jdf.queryExecution().executedPlan()))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    psdf.spark.explain()
+print("plan contains a join:", "Join" in buf.getvalue())
+```
+
+```text
+  region   rep  amount  share
+0  north  asha     100   0.25
+4  north  asha     150   0.38
+1  north   ben     150   0.38
+2  south  chen     200   0.80
+3  south  dara      50   0.20
+plan contains a join: True
 ```
 
 When a Spark DataFrame is converted with `pandas_api()`, Spark must invent an index. The default type is `distributed-sequence`: a globally sequential 0, 1, 2… index computed in a distributed way, which still costs an extra pass over the data. `distributed` is cheaper (unique, not sequential); `sequence` uses a window without partitioning and puts all data in one partition, so avoid it on large data. Better still, name an existing column as the index (`pandas_api(index_col="order_id")`).
@@ -441,6 +454,23 @@ back = orders.pandas_api(index_col="order_id")
 print(back.dtypes)
 print(back.index)
 ```
+
+```text
+distributed-sequence
+root
+ |-- region: string (nullable = false)
+ |-- rep: string (nullable = false)
+ |-- amount: long (nullable = false)
+ |-- share: double (nullable = true)
+
+customer        str
+postcode        str
+amount      float64
+dtype: object
+Index([1, 2, 3, 4], dtype='int32', name='order_id')
+```
+
+`to_spark()` drops the pandas-on-Spark index (the schema above has no index column) unless you pass `index_col` to keep it as a column. With `index_col="order_id"`, the column becomes the index and no default index is generated.
 
 ### Moving between APIs
 
