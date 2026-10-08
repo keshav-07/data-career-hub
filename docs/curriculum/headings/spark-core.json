@@ -138,5 +138,13 @@
   "SQL vs DataFrame performance": {
     "ref": "articles:spark/catalyst-tungsten-optimizer",
     "heading": "SQL versus DataFrame performance"
+  },
+  "AQE (Adaptive Query Execution)": {
+    "ref": "articles:spark/adaptive-query-execution",
+    "heading": "Adaptive Query Execution"
+  },
+  "Dynamic partition pruning": {
+    "ref": "articles:spark/adaptive-query-execution",
+    "heading": "Dynamic partition pruning"
   }
 }
