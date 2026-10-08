@@ -318,5 +318,37 @@
   "ROW_NUMBER() → Employee Hierarchy": {
     "ref": "interview-questions:sql/employee-hierarchy-sql-case-study",
     "heading": "Approach: ROW_NUMBER() for the current manager and sibling order"
+  },
+  "Covering indexes → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: covering indexes for authorisation-time lookups"
+  },
+  "Deduplicate keeping latest record → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: deduplicate keeping the latest status"
+  },
+  "ROLLUP and CUBE → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: ROLLUP and CUBE for flag reporting"
+  },
+  "Anti-pattern detection → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: anti-pattern detection in fraud SQL"
+  },
+  "Retention analysis → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: retention analysis of flagged and clean accounts"
+  },
+  "Subqueries in WHERE → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: subqueries in WHERE for blocklists and outliers"
+  },
+  "Bitmap indexing → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: bitmap indexing for combined low-cardinality filters"
+  },
+  "Recursive CTEs → Fraud Pattern Detection": {
+    "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
+    "heading": "Approach: recursive CTEs to expand fraud rings"
   }
 }
