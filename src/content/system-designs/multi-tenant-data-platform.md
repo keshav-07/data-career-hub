@@ -69,6 +69,7 @@ related:
   - "system-designs:reporting-analytics-platform"
   - "system-designs:kafka-ingestion-system"
 previous: "system-designs:idempotent-reprocessing-system"
+next: "system-designs:cost-optimized-warehouse-strategy"
 versionContext: "The row-level security example was run on PostgreSQL 16 using a non-owner role (superusers and table owners bypass policies unless forced). Warehouse policies and provisioning are described, not executed."
 sources:
   - { label: "Snowflake documentation: virtual warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses" }
