@@ -1,0 +1,607 @@
+---
+seoTitle: "Session Duration SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Session Duration: SQL Case Study with 8 Approaches"
+description: "Measure average and median session duration in SQL with single-event sessions, idle tabs and midnight crossings, then join, pivot, partition and tune the query."
+technology: ["sql"]
+topic: ["case-study", "product-analytics", "window-functions"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Collapse events to one row per session first: duration is the last event time minus the first event time, after removing duplicate events. Decide how to treat single-event sessions (duration 0, usually reported separately as bounces) and cap or exclude idle outliers. Then average per day or month by the session's start time, report the median beside the mean, and join to device and user tables only after aggregating to the session grain, so many-to-many tables do not duplicate sessions."
+followUps:
+  - "How do you handle sessions with a single event?"
+  - "A session starts before midnight and ends after it. Which day does it belong to?"
+  - "Why does LAST_VALUE return the current row's value instead of the last one?"
+  - "How do you compute month-over-month change in average session duration?"
+  - "Which partitioning scheme suits a large events table, and what breaks at partition boundaries?"
+  - "The session report scans the whole events table every hour. How do you make it cheaper?"
+prerequisites: ["articles:sql/window-functions", "articles:sql/aggregations-group-by-having"]
+related: ["interview-questions:sql/daily-active-users-sql-case-study", "interview-questions:sql/conversion-funnel-sql-case-study", "articles:sql/window-functions", "articles:sql/joins", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/fraud-pattern-detection-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 and one PIVOT example on DuckDB 1.5.6, with scripts/verify-examples.py; outputs and plans are copied from the engines (plans use COSTS OFF and TIMING OFF so they are reproducible)."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions (first_value, last_value, frames)", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Table partitioning", url: "https://www.postgresql.org/docs/16//ddl-partitioning.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: Aggregate functions (percentile_cont)", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
+  - { label: "DuckDB documentation: PIVOT statement", url: "https://duckdb.org/docs/current/sql/statements/pivot" }
+---
+
+Session duration, how long people stay each time they use a product, is a core engagement metric for apps, media and e-commerce sites. Computing it means collapsing raw events into sessions and taking first and last timestamps, which is where window functions, join grain and partitioning all matter. This case study defines the metric on a small event log and answers eight follow-up techniques.
+
+## The business question
+
+**"How long do people spend in the product per visit, and is it going up?"** Product teams track it after design changes, content teams use it to judge engagement, and it feeds retention models. The definition here:
+
+- A **session** is identified by the client's `session_id`. (When there is no session id, sessions are built from inactivity gaps; see the top-selling-products case study for that method.)
+- **Duration** = last event time − first event time in the session, in minutes, after removing duplicate events.
+- **Single-event sessions** have duration 0. They are kept in the session count and reported as **bounces**, and the average is shown both with and without them.
+- **Idle outliers**: a tab left open makes a session look hours long. Durations are **capped at 120 minutes**.
+- A session belongs to the **day and month in which it starts** (UTC), even if it crosses midnight.
+- Report the **mean and the median**, because durations are skewed.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE plans   (plan_id INT PRIMARY KEY, plan_name TEXT NOT NULL);
+CREATE TABLE users   (user_id INT PRIMARY KEY, plan_id INT NOT NULL REFERENCES plans);
+CREATE TABLE devices (device_id TEXT PRIMARY KEY, user_id INT NOT NULL REFERENCES users, platform TEXT NOT NULL);
+CREATE TABLE experiment_assignments (user_id INT NOT NULL, experiment TEXT NOT NULL);   -- many per user
+
+CREATE TABLE events (
+  event_id   INT NOT NULL,        -- repeats when the client retries
+  session_id TEXT NOT NULL,
+  device_id  TEXT NOT NULL REFERENCES devices,
+  page       TEXT NOT NULL,
+  event_ts   TIMESTAMP NOT NULL   -- UTC
+);
+
+INSERT INTO plans VALUES (1, 'free'), (2, 'pro');
+INSERT INTO users VALUES (1, 2), (2, 1), (3, 1), (4, 2);
+INSERT INTO devices VALUES ('d1', 1, 'ios'), ('d2', 1, 'web'), ('d3', 2, 'android'), ('d4', 3, 'web'), ('d5', 4, 'ios');
+INSERT INTO experiment_assignments VALUES (1, 'new_nav'), (1, 'dark_mode'), (2, 'new_nav');
+
+INSERT INTO events VALUES
+  (1,  's01', 'd1', 'home',     '2026-01-05 08:00'), (2,  's01', 'd1', 'search',   '2026-01-05 08:05'),
+  (3,  's01', 'd1', 'product',  '2026-01-05 08:12'),
+  (4,  's02', 'd1', 'home',     '2026-01-06 08:00'), (5,  's02', 'd1', 'checkout', '2026-01-06 08:20'),
+  (6,  's03', 'd2', 'home',     '2026-01-07 21:00'),                                         -- bounce
+  (7,  's04', 'd3', 'home',     '2026-01-10 23:50'), (8,  's04', 'd3', 'product',  '2026-01-11 00:15'),  -- crosses midnight
+  (9,  's05', 'd4', 'home',     '2026-01-15 10:00'), (10, 's05', 'd4', 'product',  '2026-01-15 10:03'),
+  (11, 's05', 'd4', 'product',  '2026-01-15 14:30'),                                         -- tab left open
+  (12, 's16', 'd3', 'home',     '2026-01-31 23:55'), (13, 's16', 'd3', 'search',   '2026-02-01 00:10'),  -- crosses a month
+  (14, 's06', 'd1', 'home',     '2026-02-01 09:00'), (15, 's06', 'd1', 'product',  '2026-02-01 09:10'),
+  (16, 's07', 'd1', 'home',     '2026-02-02 09:00'), (17, 's07', 'd1', 'checkout', '2026-02-02 09:30'),
+  (18, 's08', 'd3', 'home',     '2026-02-03 12:00'), (19, 's08', 'd3', 'product',  '2026-02-03 12:04'),
+  (19, 's08', 'd3', 'product',  '2026-02-03 12:04'),                                         -- duplicate event
+  (20, 's09', 'd5', 'home',     '2026-02-10 18:00'), (21, 's09', 'd5', 'search',   '2026-02-10 18:45'),
+  (22, 's10', 'd5', 'home',     '2026-02-11 18:00'),                                         -- bounce
+  (23, 's11', 'd5', 'home',     '2026-02-12 18:00'), (24, 's11', 'd5', 'product',  '2026-02-12 18:20'),
+  (25, 's12', 'd2', 'home',     '2026-03-01 20:00'), (26, 's12', 'd2', 'product',  '2026-03-01 20:15'),
+  (27, 's13', 'd3', 'home',     '2026-03-05 07:00'), (28, 's13', 'd3', 'search',   '2026-03-05 07:02'),
+  (29, 's14', 'd4', 'home',     '2026-03-07 13:00'), (30, 's14', 'd4', 'checkout', '2026-03-07 13:40'),
+  (31, 's15', 'd5', 'home',     '2026-03-09 18:00'), (32, 's15', 'd5', 'product',  '2026-03-09 18:10');
+```
+
+## Core solution
+
+Deduplicate, collapse to one row per session, cap, then aggregate by the session's start month.
+
+```sql
+CREATE VIEW sessions AS
+WITH deduped AS (
+  SELECT DISTINCT ON (event_id) * FROM events ORDER BY event_id
+)
+SELECT session_id, device_id,
+       MIN(event_ts) AS started_at,
+       MAX(event_ts) AS ended_at,
+       COUNT(*)      AS events,
+       EXTRACT(EPOCH FROM MAX(event_ts) - MIN(event_ts)) / 60          AS raw_minutes,
+       LEAST(EXTRACT(EPOCH FROM MAX(event_ts) - MIN(event_ts)) / 60, 120) AS minutes
+FROM deduped
+GROUP BY session_id, device_id;
+
+SELECT date_trunc('month', started_at)::date              AS month,
+       COUNT(*)                                           AS sessions,
+       COUNT(*) FILTER (WHERE events = 1)                 AS bounces,
+       ROUND(AVG(minutes), 1)                             AS avg_minutes,
+       ROUND(AVG(minutes) FILTER (WHERE events > 1), 1)   AS avg_minutes_excl_bounces,
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY minutes) AS median_minutes,
+       ROUND(AVG(raw_minutes), 1)                         AS avg_uncapped
+FROM sessions
+GROUP BY 1
+ORDER BY 1;
+```
+
+| month | sessions | bounces | avg_minutes | avg_minutes_excl_bounces | median_minutes | avg_uncapped |
+|---|---|---|---|---|---|---|
+| 2026-01-01 | 6 | 1 | 32.0 | 38.4 | 17.5 | 57.0 |
+| 2026-02-01 | 6 | 1 | 18.2 | 21.8 | 15 | 18.2 |
+| 2026-03-01 | 4 | 0 | 16.8 | 16.8 | 12.5 | 16.8 |
+
+January's uncapped average (57.0 minutes) is inflated by the 270-minute idle session; capping it at 120 brings the average to 32.0, and the median (17.5) is not affected by the outlier at all. Session `s16` runs from 31 January to 1 February and counts in January, the month it started. The duplicate event in `s08` would not change its duration (same timestamp) but would change event counts, which is why deduplication comes first.
+
+## Approach: FIRST_VALUE and LAST_VALUE for entry and exit pages
+
+**Why it matters.** Alongside duration, product teams ask where sessions start (landing page) and end (exit page). `FIRST_VALUE(x)` and `LAST_VALUE(x)` return `x` from the first or last row of the window frame, which attaches the entry and exit page to every event of the session.
+
+The trap is the frame. With `ORDER BY` in the window, the default frame is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, so the "last" row of the frame is the current row:
+
+```sql
+SELECT session_id, event_ts, page,
+       FIRST_VALUE(page) OVER (PARTITION BY session_id ORDER BY event_ts) AS entry_page,
+       LAST_VALUE(page)  OVER (PARTITION BY session_id ORDER BY event_ts) AS exit_page_wrong,
+       LAST_VALUE(page)  OVER (PARTITION BY session_id ORDER BY event_ts
+                               ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS exit_page
+FROM events
+WHERE session_id IN ('s01', 's05')
+ORDER BY session_id, event_ts;
+```
+
+| session_id | event_ts | page | entry_page | exit_page_wrong | exit_page |
+|---|---|---|---|---|---|
+| s01 | 2026-01-05 08:00:00 | home | home | home | product |
+| s01 | 2026-01-05 08:05:00 | search | home | search | product |
+| s01 | 2026-01-05 08:12:00 | product | home | product | product |
+| s05 | 2026-01-15 10:00:00 | home | home | home | product |
+| s05 | 2026-01-15 10:03:00 | product | home | product | product |
+| s05 | 2026-01-15 14:30:00 | product | home | product | product |
+
+`exit_page_wrong` simply repeats each row's own page. Extending the frame to `UNBOUNDED FOLLOWING` gives the true last page. With the session-level table, exit pages and their average durations:
+
+```sql
+WITH paged AS (
+  SELECT DISTINCT session_id,
+         FIRST_VALUE(page) OVER w AS entry_page,
+         LAST_VALUE(page)  OVER w AS exit_page
+  FROM events
+  WINDOW w AS (PARTITION BY session_id ORDER BY event_ts, event_id
+               ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+)
+SELECT p.exit_page, COUNT(*) AS sessions, ROUND(AVG(s.minutes), 1) AS avg_minutes
+FROM paged p JOIN sessions s USING (session_id)
+GROUP BY p.exit_page
+ORDER BY sessions DESC, p.exit_page;
+```
+
+| exit_page | sessions | avg_minutes |
+|---|---|---|
+| product | 8 | 27.0 |
+| checkout | 3 | 30.0 |
+| search | 3 | 20.7 |
+| home | 2 | 0.0 |
+
+Sessions that end on `checkout` are long (people complete a purchase); sessions ending on `home` are bounces. **Pitfalls.** Ties on `event_ts` (two events in the same second, or the duplicate in `s08`) make first and last ambiguous; add `event_id` as a tiebreaker, as above. `MIN`/`MAX` give first and last *values* (alphabetically for text), not the value at the first and last *time*, so they are not substitutes. `NTH_VALUE(page, 2)` gives the second page with the same frame rules.
+
+## Approach: multi-table joins at the right grain
+
+**Why it matters.** Breakdowns need other tables: platform from `devices`, plan from `users` and `plans`, experiment from `experiment_assignments`. Chain the joins from the session table, each join many-to-one, and the session count stays correct. A many-to-many table (a user in several experiments) silently multiplies sessions.
+
+```sql
+SELECT d.platform, p.plan_name,
+       COUNT(*)                 AS sessions,
+       ROUND(AVG(s.minutes), 1) AS avg_minutes
+FROM sessions s
+JOIN devices d ON d.device_id = s.device_id      -- many sessions to one device
+JOIN users u   ON u.user_id   = d.user_id        -- many devices to one user
+JOIN plans p   ON p.plan_id   = u.plan_id        -- many users to one plan
+GROUP BY d.platform, p.plan_name
+ORDER BY d.platform, p.plan_name;
+```
+
+| platform | plan_name | sessions | avg_minutes |
+|---|---|---|---|
+| android | free | 4 | 11.5 |
+| ios | pro | 8 | 18.4 |
+| web | free | 2 | 80.0 |
+| web | pro | 2 | 7.5 |
+
+The counts add up to the 16 sessions. Now add experiments the naive way:
+
+```sql
+SELECT COUNT(*) AS session_rows, COUNT(DISTINCT s.session_id) AS distinct_sessions
+FROM sessions s
+JOIN devices d ON d.device_id = s.device_id
+LEFT JOIN experiment_assignments x ON x.user_id = d.user_id;
+```
+
+| session_rows | distinct_sessions |
+|---|---|
+| 22 | 16 |
+
+User 1 is in two experiments, so each of their sessions appears twice. Overall totals become wrong, but per-experiment figures are fine, because within one experiment each session appears once:
+
+```sql
+SELECT COALESCE(x.experiment, '(none)')  AS experiment,
+       COUNT(*)                          AS sessions,
+       ROUND(AVG(s.minutes), 1)          AS avg_minutes
+FROM sessions s
+JOIN devices d ON d.device_id = s.device_id
+LEFT JOIN experiment_assignments x ON x.user_id = d.user_id
+GROUP BY 1
+ORDER BY 1;
+```
+
+| experiment | sessions | avg_minutes |
+|---|---|---|
+| (none) | 6 | 39.2 |
+| dark_mode | 6 | 14.5 |
+| new_nav | 10 | 13.3 |
+
+The rule: group by the many-to-many attribute when you report per experiment, and never sum those groups into a total. For an overall figure filtered to "users in any experiment", use `EXISTS` instead of the join.
+
+**Pitfalls.** Join conditions on the wrong key (`d.user_id = s.device_id` type mistakes) can still return rows; compare row counts before and after each join. A `LEFT JOIN` keeps sessions from devices missing in `devices`; an inner join drops them silently.
+
+## Approach: join algorithms for session reporting
+
+**Why it matters.** The same session report runs as a nightly batch over everything and as an interactive lookup for one user. PostgreSQL picks a different physical join for each, and knowing why helps when a plan goes wrong. Load larger tables: 300,000 events in 60,000 sessions on 20,000 devices.
+
+```sql
+CREATE TABLE devices_big AS
+SELECT 'dev' || g AS device_id, (ARRAY['ios','android','web'])[g % 3 + 1] AS platform
+FROM generate_series(1, 20000) AS g;
+ALTER TABLE devices_big ADD PRIMARY KEY (device_id);
+
+CREATE TABLE sessions_big AS
+SELECT 's' || g AS session_id, 'dev' || (g % 20000 + 1) AS device_id,
+       TIMESTAMP '2026-01-01' + g * INTERVAL '2 minutes' AS started_at,
+       (g * 7) % 90 AS minutes
+FROM generate_series(1, 60000) AS g;
+CREATE INDEX sessions_big_device ON sessions_big (device_id);
+VACUUM ANALYZE devices_big;
+VACUUM ANALYZE sessions_big;
+```
+
+Whole-table report: a **hash join** builds a hash table on the smaller input (devices) and probes it with every session, reading both tables once:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT d.platform, AVG(s.minutes)
+FROM sessions_big s JOIN devices_big d USING (device_id)
+GROUP BY d.platform;
+```
+
+```text
+HashAggregate (actual rows=3 loops=1)
+  Group Key: d.platform
+  Batches: 1  Memory Usage: 24kB
+  ->  Hash Join (actual rows=60000 loops=1)
+        Hash Cond: (s.device_id = d.device_id)
+        ->  Seq Scan on sessions_big s (actual rows=60000 loops=1)
+        ->  Hash (actual rows=20000 loops=1)
+              Buckets: 32768  Batches: 1  Memory Usage: 1151kB
+              ->  Seq Scan on devices_big d (actual rows=20000 loops=1)
+```
+
+One user's devices: a **nested loop** takes the few matching device rows and probes the sessions index once per device, touching only matching rows:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT s.session_id, s.minutes
+FROM devices_big d JOIN sessions_big s USING (device_id)
+WHERE d.device_id IN ('dev17', 'dev18');
+```
+
+```text
+Nested Loop (actual rows=6 loops=1)
+  ->  Index Only Scan using devices_big_pkey on devices_big d (actual rows=2 loops=1)
+        Index Cond: (device_id = ANY ('{dev17,dev18}'::text[]))
+        Heap Fetches: 0
+  ->  Bitmap Heap Scan on sessions_big s (actual rows=3 loops=2)
+        Recheck Cond: (d.device_id = device_id)
+        Heap Blocks: exact=6
+        ->  Bitmap Index Scan on sessions_big_device (actual rows=3 loops=2)
+              Index Cond: (device_id = d.device_id)
+```
+
+When the hash table does not fit in memory, the hash join splits both inputs into batches on disk. A tiny `work_mem` shows it:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64kB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT d.platform, AVG(s.minutes)
+FROM sessions_big s JOIN devices_big d USING (device_id)
+GROUP BY d.platform;
+```
+
+```text
+HashAggregate (actual rows=3 loops=1)
+  Group Key: d.platform
+  Batches: 1  Memory Usage: 24kB
+  ->  Hash Join (actual rows=60000 loops=1)
+        Hash Cond: (s.device_id = d.device_id)
+        ->  Seq Scan on sessions_big s (actual rows=60000 loops=1)
+        ->  Hash (actual rows=20000 loops=1)
+              Buckets: 4096  Batches: 16  Memory Usage: 90kB
+              ->  Seq Scan on devices_big d (actual rows=20000 loops=1)
+```
+
+The plan may change shape at low memory as well: the planner prices spilling and can prefer a different strategy. Whatever it picks, `Batches` above 1 on a `Hash` node or `external merge` on a `Sort` means spilling. A **merge join** appears when both inputs are already sorted on the key, for example both read through indexes in key order, or when a sort is needed anyway. The rule of thumb: hash for big unsorted equality joins, nested loop with an index for a small outer side, merge for presorted inputs. Distributed engines add broadcast joins (copy the small table to every worker) versus shuffle joins (repartition both sides by key).
+
+## Approach: detecting consecutive-day streaks
+
+**Why it matters.** Habit matters as much as length: a user with a session every day for a week is more engaged than one long weekly visit. "Which users had sessions on three or more consecutive days?" is the gaps-and-islands pattern: for distinct active dates per user, `date − ROW_NUMBER()` is constant within a run.
+
+```sql
+WITH active_days AS (
+  SELECT DISTINCT d.user_id, s.started_at::date AS day
+  FROM sessions s JOIN devices d USING (device_id)
+),
+grouped AS (
+  SELECT user_id, day,
+         day - (ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY day))::int AS streak_key
+  FROM active_days
+)
+SELECT user_id, MIN(day) AS streak_start, MAX(day) AS streak_end, COUNT(*) AS days
+FROM grouped
+GROUP BY user_id, streak_key
+HAVING COUNT(*) >= 2
+ORDER BY days DESC, user_id, streak_start;
+```
+
+| user_id | streak_start | streak_end | days |
+|---|---|---|---|
+| 1 | 2026-01-05 | 2026-01-07 | 3 |
+| 4 | 2026-02-10 | 2026-02-12 | 3 |
+| 1 | 2026-02-01 | 2026-02-02 | 2 |
+
+User 1 has a three-day run (5–7 January, across two devices, which is why the streak is per user, not per device) and a two-day run in February; user 4 has three days in February, one of them a bounce. Whether a bounce counts as an active day is a definition choice; to exclude it, filter `events > 1` in `active_days`.
+
+**Pitfalls.** Deduplicate to one row per user per day before numbering, or two sessions on one day break the arithmetic. Use the same time zone for "day" as the rest of the report. A session crossing midnight counts only for its start date here; a "minutes per day" metric would split it across days instead.
+
+## Approach: month-over-month change
+
+**Why it matters.** Dashboards show the latest month against the previous one. `LAG` over the monthly series gives the previous value; the change is reported in absolute minutes and as a percentage.
+
+```sql
+WITH monthly AS (
+  SELECT date_trunc('month', started_at)::date AS month,
+         COUNT(*)     AS sessions,
+         AVG(minutes) AS avg_minutes
+  FROM sessions
+  GROUP BY 1
+)
+SELECT month, sessions,
+       ROUND(avg_minutes, 1)                                        AS avg_minutes,
+       ROUND(avg_minutes - LAG(avg_minutes) OVER (ORDER BY month), 1) AS change_minutes,
+       ROUND(100.0 * (avg_minutes - LAG(avg_minutes) OVER (ORDER BY month))
+             / NULLIF(LAG(avg_minutes) OVER (ORDER BY month), 0), 1)  AS change_pct,
+       ROUND(100.0 * (sessions - LAG(sessions) OVER (ORDER BY month))
+             / NULLIF(LAG(sessions) OVER (ORDER BY month), 0), 1)     AS sessions_change_pct
+FROM monthly
+ORDER BY month;
+```
+
+| month | sessions | avg_minutes | change_minutes | change_pct | sessions_change_pct |
+|---|---|---|---|---|---|
+| 2026-01-01 | 6 | 32.0 | NULL | NULL | NULL |
+| 2026-02-01 | 6 | 18.2 | -13.8 | -43.2 | 0.0 |
+| 2026-03-01 | 4 | 16.8 | -1.4 | -7.8 | -33.3 |
+
+Average duration fell from January to February largely because January's capped idle session dropped out; a month-over-month change in a mean is sensitive to a single outlier when volumes are small. Show the median change beside it, and the session counts, so a reader can tell whether behaviour changed or the mix did.
+
+**Pitfalls.** `LAG` compares with the previous *row*: if a month has no sessions, generate a month spine and left join, or `LAG` compares March with January. A partial current month should be compared with the same number of days of the previous month, or labelled "month to date". Percentages of small bases are noisy; show absolute changes too.
+
+## Approach: PIVOT rows to columns
+
+**Why it matters.** A product review deck wants one row per platform and one column per month. In PostgreSQL, conditional aggregation does the pivot:
+
+```sql
+SELECT d.platform,
+       ROUND(AVG(s.minutes) FILTER (WHERE s.started_at >= '2026-01-01' AND s.started_at < '2026-02-01'), 1) AS jan,
+       ROUND(AVG(s.minutes) FILTER (WHERE s.started_at >= '2026-02-01' AND s.started_at < '2026-03-01'), 1) AS feb,
+       ROUND(AVG(s.minutes) FILTER (WHERE s.started_at >= '2026-03-01' AND s.started_at < '2026-04-01'), 1) AS mar
+FROM sessions s JOIN devices d USING (device_id)
+GROUP BY d.platform
+ORDER BY d.platform;
+```
+
+| platform | jan | feb | mar |
+|---|---|---|---|
+| android | 20.0 | 4.0 | 2.0 |
+| ios | 16.0 | 21.0 | 10.0 |
+| web | 60.0 | NULL | 27.5 |
+
+Each `FILTER` feeds only that month's sessions to `AVG`; a platform with no sessions in a month gets `NULL`, which is correct for an average (0 minutes would be a false statement). DuckDB's `PIVOT` produces the same grid from long rows, with columns named after the month values. The session-level figures are loaded directly here:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE session_months (platform VARCHAR, month VARCHAR, minutes DOUBLE);
+INSERT INTO session_months VALUES
+  ('ios','2026-01',12), ('ios','2026-01',20), ('web','2026-01',0), ('android','2026-01',25),
+  ('web','2026-01',120), ('android','2026-01',15), ('ios','2026-02',10), ('ios','2026-02',30),
+  ('android','2026-02',4), ('ios','2026-02',45), ('ios','2026-02',0), ('ios','2026-02',20),
+  ('web','2026-03',15), ('android','2026-03',2), ('web','2026-03',40), ('ios','2026-03',10);
+
+PIVOT session_months ON month USING ROUND(AVG(minutes), 1) GROUP BY platform ORDER BY platform;
+```
+
+| platform | 2026-01 | 2026-02 | 2026-03 |
+|---|---|---|---|
+| android | 20.0 | 4.0 | 2.0 |
+| ios | 16.0 | 21.0 | 10.0 |
+| web | 60.0 | NULL | 27.5 |
+
+Both give the same numbers. **Pitfalls.** Pivot after aggregating to the right grain (average of sessions, not of events). A pivot over an unknown set of months needs dynamic SQL in PostgreSQL; DuckDB, Snowflake and BigQuery infer or accept the value list. Keep the long format in the data model and pivot in the presentation layer when possible.
+
+## Approach: partitioning strategies for event tables
+
+**Why it matters.** Event tables grow without limit, and nearly every query filters on time. **Range partitioning by event time** (one partition per month or day) lets PostgreSQL skip partitions that cannot match (partition pruning), and lets you drop old data by detaching a partition instead of running a huge `DELETE`.
+
+```sql
+CREATE TABLE events_part (LIKE events) PARTITION BY RANGE (event_ts);
+CREATE TABLE events_2026_01 PARTITION OF events_part FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+CREATE TABLE events_2026_02 PARTITION OF events_part FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+CREATE TABLE events_2026_03 PARTITION OF events_part FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+INSERT INTO events_part SELECT * FROM events;
+
+SELECT tableoid::regclass AS partition, COUNT(*) AS events
+FROM events_part GROUP BY 1 ORDER BY 1;
+```
+
+| partition | events |
+|---|---|
+| events_2026_01 | 12 |
+| events_2026_02 | 13 |
+| events_2026_03 | 8 |
+
+A query on February touches only the February partition:
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT session_id, MIN(event_ts), MAX(event_ts)
+FROM events_part
+WHERE event_ts >= TIMESTAMP '2026-02-01' AND event_ts < TIMESTAMP '2026-03-01'
+GROUP BY session_id;
+```
+
+```text
+GroupAggregate
+  Group Key: events_part.session_id
+  ->  Sort
+        Sort Key: events_part.session_id
+        ->  Seq Scan on events_2026_02 events_part
+              Filter: ((event_ts >= '2026-02-01 00:00:00'::timestamp without time zone) AND (event_ts < '2026-03-01 00:00:00'::timestamp without time zone))
+```
+
+**What breaks at the boundary.** Session `s16` has one event in each of January and February. A job that computes sessions *per partition* (a common way to process data incrementally) sees two half-sessions:
+
+```sql
+SELECT 'january only' AS scope, session_id, COUNT(*) AS events,
+       ROUND(EXTRACT(EPOCH FROM MAX(event_ts) - MIN(event_ts)) / 60, 1) AS minutes
+FROM events_2026_01 WHERE session_id = 's16' GROUP BY session_id
+UNION ALL
+SELECT 'february only', session_id, COUNT(*), ROUND(EXTRACT(EPOCH FROM MAX(event_ts) - MIN(event_ts)) / 60, 1)
+FROM events_2026_02 WHERE session_id = 's16' GROUP BY session_id
+UNION ALL
+SELECT 'whole table', session_id, COUNT(*), ROUND(EXTRACT(EPOCH FROM MAX(event_ts) - MIN(event_ts)) / 60, 1)
+FROM events_part WHERE session_id = 's16' GROUP BY session_id;
+```
+
+| scope | session_id | events | minutes |
+|---|---|---|---|
+| january only | s16 | 1 | 0.0 |
+| february only | s16 | 1 | 0.0 |
+| whole table | s16 | 2 | 15.0 |
+
+Each half-session looks like a bounce. The usual fix is to reprocess a lookback window: when building sessions for a day or month, read a little of the previous period (for example the last hour), and assign each session to its start.
+
+**Choosing a strategy.**
+
+| Strategy | Good for | Watch out for |
+|---|---|---|
+| Range by time (month or day) | Time filters, retention by dropping old partitions | Too many tiny partitions slow planning; sessions span boundaries |
+| List by a category (platform, region) | Queries that always filter one category | Uneven partition sizes |
+| Hash by user or device id | Spreading writes evenly; per-user lookups | No pruning for time ranges unless combined with time |
+| Range by time, sub-partitioned by hash | Very large tables needing both | Operational complexity |
+
+Partition count matters: PostgreSQL handles hundreds of partitions well, but tens of thousands make planning and maintenance slower. In warehouses the same idea is **partitioning** (BigQuery) or **clustering** (Snowflake micro-partitions, BigQuery clustering): the engine skips data blocks whose time range cannot match, and the same "filter on the raw timestamp column" rule applies.
+
+## Approach: query optimisation and cost reduction
+
+**Why it matters.** A session dashboard that rebuilds sessions from raw events on every refresh reads the whole events table every time. Most of that work is repeated: sessions that ended yesterday will never change. The cheapest query is the one you do not run.
+
+**1. Build a session table incrementally.** Keep `sessions` as a table, one row per session, and each run only rebuilds sessions that had events since the last run (plus the lookback window for boundaries):
+
+```sql
+CREATE TABLE session_facts AS
+SELECT session_id, device_id, MIN(event_ts) AS started_at, MAX(event_ts) AS ended_at, COUNT(*) AS events
+FROM events
+WHERE event_ts < TIMESTAMP '2026-03-01'
+GROUP BY session_id, device_id;
+
+-- next run: only sessions touched by events since the last load, minus a one-hour lookback
+WITH touched AS (
+  SELECT DISTINCT session_id FROM events WHERE event_ts >= TIMESTAMP '2026-03-01' - INTERVAL '1 hour'
+)
+DELETE FROM session_facts f USING touched t WHERE f.session_id = t.session_id;
+
+INSERT INTO session_facts
+SELECT session_id, device_id, MIN(event_ts), MAX(event_ts), COUNT(*)
+FROM events
+WHERE session_id IN (SELECT DISTINCT session_id FROM events
+                     WHERE event_ts >= TIMESTAMP '2026-03-01' - INTERVAL '1 hour')
+GROUP BY session_id, device_id;
+
+SELECT COUNT(*) AS sessions_in_table,
+       (SELECT COUNT(DISTINCT session_id) FROM events) AS sessions_in_events
+FROM session_facts;
+```
+
+| sessions_in_table | sessions_in_events |
+|---|---|
+| 16 | 16 |
+
+The incremental table matches a full rebuild. On real data the second run reads one partition instead of the whole history.
+
+**2. Read less in every query.** Filter on the raw partition column with a range (`event_ts >= ... AND event_ts < ...`), never `date(event_ts) = ...`; select only needed columns, which in columnar warehouses directly cuts bytes scanned and therefore cost.
+
+**3. Aggregate once, reuse many times.** Dashboards read `session_facts` (one row per session) or a daily summary (one row per day and platform), not raw events. Medians need the session-level table or a mergeable sketch; averages can come from stored sums and counts.
+
+**4. Measure before and after.** Compare a full rebuild with a query on the session table on the larger synthetic data:
+
+```sql
+CREATE TABLE events_big AS
+SELECT g AS event_id, 's' || (g / 5) AS session_id,
+       TIMESTAMP '2026-01-01' + (g / 5) * INTERVAL '2 minutes' + (g % 5) * INTERVAL '1 minute' AS event_ts
+FROM generate_series(1, 300000) AS g;
+CREATE TABLE session_facts_big AS
+SELECT session_id, MIN(event_ts) AS started_at, MAX(event_ts) AS ended_at FROM events_big GROUP BY session_id;
+ANALYZE events_big;
+ANALYZE session_facts_big;
+
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT AVG(EXTRACT(EPOCH FROM ended_at - started_at)) FROM (
+  SELECT MIN(event_ts) AS started_at, MAX(event_ts) AS ended_at FROM events_big GROUP BY session_id) s;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  HashAggregate (actual rows=60001 loops=1)
+        Group Key: events_big.session_id
+        Batches: 1  Memory Usage: 7953kB
+        ->  Seq Scan on events_big (actual rows=300000 loops=1)
+```
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT AVG(EXTRACT(EPOCH FROM ended_at - started_at)) FROM session_facts_big;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Seq Scan on session_facts_big (actual rows=60001 loops=1)
+```
+
+The session table query reads 60,001 rows instead of grouping 300,000 events, and needs no hash table at all. On a warehouse billed by data scanned, that ratio is roughly the cost saving.
+
+## Interview tips
+
+**How it is asked.** "Calculate average session duration per day", "average time on site by platform", "landing and exit pages", "users with sessions on 3 consecutive days", or "the session pipeline is slow and expensive".
+
+**What a strong answer includes.**
+
+1. The definition: session boundary, duration as last minus first, single-event sessions, outlier cap, attribution to start date.
+2. Deduplication and aggregation to one row per session before any join.
+3. Mean and median, and bounce rate reported separately.
+4. Correct window frames for first and last values.
+5. A scalable design: time-partitioned events, an incremental session table, lookback for boundary sessions.
+
+**Mistakes candidates make.**
+
+- Averaging event-level time differences instead of session durations.
+- `LAST_VALUE` with the default frame.
+- Joining a many-to-many table and averaging duplicated sessions.
+- Ignoring sessions that cross midnight or partition boundaries.
+- Reporting only the mean when one idle tab dominates.
+- Rebuilding all sessions from raw events on every run.

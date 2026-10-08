@@ -23,6 +23,7 @@ followUps:
 prerequisites: ["articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables"]
 related: ["interview-questions:sql/employee-hierarchy-sql-case-study", "interview-questions:sql/conversion-funnel-sql-case-study", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
 previous: "interview-questions:sql/employee-hierarchy-sql-case-study"
+next: "interview-questions:sql/session-duration-sql-case-study"
 versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
 sources:
   - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
@@ -626,13 +627,13 @@ WHERE country = 'C3' AND merchant_category = 'M7';
 ```text
 Aggregate (actual rows=1 loops=1)
   ->  Bitmap Heap Scan on txn_attrs (actual rows=2859 loops=1)
-        Recheck Cond: ((country = 'C3'::text) AND (merchant_category = 'M7'::text))
+        Recheck Cond: ((merchant_category = 'M7'::text) AND (country = 'C3'::text))
         Heap Blocks: exact=953
         ->  BitmapAnd (actual rows=0 loops=1)
-              ->  Bitmap Index Scan on txn_attrs_country (actual rows=19999 loops=1)
-                    Index Cond: (country = 'C3'::text)
               ->  Bitmap Index Scan on txn_attrs_mcc (actual rows=20001 loops=1)
                     Index Cond: (merchant_category = 'M7'::text)
+              ->  Bitmap Index Scan on txn_attrs_country (actual rows=19999 loops=1)
+                    Index Cond: (country = 'C3'::text)
 ```
 
 Each `Bitmap Index Scan` produces a bitmap of matching row locations from one index; `BitmapAnd` intersects them; the `Bitmap Heap Scan` then reads only the pages that can contain matches, in physical order. Each condition alone matches about 20,000 rows (5%); together they match under 3,000. The planner does not always combine bitmaps: when one condition is selective enough on its own, it uses that index and filters the rest, as here with the 2% flag:
