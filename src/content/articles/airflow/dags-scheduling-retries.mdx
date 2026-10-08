@@ -244,7 +244,7 @@ When a DAG is unpaused, the scheduler compares its `start_date` with now. With *
 ### How it works
 
 - `catchup=True` with `start_date` a year in the past and a daily schedule: about 365 runs are created, limited by `max_active_runs` (16 by default) at a time.
-- `catchup=False`: only the latest interval is scheduled. Historical periods are run deliberately with a **backfill** (`airflow backfill create`, the UI or the REST API), covered in the operations lesson.
+- `catchup=False`: only the latest interval is scheduled. Historical periods are run deliberately with a **backfill** (`airflow backfill create`, the UI or the REST API), covered in the [operations lesson](/airflow/operations-backfills-monitoring/).
 - `start_date` is not "the date of the first run". With data intervals, the first run's interval *starts* at `start_date` and runs after it ends; with trigger timetables, the first run fires at the first cron time on or after `start_date`.
 - Changing `start_date` on an existing DAG does not rewrite history, and moving it earlier does not create the missing runs unless catchup is on.
 - `end_date` stops scheduling after a date.
@@ -480,7 +480,7 @@ Interviewers still ask "How do you implement SLAs in Airflow?". Explain the Airf
 
 ## Retries and idempotency
 
-Scheduling decides *when* a run happens; retries, reruns and backfills decide how often the same interval is processed. Every one of them is only safe if each task is **idempotent**: rerunning it for the same interval leaves the same final state. Overwrite the run's partition (or delete-then-insert in one transaction), upsert on a unique key, or write to a temporary location and swap it in atomically; never append blindly. The [Python tutorial on an idempotent loader](/python/idempotent-csv-loader/) shows the pattern in code, and the operations lesson covers retries, backfills and clearing in depth.
+Scheduling decides *when* a run happens; retries, reruns and backfills decide how often the same interval is processed. Every one of them is only safe if each task is **idempotent**: rerunning it for the same interval leaves the same final state. Overwrite the run's partition (or delete-then-insert in one transaction), upsert on a unique key, or write to a temporary location and swap it in atomically; never append blindly. The [Python tutorial on an idempotent loader](/python/idempotent-csv-loader/) shows the pattern in code, and the [operations lesson](/airflow/operations-backfills-monitoring/) covers retries, backfills and clearing in depth.
 
 ## Practice questions
 

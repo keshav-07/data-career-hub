@@ -1,6 +1,6 @@
 ---
 title: "Airflow Executors, Pools and Scaling"
-description: "Compare Airflow 3 executors (Local, Celery, Kubernetes and multiple executors), see what replaced SequentialExecutor and hybrids, and tune parallelism, pools and scaling."
+description: "Compare Airflow 3 executors (Local, Celery, Kubernetes, multiple executors), learn what replaced SequentialExecutor and hybrids, and tune pools and scaling."
 technology: ["airflow"]
 topic: ["executors", "scaling", "pools", "concurrency"]
 difficulty: "Advanced"
@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:airflow/dags-scheduling-retries", "articles:airflow/xcom-variables-connections"]
 related: ["articles:airflow/operators-hooks-providers", "articles:airflow/sensors-deferrable-operators"]
 previous: "articles:airflow/xcom-variables-connections"
+next: "articles:airflow/operations-backfills-monitoring"
 versionContext: "Configuration defaults were read from an Apache Airflow 3.3.2 installation, and the pool and concurrency examples ran on it with a SQLite metadata database. Executor, Celery, Kubernetes and Helm configuration is written from the Airflow and provider documentation and was not executed (it needs a broker, a cluster or several machines)."
 sources:
   - { label: "Apache Airflow documentation: Executor", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/executor/index.html" }
@@ -370,7 +371,7 @@ The official Helm chart deploys each component as its own Kubernetes workload wi
 - Adding schedulers when the bottleneck is the database or the DAG files.
 - Scaling workers to hundreds while `parallelism` stays at 32 per scheduler.
 - Running SQLite or a tiny database instance in production.
-- Measuring nothing: use the metrics in the operations lesson (scheduler loop duration, pool open slots, executor queued tasks).
+- Measuring nothing: use the metrics in the [operations lesson](/airflow/operations-backfills-monitoring/) (scheduler loop duration, pool open slots, executor queued tasks).
 
 ### In interviews
 

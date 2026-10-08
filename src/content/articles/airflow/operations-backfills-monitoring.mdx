@@ -1,7 +1,7 @@
 ---
 title: "Operating Airflow: Backfills, Retries, Alerting, Logging and the REST API"
 seoTitle: "Operating Airflow: Backfills, Alerts and API"
-description: "Run Airflow day to day: backfill and rerun history, clear tasks safely, set retries and failure alerts, configure logs and StatsD metrics, and drive it all through REST API v2."
+description: "Run Airflow day to day: backfill history, clear tasks safely, set retries and alerts, configure logs and StatsD metrics, and use the REST API v2."
 technology: ["airflow"]
 topic: ["operations", "backfills", "monitoring", "rest-api", "alerting"]
 difficulty: "Intermediate"
@@ -196,17 +196,18 @@ def run_failed(context):
         "retry_delay": timedelta(seconds=1),              # minutes in real life
         "retry_exponential_backoff": 2.0,
         "max_retry_delay": timedelta(minutes=30),
-        "on_failure_callback": task_failed,               # task-level, for every task
-        "on_retry_callback": task_retrying,
-        "on_success_callback": task_succeeded,
     },
 )
 def orders_ops_demo():
-    @task
+    alerts = {"on_failure_callback": task_failed,          # task-level callbacks
+              "on_retry_callback": task_retrying,
+              "on_success_callback": task_succeeded}
+
+    @task(**alerts)
     def extract() -> str:
         return "s3://lake/orders/dt=2026-03-01/"
 
-    @task
+    @task(**alerts)
     def load(path: str) -> None:
         raise RuntimeError("warehouse unavailable")
 
@@ -219,10 +220,14 @@ for event in events:
 ```
 
 ```text
-OUTPUT_CALLBACKS
+('failed', {'extract': 'success', 'load': 'failed'})
+('task succeeded', 'extract')
+('retrying', 'load', 'after try 1')
+('task failed', 'load', 'warehouse unavailable')
+('dag run failed', 'orders_ops_demo', 'task_failure')
 ```
 
-`load` failed, the retry callback fired, the second attempt failed too, and then both the task-level and DAG-level failure callbacks ran. A notifier is used the same way:
+Task callbacks can also go in `default_args` so every task gets them; here they are passed to each task explicitly. `load` failed, the retry callback fired, the second attempt failed too, and then both the task-level and DAG-level failure callbacks ran. A notifier is used the same way:
 
 {/* noexec */}
 ```python
@@ -381,10 +386,16 @@ print("backfill would create:", [b["logical_date"][:10] for b in plan["backfills
 ```
 
 ```text
-OUTPUT_API
+health: {'status': 'healthy'}
+v1: 404 /api/v1 has been removed in Airflow 3, please use its upgraded version /api/v2 instead.
+dag: orders_ops_demo paused: True
+run: 2026-03-01T00:00:00Z failed
+would clear: [('load', 'failed')]
+triggered: manual queued None {'mode': 'full'}
+backfill would create: ['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04']
 ```
 
-The same calls over HTTP against a running API server:
+A few things to notice: new DAGs start paused (`[core] dags_are_paused_at_creation` is `True`), so the triggered run stays queued until the DAG is unpaused (`PATCH /api/v2/dags/{dag_id}` with `{"is_paused": false}`); the run triggered with a null logical date has none; and the backfill plan includes 1 March because its existing run failed and the reprocess behaviour is `failed`. The same calls over HTTP against a running API server:
 
 {/* noexec */}
 ```bash
