@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /search/
 
-Sitemap: https://datacareerhub.example/sitemap-index.xml
+Sitemap: https://datadank.example/sitemap-index.xml

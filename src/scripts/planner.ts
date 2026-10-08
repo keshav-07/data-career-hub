@@ -176,7 +176,7 @@ function onClick(e: Event) {
         decorate();
         alert("Planner restored from backup.");
       } catch {
-        alert("That file is not a Data Career Hub planner backup.");
+        alert("That file is not a DataDank planner backup.");
       }
     });
     input.click();

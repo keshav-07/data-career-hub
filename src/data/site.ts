@@ -1,8 +1,8 @@
 export const SITE = {
-  name: "Data Career Hub",
-  tagline: "Learn Data Engineering. Prepare smarter. Get job ready.",
+  name: "DataDank",
+  tagline: "Your 90-day plan to a Data Engineering job.",
   description:
-    "A structured learning and interview-preparation platform for Data Engineers: roadmaps, technology guides, interview questions, system design and projects.",
+    "DataDank is a 90-day plan and complete study hub for Data Engineering interviews: SQL, Spark, Kafka, Airflow, AWS, data modeling, DSA and system design.",
   // Real contact route is not configured yet. Set when an address exists (docs/DECISIONS.md D-012).
   contactEmail: "" as string,
   social: [] as { label: string; url: string }[],
@@ -49,7 +49,7 @@ export const FOOTER_COLUMNS: { title: string; links: { label: string; href: stri
     links: [
       { label: "Career hub", href: "/career/" },
       { label: "Roadmaps", href: "/roadmaps/" },
-  { label: "Planner", href: "/planner/" },
+      { label: "Planner", href: "/planner/" },
     ],
   },
   {

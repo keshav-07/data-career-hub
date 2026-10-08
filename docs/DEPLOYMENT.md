@@ -6,7 +6,7 @@ The site is a static `dist/` folder. No Worker script, adapter, database or secr
 
 1. **Choose the domain.** Then:
    - set `SITE_URL=https://your-domain` in the build environment (used for canonicals, sitemap and OG URLs);
-   - replace `datacareerhub.example` in `public/robots.txt`.
+   - replace `datadank.example` in `public/robots.txt`.
 2. **Cloudflare account.** `npx wrangler login` (or create an API token with *Workers Scripts: Edit*) on the machine or CI that deploys.
 3. **Update `compatibility_date`** in `wrangler.jsonc` to the deployment date.
 

@@ -7,7 +7,7 @@
     gap: var(--sp-2);
     min-height: 44px;
     padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);
     border: 1px solid transparent;
     font-weight: 600;
     font-size: var(--fs-md);
@@ -29,12 +29,14 @@
     font-size: var(--fs-lg);
   }
   .btn--primary {
-    background: var(--c-accent);
-    color: var(--c-on-accent);
+    background: var(--c-primary);
+    color: var(--c-on-primary);
+    border-color: var(--c-primary);
+    letter-spacing: 0.01em;
   }
   .btn--primary:hover {
-    background: var(--c-accent-hover);
-    color: var(--c-on-accent);
+    background: var(--c-primary-hover);
+    color: var(--c-on-primary);
   }
   .btn--secondary {
     background: var(--c-surface);

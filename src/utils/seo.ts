@@ -3,7 +3,7 @@ import { isoDate } from "./dates";
 import type { Crumb } from "./breadcrumbs";
 
 export function absoluteUrl(path: string, site: URL | string | undefined): string {
-  return new URL(path, site ?? "https://datacareerhub.example").toString();
+  return new URL(path, site ?? "https://datadank.example").toString();
 }
 
 export function pageTitle(title: string): string {

@@ -26,7 +26,7 @@ const shared = {
   topic: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   audience: z.array(z.string()).default(["aspiring-data-engineer"]),
-  author: z.string().default("Data Career Hub Editorial"),
+  author: z.string().default("DataDank Editorial"),
   publishedDate: z.coerce.date(),
   updatedDate: z.coerce.date(),
   reviewedDate: z.coerce.date(),

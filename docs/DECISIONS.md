@@ -70,7 +70,7 @@ Pagefind. Revisit: move to hashes when Astro's CSP support covers all inline scr
 visible trail); `Article` on content pages. No `Organization` entity (no real organisation data yet); the Article
 author is the editorial byline. FAQ schema is only emitted from a visible FAQ section, and no page has one yet.
 
-**D-011 Placeholder domain.** `https://datacareerhub.example` is used until a domain is chosen (task P0-03 is
+**D-011 Placeholder domain.** `https://datadank.example` is used until a domain is chosen (task P0-03 is
 BLOCKED). Set `SITE_URL` at build time and update `public/robots.txt`. See `docs/DEPLOYMENT.md`.
 
 **D-012 Contact route.** No contact address is published yet, and the contact page says so honestly. Set

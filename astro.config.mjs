@@ -3,7 +3,7 @@ import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 
 // Replace with the production domain before launch (see docs/DEPLOYMENT.md).
-const site = process.env.SITE_URL ?? "https://datacareerhub.example";
+const site = process.env.SITE_URL ?? "https://datadank.example";
 
 export default defineConfig({
   output: "static",

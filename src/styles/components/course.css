@@ -778,7 +778,7 @@
     border-radius: var(--radius-pill);
     background: linear-gradient(
       90deg,
-      var(--c-success) calc(var(--pct, 0) * 1%),
+      var(--c-gold) calc(var(--pct, 0) * 1%),
       var(--c-surface-2) 0
     );
     border: 1px solid var(--c-border);
@@ -945,7 +945,7 @@
     width: 72px;
     height: 72px;
     border-radius: 50%;
-    background: conic-gradient(var(--c-success) calc(var(--pct, 0) * 1%), var(--c-surface-2) 0);
+    background: conic-gradient(var(--c-gold) calc(var(--pct, 0) * 1%), var(--c-surface-2) 0);
     display: grid;
     place-items: center;
   }

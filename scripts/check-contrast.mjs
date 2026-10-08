@@ -30,6 +30,8 @@ const pairs = [
   ["--c-accent", "--c-surface", 4.5],
   ["--c-accent", "--c-accent-soft", 4.5],
   ["--c-on-accent", "--c-accent", 4.5],
+  ["--c-on-primary", "--c-primary", 4.5],
+  ["--c-primary", "--c-bg", 3],
   ["--c-success", "--c-surface", 4.5],
   ["--c-warning", "--c-surface", 4.5],
   ["--c-error", "--c-surface", 4.5],

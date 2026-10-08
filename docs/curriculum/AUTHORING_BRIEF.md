@@ -2,7 +2,7 @@
 
 This brief is for anyone writing curriculum content, human or AI. Read it fully before writing.
 
-The site is Data Career Hub, an Astro static site for aspiring and working Data Engineers. Its owner supplied a
+The site is DataDank, an Astro static site for aspiring and working Data Engineers. Its owner supplied a
 study planner (`Data_Engineer_Career_Transition_Master_Planner.xlsx`). Every topic in it is listed in
 `docs/curriculum/curriculum.json`, together with the lesson or page that must cover it. The goal is a one-stop study
 resource: each topic gets clear, correct, interview-ready study material, not a stub.

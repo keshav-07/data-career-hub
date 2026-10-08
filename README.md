@@ -1,4 +1,4 @@
-# Data Career Hub
+# DataDank
 
 A structured learning and interview-preparation website for Data Engineers: roadmaps, technology hubs,
 guides, interview questions with evidence-labelled company preparation, system design case studies, projects
