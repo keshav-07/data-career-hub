@@ -72,6 +72,7 @@ sources:
   - { label: "Databricks documentation: Unity Catalog", url: "https://docs.databricks.com/en/data-governance/unity-catalog/index.html" }
   - { label: "dbt documentation: data tests", url: "https://docs.getdbt.com/docs/build/data-tests" }
 previous: "system-designs:schema-registry-contract-system"
+next: "system-designs:llm-rag-data-ingestion-pipeline"
 ---
 
 ## Approach
