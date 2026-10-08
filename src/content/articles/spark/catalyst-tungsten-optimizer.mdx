@@ -87,7 +87,27 @@ show_plan(q, "extended")
 ```
 
 ```text
-OUTPUT_EXTENDED
+== Parsed Logical Plan ==
+'Project ['order_id, 'amount]
++- Filter ((amount#8 > cast(150 as double)) AND (channel#9 = web))
+   +- Relation [order_id#6L,customer_id#7L,amount#8,channel#9,order_date#10] parquet
+
+== Analyzed Logical Plan ==
+order_id: bigint, amount: double
+Project [order_id#6L, amount#8]
++- Filter ((amount#8 > cast(150 as double)) AND (channel#9 = web))
+   +- Relation [order_id#6L,customer_id#7L,amount#8,channel#9,order_date#10] parquet
+
+== Optimized Logical Plan ==
+Project [order_id#6L, amount#8]
++- Filter ((isnotnull(amount#8) AND isnotnull(channel#9)) AND ((amount#8 > 150.0) AND (channel#9 = web)))
+   +- Relation [order_id#6L,customer_id#7L,amount#8,channel#9,order_date#10] parquet
+
+== Physical Plan ==
+*(1) Project [order_id#6L, amount#8]
++- *(1) Filter (((isnotnull(amount#8) AND isnotnull(channel#9)) AND (amount#8 > 150.0)) AND (channel#9 = web))
+   +- *(1) ColumnarToRow
+      +- FileScan parquet [order_id#6L,amount#8,channel#9,order_date#10] Batched: true, DataFilters: [isnotnull(amount#8), isnotnull(channel#9), (amount#8 > 150.0), (channel#9 = web)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[<data>/orders], PartitionFilters: [], PushedFilters: [IsNotNull(amount), IsNotNull(channel), GreaterThan(amount,150.0), EqualTo(channel,web)], ReadSchema: struct<order_id:bigint,amount:double,channel:string>
 ```
 
 Between the analysed and optimised plans, Catalyst **folded** the constant `cast(150 as double)` into `150.0` and **inferred** `isnotnull` filters, since a `NULL` can never satisfy `> 150`. In the physical plan, the filters appear in `PushedFilters` (sent to the Parquet reader) and `ReadSchema` lists only three of the five columns. The `*(1)` marks operators fused by whole-stage code generation.
@@ -152,10 +172,40 @@ show_plan(orders.filter("amount > 400").select("order_id", "amount"), "codegen")
 ```
 
 ```text
-OUTPUT_CODEGEN
+Found 1 WholeStageCodegen subtrees.
+== Subtree 1 / 1 (maxMethodCodeSize:338; maxConstantPoolSize:173(0.26% used); numInnerClasses:0) ==
+*(1) Project [order_id#6L, amount#8]
++- *(1) Filter (isnotnull(amount#8) AND (amount#8 > 400.0))
+   +- *(1) ColumnarToRow
+      +- FileScan parquet [order_id#6L,amount#8,order_date#10] Batched: true, DataFilters: [isnotnull(amount#8), (amount#8 > 400.0)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[<data>/orders], PartitionFilters: [], PushedFilters: [IsNotNull(amount), GreaterThan(amount,400.0)], ReadSchema: struct<order_id:bigint,amount:double>
+
+Generated code:
+...
+/* 031 */   protected void processNext() throws java.io.IOException {
+/* 032 */     if (columnartorow_mutableStateArray_1[0] == null) {
+/* 033 */       columnartorow_nextBatch_0();
+/* 034 */     }
+/* 035 */     while ( columnartorow_mutableStateArray_1[0] != null) {
+/* 036 */       int columnartorow_numRows_0 = columnartorow_mutableStateArray_1[0].numRows();
+/* 037 */       int columnartorow_localEnd_0 = columnartorow_numRows_0 - columnartorow_batchIdx_0;
+/* 038 */       for (int columnartorow_localIdx_0 = 0; columnartorow_localIdx_0 < columnartorow_localEnd_0; columnartorow_localIdx_0++) {
+/* 039 */         int columnartorow_rowIdx_0 = columnartorow_batchIdx_0 + columnartorow_localIdx_0;
+/* 040 */         do {
+/* 041 */           boolean columnartorow_isNull_1 = columnartorow_mutableStateArray_2[1].isNullAt(columnartorow_rowIdx_0);
+/* 042 */           double columnartorow_value_1 = columnartorow_isNull_1 ? -1.0 : (columnartorow_mutableStateArray_2[1].getDouble(columnartorow_rowIdx_0));
+/* 043 */
+/* 044 */           boolean filter_value_2 = !columnartorow_isNull_1;
+/* 045 */           if (!filter_value_2) continue;
+/* 046 */
+/* 047 */           boolean filter_value_3 = false;
+/* 048 */           filter_value_3 = org.apache.spark.sql.catalyst.util.SQLOrderingUtil.compareDoubles(columnartorow_value_1, 400.0D) > 0;
+/* 049 */           if (!filter_value_3) continue;
+/* 050 */
+/* 051 */           ((org.apache.spark.sql.execution.metric.SQLMetric) references[2] /* numOutputRows */).add(1);
+...
 ```
 
-(Trimmed to the summary line and the inner loop; the full output is a few hundred lines.) The filter is two `if (...) continue;` checks inside a `for` loop over a column batch, with no per-row function calls.
+(Trimmed to the summary, the fused plan and the inner loop; the full output is a few hundred lines.) The filter is two `if (...) continue;` checks inside a `for` loop over a column batch, with no per-row function calls.
 
 ### When code generation is skipped
 
@@ -204,10 +254,25 @@ spark.conf.set("spark.sql.cbo.enabled", "false")
 ```
 
 ```text
-OUTPUT_CBO
+no stats:    ['(sizeInBytes=466.5 KiB)', '(sizeInBytes=466.5 KiB)']
+with stats:  ['(sizeInBytes=1085.0 KiB, rowCount=1.98E+4)', '(sizeInBytes=5.3 MiB, rowCount=1.00E+5)']
++--------------+----------+
+|     info_name|info_value|
++--------------+----------+
+|      col_name|    amount|
+|     data_type|    double|
+|       comment|      NULL|
+|           min|       0.0|
+|           max|     499.0|
+|     num_nulls|         0|
+|distinct_count|       510|
+|   avg_col_len|         8|
+|   max_col_len|         8|
+|     histogram|      NULL|
++--------------+----------+
 ```
 
-Without statistics, the filter's estimate is just the file size. With column statistics and CBO on, Spark knows `amount` ranges from 0 to 499 and estimates that `amount > 400` keeps about a fifth of 100,000 rows: 19,800, which is exactly right here because the values are uniform. On skewed data, histograms improve such estimates.
+Without statistics, the filter's estimate is just the file size (466.5 KiB here). With column statistics and CBO on, Spark knows `amount` ranges from 0 to 499 and estimates that `amount > 400` keeps about a fifth of 100,000 rows: 19,800, which is exactly right here because the values are uniform. Note that the byte sizes change too: with row counts available, Spark estimates size as rows times an estimated row width (5.3 MiB for the table) instead of using the compressed file size, so the numbers are estimates for planning, not measurements. On skewed data, histograms improve such estimates.
 
 ### Statistics versus AQE
 
@@ -243,7 +308,11 @@ show_plan(q2)
 ```
 
 ```text
-OUTPUT_PUSHDOWN
+== Physical Plan ==
+*(1) Project [customer_id#7L]
++- *(1) Filter (isnotnull(amount#8) AND (amount#8 > 400.0))
+   +- *(1) ColumnarToRow
+      +- FileScan parquet [customer_id#7L,amount#8,order_date#10] Batched: true, DataFilters: [isnotnull(amount#8), (amount#8 > 400.0)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[<data>/orders], PartitionFilters: [isnotnull(order_date#10), (order_date#10 = 2026-01-05)], PushedFilters: [IsNotNull(amount), GreaterThan(amount,400.0)], ReadSchema: struct<customer_id:bigint,amount:double>
 ```
 
 | Field | Meaning here |
@@ -310,7 +379,7 @@ print("identical physical plans:", physical(sql_df) == physical(api_df))
 ```
 
 ```text
-OUTPUT_SAME_PLAN
+identical physical plans: True
 ```
 
 (Expression ids and plan ids are stripped before comparing, since they differ by construction.) Choose between SQL and the DataFrame API for readability, testing and reuse, not speed.
@@ -338,7 +407,20 @@ show_plan(orders.select(add_vat("amount").alias("gross")).filter("gross > 10"))
 ```
 
 ```text
-OUTPUT_UDF
+== Physical Plan ==
+*(1) Project [(amount#8 * 1.2) AS gross#2594]
++- *(1) ColumnarToRow
+   +- FileScan parquet [amount#8,order_date#10] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[<data>/orders], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<amount:double>
+
+== Physical Plan ==
+*(3) Project [pythonUDF0#2598 AS gross#2596]
++- ArrowEvalPython [add_vat(amount#8)#2595], [pythonUDF0#2598], 101
+   +- *(2) Project [amount#8]
+      +- *(2) Filter (pythonUDF0#2597 > 10.0)
+         +- ArrowEvalPython [add_vat(amount#8)#2595], [pythonUDF0#2597], 101
+            +- *(1) Project [amount#8]
+               +- *(1) ColumnarToRow
+                  +- FileScan parquet [amount#8,order_date#10] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[<data>/orders], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<amount:double>
 ```
 
 The built-in expression is one fused codegen stage. The UDF version leaves the JVM for Python twice, once for the filter and once for the projection, and splits code generation into three stages. If a UDF is expensive or non-deterministic, compute it once in a column and cache or checkpoint, or better, replace it with built-in functions (see [UDFs and safer alternatives](/pyspark/udfs-and-safer-alternatives/)).
