@@ -249,7 +249,7 @@ Illustrative arithmetic for one Snowflake-style warehouse (state your own credit
 - A medium warehouse consuming 4 credits per hour, always on: 4 × 24 × 30 = 2,880 credits/month.
 - If BI usage is 07:00–19:00 on weekdays (about 260 hours/month) and the warehouse suspends otherwise: 4 × 260 ≈ 1,040 credits, about 64% less for the same daytime performance.
 - An hourly full rebuild taking 20 minutes on an 8-credit/hour warehouse: 24 runs × 8 × (20/60) ≈ 64 credits/day ≈ 1,920/month. As an incremental model taking 2 minutes per run: 24 × 8 × (2/60) ≈ 6.4 credits/day ≈ 190/month, about 90% less, plus a weekly full refresh.
-- BigQuery on-demand: a dashboard scanning 50 GB per load, opened 2,000 times a month, scans about 100 TB ≈ 98 TiB; at $6.25 per TiB that is roughly $600 a month for one dashboard. A 1 GB pre-aggregated table cuts that by about 50 times.
+- BigQuery on-demand: a dashboard scanning 50 GB per load, opened 2,000 times a month, scans about 100 TB ≈ 91 TiB; at $6.25 per TiB that is roughly $570 a month for one dashboard. A 1 GB pre-aggregated table cuts that by about 50 times.
 
 ## What a strong answer includes
 
