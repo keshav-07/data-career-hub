@@ -17,7 +17,6 @@ learningObjectives:
 prerequisites: ["articles:kafka/producers", "articles:kafka/consumer-groups-rebalancing"]
 related: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/log-storage-retention-compaction"]
 previous: "articles:kafka/consumer-groups-rebalancing"
-next: "articles:kafka/delivery-semantics-exactly-once"
 sources:
   - { label: "Apache Kafka documentation: Design (replication)", url: "https://kafka.apache.org/documentation/#design" }
   - { label: "Apache Kafka 4.0.0 release announcement", url: "https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/" }
@@ -277,7 +276,7 @@ A slow follower holds the HW back (HW 3 while b3 lags) until it is removed from 
 
 - **"Committed" means below the HW**, not "acknowledged to the producer". With `acks=1` the two differ.
 - **End-to-end latency includes replication.** A slow follower in the ISR delays every `acks=all` write and every consumer, until it is dropped.
-- **Transactional consumers** read up to the *last stable offset*, which can be lower than the HW while a transaction is open (see [delivery semantics](/kafka/delivery-semantics-exactly-once/)).
+- **Transactional consumers** read up to the *last stable offset*, which can be lower than the HW while a transaction is open (see delivery semantics).
 
 ### In interviews
 
@@ -343,14 +342,14 @@ client.rack=eu-west-1a
 
 ## KRaft vs ZooKeeper
 
-**What it is.** Kafka needs a place to store cluster metadata: brokers, topics, partition leaders, ISRs, configs and ACLs. Until 3.x, that was an external **ZooKeeper** ensemble, with one broker acting as controller. **KRaft** (Kafka Raft) stores metadata in an internal, replicated log managed by a quorum of Kafka controller nodes. **Kafka 4.0 removed ZooKeeper mode entirely**: clusters must run KRaft, and ZooKeeper-based clusters must migrate to KRaft on a 3.x release before upgrading to 4.x.
+**What it is.** Kafka needs a place to store cluster metadata: brokers, topics, partition leaders, ISRs, configs and ACLs. Until 3.x, that was an external **ZooKeeper** ensemble, with one broker acting as controller. **KRaft** (Kafka Raft) stores metadata in an internal, replicated log managed by a quorum of Kafka controller nodes. **Kafka 4.0 removed ZooKeeper mode entirely**: clusters must run KRaft, and ZooKeeper-based clusters must migrate to KRaft on a 3.x bridge release (the last one is 3.9) before upgrading to 4.x.
 
 ### How KRaft works
 
 - A small set of **controllers** (typically 3 or 5) run the Raft protocol on the `__cluster_metadata` log. One is the **active controller**; a majority must be alive for the cluster to change metadata.
 - Brokers replicate the metadata log and apply it, instead of being pushed updates.
 - Servers have `process.roles=broker`, `controller`, or both (**combined** mode). The documentation recommends separate controllers for critical deployments; combined mode suits development, like the cluster used in this course.
-- Kafka 3.9 introduced **dynamic quorums** (KRaft version 1): `controller.quorum.bootstrap.servers` replaces the static `controller.quorum.voters` list, and controllers can be added or removed. This course's cluster still used the older static voter list, which is why `kraft.version` shows 0 below.
+- Recent releases support **dynamic quorums** (KIP-853, `kraft.version` 1): `controller.quorum.bootstrap.servers` replaces the static `controller.quorum.voters` list, and controllers can be added or removed without rebuilding the quorum. The 4.3 documentation describes upgrading an existing static quorum to `kraft.version` 1 as supported from release 4.1. This course's cluster used the older static voter list, which is why `kraft.version` shows 0 below.
 
 ### Inspecting the quorum
 

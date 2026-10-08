@@ -69,7 +69,7 @@ Topic: page-views	TopicId: LG01aRfWQh-yqdLL3js4-Q	PartitionCount: 3	ReplicationF
 	Topic: page-views	Partition: 2	Leader: 1	Replicas: 1,2,3	Isr: 1,2,3	Elr: 	LastKnownElr:
 ```
 
-Each line describes one partition: which broker leads it, which brokers hold copies, and which copies are currently in sync (`Isr`). `Elr` is the eligible leader replica list, a newer safety mechanism covered in the replication lesson.
+Each line describes one partition: which broker leads it, which brokers hold copies, and which copies are currently in sync (`Isr`). `Elr` is the eligible leader replica list, a newer safety mechanism covered in the [replication lesson](/kafka/replication-isr/).
 
 ### Naming topics
 
@@ -270,7 +270,7 @@ Error while executing topic command : Unable to replicate the partition 4 time(s
 
 ### In interviews
 
-Be ready to connect RF, `acks` and `min.insync.replicas`: RF says how many copies exist, `min.insync.replicas` says how many must confirm a write, and `acks=all` makes the producer wait for them. The details are in the replication lesson.
+Be ready to connect RF, `acks` and `min.insync.replicas`: RF says how many copies exist, `min.insync.replicas` says how many must confirm a write, and `acks=all` makes the producer wait for them. The details are in the [replication lesson](/kafka/replication-isr/).
 
 ## Consumer group basics
 

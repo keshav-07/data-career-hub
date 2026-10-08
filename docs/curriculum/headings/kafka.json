@@ -134,5 +134,37 @@
   "Partition reassignment": {
     "ref": "articles:kafka/consumer-groups-rebalancing",
     "heading": "Partition reassignment"
+  },
+  "Leader & followers": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "Leader and followers"
+  },
+  "In-Sync Replicas (ISR)": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "In-Sync Replicas (ISR)"
+  },
+  "min.insync.replicas": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "min.insync.replicas"
+  },
+  "Unclean leader election": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "Unclean leader election"
+  },
+  "High watermark": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "High watermark"
+  },
+  "Replica fetcher": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "Replica fetcher"
+  },
+  "Rack awareness": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "Rack awareness"
+  },
+  "KRaft vs ZooKeeper": {
+    "ref": "articles:kafka/replication-isr",
+    "heading": "KRaft vs ZooKeeper"
   }
 }

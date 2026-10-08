@@ -171,7 +171,7 @@ Walk through serialise, partition, accumulate, send, acknowledge, and say that `
 
 ### How it works with min.insync.replicas
 
-`acks=all` waits for the *current* ISR. If the ISR has shrunk to just the leader, `acks=all` is no safer than `acks=1`. The topic or broker setting `min.insync.replicas` closes that gap: when the ISR is smaller than it, the leader rejects `acks=all` writes with `NotEnoughReplicasException` instead of accepting them with too few copies. The standard durable combination is **replication factor 3, `min.insync.replicas=2`, `acks=all`**: one broker can be down and writes continue with two copies. The broker default `min.insync.replicas` is 1, so set it deliberately. The replication lesson shows this failing on a real cluster.
+`acks=all` waits for the *current* ISR. If the ISR has shrunk to just the leader, `acks=all` is no safer than `acks=1`. The topic or broker setting `min.insync.replicas` closes that gap: when the ISR is smaller than it, the leader rejects `acks=all` writes with `NotEnoughReplicasException` instead of accepting them with too few copies. The standard durable combination is **replication factor 3, `min.insync.replicas=2`, `acks=all`**: one broker can be down and writes continue with two copies. The broker default `min.insync.replicas` is 1, so set it deliberately. The [replication lesson](/kafka/replication-isr/) shows this failing on a real cluster.
 
 ### acks=0 on the cluster
 
