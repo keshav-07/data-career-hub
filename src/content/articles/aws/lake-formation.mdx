@@ -107,7 +107,10 @@ aws lakeformation grant-permissions \
 The PostgreSQL analogue applies the same rule with a column grant and a row-level security policy. It is labelled as an analogue: PostgreSQL enforces it inside one database, while Lake Formation enforces it across engines reading S3.
 
 ```sql
-CREATE ROLE uk_analyst NOLOGIN;
+-- roles are cluster-wide in PostgreSQL, so create it only if it does not exist yet
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'uk_analyst') THEN CREATE ROLE uk_analyst NOLOGIN; END IF;
+END $$;
 GRANT SELECT (customer_id, country, segment) ON customers TO uk_analyst;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY gb_only ON customers FOR SELECT TO uk_analyst USING (country = 'GB');
