@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design an LLM RAG Data Ingestion Pipeline"
 seoTitle: "Design a RAG Data Ingestion Pipeline"
-description: "A system-design case study for retrieval-augmented generation data: connectors, parsing, chunking, metadata, permissions, incremental re-embedding, hybrid indexes and evaluation."
+description: "A system-design case study for RAG data: connectors, parsing, chunking, permissions, incremental re-embedding, hybrid indexes and retrieval evaluation."
 technology: ["data-engineering", "python"]
 topic: ["ml-data", "llm", "rag", "architecture"]
 tags: ["rag", "chunking", "embeddings", "access-control", "hybrid-search", "incremental-ingestion"]
@@ -59,6 +59,7 @@ interviewFollowUps:
   - "How do you evaluate whether a pipeline change improved retrieval?"
   - "A malicious page contains instructions aimed at the language model. What can the ingestion pipeline do about it?"
 related:
+  - "system-designs:vector-embeddings-pipeline"
   - "system-designs:search-indexing-pipeline"
   - "system-designs:schema-registry-contract-system"
   - "articles:python/iterators-generators"
@@ -70,6 +71,7 @@ sources:
   - { label: "OpenSearch documentation source: text chunking", url: "https://github.com/opensearch-project/documentation-website/blob/main/_vector-search/ingesting-data/text-chunking.md" }
   - { label: "OpenSearch documentation source: text chunking processor", url: "https://github.com/opensearch-project/documentation-website/blob/main/_ingest-pipelines/processors/text-chunking.md" }
   - { label: "Debezium documentation", url: "https://debezium.io/documentation/" }
+next: "system-designs:vector-embeddings-pipeline"
 previous: "system-designs:self-serve-analytics-platform"
 ---
 
@@ -193,7 +195,7 @@ Changing "30 days" to "45 days" re-embeds one chunk out of three. Word counts st
 ## Embeddings and versioning
 
 - Record **model name, version and dimension** with every vector and on the index itself. Vectors from different models (or different versions of one model) live in different spaces; comparing them gives meaningless similarities.
-- A model upgrade is a **re-index**: build a new index with the new model in the background (blue-green), evaluate it, then switch queries over and retire the old one.
+- A model upgrade is a **re-index**: build a new index with the new model in the background (blue-green), evaluate it, then switch queries over and retire the old one. The [vector embeddings pipeline](/data-engineering/system-design/vector-embeddings-pipeline/) covers this in depth.
 - The query must be embedded with the **same** model as the index.
 - Batch embedding calls, cache by chunk hash (identical text never needs embedding twice), and handle API rate limits with backoff.
 
