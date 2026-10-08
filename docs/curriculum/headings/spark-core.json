@@ -110,5 +110,33 @@
   "Accumulators": {
     "ref": "articles:spark/caching-broadcast-accumulators",
     "heading": "Accumulators"
+  },
+  "Catalyst optimizer": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "The Catalyst optimiser"
+  },
+  "Tungsten execution engine": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "The Tungsten execution engine"
+  },
+  "Whole-stage code generation": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "Whole-stage code generation"
+  },
+  "Cost-based optimization": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "Cost-based optimisation"
+  },
+  "Predicate & projection pushdown": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "Predicate and projection pushdown"
+  },
+  "Column pruning": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "Column pruning"
+  },
+  "SQL vs DataFrame performance": {
+    "ref": "articles:spark/catalyst-tungsten-optimizer",
+    "heading": "SQL versus DataFrame performance"
   }
 }
