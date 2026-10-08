@@ -108,7 +108,7 @@ An analyst searches "orders". Results rank `gold.fct_orders` first: it is certif
 
 ## Metadata model
 
-Model metadata as a graph of entities identified by stable URNs such as `dataset:snowflake:prod.gold.fct_orders`:
+Model metadata as a graph of entities identified by stable URNs that combine entity type, platform and full name (for example `dataset:snowflake:` followed by `prod.gold.fct_orders`):
 
 | Entity | Key attributes | Example edges |
 |---|---|---|
