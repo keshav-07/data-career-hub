@@ -70,6 +70,7 @@ related:
   - "system-designs:reporting-analytics-platform"
   - "system-designs:elt-pipeline-with-dbt"
 previous: "system-designs:multi-tenant-data-platform"
+next: "system-designs:data-mesh-architecture"
 versionContext: "The cost-allocation SQL was run on PostgreSQL 16 against sample metering and query-history tables. Prices quoted are list prices seen at the time of writing and change; warehouse settings are described, not executed."
 sources:
   - { label: "Snowflake documentation: virtual warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses" }
