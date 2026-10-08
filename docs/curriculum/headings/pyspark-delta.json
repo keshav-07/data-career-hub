@@ -90,5 +90,13 @@
   "Window functions in Spark": {
     "ref": "articles:pyspark/window-functions",
     "heading": "Window functions in Spark"
+  },
+  "UDFs and pandas UDFs": {
+    "ref": "articles:pyspark/udfs-and-safer-alternatives",
+    "heading": "UDFs and pandas UDFs"
+  },
+  "Pandas API on Spark": {
+    "ref": "articles:pyspark/udfs-and-safer-alternatives",
+    "heading": "The pandas API on Spark"
   }
 }
