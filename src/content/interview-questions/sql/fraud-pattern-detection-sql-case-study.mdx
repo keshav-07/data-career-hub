@@ -1,0 +1,694 @@
+---
+seoTitle: "Fraud Pattern Detection SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Fraud Pattern Detection: SQL Case Study with 8 Approaches"
+description: "Detect card fraud patterns in SQL: velocity, card testing, impossible travel and fraud rings, with deduplicated statuses, subtotals, retention, indexes and bitmaps."
+technology: ["sql"]
+topic: ["case-study", "fraud", "window-functions"]
+difficulty: "Hard"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Express each fraud rule as a per-transaction flag computed with window functions over the card's or account's own history: velocity is COUNT(*) OVER a RANGE frame of the last 10 minutes, card testing is several tiny amounts followed by a large one, and impossible travel compares each transaction's country and time with the previous one via LAG. Deduplicate the transaction feed to its latest status first, combine flags into a flagged rate per day, and use a recursive CTE over shared cards and devices to expand one confirmed fraudster into a ring."
+followUps:
+  - "How do you count transactions on the same card in the last 10 minutes without a self-join?"
+  - "The feed sends several status updates per transaction. Which one do you keep?"
+  - "How do you find every account connected to a known fraudster through shared cards or devices?"
+  - "How do you show flag counts by rule and country with subtotals?"
+  - "Do flagged accounts behave differently after signup?"
+  - "Which index makes the per-card velocity lookup fast at authorisation time?"
+prerequisites: ["articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables"]
+related: ["interview-questions:sql/employee-hierarchy-sql-case-study", "interview-questions:sql/conversion-funnel-sql-case-study", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/employee-hierarchy-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine (plans use COSTS OFF and TIMING OFF so they are reproducible)."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: WITH queries (recursive)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: GROUPING SETS, CUBE and ROLLUP", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
+  - { label: "PostgreSQL 16 documentation: Index-only scans and covering indexes", url: "https://www.postgresql.org/docs/16/indexes-index-only-scans.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+---
+
+Fraud detection in production uses models and real-time systems, but most of the patterns they look for start life as SQL rules, and data engineers build the features those systems use. Interviewers use fraud scenarios to test window frames, self-joins, graph traversal and performance under pressure. This case study builds a small set of rules on one dataset and works through eight techniques.
+
+## The business question
+
+**"Which transactions and accounts look fraudulent, and how much of our volume is flagged?"** A risk team uses rule flags to block or review payments, to measure exposure, and to train and monitor models. The rules here are standard, simplified patterns:
+
+- **Velocity**: 3 or more transactions on the same card within 10 minutes.
+- **Card testing**: a fraudster checks a stolen card with tiny amounts (under 2.00) before a large purchase. Flag a transaction of 100 or more preceded by at least two tiny ones on the same card in the previous hour.
+- **Impossible travel**: two transactions on the same account in different countries less than 2 hours apart.
+- **Blocklist**: the card is on the blocklist.
+- **Ring membership**: the account is connected to a confirmed fraudster through shared cards or devices, at any distance.
+- **Status**: only each transaction's **latest** status counts; declined transactions are still evaluated for patterns (failed attempts are a signal) but excluded from approved amounts.
+- **Flagged rate** = transactions with at least one flag ÷ all transactions, per day.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE accounts (account_id INT PRIMARY KEY, signup_date DATE NOT NULL, country TEXT NOT NULL);
+
+CREATE TABLE transactions (
+  txn_id     INT PRIMARY KEY,
+  account_id INT NOT NULL REFERENCES accounts,
+  card_id    TEXT NOT NULL,
+  device_id  TEXT NOT NULL,
+  amount     NUMERIC(10,2) NOT NULL,
+  country    TEXT NOT NULL,
+  txn_ts     TIMESTAMP NOT NULL          -- UTC
+);
+
+CREATE TABLE txn_status_events (         -- the processor sends every status change
+  txn_id   INT NOT NULL,
+  status   TEXT NOT NULL,                -- authorised | captured | declined | refunded
+  event_ts TIMESTAMP NOT NULL
+);
+
+CREATE TABLE blocklist (card_id TEXT);   -- maintained by hand; contains a NULL
+CREATE TABLE confirmed_fraud (account_id INT PRIMARY KEY);
+
+INSERT INTO accounts VALUES
+  (1,'2026-06-01','GB'), (2,'2026-06-01','US'), (3,'2026-06-02','US'), (4,'2026-06-02','GB'),
+  (5,'2026-06-03','GB'), (6,'2026-06-03','US'), (7,'2026-06-04','DE'), (8,'2026-06-04','DE');
+
+INSERT INTO transactions VALUES
+  (101, 1, 'c1', 'd1',  45.00, 'GB', '2026-06-01 10:00'),
+  (102, 1, 'c1', 'd1',  30.00, 'GB', '2026-06-09 12:00'),
+  (103, 1, 'c1', 'd1',  52.00, 'GB', '2026-06-16 18:00'),
+  (104, 1, 'c1', 'd1',  41.00, 'GB', '2026-06-23 09:00'),
+  -- account 2: card testing then a big purchase, all within five minutes
+  (201, 2, 'c2', 'd2',   1.00, 'US', '2026-06-02 03:00'),
+  (202, 2, 'c2', 'd2',   1.50, 'US', '2026-06-02 03:02'),
+  (203, 2, 'c2', 'd2',   0.99, 'US', '2026-06-02 03:04'),
+  (204, 2, 'c2', 'd2', 499.00, 'US', '2026-06-02 03:05'),
+  -- account 3 shares account 2's device
+  (301, 3, 'c3', 'd2',   2.00, 'US', '2026-06-02 04:00'),
+  (302, 3, 'c3', 'd2', 350.00, 'US', '2026-06-02 04:30'),
+  -- account 4: London, then Sao Paulo forty minutes later
+  (401, 4, 'c4', 'd4',  60.00, 'GB', '2026-06-03 10:00'),
+  (402, 4, 'c4', 'd4',  80.00, 'BR', '2026-06-03 10:40'),
+  (403, 4, 'c4', 'd4',  25.00, 'GB', '2026-06-10 11:00'),
+  -- account 5: ordinary weekly shopper
+  (501, 5, 'c5', 'd5',  20.00, 'GB', '2026-06-03 17:00'),
+  (502, 5, 'c5', 'd5',  22.00, 'GB', '2026-06-10 17:30'),
+  (503, 5, 'c5', 'd5',  25.00, 'GB', '2026-06-17 17:10'),
+  -- account 6 uses account 3's card on its own device
+  (601, 6, 'c3', 'd6', 120.00, 'US', '2026-06-03 05:00'),
+  -- account 7: blocklisted card
+  (701, 7, 'c7', 'd7',  75.00, 'DE', '2026-06-04 14:00'),
+  -- account 8: normal shopper with one large purchase
+  (801, 8, 'c8', 'd8',  30.00, 'DE', '2026-06-04 12:00'),
+  (802, 8, 'c8', 'd8',  35.00, 'DE', '2026-06-11 12:00'),
+  (803, 8, 'c8', 'd8', 400.00, 'DE', '2026-06-18 12:00');
+
+INSERT INTO txn_status_events VALUES
+  (204, 'authorised', '2026-06-02 03:05'), (204, 'captured', '2026-06-02 03:06'),
+  (204, 'refunded',   '2026-06-05 09:00'),                          -- chargeback later
+  (302, 'authorised', '2026-06-02 04:30'), (302, 'declined', '2026-06-02 04:30'),   -- same second
+  (402, 'authorised', '2026-06-03 10:40'), (402, 'captured', '2026-06-03 10:41'),
+  (701, 'declined',   '2026-06-04 14:00'), (701, 'declined', '2026-06-04 14:00');   -- exact duplicate
+-- every other transaction: one 'captured' event
+INSERT INTO txn_status_events
+SELECT txn_id, 'captured', txn_ts + INTERVAL '1 minute'
+FROM transactions WHERE txn_id NOT IN (204, 302, 402, 701);
+
+INSERT INTO blocklist VALUES ('c7'), (NULL);
+INSERT INTO confirmed_fraud VALUES (2);
+```
+
+## Core solution
+
+Compute each rule as a column over the card's or account's own history, then combine.
+
+```sql
+WITH flags AS (
+  SELECT t.*,
+         COUNT(*) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '10 minutes' PRECEDING AND CURRENT ROW) AS txns_last_10m,
+         COUNT(*) FILTER (WHERE amount < 2) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '1 hour' PRECEDING AND INTERVAL '1 second' PRECEDING) AS tiny_last_hour,
+         LAG(country) OVER (PARTITION BY account_id ORDER BY txn_ts) AS prev_country,
+         txn_ts - LAG(txn_ts) OVER (PARTITION BY account_id ORDER BY txn_ts) AS since_prev
+  FROM transactions t
+)
+SELECT txn_id, account_id, card_id, amount, country, txn_ts,
+       txns_last_10m >= 3                                                    AS velocity,
+       amount >= 100 AND tiny_last_hour >= 2                                 AS card_testing,
+       prev_country <> country AND since_prev < INTERVAL '2 hours'           AS impossible_travel,
+       card_id IN (SELECT card_id FROM blocklist WHERE card_id IS NOT NULL)  AS blocklisted
+FROM flags
+WHERE txns_last_10m >= 3
+   OR (amount >= 100 AND tiny_last_hour >= 2)
+   OR (prev_country <> country AND since_prev < INTERVAL '2 hours')
+   OR card_id IN (SELECT card_id FROM blocklist WHERE card_id IS NOT NULL)
+ORDER BY txn_ts;
+```
+
+| txn_id | account_id | card_id | amount | country | txn_ts | velocity | card_testing | impossible_travel | blocklisted |
+|---|---|---|---|---|---|---|---|---|---|
+| 203 | 2 | c2 | 0.99 | US | 2026-06-02 03:04:00 | t | f | f | f |
+| 204 | 2 | c2 | 499.00 | US | 2026-06-02 03:05:00 | t | t | f | f |
+| 402 | 4 | c4 | 80.00 | BR | 2026-06-03 10:40:00 | f | f | t | f |
+| 701 | 7 | c7 | 75.00 | DE | 2026-06-04 14:00:00 | f | f | NULL | t |
+
+`RANGE BETWEEN INTERVAL '10 minutes' PRECEDING AND CURRENT ROW` counts the card's transactions whose timestamp is within 10 minutes before the current one, however many rows that is; a `ROWS` frame would count a fixed number of rows regardless of time. The card-testing frame ends one second before the current row so the purchase itself is not counted. Account 8's 400 purchase is not flagged by any rule, which is correct for these rules: a large purchase alone is not fraud.
+
+The flagged rate per day:
+
+```sql
+WITH flags AS (
+  SELECT t.*,
+         COUNT(*) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '10 minutes' PRECEDING AND CURRENT ROW) AS v10,
+         COUNT(*) FILTER (WHERE amount < 2) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '1 hour' PRECEDING AND INTERVAL '1 second' PRECEDING) AS tiny,
+         LAG(country) OVER (PARTITION BY account_id ORDER BY txn_ts) AS prev_country,
+         txn_ts - LAG(txn_ts) OVER (PARTITION BY account_id ORDER BY txn_ts) AS since_prev
+  FROM transactions t
+),
+flagged AS (
+  SELECT txn_ts::date AS day,
+         (v10 >= 3 OR (amount >= 100 AND tiny >= 2)
+          OR COALESCE(prev_country <> country AND since_prev < INTERVAL '2 hours', false)
+          OR card_id IN (SELECT card_id FROM blocklist WHERE card_id IS NOT NULL)) AS is_flagged
+  FROM flags
+)
+SELECT day, COUNT(*) AS txns, COUNT(*) FILTER (WHERE is_flagged) AS flagged,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE is_flagged) / COUNT(*), 1) AS flagged_pct
+FROM flagged
+GROUP BY day
+ORDER BY day;
+```
+
+| day | txns | flagged | flagged_pct |
+|---|---|---|---|
+| 2026-06-01 | 1 | 0 | 0.0 |
+| 2026-06-02 | 6 | 2 | 33.3 |
+| 2026-06-03 | 4 | 1 | 25.0 |
+| 2026-06-04 | 2 | 1 | 50.0 |
+| 2026-06-09 | 1 | 0 | 0.0 |
+| 2026-06-10 | 2 | 0 | 0.0 |
+| 2026-06-11 | 1 | 0 | 0.0 |
+| 2026-06-16 | 1 | 0 | 0.0 |
+| 2026-06-17 | 1 | 0 | 0.0 |
+| 2026-06-18 | 1 | 0 | 0.0 |
+| 2026-06-23 | 1 | 0 | 0.0 |
+
+`COALESCE(..., false)` matters: the first transaction of each account has no previous country, so the travel test is `NULL`, and `NULL OR false` is `NULL`, which `FILTER` would treat as not flagged anyway but which would show as a blank flag in a report.
+
+## Approach: deduplicate keeping the latest status
+
+**Why it matters.** Payment processors send a stream of status events per transaction (authorised, captured, refunded), sometimes duplicated and sometimes two in the same second. Fraud reporting needs one current status per transaction: a captured payment that was later refunded is a chargeback, and the amount at risk depends on it.
+
+```sql
+SELECT txn_id, status, event_ts,
+       ROW_NUMBER() OVER (PARTITION BY txn_id
+                          ORDER BY event_ts DESC,
+                                   CASE status WHEN 'refunded' THEN 1 WHEN 'declined' THEN 2
+                                               WHEN 'captured' THEN 3 ELSE 4 END) AS rn
+FROM txn_status_events
+WHERE txn_id IN (204, 302, 701)
+ORDER BY txn_id, rn;
+```
+
+| txn_id | status | event_ts | rn |
+|---|---|---|---|
+| 204 | refunded | 2026-06-05 09:00:00 | 1 |
+| 204 | captured | 2026-06-02 03:06:00 | 2 |
+| 204 | authorised | 2026-06-02 03:05:00 | 3 |
+| 302 | declined | 2026-06-02 04:30:00 | 1 |
+| 302 | authorised | 2026-06-02 04:30:00 | 2 |
+| 701 | declined | 2026-06-04 14:00:00 | 1 |
+| 701 | declined | 2026-06-04 14:00:00 | 2 |
+
+Transaction 302 has two events in the same second; ordering by time alone would pick one arbitrarily. The `CASE` expresses a business precedence (a decline outranks an authorisation at the same instant) and makes the choice deterministic. The exact duplicate for 701 is harmless once you keep row 1. The deduplicated view used by later queries:
+
+```sql
+CREATE VIEW txn_latest_status AS
+SELECT DISTINCT ON (txn_id) txn_id, status, event_ts
+FROM txn_status_events
+ORDER BY txn_id, event_ts DESC,
+         CASE status WHEN 'refunded' THEN 1 WHEN 'declined' THEN 2 WHEN 'captured' THEN 3 ELSE 4 END;
+
+SELECT s.status, COUNT(*) AS txns, SUM(t.amount) AS amount
+FROM txn_latest_status s JOIN transactions t USING (txn_id)
+GROUP BY s.status ORDER BY s.status;
+```
+
+| status | txns | amount |
+|---|---|---|
+| captured | 18 | 990.49 |
+| declined | 2 | 425.00 |
+| refunded | 1 | 499.00 |
+
+Counting the raw events instead would report 26 statuses for 21 transactions, with 204 counted as captured *and* refunded. **Pitfalls.** Deduplicate on the business key (`txn_id`), not on all columns. Keep the raw event table: the full status sequence is itself a fraud feature (authorise–capture–refund within days is a chargeback pattern).
+
+## Approach: subqueries in WHERE for blocklists and outliers
+
+**Why it matters.** Many rules are "the transaction's card is in this list", "this account has no history", or "this amount is far above the card's normal". Subqueries in `WHERE` state them directly. The blocklist contains a `NULL`, which makes the `NOT IN` form dangerous:
+
+```sql
+SELECT COUNT(*) AS not_blocklisted_with_not_in
+FROM transactions
+WHERE card_id NOT IN (SELECT card_id FROM blocklist);
+```
+
+| not_blocklisted_with_not_in |
+|---|
+| 0 |
+
+Zero rows, because `card_id NOT IN ('c7', NULL)` is never true. `NOT EXISTS` gives the intended 20:
+
+```sql
+SELECT COUNT(*) AS not_blocklisted_with_not_exists
+FROM transactions t
+WHERE NOT EXISTS (SELECT 1 FROM blocklist b WHERE b.card_id = t.card_id);
+```
+
+| not_blocklisted_with_not_exists |
+|---|
+| 20 |
+
+A correlated subquery in `WHERE` compares each transaction with its own card's history, for example "at least 5 times the average of the card's earlier transactions":
+
+```sql
+SELECT t.txn_id, t.card_id, t.amount,
+       (SELECT ROUND(AVG(p.amount), 2) FROM transactions p
+        WHERE p.card_id = t.card_id AND p.txn_ts < t.txn_ts) AS prior_avg
+FROM transactions t
+WHERE t.amount >= 5 * (SELECT AVG(p.amount) FROM transactions p
+                       WHERE p.card_id = t.card_id AND p.txn_ts < t.txn_ts)
+ORDER BY t.txn_id;
+```
+
+| txn_id | card_id | amount | prior_avg |
+|---|---|---|---|
+| 204 | c2 | 499.00 | 1.16 |
+| 302 | c3 | 350.00 | 2.00 |
+| 803 | c8 | 400.00 | 32.50 |
+
+Account 8's 400 purchase appears now (more than 12 times its earlier average), along with the card-testing purchases. A card's first transaction has no earlier average, so the comparison is `NULL` and the row drops out; "large first transaction on a new account" is its own rule:
+
+```sql
+SELECT t.txn_id, t.account_id, t.card_id, t.amount
+FROM transactions t
+WHERE t.amount >= 100
+  AND NOT EXISTS (SELECT 1 FROM transactions p WHERE p.account_id = t.account_id AND p.txn_ts < t.txn_ts);
+```
+
+| txn_id | account_id | card_id | amount |
+|---|---|---|---|
+| 601 | 6 | c3 | 120.00 |
+
+Account 6's very first transaction is 120 on a card another account had already used: the rule catches the ring member that no velocity or amount rule flagged.
+
+**In interviews.** Use `IN` for inclusion lists, `NOT EXISTS` for exclusions, and mention that a correlated subquery is evaluated per row; on large data, a window average (`AVG(amount) OVER (PARTITION BY card_id ORDER BY txn_ts ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)`) computes the same prior average in one pass.
+
+## Approach: recursive CTEs to expand fraud rings
+
+**Why it matters.** Fraudsters reuse cards and devices across accounts. Account 2 is confirmed fraud; account 3 used the same device; account 6 used account 3's card. Account 6 never touched account 2's card or device, so only a traversal of the account–identifier graph, at any depth, finds it.
+
+```sql
+WITH RECURSIVE links AS (                 -- account pairs sharing a card or a device
+  SELECT DISTINCT a.account_id AS src, b.account_id AS dst,
+         CASE WHEN a.card_id = b.card_id THEN 'card ' || a.card_id
+              ELSE 'device ' || a.device_id END AS via
+  FROM transactions a
+  JOIN transactions b
+    ON (a.card_id = b.card_id OR a.device_id = b.device_id)
+   AND a.account_id <> b.account_id
+),
+ring AS (
+  SELECT account_id, 0 AS hops, ARRAY[account_id] AS path, 'confirmed' AS via
+  FROM confirmed_fraud
+  UNION ALL
+  SELECT l.dst, r.hops + 1, r.path || l.dst, l.via
+  FROM ring r
+  JOIN links l ON l.src = r.account_id
+  WHERE NOT l.dst = ANY (r.path)          -- do not revisit an account on this path
+    AND r.hops < 5                         -- safety limit
+)
+SELECT DISTINCT ON (account_id) account_id, hops, via, array_to_string(path, ' -> ') AS path
+FROM ring
+ORDER BY account_id, hops;
+```
+
+| account_id | hops | via | path |
+|---|---|---|---|
+| 2 | 0 | confirmed | 2 |
+| 3 | 1 | device d2 | 2 -> 3 |
+| 6 | 2 | card c3 | 2 -> 3 -> 6 |
+
+`DISTINCT ON (account_id) ... ORDER BY hops` keeps the shortest path to each account, which is the one an investigator wants to see. The path check prevents infinite loops (the links go both ways, so 2 → 3 → 2 would otherwise repeat), and the hop limit bounds the work.
+
+**Pitfalls.** Shared identifiers are noisy: a public Wi-Fi device fingerprint or a family card can link innocent accounts, so production systems weight or exclude identifiers shared by too many accounts and stop expanding through them. The `OR` in the `links` join is expensive on large tables; build card links and device links separately and `UNION` them. For large graphs, precompute connected components in batches rather than traversing per investigation.
+
+## Approach: ROLLUP and CUBE for flag reporting
+
+**Why it matters.** Risk managers want flag counts by rule and by country, with subtotals per country and per rule and an overall total, in one table. One transaction can trigger several rules, so the subtotal "flagged transactions in the US" is a distinct count, not the sum of the rule rows.
+
+First unpivot the flags to one row per (transaction, rule), then aggregate with `CUBE`:
+
+```sql
+CREATE VIEW txn_flags AS
+WITH f AS (
+  SELECT t.*,
+         COUNT(*) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '10 minutes' PRECEDING AND CURRENT ROW) AS v10,
+         COUNT(*) FILTER (WHERE amount < 2) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '1 hour' PRECEDING AND INTERVAL '1 second' PRECEDING) AS tiny,
+         LAG(country) OVER (PARTITION BY account_id ORDER BY txn_ts) AS prev_country,
+         txn_ts - LAG(txn_ts) OVER (PARTITION BY account_id ORDER BY txn_ts) AS since_prev
+  FROM transactions t
+)
+SELECT f.txn_id, f.account_id, f.country, f.amount, r.rule
+FROM f
+CROSS JOIN LATERAL (VALUES
+  ('velocity',          f.v10 >= 3),
+  ('card_testing',      f.amount >= 100 AND f.tiny >= 2),
+  ('impossible_travel', f.prev_country <> f.country AND f.since_prev < INTERVAL '2 hours'),
+  ('blocklist',         EXISTS (SELECT 1 FROM blocklist b WHERE b.card_id = f.card_id))
+) AS r(rule, hit)
+WHERE r.hit;
+```
+
+```sql
+SELECT CASE WHEN GROUPING(country) = 1 THEN 'ALL' ELSE country END AS country,
+       CASE WHEN GROUPING(rule)    = 1 THEN 'ALL' ELSE rule    END AS rule,
+       COUNT(*)               AS rule_hits,
+       COUNT(DISTINCT txn_id) AS flagged_txns,
+       SUM(amount)            AS amount_at_risk
+FROM txn_flags
+GROUP BY CUBE (country, rule)
+ORDER BY GROUPING(country), country, GROUPING(rule), rule;
+```
+
+| country | rule | rule_hits | flagged_txns | amount_at_risk |
+|---|---|---|---|---|
+| BR | impossible_travel | 1 | 1 | 80.00 |
+| BR | ALL | 1 | 1 | 80.00 |
+| DE | blocklist | 1 | 1 | 75.00 |
+| DE | ALL | 1 | 1 | 75.00 |
+| US | card_testing | 1 | 1 | 499.00 |
+| US | velocity | 2 | 2 | 499.99 |
+| US | ALL | 3 | 2 | 998.99 |
+| ALL | blocklist | 1 | 1 | 75.00 |
+| ALL | card_testing | 1 | 1 | 499.00 |
+| ALL | impossible_travel | 1 | 1 | 80.00 |
+| ALL | velocity | 2 | 2 | 499.99 |
+| ALL | ALL | 5 | 4 | 1153.99 |
+
+In the US, rule hits (3) exceed flagged transactions (2), because transaction 204 triggered both velocity and card testing; overall, 5 hits come from 4 transactions. The same overlap makes `amount_at_risk` on the subtotal rows overstated (204's 499 is summed twice); compute amounts from distinct transactions when the number goes to finance. `ROLLUP (country, rule)` would drop the "ALL countries by rule" rows, which suits a strict country-then-rule drill-down.
+
+## Approach: retention analysis of flagged and clean accounts
+
+**Why it matters.** Fraudulent accounts behave differently over time: they are used intensely, then abandoned. Comparing week-by-week retention of flagged and clean signup cohorts both validates the rules (flagged accounts should vanish) and feeds a feature ("active in week 2 after signup") to the model.
+
+```sql
+WITH flagged_accounts AS (
+  SELECT DISTINCT account_id FROM txn_flags
+),
+activity AS (
+  SELECT DISTINCT t.account_id, (t.txn_ts::date - a.signup_date) / 7 AS week_number
+  FROM transactions t JOIN accounts a USING (account_id)
+),
+cohort AS (
+  SELECT a.account_id,
+         CASE WHEN f.account_id IS NULL THEN 'clean' ELSE 'flagged' END AS segment
+  FROM accounts a LEFT JOIN flagged_accounts f USING (account_id)
+)
+SELECT c.segment,
+       COUNT(DISTINCT c.account_id) AS accounts,
+       COUNT(DISTINCT x.account_id) FILTER (WHERE x.week_number = 0) AS week_0,
+       COUNT(DISTINCT x.account_id) FILTER (WHERE x.week_number = 1) AS week_1,
+       COUNT(DISTINCT x.account_id) FILTER (WHERE x.week_number = 2) AS week_2,
+       COUNT(DISTINCT x.account_id) FILTER (WHERE x.week_number = 3) AS week_3,
+       ROUND(100.0 * COUNT(DISTINCT x.account_id) FILTER (WHERE x.week_number = 1)
+             / COUNT(DISTINCT c.account_id), 0) AS week_1_retention_pct
+FROM cohort c
+LEFT JOIN activity x USING (account_id)
+GROUP BY c.segment
+ORDER BY c.segment;
+```
+
+| segment | accounts | week_0 | week_1 | week_2 | week_3 | week_1_retention_pct |
+|---|---|---|---|---|---|---|
+| clean | 5 | 5 | 3 | 3 | 1 | 60 |
+| flagged | 3 | 3 | 1 | 0 | 0 | 33 |
+
+Week numbers are counted from each account's own signup date, so all cohorts are aligned at their start. Clean accounts keep transacting weekly; only one flagged account (4, the impossible-travel case) returns after week 0, which suggests that rule catches real customers on holiday more often than fraud, a typical finding when you validate rules this way.
+
+**Pitfalls.** Use the same observation window for every cohort: an account that signed up last week cannot have week-3 activity yet, so restrict to cohorts old enough or report "not yet observable". Exclude flagged accounts from product retention dashboards, or fraud waves make retention look worse than it is.
+
+## Approach: anti-pattern detection in fraud SQL
+
+**Why it matters.** Fraud rules are often first written as self-joins on time windows, which work on a sample and then fail in production. Recognising the anti-patterns and their rewrites is a common interview task.
+
+**The quadratic time-window self-join.** Counting each transaction's neighbours within 10 minutes by joining the table to itself compares every pair of transactions per card, and wrapping the timestamp difference in a function makes the condition unusable by an index:
+
+```sql
+SELECT a.txn_id, COUNT(*) AS txns_last_10m
+FROM transactions a
+JOIN transactions b
+  ON b.card_id = a.card_id
+ AND abs(EXTRACT(EPOCH FROM a.txn_ts - b.txn_ts)) <= 600     -- symmetric: counts later rows too
+GROUP BY a.txn_id
+HAVING COUNT(*) >= 3
+ORDER BY a.txn_id;
+```
+
+| txn_id | txns_last_10m |
+|---|---|
+| 201 | 4 |
+| 202 | 4 |
+| 203 | 4 |
+| 204 | 4 |
+
+It is also wrong: the symmetric `abs(...)` window counts transactions *after* the current one, so the first tiny charge (201) is flagged before the burst has happened, which a real-time rule could never know. The window-function version in the core solution looks only backwards, reads each card's rows once in order, and flags 203 and 204 only.
+
+On a larger table the cost difference shows in the plan. Load 200,000 transactions over 500 cards:
+
+```sql
+CREATE TABLE txn_big AS
+SELECT g AS txn_id, 'c' || ((g * 7) % 500) AS card_id,
+       TIMESTAMP '2026-06-01' + (g * INTERVAL '13 seconds') AS txn_ts,
+       ((g * 17) % 50000) / 100.0 AS amount
+FROM generate_series(1, 200000) AS g;
+ANALYZE txn_big;
+
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM (
+  SELECT COUNT(*) OVER (PARTITION BY card_id ORDER BY txn_ts
+                        RANGE BETWEEN INTERVAL '10 minutes' PRECEDING AND CURRENT ROW) AS v
+  FROM txn_big) t
+WHERE v >= 3;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Subquery Scan on t (actual rows=0 loops=1)
+        Filter: (t.v >= 3)
+        Rows Removed by Filter: 200000
+        ->  WindowAgg (actual rows=200000 loops=1)
+              ->  Sort (actual rows=200000 loops=1)
+                    Sort Key: txn_big.card_id, txn_big.txn_ts
+                    Sort Method: quicksort  Memory: 13957kB
+                    ->  Seq Scan on txn_big (actual rows=200000 loops=1)
+```
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+SET work_mem = '64MB';
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM (
+  SELECT a.txn_id
+  FROM txn_big a JOIN txn_big b
+    ON b.card_id = a.card_id AND abs(EXTRACT(EPOCH FROM a.txn_ts - b.txn_ts)) <= 600
+  GROUP BY a.txn_id HAVING COUNT(*) >= 3) t;
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  HashAggregate (actual rows=0 loops=1)
+        Group Key: a.txn_id
+        Filter: (count(*) >= 3)
+        Batches: 1  Memory Usage: 28689kB
+        Rows Removed by Filter: 200000
+        ->  Hash Join (actual rows=200000 loops=1)
+              Hash Cond: (a.card_id = b.card_id)
+              Join Filter: (abs(EXTRACT(epoch FROM (a.txn_ts - b.txn_ts))) <= '600'::numeric)
+              Rows Removed by Join Filter: 79800000
+              ->  Seq Scan on txn_big a (actual rows=200000 loops=1)
+              ->  Hash (actual rows=200000 loops=1)
+                    Buckets: 262144  Batches: 1  Memory Usage: 11423kB
+                    ->  Seq Scan on txn_big b (actual rows=200000 loops=1)
+```
+
+The self-join's hash join produces every same-card pair (the `Rows Removed by Join Filter` line shows how many were generated only to be discarded) before the time condition is applied; the window version sorts once and scans. Other anti-patterns that appear in fraud SQL:
+
+| Anti-pattern | Problem | Better |
+|---|---|---|
+| `OR` across columns in a join (`card = card OR device = device`) | Defeats hash joins, often becomes a nested loop | Two joins combined with `UNION` |
+| `NOT IN` against a hand-maintained list | One `NULL` hides every row | `NOT EXISTS` |
+| `ROWS BETWEEN 2 PRECEDING` for a time rule | Counts rows, not minutes | `RANGE BETWEEN INTERVAL ... PRECEDING` |
+| Rules that look at future rows | Cannot run in real time; inflates backtests | Frames ending at `CURRENT ROW` |
+| `SELECT DISTINCT` to hide join duplicates | Masks fan-out, costs a sort | Fix the join grain |
+
+## Approach: covering indexes for authorisation-time lookups
+
+**Why it matters.** At authorisation time, a risk service asks "what has this card done in the last 24 hours?" thousands of times a second. The query filters on `card_id` and a time range and reads a few columns, so a composite index on `(card_id, txn_ts)` that also carries the read columns lets PostgreSQL answer from the index alone.
+
+```sql
+CREATE INDEX txn_big_card_ts ON txn_big (card_id, txn_ts) INCLUDE (amount);
+VACUUM ANALYZE txn_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) AS txns_last_hour, SUM(amount) AS amount_last_hour
+FROM txn_big
+WHERE card_id = 'c242'
+  AND txn_ts >  TIMESTAMP '2026-06-15 12:00' - INTERVAL '24 hours'
+  AND txn_ts <= TIMESTAMP '2026-06-15 12:00';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  Buffers: shared hit=1 read=3
+  ->  Index Only Scan using txn_big_card_ts on txn_big (actual rows=13 loops=1)
+        Index Cond: ((card_id = 'c242'::text) AND (txn_ts > '2026-06-14 12:00:00'::timestamp without time zone) AND (txn_ts <= '2026-06-15 12:00:00'::timestamp without time zone))
+        Heap Fetches: 0
+        Buffers: shared hit=1 read=3
+Planning:
+  Buffers: shared hit=40
+```
+
+Without `amount` in the index, the same query must visit the table for each matching row to read the amount:
+
+```sql
+DROP INDEX txn_big_card_ts;
+CREATE INDEX txn_big_card_ts_plain ON txn_big (card_id, txn_ts);
+VACUUM ANALYZE txn_big;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) AS txns_last_hour, SUM(amount) AS amount_last_hour
+FROM txn_big
+WHERE card_id = 'c242'
+  AND txn_ts >  TIMESTAMP '2026-06-15 12:00' - INTERVAL '24 hours'
+  AND txn_ts <= TIMESTAMP '2026-06-15 12:00';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  Buffers: shared hit=13 read=3
+  ->  Bitmap Heap Scan on txn_big (actual rows=13 loops=1)
+        Recheck Cond: ((card_id = 'c242'::text) AND (txn_ts > '2026-06-14 12:00:00'::timestamp without time zone) AND (txn_ts <= '2026-06-15 12:00:00'::timestamp without time zone))
+        Heap Blocks: exact=13
+        Buffers: shared hit=13 read=3
+        ->  Bitmap Index Scan on txn_big_card_ts_plain (actual rows=13 loops=1)
+              Index Cond: ((card_id = 'c242'::text) AND (txn_ts > '2026-06-14 12:00:00'::timestamp without time zone) AND (txn_ts <= '2026-06-15 12:00:00'::timestamp without time zone))
+              Buffers: shared read=3
+Planning:
+  Buffers: shared hit=38
+```
+
+Both plans read the same three index pages, but the plain index then fetches 13 table pages, one per matching transaction; the covering index needs none. At thousands of lookups a second, that difference is most of the I/O.
+
+**Trade-offs.** A covering index is larger, and every insert updates it; transaction tables are insert-heavy, so include only the columns the hot query needs. Index-only scans need the visibility map to be current, which autovacuum maintains; right after heavy inserts, the plan may still show heap fetches. Real-time systems often keep these per-card aggregates in a key-value store or stream processor instead, and use SQL for backtesting the same rules.
+
+## Approach: bitmap indexing for combined low-cardinality filters
+
+**Why it matters.** Investigators filter on several low-cardinality attributes at once: country, channel, rule flag, status. No single condition is selective, but their combination is. **Bitmap indexes** store, for each distinct value, a bitmap with one bit per row; combining conditions is a fast bitwise `AND`/`OR`. Engines such as Oracle offer persistent bitmap indexes, and columnar warehouses use similar ideas internally. They suit read-mostly analytical tables; on tables with frequent concurrent updates they cause lock contention, which is why OLTP systems avoid them.
+
+PostgreSQL has no persistent bitmap index type. Instead it builds bitmaps at query time from ordinary B-tree indexes and combines them with `BitmapAnd` / `BitmapOr`:
+
+```sql
+CREATE TABLE txn_attrs AS
+SELECT g AS txn_id,
+       'C' || ((g / 7) % 20)   AS country,              -- 20 countries, 5% each
+       'M' || ((g / 3) % 20)   AS merchant_category,    -- 20 categories, 5% each
+       ((g * 31) % 50 = 0)     AS is_flagged            -- 2% flagged
+FROM generate_series(1, 400000) AS g;
+CREATE INDEX txn_attrs_country ON txn_attrs (country);
+CREATE INDEX txn_attrs_mcc     ON txn_attrs (merchant_category);
+CREATE INDEX txn_attrs_flagged ON txn_attrs (is_flagged);
+VACUUM ANALYZE txn_attrs;
+
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM txn_attrs
+WHERE country = 'C3' AND merchant_category = 'M7';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Bitmap Heap Scan on txn_attrs (actual rows=2859 loops=1)
+        Recheck Cond: ((country = 'C3'::text) AND (merchant_category = 'M7'::text))
+        Heap Blocks: exact=953
+        ->  BitmapAnd (actual rows=0 loops=1)
+              ->  Bitmap Index Scan on txn_attrs_country (actual rows=19999 loops=1)
+                    Index Cond: (country = 'C3'::text)
+              ->  Bitmap Index Scan on txn_attrs_mcc (actual rows=20001 loops=1)
+                    Index Cond: (merchant_category = 'M7'::text)
+```
+
+Each `Bitmap Index Scan` produces a bitmap of matching row locations from one index; `BitmapAnd` intersects them; the `Bitmap Heap Scan` then reads only the pages that can contain matches, in physical order. Each condition alone matches about 20,000 rows (5%); together they match under 3,000. The planner does not always combine bitmaps: when one condition is selective enough on its own, it uses that index and filters the rest, as here with the 2% flag:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM txn_attrs
+WHERE is_flagged AND country = 'C2';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Index Scan using txn_attrs_flagged on txn_attrs (actual rows=572 loops=1)
+        Index Cond: (is_flagged = true)
+        Filter: (country = 'C2'::text)
+        Rows Removed by Filter: 7428
+```
+
+A partial index is often better still for one hot flag, because it contains only the flagged rows and can be keyed on the next filter:
+
+```sql
+CREATE INDEX txn_attrs_flagged_only ON txn_attrs (country) WHERE is_flagged;
+VACUUM ANALYZE txn_attrs;
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM txn_attrs
+WHERE is_flagged AND country = 'C2';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Index Only Scan using txn_attrs_flagged_only on txn_attrs (actual rows=572 loops=1)
+        Index Cond: (country = 'C2'::text)
+        Heap Fetches: 0
+```
+
+**In interviews.** Say what a bitmap index is (one bitmap per value, combined with bitwise operations), where it fits (low-cardinality columns in read-mostly analytical tables), why it is a poor fit for write-heavy OLTP (updating one row can lock a whole bitmap segment), and how PostgreSQL achieves a similar effect with bitmap scans over B-trees.
+
+## Interview tips
+
+**How it is asked.** "Find cards with 3 or more transactions in 10 minutes", "flag users who transacted from two countries within an hour", "find all accounts linked to a fraudster", "detect card testing", or "this fraud query takes hours".
+
+**What a strong answer includes.**
+
+1. Each rule stated precisely (window length, threshold, inclusive or exclusive bounds).
+2. Window frames with `RANGE` and interval offsets, partitioned by the right entity, looking only backwards.
+3. Deduplicated statuses before measuring amounts.
+4. Graph traversal with cycle protection for rings.
+5. Performance and serving awareness: one pass per rule, covering index on `(card_id, txn_ts)`, real-time versus batch.
+
+**Mistakes candidates make.**
+
+- `ROWS` frames for time-based rules.
+- Symmetric windows that use future transactions.
+- `NOT IN` against a blocklist with `NULL`s.
+- Summing amounts across overlapping rule rows.
+- Recursive traversals without a visited check or depth limit.
+- Treating every large purchase as fraud without a baseline.
