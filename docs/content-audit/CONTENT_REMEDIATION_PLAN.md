@@ -2,6 +2,8 @@
 
 > This is a tracked plan based on the initial audit report. Tasks are not complete until the validation evidence is recorded. Do not modify or publish content in bulk without reviewing the affected material.
 
+> **Implementation update:** A first remediation pass is on branch `audit/remediation-oct-2026`. The planner, homepage copy, canonical-origin guard, and automated planner checks have been changed. The full validation workflow passes; REM-005 and REM-009 are checked, while lesson-level and editorial tasks remain open. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).
+
 ## Non-negotiable constraints
 - Preserve Astro, existing URL conventions, visual design, content schemas, and working functionality unless evidence justifies a change.
 - Do not invent technical sources or claim plagiarism detection without evidence.
@@ -46,7 +48,7 @@
 - **Validation:** Each milestone must reference completed lessons/practice and a clear pass criterion.
 - **Done when:** No milestone claims completion without scheduled and verifiable evidence.
 
-#### [ ] REM-005 — Make daily workload auditable and realistic
+#### [x] REM-005 — Make daily workload auditable and realistic
 - **Finding:** AUD-005
 - **Affected file:** `docs/curriculum/plan-90-days.json` and planner rendering
 - **Current problem:** 348 total hours, 3–6 hours/day, with no task-level time budget in the plan.
@@ -77,7 +79,7 @@
 
 ### P2 — Medium priority
 
-#### [ ] REM-009 — Guard production site origin
+#### [x] REM-009 — Guard production site origin
 - **Finding:** AUD-008
 - **Affected file:** `astro.config.mjs`, deployment configuration, `scripts/check-dist.mjs`
 - **Required change:** Keep local development convenient, but make release validation fail if generated canonical URLs or sitemap contain `datadank.example`.
@@ -96,6 +98,10 @@
 - **Required change:** Review search intent, titles/descriptions, H1/H2 hierarchy, duplicate intent, thin/generic text, internal links, canonicals, structured data, sitemap, robots directives, alt text, attribution, and unsupported career promises.
 - **Validation:** Inspect built HTML and representative browser-rendered pages; use Search Console only if access/evidence is available.
 - **Done when:** Every route has a recorded SEO/editorial decision and no high-priority defects remain.
+
+## Implementation status
+
+REM-005 and REM-009 have implementation and automated validation evidence on branch `audit/remediation-oct-2026`. The 90-day planner budget check passes for all 90 days, and the built-site QA rejects the placeholder canonical origin; the full validation workflow passed. Other items remain open where lesson-by-lesson, originality, external-link, or human editorial evidence is still missing. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).
 
 ## Recommended execution order
 1. REM-001 (promise correction).

@@ -1,6 +1,6 @@
 # DataDank Curriculum and 90-Day Plan Redesign
 
-> **Design proposal, not a claim that the current linked lessons have been fully verified.** This document defines the intended progression and an actionable 90-day structure. Before publishing, map each entry to a real lesson, validate the lesson content and linked practice, and adjust time estimates to the learner's starting level.
+> **Implementation status:** The day-by-day schedule below has been encoded in `docs/curriculum/plan-90-days.json` on branch `audit/remediation-oct-2026`. This does not mean every linked lesson or practice destination has been technically verified. Validate lesson coverage, examples, links, and time estimates before publication.
 
 ## Curriculum dependency graph
 
@@ -31,7 +31,7 @@
 
 ## Individual Day 1–90 schedule
 
-Time ranges are planning estimates for a learner studying alongside a full-time job. Reduce optional tasks if prerequisites are missing; do not treat hours as a guarantee of mastery. The existing planner is 348 hours and is likely too demanding for many learners; this proposed structure targets roughly 2–3 hours on most days with some lighter review days.
+Time ranges are planning estimates for a learner studying alongside a full-time job. Reduce optional tasks if prerequisites are missing; do not treat hours as a guarantee of mastery. The previous planner was 348 hours and was likely too demanding for many learners. The revised implementation targets roughly 2–3 hours on most days, with lighter review days and activity budgets recorded in the JSON.
 
 | Day | Main focus and new capability | Practice / reinforcement | Completion evidence |
 |---:|---|---|---|
