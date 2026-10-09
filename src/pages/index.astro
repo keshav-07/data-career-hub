@@ -44,10 +44,11 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
         <div class="hero-plan__copy">
           <p class="eyebrow">The DataDank 90-day plan</p>
           <h1>
-            Prepare for Data Engineering interviews <span class="hero-plan__em">with a structured 90-day plan.</span>
+            Become a job&#8209;ready Data Engineer <span class="hero-plan__em">in 90 days.</span>
           </h1>
           <p class="deck">
-            Start with foundations, build one capability at a time, and make room for practice, review, projects and mock interviews. Results depend on your starting point, consistency and the job market.
+            One clear plan, day by day: SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS and system
+            design, with mock interviews and applications built in. Every topic opens a full lesson.
           </p>
           <div class="hero__actions">
             <Button href="/planner/90-day-plan/#day-1" size="lg" fullWidthOnMobile data-plan-cta>
@@ -289,7 +290,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
         <div class="section-head">
           <p class="eyebrow">Roadmap</p>
           <h2 id="road-h">Data Engineer roadmap</h2>
-          <p>From beginner foundations to interview preparation, in {stages.length} ordered stages.</p>
+          <p>From beginner foundations to job ready, in {stages.length} ordered stages.</p>
         </div>
         <ol class="roadmap-preview">
           {stages.map((s) => (
