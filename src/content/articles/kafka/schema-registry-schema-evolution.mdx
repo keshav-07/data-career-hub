@@ -1,0 +1,369 @@
+---
+title: "Kafka Schema Registry and Schema Evolution: Compatibility Modes"
+seoTitle: "Kafka Schema Registry and Compatibility Modes"
+description: "How a schema registry keeps Kafka producers and consumers compatible: the wire format, subjects, Avro and Protobuf evolution rules, compatibility modes and safe rollouts."
+technology: ["kafka"]
+topic: ["schema-registry", "schema-evolution", "avro", "data-contracts"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+learningObjectives:
+  - "Explain why Kafka needs a schema registry and what the serialiser writes into each record"
+  - "Choose a subject naming strategy for a topic"
+  - "Predict which schema changes pass BACKWARD, FORWARD and FULL compatibility, including the transitive variants"
+  - "Plan the rollout order of producers and consumers for each compatibility mode"
+  - "Use Avro serialisers with confluent-kafka in Python and register schemas from CI instead of at run time"
+prerequisites: ["articles:kafka/producers", "articles:kafka/consumers-offsets"]
+related: ["system-designs:schema-registry-contract-system", "articles:delta-lake/schema-evolution-patterns", "articles:etl-elt/data-quality-checks-contracts", "articles:kafka/kafka-connect-debezium"]
+previous: "articles:kafka/kafka-connect-debezium"
+next: "articles:kafka/kafka-streams-basics"
+sources:
+  - { label: "Confluent documentation: Schema evolution and compatibility", url: "https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html" }
+  - { label: "Confluent documentation: Formats, serializers and deserializers (wire format)", url: "https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html" }
+  - { label: "Apache Avro specification: Schema resolution", url: "https://avro.apache.org/docs/1.12.0/specification/" }
+  - { label: "Protocol Buffers documentation: Updating a message type", url: "https://protobuf.dev/programming-guides/proto3/" }
+  - { label: "confluent-kafka Python client documentation", url: "https://docs.confluent.io/platform/current/clients/confluent-kafka-python/html/index.html" }
+versionContext: "Compatibility rules follow the Confluent Schema Registry documentation and the Avro 1.12 specification (October 2026). The compatibility checker and wire-format examples are plain Python 3.11 simulations and were run; they model the Avro record rules that matter in interviews, not every edge case. The confluent-kafka (2.x) producer and REST calls need a running broker and registry, so they are marked noexec and were checked against the client documentation."
+---
+
+Kafka stores bytes. It does not know or care whether a record's value is JSON, Avro or a JPEG. That is what makes Kafka fast and general, and it is also how pipelines break: one producer team renames a field, deploys on a Friday, and every consumer starts failing on records it cannot parse. A **schema registry** puts a contract between producers and consumers. This lesson explains what the registry stores, what goes into each record, how schemas may change under each compatibility mode, and the deployment order that keeps everything running.
+
+## Why Kafka needs a schema registry
+
+Without a registry, the schema lives in people's heads or in a wiki, and every record either carries its own schema (wasteful) or none (fragile).
+
+A schema registry is a separate service with a REST API that stores **versioned schemas** and checks every new version against a **compatibility rule** before accepting it. Serialisers in producers look up (or register) the schema and put a small **schema ID** in front of each record; deserialisers in consumers fetch the schema by that ID and decode the bytes.
+
+| Without a registry | With a registry |
+|--------------------|-----------------|
+| Breaking changes found by consumers in production | Breaking changes rejected when the producer tries to register them |
+| Field names and types documented informally | Every version stored, numbered and queryable |
+| JSON payloads repeat field names in every record | Compact binary formats (Avro, Protobuf) with the schema stored once |
+| Consumers guess at types | Consumers decode with the exact writer schema |
+
+The best-known implementation is Confluent Schema Registry (source-available under the Confluent Community License, also offered as a managed service). Alternatives with compatible or similar APIs include Apicurio Registry, Karapace and AWS Glue Schema Registry. Apache Kafka itself does not include one. The concepts below are shared; the configuration names are Confluent's.
+
+**In interviews**
+
+"How do you stop a producer from breaking consumers?" A strong answer: a schema registry with a compatibility mode enforced on the subject, schemas registered from CI rather than by applications at run time, and a rollout order that matches the mode.
+
+## The wire format and subjects
+
+### What the serialiser writes
+
+The Confluent serialisers prefix every key or value with five bytes:
+
+| Bytes | Content |
+|-------|---------|
+| 0 | Magic byte, always `0` |
+| 1 to 4 | Schema ID, a 4-byte big-endian integer assigned by the registry |
+| 5 onward | The encoded data (Avro binary; Protobuf adds a short list of message indexes first; JSON Schema writes plain JSON) |
+
+The record does not contain field names or the schema itself. This simulation builds and parses that header with the standard library:
+
+```python
+import json, struct
+
+def frame(schema_id: int, payload: bytes) -> bytes:
+    """Confluent wire format: magic byte 0, 4-byte big-endian schema ID, then the payload."""
+    return struct.pack(">bI", 0, schema_id) + payload
+
+def unframe(data: bytes):
+    magic, schema_id = struct.unpack(">bI", data[:5])
+    if magic != 0:
+        raise ValueError("not Schema Registry framed data")
+    return schema_id, data[5:]
+
+# A JSON payload keeps the example readable; Avro would be binary
+record = frame(42, json.dumps({"order_id": 1001, "amount": 25.5}).encode())
+print("first 5 bytes:", record[:5].hex(" "))
+schema_id, body = unframe(record)
+print("schema id:", schema_id, "| body:", body.decode())
+
+try:
+    unframe(b'{"order_id": 1001}')        # plain JSON written by a producer without the serialiser
+except ValueError as err:
+    print("plain JSON record:", err)
+```
+
+```text
+first 5 bytes: 00 00 00 00 2a
+schema id: 42 | body: {"order_id": 1001, "amount": 25.5}
+plain JSON record: not Schema Registry framed data
+```
+
+The last line is a common production incident: a producer that bypasses the serialiser writes records that registry-aware consumers cannot read. Schema IDs are global in a registry, so the consumer does not need to know the subject to decode a record.
+
+### Subjects and naming strategies
+
+The registry groups versions of a schema under a **subject**. Compatibility is checked between versions of the same subject. The serialiser decides the subject name with a **subject name strategy**:
+
+| Strategy | Subject for topic `orders`, record `com.shop.OrderCreated` | Use when |
+|----------|-----------------------------------------------------------|----------|
+| `TopicNameStrategy` (default) | `orders-value` and `orders-key` | One record type per topic, the usual case |
+| `RecordNameStrategy` | `com.shop.OrderCreated` | The same record type is used across many topics and must evolve once |
+| `TopicRecordNameStrategy` | `orders-com.shop.OrderCreated` | Several event types share one topic (to keep per-entity ordering) and each evolves separately |
+
+Putting several event types in one topic is a legitimate design when they must stay in order per key (for example `OrderCreated`, `OrderPaid` and `OrderShipped` for one order). With the default strategy that would force all types into one schema; use `TopicRecordNameStrategy`, or a Protobuf or Avro union as the top-level type.
+
+**Pitfalls**
+
+- Producers and consumers configured with different strategies look in different subjects.
+- Keys need schemas too. Changing a key's type or encoding changes its hash, so records for the same entity move to another partition.
+
+## Schema evolution rules
+
+**Schema evolution** means changing a schema while old and new versions are both in use: old records stay in the topic for the whole retention period, and producers and consumers are deployed at different times. Two directions matter:
+
+- **Backward compatible**: a consumer using the **new** schema can read data written with the **old** one.
+- **Forward compatible**: a consumer using the **old** schema can read data written with the **new** one.
+
+### Avro
+
+Avro decodes with two schemas: the **writer's** (fetched by ID) and the **reader's** (the consumer's). It matches fields by name:
+
+| Change | Backward (new reads old) | Forward (old reads new) |
+|--------|--------------------------|-------------------------|
+| Add a field **with** a default | Yes: missing in old data, reader uses the default | Yes: old reader ignores the extra field |
+| Add a field **without** a default | No: old data has no value for it | Yes |
+| Remove a field that **had** a default | Yes: new reader ignores it | Yes: old reader uses its default |
+| Remove a field **without** a default | Yes | No: old reader needs it and has no default |
+| Rename a field | No (it is a remove plus an add); reader-side `aliases` help only Avro readers that support them | No |
+| Widen a type: `int` to `long`, `float` or `double`; `long` to `float` or `double`; `float` to `double`; `string` and `bytes` | Yes (promotion) | No, unless the reverse promotion also exists |
+| Narrow a type: `long` to `int` | No | Yes |
+| Add a symbol to an enum | Yes: old data never contains the new symbol | Only if the enum declares a `default` symbol for old readers to fall back to |
+
+The practical rule that keeps you safe in every mode: **only add or remove fields that have defaults, never rename, never change types**. Make new fields optional with a union and a null default: `{"name": "channel", "type": ["null", "string"], "default": null}`.
+
+### Protobuf
+
+Protobuf matches fields by **number**, not name. Adding fields is safe; removing a field is safe if you mark its number (and name) `reserved` so it is never reused. Renaming a field is safe on the wire, because only numbers are encoded, but it breaks JSON mappings and code. Changing a field's type or number, or reusing a number, is a breaking change.
+
+### JSON Schema
+
+JSON Schema compatibility depends on whether the schema allows extra properties (open versus closed content models), which makes the rules less intuitive than Avro's. Teams that choose JSON Schema should test candidate schemas against the registry's compatibility endpoint in CI rather than reason it out by hand.
+
+## Compatibility modes
+
+The registry enforces one **compatibility mode** per subject (with a global default):
+
+| Mode | Checks the new schema against | Allowed changes (Avro) | Upgrade first |
+|------|-------------------------------|------------------------|---------------|
+| `BACKWARD` (default) | the latest version | delete fields, add fields with defaults | Consumers |
+| `BACKWARD_TRANSITIVE` | **all** previous versions | same | Consumers |
+| `FORWARD` | the latest version | add fields, delete fields with defaults | Producers |
+| `FORWARD_TRANSITIVE` | all previous versions | same | Producers |
+| `FULL` | the latest version, both directions | add or delete fields with defaults | Either |
+| `FULL_TRANSITIVE` | all previous versions, both directions | same | Either |
+| `NONE` | nothing | anything | Coordinated big-bang only |
+
+Why the rollout order follows from the mode:
+
+- **BACKWARD**: new readers can read old data, but old readers may fail on new data. Deploy consumers with the new schema first, then producers. It is also the mode that lets a new consumer **replay the topic from the beginning**, which is why it is the default.
+- **FORWARD**: old readers can read new data. Deploy producers first; consumers can follow at their own pace. Useful when you do not control all consumers.
+- **FULL**: any order, at the price of the strictest rules.
+
+**Transitive** matters because the default check is only against the latest version. A field can be removed in version 2 and re-added with a different type in version 3; each step passes against its predecessor, but version 3 cannot read version 1 data still sitting in the topic. Use a transitive mode for topics with long retention, compacted topics and anything replayed from the start.
+
+### Worked example: checking changes
+
+The checker below implements the Avro record rules from the table for flat records (field names, primitive types, defaults and promotions). It is a teaching model, not a replacement for the registry's own checks.
+
+```python
+PROMOTIONS = {("int", "long"), ("int", "float"), ("int", "double"), ("long", "float"),
+              ("long", "double"), ("float", "double"), ("string", "bytes"), ("bytes", "string")}
+NO_DEFAULT = object()
+
+def fields(schema):
+    return {f["name"]: f for f in schema["fields"]}
+
+def can_read(reader, writer):
+    """Can data written with `writer` be decoded with `reader`? Returns a list of problems."""
+    problems, w = [], fields(writer)
+    for name, rf in fields(reader).items():
+        if name not in w:
+            if rf.get("default", NO_DEFAULT) is NO_DEFAULT:
+                problems.append(f"reader field '{name}' missing from writer and has no default")
+        elif rf["type"] != w[name]["type"] and (w[name]["type"], rf["type"]) not in PROMOTIONS:
+            problems.append(f"'{name}': cannot read {w[name]['type']} as {rf['type']}")
+    return problems
+
+def check(mode, new, history):
+    """history: earlier versions, oldest first. Returns the problems for the registry's check."""
+    targets = history if mode.endswith("TRANSITIVE") else history[-1:]
+    problems = []
+    for old in targets:
+        if mode.startswith(("BACKWARD", "FULL")):
+            problems += can_read(new, old)          # new consumers read old data
+        if mode.startswith(("FORWARD", "FULL")):
+            problems += can_read(old, new)          # old consumers read new data
+    return problems
+
+def rec(*flds):
+    return {"type": "record", "name": "Order", "fields": list(flds)}
+
+v1 = rec({"name": "order_id", "type": "long"}, {"name": "amount", "type": "double"},
+         {"name": "status", "type": "string"})
+candidates = {
+    "add channel with default":    rec(*v1["fields"], {"name": "channel", "type": "string", "default": "web"}),
+    "add channel without default": rec(*v1["fields"], {"name": "channel", "type": "string"}),
+    "remove status (no default)":  rec(*v1["fields"][:2]),
+    "rename amount to total":      rec(v1["fields"][0], {"name": "total", "type": "double"}, v1["fields"][2]),
+    "order_id long -> int":        rec({"name": "order_id", "type": "int"}, *v1["fields"][1:]),
+}
+for label, new in candidates.items():
+    verdicts = {m: ("ok" if not check(m, new, [v1]) else "REJECT") for m in ("BACKWARD", "FORWARD", "FULL")}
+    print(f"{label:28}", verdicts)
+
+# Why transitive modes exist: each step passes BACKWARD, but v3 cannot read v1 data
+v2 = rec(*v1["fields"][:2])                                              # drop status
+v3 = rec(*v2["fields"], {"name": "status", "type": "int", "default": 0}) # re-add status as int
+print("v3 BACKWARD vs latest only:", check("BACKWARD", v3, [v1, v2]) or "ok")
+print("v3 BACKWARD_TRANSITIVE:    ", check("BACKWARD_TRANSITIVE", v3, [v1, v2]))
+```
+
+```text
+add channel with default     {'BACKWARD': 'ok', 'FORWARD': 'ok', 'FULL': 'ok'}
+add channel without default  {'BACKWARD': 'REJECT', 'FORWARD': 'ok', 'FULL': 'REJECT'}
+remove status (no default)   {'BACKWARD': 'ok', 'FORWARD': 'REJECT', 'FULL': 'REJECT'}
+rename amount to total       {'BACKWARD': 'REJECT', 'FORWARD': 'REJECT', 'FULL': 'REJECT'}
+order_id long -> int         {'BACKWARD': 'REJECT', 'FORWARD': 'ok', 'FULL': 'REJECT'}
+v3 BACKWARD vs latest only: ok
+v3 BACKWARD_TRANSITIVE:     ["'status': cannot read string as int"]
+```
+
+The rename fails everywhere because, to Avro, it is a new field without a default plus a removed field. The last two lines are the transitive trap: version 3 passes the default check against version 2 but cannot decode version 1 records still retained in the topic.
+
+## Using the registry from code and CI
+
+### Producing Avro with confluent-kafka
+
+{/* noexec */}
+```python
+from confluent_kafka import Producer
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.avro import AvroSerializer
+from confluent_kafka.serialization import MessageField, SerializationContext, StringSerializer
+
+ORDER_V2 = """
+{"type": "record", "name": "Order", "namespace": "com.shop",
+ "fields": [
+   {"name": "order_id", "type": "long"},
+   {"name": "amount",   "type": "double"},
+   {"name": "status",   "type": "string"},
+   {"name": "channel",  "type": ["null", "string"], "default": null}
+ ]}
+"""
+
+registry = SchemaRegistryClient({"url": "http://localhost:8081"})
+value_serializer = AvroSerializer(
+    registry, ORDER_V2,
+    conf={"auto.register.schemas": False, "use.latest.version": True},  # schemas come from CI
+)
+key_serializer = StringSerializer("utf_8")
+producer = Producer({"bootstrap.servers": "localhost:9092", "enable.idempotence": True})
+
+order = {"order_id": 1001, "amount": 25.5, "status": "created", "channel": "app"}
+producer.produce(
+    topic="orders",
+    key=key_serializer(str(order["order_id"])),
+    value=value_serializer(order, SerializationContext("orders", MessageField.VALUE)),
+)
+producer.flush()
+```
+
+On the consumer side, `AvroDeserializer(registry)` reads the schema ID from each record and decodes it; pass the consumer's own schema as `schema_str` if it should resolve old and new records into one reader shape.
+
+### Registering and checking schemas from CI
+
+By default, serialisers register a schema automatically the first time they see it (`auto.register.schemas=true`). That lets any deployed application change the contract. In production, turn it off and register schemas from CI after a compatibility check:
+
+{/* noexec */}
+```bash
+# Set the subject's mode (once, or as part of topic provisioning)
+curl -s -X PUT -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  --data '{"compatibility": "BACKWARD_TRANSITIVE"}' http://localhost:8081/config/orders-value
+
+# In the pull request: would this schema be accepted?
+jq -n --rawfile s order_v2.avsc '{schema: $s}' | \
+  curl -s -X POST -H "Content-Type: application/vnd.schemaregistry.v1+json" --data @- \
+  http://localhost:8081/compatibility/subjects/orders-value/versions/latest
+# -> {"is_compatible":true}
+
+# After merge: register it (returns the global schema id)
+jq -n --rawfile s order_v2.avsc '{schema: $s}' | \
+  curl -s -X POST -H "Content-Type: application/vnd.schemaregistry.v1+json" --data @- \
+  http://localhost:8081/subjects/orders-value/versions
+```
+
+Build tools wrap the same calls (for example the Confluent Maven and Gradle plugins). The registry stores its own data in a compacted Kafka topic (`_schemas` by default), so back up and replicate it like any critical topic: losing it makes every Avro record in the cluster unreadable.
+
+**Pitfalls**
+
+- **Auto-registration in production**: the first producer to deploy defines the contract.
+- **Breaking change "fixed" by setting the subject to `NONE`**: consumers still break; the check was the warning.
+- **One registry per environment without replicating IDs**: records mirrored to another cluster (for example by MirrorMaker 2) carry schema IDs that mean nothing in the target registry. Use one shared registry, or a registry replication approach that preserves IDs.
+
+## Playbook: shipping a breaking change
+
+Sometimes a change really is breaking: a field must change type, or an ID becomes a string. Do not force it into the existing subject.
+
+1. **Create a new topic** (for example `orders.v2`) with its own subject.
+2. **Dual-write**: the producer writes both `orders` (old schema) and `orders.v2` for a transition period, or a small stream processor converts `orders` into `orders.v2`.
+3. **Migrate consumers** one by one to `orders.v2`, checking lag and output parity.
+4. **Stop the old topic** after its last consumer has moved and its retention has passed (or archive it).
+
+The same approach applies to key changes, since a new key type changes partitioning.
+
+## Practice questions
+
+<details>
+<summary>What is the difference between BACKWARD and FORWARD compatibility, and which side do you deploy first for each?</summary>
+
+BACKWARD means a consumer with the new schema can read data written with the old one, so you upgrade consumers first and producers afterwards. FORWARD means a consumer with the old schema can read data written with the new one, so you upgrade producers first and consumers can follow later. FULL requires both, so the order does not matter.
+
+</details>
+
+<details>
+<summary>Why is BACKWARD the registry's default mode?</summary>
+
+It guarantees that the newest consumer code can read everything already in the topic, which is what you need to replay a topic from the beginning or to start a new consumer on historical data. Combined with a transitive check, it covers every version still retained.
+
+</details>
+
+<details>
+<summary>A producer added a required field (no default) and registration failed under BACKWARD. How do you make the change?</summary>
+
+Give the field a default (for Avro, typically a union with null and `"default": null`, or a sensible value). Then old records, which lack the field, decode with the default. If the field truly must be required for every record, including old ones, that is a breaking change: publish to a new topic and migrate consumers.
+
+</details>
+
+<details>
+<summary>When do you need a transitive compatibility mode?</summary>
+
+When consumers can read records written by any earlier version: long retention, compacted topics, replays from the beginning, or late consumers. The non-transitive check compares only with the latest version, so a sequence of individually compatible steps can still produce a schema that cannot read the oldest data.
+
+</details>
+
+<details>
+<summary>Several event types for one order must stay in order on one topic. How do you register their schemas?</summary>
+
+Keep them on one topic keyed by order ID and use `TopicRecordNameStrategy` (or `RecordNameStrategy`) so each event type has its own subject and evolves independently, while all events for an order stay in one partition. The alternative is a single top-level union (Avro) or `oneof` (Protobuf) schema under the default strategy.
+
+</details>
+
+<details>
+<summary>Why should auto.register.schemas be false in production?</summary>
+
+With auto-registration, any application that starts with a new schema registers it, so schema changes bypass review and the deployment order decides the contract. With it off, schemas are reviewed and registered from CI after a compatibility check, and applications only look up existing versions.
+
+</details>
+
+## Key takeaways
+
+- Kafka stores bytes; a schema registry stores versioned schemas and serialisers prefix each record with a magic byte and a 4-byte schema ID.
+- Subjects group versions; the default `TopicNameStrategy` gives `<topic>-value` and `<topic>-key`, and record-based strategies allow several event types per topic.
+- Safe Avro evolution: add or remove only fields with defaults, never rename, never change types except by promotion.
+- BACKWARD (the default) means upgrade consumers first; FORWARD means producers first; FULL allows either; transitive modes check every earlier version.
+- Disable auto-registration in production, check and register schemas in CI, and ship real breaking changes as a new topic.

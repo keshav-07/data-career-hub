@@ -1,61 +1,151 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Kafka vs Queue-Based Messaging for Data Pipelines"
 seoTitle: "Kafka vs Message Queues for Data Pipelines"
-description: "When to use a distributed log like Kafka and when a traditional message queue fits better: retention, replay, ordering, fan-out, per-message acknowledgement and operations."
+description: "When to use a distributed log like Kafka and when a message queue fits better: retention, replay, ordering, fan-out, acknowledgement, Kafka share groups and Kinesis."
 inventoryId: "SUPPORT-06"
 technology: ["kafka"]
 topic: ["comparison", "messaging"]
 difficulty: "Intermediate"
 prerequisites: ["articles:kafka/topics-partitions-consumer-groups"]
-related: ["system-designs:kafka-ingestion-system", "interview-questions:kafka/at-least-once-delivery"]
-sources: [{"label": "Apache Kafka documentation: Introduction", "url": "https://kafka.apache.org/intro"}]
-versionContext: "Conceptual; individual queue products differ, and Kafka has added queue-like consumption features in recent releases"
+related: ["system-designs:kafka-ingestion-system", "interview-questions:kafka/at-least-once-delivery", "interview-questions:kafka/kafka-vs-kinesis-vs-queues", "system-designs:event-driven-architecture"]
+previous: "articles:kafka/kafka-streams-basics"
+sources:
+  - { label: "Apache Kafka documentation: Introduction", url: "https://kafka.apache.org/intro" }
+  - { label: "Apache Kafka 4.2.0 release announcement (share groups)", url: "https://kafka.apache.org/blog/2026/02/17/apache-kafka-4.2.0-release-announcement/" }
+  - { label: "Amazon Kinesis Data Streams developer guide: Quotas and limits", url: "https://docs.aws.amazon.com/streams/latest/dev/service-sizes-and-limits.html" }
+  - { label: "Amazon SQS developer guide: Visibility timeout", url: "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html" }
+  - { label: "RabbitMQ documentation: Streams", url: "https://www.rabbitmq.com/docs/streams" }
+versionContext: "Kafka behaviour is described for Apache Kafka 4.2 and later, where share groups (KIP-932) are production-ready. Queue and cloud-service behaviour (SQS, RabbitMQ, Kinesis Data Streams, Pub/Sub) follows each vendor's documentation as of October 2026; limits change, so check them before sizing. The delivery simulation runs on plain Python 3.11."
 ---
 
-Both move messages between systems. They are built around different models, and that decides which fits a data pipeline.
+Both a distributed log and a message queue move messages from producers to consumers. They are built around different ideas of what happens to a message after it is read, and that decides which one fits a data pipeline. This lesson compares the two models, shows the difference on a small simulation, places Kafka's share groups and cloud services such as Kinesis on the same map, and ends with a decision guide.
 
-| | Distributed log (Kafka) | Message queue (typical) |
+## The two models
+
+| | Distributed log (Kafka consumer groups, Kinesis) | Message queue (SQS, RabbitMQ classic queues, Kafka share groups) |
 |--|-------------------------|-------------------------|
-| Model | Append-only log; consumers track their own position | Messages delivered to a consumer and removed after acknowledgement |
-| Retention | Time- or size-based, independent of consumption | Usually until consumed (or expired) |
+| What a read does | Moves the reader's position; the record stays | Hands the message to one worker, who acknowledges it; then it is gone (or archived) |
+| Retention | Time- or size-based, independent of consumption | Until acknowledged (or expired) |
 | Replay | Yes: reset the offset and read again | Generally no, once acknowledged |
-| Many independent consumers | Natural: each consumer group reads everything | Needs fan-out (topics/exchanges) configured per subscriber |
-| Ordering | Per partition | Varies; often per queue, weakened by multiple consumers |
-| Work distribution | By partition | Per message, flexible |
-| Typical strengths | High-throughput event streams, CDC, replayable pipelines | Task queues, per-message work, request decoupling |
+| Many independent consumers | Natural: each consumer group reads everything | Needs fan-out (topics, exchanges, subscriptions) configured per subscriber |
+| Ordering | Per partition (or shard) | Varies; usually lost once several workers share a queue |
+| Unit of parallelism | Partition: one consumer per partition per group | Message: any free worker takes the next one |
+| Progress tracking | One offset per partition | Per-message state: in flight, acknowledged, redelivered |
+| Retry of one bad message | The partition is blocked until the consumer skips or parks it | Built in: redeliver after a timeout, then a dead-letter queue |
+| Typical strengths | High-throughput event streams, CDC, replayable pipelines, many readers | Task distribution, per-message work, uneven processing times |
+
+The single most useful sentence for interviews: **a log remembers, a queue forgets**. A log keeps history so that new and existing readers can replay it; a queue tracks work so that each item is done once and then dropped.
+
+## Worked example: the same messages, two models
+
+This simulation sends five order events through each model. In the log, two consumer groups read independently and one replays; in the queue, two workers share the messages and one message fails once.
+
+```python
+from collections import deque
+
+events = [f"order-{i}" for i in range(1, 6)]
+
+# Log: records stay; every group keeps its own offset
+log = list(events)
+offsets = {"warehouse-loader": 0, "fraud-service": 0}
+def poll(group, n):
+    start = offsets[group]
+    batch = log[start:start + n]
+    offsets[group] = start + len(batch)          # "commit" after processing
+    return batch
+
+print("log, warehouse-loader:", poll("warehouse-loader", 5))
+print("log, fraud-service:   ", poll("fraud-service", 3), "(still has", len(log) - offsets["fraud-service"], "to read)")
+offsets["warehouse-loader"] = 0                  # replay after a bug fix
+print("log, replay:          ", poll("warehouse-loader", 5))
+
+# Queue: each message goes to one worker; acknowledged messages are gone
+queue, done, dead_letter, attempts = deque(events), [], [], {}
+workers = ["worker-a", "worker-b"]
+turn = 0
+while queue:
+    msg = queue.popleft()
+    worker = workers[turn % 2]; turn += 1
+    attempts[msg] = attempts.get(msg, 0) + 1
+    if msg == "order-3" and attempts[msg] == 1:  # transient failure: no ack, so it is redelivered
+        queue.append(msg)
+        continue
+    done.append((worker, msg))
+print("queue, processed:", done)
+print("queue, left to replay:", list(queue), "| order-3 attempts:", attempts["order-3"])
+```
+
+```text
+log, warehouse-loader: ['order-1', 'order-2', 'order-3', 'order-4', 'order-5']
+log, fraud-service:    ['order-1', 'order-2', 'order-3'] (still has 2 to read)
+log, replay:           ['order-1', 'order-2', 'order-3', 'order-4', 'order-5']
+queue, processed: [('worker-a', 'order-1'), ('worker-b', 'order-2'), ('worker-b', 'order-4'), ('worker-a', 'order-5'), ('worker-b', 'order-3')]
+queue, left to replay: [] | order-3 attempts: 2
+```
+
+The log gave both groups every event and allowed a replay. The queue spread the work across two workers, retried `order-3` without blocking the others, and processed it **after** `order-4` and `order-5`: per-message retry costs ordering. Nothing is left to replay once the queue is drained.
 
 ## Choose a log when
 
-- Several systems need the **same** events (lakehouse, search, alerts).
+- Several systems need the **same** events (lakehouse loader, search indexer, fraud service).
 - You need to **replay** history after a bug or to bootstrap a new consumer.
-- Throughput is high and events are part of an ongoing stream.
-- Per-key ordering matters (all changes for one order in sequence).
+- Throughput is high and events form an ongoing stream (clicks, IoT readings, CDC).
+- Per-key ordering matters: all changes for one order, in sequence.
 
 ## Choose a queue when
 
-- Each message is a **unit of work** that one worker should do once (resize an image, send an email).
-- You want per-message acknowledgement, retries and dead-lettering without managing offsets.
+- Each message is a **unit of work** that one worker should do once (resize an image, send an email, call a slow API).
+- Processing time varies a lot per message, so you want any free worker to take the next item rather than waiting behind a slow partition.
+- You want per-message acknowledgement, redelivery and dead-lettering without managing offsets.
 - Volumes are moderate and replay is not needed.
+
+## Kafka share groups: queues on Kafka
+
+Kafka 4.2 made **share groups** (KIP-932, "Queues for Kafka") production-ready. Members of a share group read from the same topic partitions **cooperatively**: records are not tied to one consumer per partition, each record is acquired for a limited time by one member, and the member acknowledges it individually (accept, release for redelivery, or reject). Kafka counts delivery attempts and stops redelivering a record after a configured limit.
+
+What this changes:
+
+- You can scale workers beyond the partition count for queue-style work.
+- Per-record retry no longer blocks a whole partition.
+- The data is still a Kafka topic, so ordinary consumer groups can read and replay the same records.
+
+What it does not give you: ordering. Share groups are meant for records processed one at a time, not ordered streams. The internal `__share_group_state` topic needs three brokers by default. For pipelines that need ordering, replay and offsets, ordinary consumer groups remain the tool.
+
+## Where cloud services fit
+
+| Service | Model | Notes for data pipelines |
+|---------|-------|--------------------------|
+| Amazon Kinesis Data Streams | Log, partitioned into **shards** | Ordering per shard via a partition key; retention 24 hours by default, extendable up to 365 days; per-shard write and read throughput limits mean you size by shard count (or use on-demand mode) |
+| Amazon MSK, Confluent Cloud and other managed Kafka | Log | The Kafka API without running brokers yourself |
+| Amazon SQS | Queue | Visibility timeout for redelivery, redrive to a dead-letter queue; standard queues do not preserve order, FIFO queues order within a message group |
+| RabbitMQ | Queue (with streams as a log-style option) | Rich routing through exchanges; streams add replayable, retained logs |
+| Google Cloud Pub/Sub | Topics with subscriptions; per-message acknowledgement | Fan-out by subscription; optional ordering keys; seek to a timestamp or snapshot within retention |
+
+Kinesis versus Kafka is mostly an operational and ecosystem choice: Kinesis is fully managed and integrates with AWS services, while Kafka offers longer and cheaper retention per byte at scale, compaction, transactions, Kafka Connect and Kafka Streams, and runs on any cloud. Compare quotas and price for your own throughput rather than in general.
 
 ## In data engineering
 
-Most pipeline use cases (event streaming, CDC, feeding a lakehouse) fit the log model because replay and multiple consumers are valuable. Task orchestration between pipeline steps is usually handled by an orchestrator, not by either.
+Most pipeline use cases (event streaming, CDC, feeding a lakehouse) fit the log model because replay and multiple consumers are valuable. Queues fit the edges: fan-out of notification jobs, calls to rate-limited APIs, image or document processing triggered by events. Task orchestration between pipeline steps is usually handled by an orchestrator, not by either.
 
-<Callout tone="info" title="The boundary is moving">
-
-Recent Kafka releases add queue-style consumption options, and some queue products add streams and replay. Compare the specific products and versions you would run.
-
-</Callout>
+A common hybrid: events land in Kafka (the system of record for the stream), and a small service turns the subset that needs per-item work into queue messages, or a share group consumes it directly.
 
 ## Common mistakes
 
-1. Using a queue where consumers later need to replay history.
-2. Using Kafka for a small task queue and taking on its operational overhead.
-3. Expecting global ordering from either.
+1. Using a queue where consumers later need to replay history, then rebuilding the history from logs.
+2. Using Kafka consumer groups for slow, uneven per-message work, so one slow message stalls a whole partition.
+3. Expecting global ordering from either. Logs order per partition; queues with several workers rarely order at all.
+4. Choosing Kafka for a small task queue and taking on its operational overhead when a managed queue would do.
 
-## Key takeaway
+## In interviews
 
-Logs retain and replay events for many consumers; queues distribute units of work and forget them. Pick by replay, fan-out and ordering needs.
+Expect "Kafka or a queue for X?" and "how is Kafka different from RabbitMQ or SQS?". Strong answers start from the model (retained log with offsets versus acknowledged work items), name the consequences (replay, fan-out, ordering, per-message retry), mention that Kafka 4.2's share groups add queue semantics on Kafka topics, and finish with a choice for the stated scenario. The [Kafka vs Kinesis vs queues question](/interview/kafka/kafka-vs-kinesis-vs-queues/) works through that answer.
+
+## Key takeaways
+
+- A log retains and replays events for many independent readers; a queue distributes units of work and forgets them once acknowledged.
+- Logs parallelise by partition and keep per-partition order; queues parallelise by message and retry per message, at the cost of order.
+- Kafka 4.2 share groups bring queue-style consumption (per-record acknowledgement, more workers than partitions) to Kafka topics, without ordering.
+- Kinesis is a managed log sized by shards; SQS and Pub/Sub are managed queue-style services. Pick by replay, fan-out, ordering and operations, then check quotas and price for your volume.
