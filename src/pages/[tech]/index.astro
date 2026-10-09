@@ -143,66 +143,65 @@ const tabs = [
 
   <div class="container" data-tabs>
     <section id="overview" class="tab-panel" role="tabpanel" aria-labelledby="tab-overview">
+      <div class="progress-panel progress-panel--course js-only">
+        <div class="progress-panel__head">
+          <h2>Your progress</h2>
+          <span class="muted" style="font-size: var(--fs-sm)">
+            Saved in this browser only
+          </span>
+        </div>
+        <div class="rings">
+          <div
+            class="ring"
+            data-ring
+            data-kind="lesson"
+            data-course={tech}
+            data-total={course.lessons.length}
+            data-label="Lessons"
+            role="img"
+          >
+            <span class="ring__dial" aria-hidden="true">
+              <span class="ring__value" data-ring-value>
+                0%
+              </span>
+            </span>
+            <span aria-hidden="true">
+              <span class="ring__label">Lessons</span>
+              <span class="ring__detail" data-ring-detail>
+                0 of {course.lessons.length}
+              </span>
+            </span>
+          </div>
+          {interviewHub && (
+            <div
+              class="ring"
+              data-ring
+              data-kind="question"
+              data-course={tech}
+              data-total={hubQuestions.length}
+              data-label="Interview questions"
+              role="img"
+            >
+              <span class="ring__dial" aria-hidden="true">
+                <span class="ring__value" data-ring-value>
+                  0%
+                </span>
+              </span>
+              <span aria-hidden="true">
+                <span class="ring__label">Questions</span>
+                <span class="ring__detail" data-ring-detail>
+                  0 of {hubQuestions.length}
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
       <div class="two-col two-col--aside">
         <div>
           <h2 class="tab-panel__title">About this course</h2>
           <div class="prose">
             <Content />
-          </div>
-
-          <div class="progress-panel js-only">
-            <div class="progress-panel__head">
-              <h3>Your progress</h3>
-              <span class="muted" style="font-size: var(--fs-sm)">
-                Saved in this browser only
-              </span>
-            </div>
-            <div class="rings">
-              <div
-                class="ring"
-                data-ring
-                data-kind="lesson"
-                data-course={tech}
-                data-total={course.lessons.length}
-                data-label="Lessons"
-                role="img"
-              >
-                <span class="ring__dial" aria-hidden="true">
-                  <span class="ring__value" data-ring-value>
-                    0%
-                  </span>
-                </span>
-                <span aria-hidden="true">
-                  <span class="ring__label">Lessons</span>
-                  <span class="ring__detail" data-ring-detail>
-                    0 of {course.lessons.length}
-                  </span>
-                </span>
-              </div>
-              {interviewHub && (
-                <div
-                  class="ring"
-                  data-ring
-                  data-kind="question"
-                  data-course={tech}
-                  data-total={hubQuestions.length}
-                  data-label="Interview questions"
-                  role="img"
-                >
-                  <span class="ring__dial" aria-hidden="true">
-                    <span class="ring__value" data-ring-value>
-                      0%
-                    </span>
-                  </span>
-                  <span aria-hidden="true">
-                    <span class="ring__label">Questions</span>
-                    <span class="ring__detail" data-ring-detail>
-                      0 of {hubQuestions.length}
-                    </span>
-                  </span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
         <aside aria-labelledby="facts-h">

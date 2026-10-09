@@ -1033,6 +1033,13 @@
   .progress-panel {
     margin-top: var(--sp-8);
   }
+  /* Course overview: progress first, so returning learners see it straight away. */
+  .progress-panel--course {
+    margin: 0 0 var(--sp-10);
+  }
+  .progress-panel--course h2 {
+    font-size: var(--fs-xl);
+  }
   .progress-panel__head {
     display: flex;
     flex-wrap: wrap;
