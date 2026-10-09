@@ -48,7 +48,7 @@
 - **Validation:** Each milestone must reference completed lessons/practice and a clear pass criterion.
 - **Done when:** No milestone claims completion without scheduled and verifiable evidence.
 
-#### [ ] REM-005 — Make daily workload auditable and realistic
+#### [x] REM-005 — Make daily workload auditable and realistic
 - **Finding:** AUD-005
 - **Affected file:** `docs/curriculum/plan-90-days.json` and planner rendering
 - **Current problem:** 348 total hours, 3–6 hours/day, with no task-level time budget in the plan.
@@ -79,7 +79,7 @@
 
 ### P2 — Medium priority
 
-#### [ ] REM-009 — Guard production site origin
+#### [x] REM-009 — Guard production site origin
 - **Finding:** AUD-008
 - **Affected file:** `astro.config.mjs`, deployment configuration, `scripts/check-dist.mjs`
 - **Required change:** Keep local development convenient, but make release validation fail if generated canonical URLs or sitemap contain `datadank.example`.
@@ -99,7 +99,7 @@
 - **Validation:** Inspect built HTML and representative browser-rendered pages; use Search Console only if access/evidence is available.
 - **Done when:** Every route has a recorded SEO/editorial decision and no high-priority defects remain.
 
-## Recommended execution order
+## Implementation status\n\nREM-005 and REM-009 have implementation and automated validation evidence on branch `audit/remediation-oct-2026`. The 90-day planner budget check passes for all 90 days, and the built-site QA rejects the placeholder canonical origin; the full validation workflow passed. Other items remain open where lesson-by-lesson, originality, external-link, or human editorial evidence is still missing. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).\n\n## Recommended execution order
 1. REM-001 (promise correction).
 2. REM-002 to REM-005 (planner repair as one coherent change).
 3. REM-009 and automated release guards.
