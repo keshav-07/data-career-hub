@@ -576,7 +576,7 @@ Limits worth knowing: `[core] max_map_length` (1024 by default) caps how many co
 
 ## DAG authoring best practices
 
-These are the habits that separate a DAG that works on your laptop from one that runs reliably for years. The best practices lesson at the end of this course covers idempotency, top-level code and testing in depth.
+These are the habits that separate a DAG that works on your laptop from one that runs reliably for years. The [best practices lesson](/airflow/best-practices-testing-cicd/) covers idempotency, top-level code and testing in depth.
 
 1. **Keep the DAG file declarative and cheap to import.** No database queries, API calls or heavy imports at module level. Put heavy imports inside the task function.
 2. **Make every task idempotent and driven by the run's dates.** Use `ds` or `data_interval_start`/`end` (or `logical_date`), never the wall clock, and overwrite or merge rather than append.

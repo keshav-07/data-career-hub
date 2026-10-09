@@ -313,7 +313,7 @@ Interviewers may ask you to sketch one. Show the class with `template_fields`, a
 
 - Install what you need, pinned with the Airflow constraints file: `pip install "apache-airflow-providers-amazon" --constraint <constraints-url>`.
 - Imports follow the pattern `airflow.providers.<name>.<operators|hooks|sensors|triggers>.<module>`.
-- In Airflow 3 the everyday operators moved out of core into **`apache-airflow-providers-standard`**: `BashOperator`, `PythonOperator`, `BranchPythonOperator`, `EmptyOperator`, `TriggerDagRunOperator`, `ExternalTaskSensor`, `FileSensor`, the time sensors and more. Old imports such as `airflow.operators.bash` are gone; the Airflow 3 upgrade guide lists the new paths, and the `ruff` AIR rules can rewrite them.
+- In Airflow 3 the everyday operators moved out of core into **`apache-airflow-providers-standard`**: `BashOperator`, `PythonOperator`, `BranchPythonOperator`, `EmptyOperator`, `TriggerDagRunOperator`, `ExternalTaskSensor`, `FileSensor`, the time sensors and more. Old paths such as `airflow.operators.bash` are deprecated: in Airflow 3.3 they still resolve through a compatibility shim that logs a `DeprecatedImportWarning` (as long as the standard provider is installed), while some long-deprecated names, such as `airflow.operators.dummy`, no longer import at all. Update imports to the provider paths; the Airflow 3 upgrade guide lists them and the `ruff` AIR rules can rewrite them.
 - Executors that need extra infrastructure live in providers too: `CeleryExecutor` in the Celery provider and `KubernetesExecutor` in the `cncf.kubernetes` provider.
 
 You can list what is installed:
@@ -338,7 +338,7 @@ From the command line, `airflow providers list` shows the same.
 ### Pitfalls
 
 - Upgrading Airflow without upgrading providers (or the reverse). Check each provider's minimum Airflow version and install with the constraints file.
-- Copying Airflow 2 import paths into Airflow 3 code. Many now fail with `ModuleNotFoundError`.
+- Copying Airflow 2 import paths into Airflow 3 code. Some still work through deprecation shims, others (such as `airflow.operators.dummy`) fail with `ModuleNotFoundError`; use the provider paths.
 - Installing every provider "just in case". Each brings dependencies that can conflict.
 
 ### In interviews
@@ -583,9 +583,9 @@ Inside `execute()`, through a hook. `__init__` runs every time the DAG file is p
 </details>
 
 <details>
-<summary>You upgraded to Airflow 3 and `from airflow.operators.bash import BashOperator` fails. Why?</summary>
+<summary>After upgrading to Airflow 3, `from airflow.operators.bash import BashOperator` logs a deprecation warning (or fails on an install without the standard provider). Why?</summary>
 
-In Airflow 3 the standard operators were moved into the `apache-airflow-providers-standard` package. Import from `airflow.providers.standard.operators.bash` and make sure that provider is installed.
+In Airflow 3 the standard operators were moved into the `apache-airflow-providers-standard` package. The old path is only a deprecated compatibility shim that forwards to the provider, so it breaks if the provider is missing and will be removed. Import from `airflow.providers.standard.operators.bash` and make sure the provider is installed.
 
 </details>
 
