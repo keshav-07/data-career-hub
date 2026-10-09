@@ -280,7 +280,7 @@ If you do *not* set `enable.idempotence` but set a conflicting value such as `ac
 
 ### Pitfalls
 
-- **Scope.** Idempotence covers one producer session writing to Kafka. If your application restarts and resends the same business event, that is a new write with a new PID. End-to-end deduplication needs transactions or an idempotent sink (see delivery semantics).
+- **Scope.** Idempotence covers one producer session writing to Kafka. If your application restarts and resends the same business event, that is a new write with a new PID. End-to-end deduplication needs transactions or an idempotent sink (see [delivery semantics](/kafka/delivery-semantics-exactly-once/)).
 - **Setting `acks=1` for speed** silently removes idempotence unless you also set `enable.idempotence=true`, in which case the producer will not start.
 
 ### In interviews

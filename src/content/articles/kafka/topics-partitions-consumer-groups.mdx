@@ -442,4 +442,4 @@ The Java client hashes keys with murmur2, while librdkafka-based clients default
 - The replication factor is how many copies of each partition exist; RF 3 with `acks=all` is the usual durable choice, but it does not replace backups or DR.
 - A consumer group gives each partition to one member, so partitions cap the group's parallelism; separate groups read independently.
 - Assignors decide who reads what: range keeps topics aligned, round-robin balances counts, and sticky or cooperative strategies minimise movement.
-- Delivery guarantees depend on when offsets are committed relative to processing; see the delivery semantics lesson.
+- Delivery guarantees depend on when offsets are committed relative to processing; see the [delivery semantics lesson](/kafka/delivery-semantics-exactly-once/).
