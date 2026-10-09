@@ -125,7 +125,8 @@ with sqlite3.connect(WAREHOUSE) as con:
 ```
 
 ```text
-OUTPUT_IDEMP
+orders_a: 6 rows, total 129.0
+orders_o: 3 rows, total 64.5
 ```
 
 The append version doubled the day's revenue on the second run; the overwrite version still has the correct three rows. The same applies to files: write `dt=2026-03-01/` as a unit (overwrite the folder or write elsewhere and swap) instead of adding files to it.
@@ -182,7 +183,8 @@ for stat in sorted(bag.dagbag_stats, key=lambda s: s.duration, reverse=True):
 ```
 
 ```text
-OUTPUT_PARSE
+slow_top_level.py       1.50s  dags=['slow_dag']
+orders_load.py          0.00s  dags=['orders_append', 'orders_overwrite']
 ```
 
 On a real deployment the same figures appear as the `dag_processing.last_duration` metric and with `airflow dags report`. A file that exceeds `[core] dagbag_import_timeout` (30 seconds by default) fails to import and all its DAGs disappear from the UI.
@@ -271,7 +273,10 @@ for test in (test_no_import_errors, test_every_dag_has_owner_tags_and_retries,
 ```
 
 ```text
-OUTPUT_TESTS
+FAIL test_no_import_errors: import errors: {'cycle.py': 'AirflowDagCycleException: Cycle detected in Dag: cycle_dag. Faulty task: b', 'missing_dependency.py': "ModuleNotFoundError: No module named 'great_expectations_not_installed'"}
+FAIL test_every_dag_has_owner_tags_and_retries: missing owner, tags or retries: ['no_owner_dag']
+FAIL test_files_parse_quickly: slow to parse: ['slow_top_level.py']
+PASS test_orders_overwrite_structure
 ```
 
 Each failure points to a real problem: a cycle and a missing library (both would show up as import errors on the DAG processor), a DAG without an owner, tags or retries, and a file that is slow to parse. The structure test shows the other kind of assertion: checking task ids and dependencies so that a refactor cannot silently drop a task.

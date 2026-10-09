@@ -190,5 +190,21 @@
  "Airflow REST API": {
   "ref": "articles:airflow/operations-backfills-monitoring",
   "heading": "Airflow REST API"
+ },
+ "Idempotent tasks": {
+  "ref": "articles:airflow/best-practices-testing-cicd",
+  "heading": "Idempotent tasks"
+ },
+ "Avoiding top-level code": {
+  "ref": "articles:airflow/best-practices-testing-cicd",
+  "heading": "Avoiding top-level code"
+ },
+ "Testing DAGs": {
+  "ref": "articles:airflow/best-practices-testing-cicd",
+  "heading": "Testing DAGs"
+ },
+ "CI/CD for DAGs": {
+  "ref": "articles:airflow/best-practices-testing-cicd",
+  "heading": "CI/CD for DAGs"
  }
 }
