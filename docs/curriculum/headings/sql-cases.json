@@ -438,5 +438,33 @@
   "Columnar vs row storage → Subscription Renewals": {
     "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
     "heading": "Approach: columnar vs row storage for renewal analytics"
+  },
+  "Anti-join (NOT EXISTS / LEFT JOIN NULL) → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: anti-joins for orphans and clean orders"
+  },
+  "Statistics & the optimizer → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: statistics and the optimizer after bulk loads"
+  },
+  "Pivoting dynamic columns → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: pivoting dynamic columns by reason code"
+  },
+  "Running totals with SUM OVER → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: running totals with SUM OVER"
+  },
+  "Partition pruning → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: partition pruning on a partitioned refunds table"
+  },
+  "Rolling 7/30 day metrics → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: rolling 7-day and 30-day metrics"
+  },
+  "UNPIVOT columns to rows → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: UNPIVOT columns to rows by refund method"
   }
 }

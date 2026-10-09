@@ -1,0 +1,546 @@
+---
+seoTitle: "Refund Analysis SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Refund Analysis: SQL Case Study with 7 Approaches"
+description: "Analyse refunds in SQL: refund rate by order cohort and refund date, over-refunds and orphans, running and rolling totals, pivots, unpivots, pruning and statistics."
+technology: ["sql"]
+topic: ["case-study", "e-commerce", "window-functions"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Refund rate is refunded value divided by sales value. Report it two ways: by order cohort (refunds attached to the month the order was placed, which measures product and fulfilment quality) and by refund date (refunds paid out in the period, which matches cash). Aggregate refunds per order before joining so multiple partial refunds do not duplicate the order, use anti-joins to find refunds without orders and orders without refunds, and check that refunds never exceed the order amount."
+followUps:
+  - "Should a refund in May reduce April's refund rate or May's?"
+  - "How do you find refunds whose order does not exist?"
+  - "How do you flag an order that has been refunded more than it cost?"
+  - "How do you compute a rolling 7-day refund rate when some days have no orders?"
+  - "How do you show refund amounts by reason code when new reason codes keep appearing?"
+  - "The refunds table is partitioned by month but the query still scans every partition. Why?"
+prerequisites: ["articles:sql/joins", "articles:sql/window-functions"]
+related: ["interview-questions:sql/monthly-revenue-sql-case-study", "interview-questions:sql/average-order-value-sql-case-study", "articles:sql/joins", "articles:sql/window-functions", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/subscription-renewals-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 (one example uses the tablefunc extension and psql's \\gexec) and one UNPIVOT on DuckDB 1.5.6, with scripts/verify-examples.py; outputs and plans are copied from the engines."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Table partitioning and partition pruning", url: "https://www.postgresql.org/docs/16//ddl-partitioning.html" }
+  - { label: "PostgreSQL 16 documentation: Statistics used by the planner", url: "https://www.postgresql.org/docs/16/planner-stats.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "DuckDB documentation: UNPIVOT statement", url: "https://duckdb.org/docs/current/sql/statements/unpivot" }
+---
+
+Refunds are where revenue quietly leaks: a product with a high refund rate looks profitable on the sales dashboard and is not. Refund data is also messy, with partial refunds, several refunds per order, refunds paid by different methods and refunds that do not match any order. This case study defines the refund rate two ways, builds it on a small dataset and works through seven techniques interviewers pair with it.
+
+## The business question
+
+**"What share of our sales do we give back, why, and is it getting worse?"** Finance needs refunds by the date money left the business; product and operations need refunds tied back to when the order was placed, to see which month's products or deliveries went wrong. Definitions:
+
+- **Refund rate (by order cohort)** = refunds on orders placed in the period ÷ sales of orders placed in the period. Late refunds keep changing a closed month, so this view is restated over time.
+- **Refund rate (by refund date)** = refunds paid in the period ÷ sales in the period. It matches cash and never changes after close, but mixes refunds for old orders with new sales.
+- **Refund count rate** = orders with at least one refund ÷ orders.
+- An order can have **several partial refunds**; the total must not exceed the order amount (an **over-refund** is a data or fraud issue).
+- A refund can be paid by **card, store credit or cash**; the method columns add up to the refund amount.
+- **Orphan refunds** (no matching order) are reported separately, never silently dropped.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE orders (
+  order_id   INT PRIMARY KEY,
+  order_date DATE NOT NULL,
+  channel    TEXT NOT NULL,
+  amount     NUMERIC(10,2) NOT NULL
+);
+
+CREATE TABLE refunds (
+  refund_id     INT PRIMARY KEY,
+  order_id      INT NOT NULL,              -- no foreign key: orphans arrive from the payment provider
+  refund_date   DATE NOT NULL,
+  reason        TEXT NOT NULL,
+  card_amount   NUMERIC(10,2) NOT NULL DEFAULT 0,
+  credit_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  cash_amount   NUMERIC(10,2) NOT NULL DEFAULT 0
+);
+
+INSERT INTO orders VALUES
+  (1, '2026-04-01', 'web', 120.00), (2, '2026-04-01', 'app',  80.00), (3, '2026-04-02', 'web',  45.00),
+  (4, '2026-04-03', 'web', 200.00), (5, '2026-04-05', 'app',  60.00), (6, '2026-04-06', 'web',  90.00),
+  (7, '2026-04-08', 'store', 150.00), (8, '2026-04-09', 'web', 30.00), (9, '2026-04-10', 'app', 75.00),
+  (10, '2026-04-12', 'web', 110.00), (11, '2026-05-02', 'web', 95.00), (12, '2026-05-03', 'app', 40.00);
+
+INSERT INTO refunds (refund_id, order_id, refund_date, reason, card_amount, credit_amount, cash_amount) VALUES
+  (1, 1,  '2026-04-04', 'damaged',       120.00,  0.00,  0.00),
+  (2, 4,  '2026-04-10', 'wrong_size',     50.00,  0.00,  0.00),   -- partial
+  (3, 4,  '2026-04-20', 'wrong_size',      0.00, 60.00,  0.00),   -- second partial refund
+  (4, 6,  '2026-05-03', 'late_delivery',  30.00,  0.00,  0.00),   -- April order refunded in May
+  (5, 7,  '2026-04-09', 'damaged',         0.00,  0.00, 150.00),  -- store refund in cash
+  (6, 8,  '2026-04-11', 'changed_mind',   20.00,  0.00,  0.00),
+  (7, 8,  '2026-04-12', 'changed_mind',   15.00,  0.00,  0.00),   -- 35 refunded on a 30 order
+  (8, 99, '2026-04-15', 'chargeback',     70.00,  0.00,  0.00),   -- no such order
+  (9, 11, '2026-05-06', 'damaged',         0.00, 95.00,  0.00);
+```
+
+## Core solution
+
+Aggregate refunds to one row per order, join to orders, and compute both views.
+
+```sql
+CREATE VIEW order_refunds AS
+SELECT order_id,
+       SUM(card_amount + credit_amount + cash_amount) AS refunded,
+       COUNT(*)                                       AS refund_count,
+       MIN(refund_date)                               AS first_refund_date
+FROM refunds
+GROUP BY order_id;
+
+SELECT date_trunc('month', o.order_date)::date                AS order_month,
+       COUNT(*)                                               AS orders,
+       SUM(o.amount)                                          AS sales,
+       COALESCE(SUM(r.refunded), 0)                           AS refunded_on_these_orders,
+       ROUND(100.0 * COALESCE(SUM(r.refunded), 0) / SUM(o.amount), 1) AS cohort_refund_rate_pct,
+       ROUND(100.0 * COUNT(r.order_id) / COUNT(*), 1)         AS orders_refunded_pct
+FROM orders o
+LEFT JOIN order_refunds r USING (order_id)
+GROUP BY 1
+ORDER BY 1;
+```
+
+| order_month | orders | sales | refunded_on_these_orders | cohort_refund_rate_pct | orders_refunded_pct |
+|---|---|---|---|---|---|
+| 2026-04-01 | 10 | 960.00 | 445.00 | 46.4 | 50.0 |
+| 2026-05-01 | 2 | 135.00 | 95.00 | 70.4 | 50.0 |
+
+The refund-date view assigns each refund to the month it was paid, including the orphan:
+
+```sql
+WITH sales AS (
+  SELECT date_trunc('month', order_date)::date AS month, SUM(amount) AS sales FROM orders GROUP BY 1
+),
+paid_out AS (
+  SELECT date_trunc('month', refund_date)::date AS month,
+         SUM(card_amount + credit_amount + cash_amount) AS refunds_paid
+  FROM refunds GROUP BY 1
+)
+SELECT month, s.sales, COALESCE(p.refunds_paid, 0) AS refunds_paid,
+       ROUND(100.0 * COALESCE(p.refunds_paid, 0) / s.sales, 1) AS cash_refund_rate_pct
+FROM sales s
+FULL JOIN paid_out p USING (month)
+ORDER BY month;
+```
+
+| month | sales | refunds_paid | cash_refund_rate_pct |
+|---|---|---|---|
+| 2026-04-01 | 960.00 | 485.00 | 50.5 |
+| 2026-05-01 | 135.00 | 125.00 | 92.6 |
+
+April's cohort rate excludes the orphan chargeback and includes the May refund of order 6; the cash view does the opposite. Neither is wrong, but they answer different questions, and a report must say which it shows. Refunds are summed per order in the view first, so order 4's two partial refunds cannot duplicate its sales amount in the join.
+
+## Approach: anti-joins for orphans and clean orders
+
+**Why it matters.** Two reconciliation questions come up in every refund review: which refunds have no order (payment-provider chargebacks, test data, orders deleted upstream), and which orders were never refunded (the clean baseline). Both are anti-joins: keep rows from one side that have **no** match on the other.
+
+```sql
+SELECT r.refund_id, r.order_id, r.refund_date, r.reason,
+       r.card_amount + r.credit_amount + r.cash_amount AS amount
+FROM refunds r
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.order_id = r.order_id);
+```
+
+| refund_id | order_id | refund_date | reason | amount |
+|---|---|---|---|---|
+| 8 | 99 | 2026-04-15 | chargeback | 70.00 |
+
+The same with `LEFT JOIN ... IS NULL`, here for orders without any refund:
+
+```sql
+SELECT o.order_id, o.order_date, o.channel, o.amount
+FROM orders o
+LEFT JOIN refunds r ON r.order_id = o.order_id
+WHERE r.refund_id IS NULL
+ORDER BY o.order_id;
+```
+
+| order_id | order_date | channel | amount |
+|---|---|---|---|
+| 2 | 2026-04-01 | app | 80.00 |
+| 3 | 2026-04-02 | web | 45.00 |
+| 5 | 2026-04-05 | app | 60.00 |
+| 9 | 2026-04-10 | app | 75.00 |
+| 10 | 2026-04-12 | web | 110.00 |
+| 12 | 2026-05-03 | app | 40.00 |
+
+Both forms produce an anti-join in PostgreSQL's plan:
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT o.order_id FROM orders o
+WHERE NOT EXISTS (SELECT 1 FROM refunds r WHERE r.order_id = o.order_id);
+```
+
+```text
+Hash Right Anti Join
+  Hash Cond: (r.order_id = o.order_id)
+  ->  Seq Scan on refunds r
+  ->  Hash
+        ->  Seq Scan on orders o
+```
+
+**Pitfalls.** In the `LEFT JOIN` form, test a column that is never `NULL` on a real match (the primary key `refund_id`), and keep conditions on the right table in the `ON` clause: `LEFT JOIN refunds r ON r.order_id = o.order_id AND r.reason = 'damaged' WHERE r.refund_id IS NULL` means "orders without a damage refund", while moving the reason test to `WHERE` returns nothing. Avoid `NOT IN (SELECT order_id FROM refunds)` if the column can ever be `NULL`.
+
+## Approach: running totals with SUM OVER
+
+**Why it matters.** Two refund questions need running totals. Per order: has the cumulative refund ever exceeded the order amount? Per month: how do cumulative refunds track against cumulative sales as the month goes on? `SUM(x) OVER (PARTITION BY ... ORDER BY ...)` gives a running sum up to each row.
+
+```sql
+SELECT r.order_id, r.refund_id, r.refund_date, o.amount AS order_amount,
+       r.card_amount + r.credit_amount + r.cash_amount AS refund_amount,
+       SUM(r.card_amount + r.credit_amount + r.cash_amount)
+         OVER (PARTITION BY r.order_id ORDER BY r.refund_date, r.refund_id
+               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS refunded_so_far,
+       SUM(r.card_amount + r.credit_amount + r.cash_amount)
+         OVER (PARTITION BY r.order_id ORDER BY r.refund_date, r.refund_id
+               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > o.amount AS over_refunded
+FROM refunds r
+JOIN orders o USING (order_id)
+ORDER BY r.order_id, r.refund_date, r.refund_id;
+```
+
+| order_id | refund_id | refund_date | order_amount | refund_amount | refunded_so_far | over_refunded |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 2026-04-04 | 120.00 | 120.00 | 120.00 | f |
+| 4 | 2 | 2026-04-10 | 200.00 | 50.00 | 50.00 | f |
+| 4 | 3 | 2026-04-20 | 200.00 | 60.00 | 110.00 | f |
+| 6 | 4 | 2026-05-03 | 90.00 | 30.00 | 30.00 | f |
+| 7 | 5 | 2026-04-09 | 150.00 | 150.00 | 150.00 | f |
+| 8 | 6 | 2026-04-11 | 30.00 | 20.00 | 20.00 | f |
+| 8 | 7 | 2026-04-12 | 30.00 | 15.00 | 35.00 | t |
+| 11 | 9 | 2026-05-06 | 95.00 | 95.00 | 95.00 | f |
+
+Order 8's second refund takes the total to 35 on a 30 order: the running total pinpoints the refund that crossed the line, which a plain `SUM ... GROUP BY order_id` would only show as a total. Month-to-date sales and refunds side by side:
+
+```sql
+WITH days AS (
+  SELECT d::date AS day FROM generate_series(DATE '2026-04-01', DATE '2026-04-12', INTERVAL '1 day') AS d
+),
+daily AS (
+  SELECT d.day,
+         COALESCE((SELECT SUM(amount) FROM orders WHERE order_date = d.day), 0) AS sales,
+         COALESCE((SELECT SUM(card_amount + credit_amount + cash_amount) FROM refunds WHERE refund_date = d.day), 0) AS refunds
+  FROM days d
+)
+SELECT day, sales, refunds,
+       SUM(sales)   OVER (ORDER BY day) AS mtd_sales,
+       SUM(refunds) OVER (ORDER BY day) AS mtd_refunds,
+       ROUND(100.0 * SUM(refunds) OVER (ORDER BY day) / NULLIF(SUM(sales) OVER (ORDER BY day), 0), 1) AS mtd_refund_rate_pct
+FROM daily
+ORDER BY day;
+```
+
+| day | sales | refunds | mtd_sales | mtd_refunds | mtd_refund_rate_pct |
+|---|---|---|---|---|---|
+| 2026-04-01 | 200.00 | 0 | 200.00 | 0 | 0.0 |
+| 2026-04-02 | 45.00 | 0 | 245.00 | 0 | 0.0 |
+| 2026-04-03 | 200.00 | 0 | 445.00 | 0 | 0.0 |
+| 2026-04-04 | 0 | 120.00 | 445.00 | 120.00 | 27.0 |
+| 2026-04-05 | 60.00 | 0 | 505.00 | 120.00 | 23.8 |
+| 2026-04-06 | 90.00 | 0 | 595.00 | 120.00 | 20.2 |
+| 2026-04-07 | 0 | 0 | 595.00 | 120.00 | 20.2 |
+| 2026-04-08 | 150.00 | 0 | 745.00 | 120.00 | 16.1 |
+| 2026-04-09 | 30.00 | 150.00 | 775.00 | 270.00 | 34.8 |
+| 2026-04-10 | 75.00 | 50.00 | 850.00 | 320.00 | 37.6 |
+| 2026-04-11 | 0 | 20.00 | 850.00 | 340.00 | 40.0 |
+| 2026-04-12 | 110.00 | 15.00 | 960.00 | 355.00 | 37.0 |
+
+**Pitfalls.** With `ORDER BY` and no frame, the default frame is `RANGE ... CURRENT ROW`, which includes all rows with the same sort value (two refunds on the same date would be summed together on both rows); add a unique tiebreaker and `ROWS` for a true row-by-row running total, as in the first query. Restart the total with `PARTITION BY` where it should reset (per order, per month).
+
+## Approach: rolling 7-day and 30-day metrics
+
+**Why it matters.** Daily refund rates jump around; a rolling 7-day rate smooths them for alerting, and a 30-day rate shows the trend. A rolling rate must divide rolling refunds by rolling sales, not average the daily rates, and it needs a row for every day so the window covers calendar days.
+
+```sql
+WITH days AS (
+  SELECT d::date AS day FROM generate_series(DATE '2026-04-01', DATE '2026-05-06', INTERVAL '1 day') AS d
+),
+daily AS (
+  SELECT d.day,
+         COALESCE(SUM(o.amount), 0) AS sales,
+         (SELECT COALESCE(SUM(card_amount + credit_amount + cash_amount), 0)
+          FROM refunds r WHERE r.refund_date = d.day) AS refunds
+  FROM days d
+  LEFT JOIN orders o ON o.order_date = d.day
+  GROUP BY d.day
+)
+SELECT day, sales, refunds,
+       SUM(refunds) OVER w7  AS refunds_7d,
+       SUM(sales)   OVER w7  AS sales_7d,
+       ROUND(100.0 * SUM(refunds) OVER w7  / NULLIF(SUM(sales) OVER w7, 0), 1)  AS refund_rate_7d_pct,
+       ROUND(100.0 * SUM(refunds) OVER w30 / NULLIF(SUM(sales) OVER w30, 0), 1) AS refund_rate_30d_pct
+FROM daily
+WINDOW w7  AS (ORDER BY day RANGE BETWEEN INTERVAL '6 days'  PRECEDING AND CURRENT ROW),
+       w30 AS (ORDER BY day RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW)
+ORDER BY day
+OFFSET 8 LIMIT 8;
+```
+
+| day | sales | refunds | refunds_7d | sales_7d | refund_rate_7d_pct | refund_rate_30d_pct |
+|---|---|---|---|---|---|---|
+| 2026-04-09 | 30.00 | 150.00 | 270.00 | 530.00 | 50.9 | 34.8 |
+| 2026-04-10 | 75.00 | 50.00 | 320.00 | 405.00 | 79.0 | 37.6 |
+| 2026-04-11 | 0 | 20.00 | 220.00 | 405.00 | 54.3 | 40.0 |
+| 2026-04-12 | 110.00 | 15.00 | 235.00 | 455.00 | 51.6 | 37.0 |
+| 2026-04-13 | 0 | 0 | 235.00 | 365.00 | 64.4 | 37.0 |
+| 2026-04-14 | 0 | 0 | 235.00 | 365.00 | 64.4 | 37.0 |
+| 2026-04-15 | 0 | 70.00 | 305.00 | 215.00 | 141.9 | 44.3 |
+| 2026-04-16 | 0 | 0 | 155.00 | 185.00 | 83.8 | 44.3 |
+
+The rows shown start on 9 April. On days with no sales in the last seven days the 7-day rate would divide by zero, so `NULLIF` returns `NULL` instead of an error. A 7-day refund rate above 100% (141.9% on 15 April here) is possible: refunds in the window relate to orders placed earlier, outside it. That is the price of the cash view; the cohort view never exceeds 100% unless something is over-refunded.
+
+**Pitfalls.** `ROWS BETWEEN 6 PRECEDING` counts rows, so without a complete calendar it spans more than seven days when days are missing; `RANGE` with an interval counts calendar days. The first 6 or 29 days of the series have partial windows; label or suppress them. In warehouses without interval frames, join a calendar to the daily table on `day BETWEEN c.day - 6 AND c.day` and aggregate.
+
+## Approach: pivoting dynamic columns by reason code
+
+**Why it matters.** Operations wants a grid: one row per month, one column per refund reason. Reason codes are added over time (`chargeback` appeared recently), so the column list is not fixed. Standard SQL needs the output columns at parse time, so a dynamic pivot generates the query from the data.
+
+PostgreSQL's `tablefunc` extension provides `crosstab`, which pivots a three-column result (row key, category, value). It still requires the output column list to be declared, so the dynamic part is generating that declaration:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS tablefunc;
+
+SELECT format(
+  $q$SELECT * FROM crosstab(
+       $src$SELECT to_char(refund_date, 'YYYY-MM'), reason, SUM(card_amount + credit_amount + cash_amount)
+            FROM refunds GROUP BY 1, 2 ORDER BY 1, 2$src$,
+       $cat$SELECT DISTINCT reason FROM refunds ORDER BY 1$cat$
+     ) AS ct(month text, %s)$q$,
+  string_agg(format('%I numeric', reason), ', ' ORDER BY reason)
+) AS generated_sql
+FROM (SELECT DISTINCT reason FROM refunds) r
+\gexec
+```
+
+| month | changed_mind | chargeback | damaged | late_delivery | wrong_size |
+|---|---|---|---|---|---|
+| 2026-04 | 35.00 | 70.00 | 270.00 | NULL | 110.00 |
+| 2026-05 | NULL | NULL | 95.00 | 30.00 | NULL |
+
+The first query inside `crosstab` returns (month, reason, amount) rows; the second lists the categories in the same order as the generated columns, so values land in the right column even when a month lacks a reason. `\gexec` is a `psql` feature that runs each result value as SQL; an application or a PL/pgSQL function would build and `EXECUTE` the same string. `format('%I', ...)` quotes each reason as a safe identifier.
+
+When the set of reasons is known, conditional aggregation is simpler and needs no extension:
+
+```sql
+SELECT to_char(refund_date, 'YYYY-MM') AS month,
+       SUM(card_amount + credit_amount + cash_amount) FILTER (WHERE reason = 'damaged')    AS damaged,
+       SUM(card_amount + credit_amount + cash_amount) FILTER (WHERE reason = 'wrong_size') AS wrong_size,
+       SUM(card_amount + credit_amount + cash_amount) FILTER (WHERE reason NOT IN ('damaged', 'wrong_size')) AS other
+FROM refunds
+GROUP BY 1
+ORDER BY 1;
+```
+
+| month | damaged | wrong_size | other |
+|---|---|---|---|
+| 2026-04 | 270.00 | 110.00 | 105.00 |
+| 2026-05 | 95.00 | NULL | 30.00 |
+
+The `other` bucket is a safety net: a new reason code shows up there instead of disappearing. Engines with a dynamic `PIVOT` (DuckDB, Snowflake with `ANY` or a subquery, BigQuery with a generated list) reduce the boilerplate, and BI tools pivot long data natively.
+
+## Approach: UNPIVOT columns to rows by refund method
+
+**Why it matters.** The refunds table stores the method split as three columns, which is convenient for the payment system but awkward for analysis: "refund amount by method" needs one row per (refund, method). Unpivoting turns columns into rows.
+
+In PostgreSQL, a `LATERAL` join to a `VALUES` list produces one row per method for each refund:
+
+```sql
+SELECT m.method,
+       COUNT(*) FILTER (WHERE m.amount > 0) AS refunds_using_method,
+       SUM(m.amount)                        AS amount
+FROM refunds r
+CROSS JOIN LATERAL (VALUES ('card', r.card_amount), ('store_credit', r.credit_amount), ('cash', r.cash_amount))
+       AS m(method, amount)
+GROUP BY m.method
+ORDER BY amount DESC;
+```
+
+| method | refunds_using_method | amount |
+|---|---|---|
+| card | 6 | 305.00 |
+| store_credit | 2 | 155.00 |
+| cash | 1 | 150.00 |
+
+Store credit keeps money in the business, so finance often reports "cash-out refunds" (card and cash) separately from credit. With the long format, that is a simple filter. DuckDB has an `UNPIVOT` statement for the same transformation:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE refund_methods (refund_id INT, card_amount DECIMAL(10,2), credit_amount DECIMAL(10,2), cash_amount DECIMAL(10,2));
+INSERT INTO refund_methods VALUES (1,120,0,0), (2,50,0,0), (3,0,60,0), (4,30,0,0), (5,0,0,150),
+  (6,20,0,0), (7,15,0,0), (8,70,0,0), (9,0,95,0);
+
+SELECT method, SUM(amount) AS amount, COUNT(*) AS rows_after_unpivot
+FROM (UNPIVOT refund_methods ON card_amount, credit_amount, cash_amount INTO NAME method VALUE amount)
+GROUP BY method
+ORDER BY amount DESC;
+```
+
+| method | amount | rows_after_unpivot |
+|---|---|---|
+| card_amount | 305.00 | 9 |
+| credit_amount | 155.00 | 9 |
+| cash_amount | 150.00 | 9 |
+
+`rows_after_unpivot` is 9 for each method, because zero amounts are kept as rows. Standard `UNPIVOT` drops `NULL` values by default, which is why the source columns here default to 0 rather than `NULL`; with `NULL`s, a refund would silently lose rows. **Pitfalls.** Unpivoted columns must have compatible types. Keep the refund id on every unpivoted row so totals can be reconciled back to the original: the three methods must still add up to the refund amount.
+
+## Approach: partition pruning on a partitioned refunds table
+
+**Why it matters.** Refund tables grow forever and most queries touch one month. With range partitioning on `refund_date`, PostgreSQL can skip partitions that cannot contain matching rows (**partition pruning**), at planning time for constant filters and at execution time for values known only when the query runs.
+
+```sql
+CREATE TABLE refunds_part (LIKE refunds) PARTITION BY RANGE (refund_date);
+CREATE TABLE refunds_2026_03 PARTITION OF refunds_part FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+CREATE TABLE refunds_2026_04 PARTITION OF refunds_part FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+CREATE TABLE refunds_2026_05 PARTITION OF refunds_part FOR VALUES FROM ('2026-05-01') TO ('2026-06-01');
+INSERT INTO refunds_part SELECT * FROM refunds;
+ANALYZE refunds_part;
+
+EXPLAIN (COSTS OFF)
+SELECT reason, SUM(card_amount + credit_amount + cash_amount)
+FROM refunds_part
+WHERE refund_date >= DATE '2026-04-01' AND refund_date < DATE '2026-05-01'
+GROUP BY reason;
+```
+
+```text
+HashAggregate
+  Group Key: refunds_part.reason
+  ->  Seq Scan on refunds_2026_04 refunds_part
+        Filter: ((refund_date >= '2026-04-01'::date) AND (refund_date < '2026-05-01'::date))
+```
+
+Only the April partition appears. A function on the partition key defeats planning-time pruning, because the planner cannot map `date_trunc(...)` back to partition bounds:
+
+```sql
+EXPLAIN (COSTS OFF)
+SELECT reason, SUM(card_amount + credit_amount + cash_amount)
+FROM refunds_part
+WHERE date_trunc('month', refund_date) = DATE '2026-04-01'
+GROUP BY reason;
+```
+
+```text
+HashAggregate
+  Group Key: refunds_part.reason
+  ->  Append
+        ->  Seq Scan on refunds_2026_03 refunds_part_1
+              Filter: (date_trunc('month'::text, (refund_date)::timestamp with time zone) = '2026-04-01'::date)
+        ->  Seq Scan on refunds_2026_04 refunds_part_2
+              Filter: (date_trunc('month'::text, (refund_date)::timestamp with time zone) = '2026-04-01'::date)
+        ->  Seq Scan on refunds_2026_05 refunds_part_3
+              Filter: (date_trunc('month'::text, (refund_date)::timestamp with time zone) = '2026-04-01'::date)
+```
+
+When the filter value comes from a subquery, pruning happens at execution time; `EXPLAIN ANALYZE` shows the partitions that were never executed:
+
+```sql
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM refunds_part
+WHERE refund_date >= (SELECT MAX(order_date) FROM orders);
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  InitPlan 1 (returns $0)
+    ->  Aggregate (actual rows=1 loops=1)
+          ->  Seq Scan on orders (actual rows=12 loops=1)
+  ->  Append (actual rows=2 loops=1)
+        ->  Seq Scan on refunds_2026_03 refunds_part_1 (never executed)
+              Filter: (refund_date >= $0)
+        ->  Seq Scan on refunds_2026_04 refunds_part_2 (never executed)
+              Filter: (refund_date >= $0)
+        ->  Seq Scan on refunds_2026_05 refunds_part_3 (actual rows=2 loops=1)
+              Filter: (refund_date >= $0)
+```
+
+The `(never executed)` partitions were pruned at run time once the subquery's value (3 May) was known. **Pitfalls.** Filter on the partition key itself with a range; casts and functions on it, or comparing it with a different type, can block pruning. Joining refunds to an orders table partitioned by `order_date` prunes only the side whose key appears in the filter. Choose partition size so each partition is large enough to be worth scanning but small enough to prune well; monthly is common for refund volumes, daily for very large event tables.
+
+## Approach: statistics and the optimizer after bulk loads
+
+**Why it matters.** Refunds often arrive in nightly bulk loads. The planner's estimates come from statistics gathered by `ANALYZE` (run by autovacuum after enough changes, or manually). Between a large load and the next analyse, the statistics describe the old table, and the plans built on them can be poor.
+
+Load 20,000 refunds into a fresh table and look at the estimate before any statistics exist:
+
+```sql
+CREATE TABLE refunds_load (refund_id INT, order_id INT, refund_date DATE, reason TEXT, amount NUMERIC(10,2));
+INSERT INTO refunds_load
+SELECT g, g % 5000, DATE '2026-01-01' + (g % 120),
+       CASE WHEN g % 50 = 0 THEN 'chargeback' ELSE 'damaged' END, (g % 200) + 0.99
+FROM generate_series(1, 20000) AS g;
+
+EXPLAIN SELECT COUNT(*) FROM refunds_load WHERE reason = 'chargeback';
+```
+
+```text
+Aggregate  (cost=318.37..318.38 rows=1 width=8)
+  ->  Seq Scan on refunds_load  (cost=0.00..318.20 rows=68 width=0)
+        Filter: (reason = 'chargeback'::text)
+```
+
+Without column statistics, PostgreSQL estimates the table size from its pages and applies a default selectivity for the equality filter. After `ANALYZE`, the most-common-values list records that `chargeback` is 2% of rows (400 of 20,000), and the estimate is exact (400 rows instead of 68):
+
+```sql
+ANALYZE refunds_load;
+EXPLAIN SELECT COUNT(*) FROM refunds_load WHERE reason = 'chargeback';
+```
+
+```text
+Aggregate  (cost=399.00..399.01 rows=1 width=8)
+  ->  Seq Scan on refunds_load  (cost=0.00..398.00 rows=400 width=0)
+        Filter: (reason = 'chargeback'::text)
+```
+
+What the planner keeps for each column, visible in `pg_stats`:
+
+```sql
+SELECT attname, null_frac, n_distinct,
+       array_to_string((most_common_vals::text::text[])[1:2], ',') AS most_common_vals,
+       array_to_string((most_common_freqs)[1:2]::text[], ',')      AS freqs,
+       correlation
+FROM pg_stats
+WHERE tablename = 'refunds_load' AND attname IN ('reason', 'refund_date', 'order_id')
+ORDER BY attname;
+```
+
+| attname | null_frac | n_distinct | most_common_vals | freqs | correlation |
+|---|---|---|---|---|---|
+| order_id | 0 | -0.25 | 0,1 | 0.0002,0.0002 | 0.24988756 |
+| reason | 0 | 2 | damaged,chargeback | 0.98,0.02 | 0.9606529 |
+| refund_date | 0 | 120 | 2026-01-02,2026-01-03 | 0.00835,0.00835 | 0.01024105 |
+
+- `n_distinct`: estimated distinct values (negative means a fraction of the row count).
+- `most_common_vals` / `most_common_freqs`: frequent values and their shares, used for equality filters.
+- A histogram (not shown) covers the remaining values for range filters.
+- `correlation`: how closely physical row order follows the column's sort order, used to cost index scans (near 1 or −1 makes range scans through an index cheap).
+
+**Practical rules.** Run `ANALYZE` on a table right after a bulk load, before the queries that use it (many pipelines add it as a load step). For big tables where important values are rare, raise the column's statistics target (`ALTER TABLE ... ALTER COLUMN reason SET STATISTICS 1000`) so they stay in the most-common-values list. Use `EXPLAIN ANALYZE` to compare estimated and actual rows when a plan looks wrong; a gap of an order of magnitude at a low node usually explains a bad join choice above it.
+
+## Interview tips
+
+**How it is asked.** "Calculate the refund rate by month", "which products have the highest refund rate", "find orders refunded more than their value", "7-day rolling refund rate", "refunds without matching orders", or "the refund dashboard does not match finance's number" (cohort versus cash view).
+
+**What a strong answer includes.**
+
+1. Both views (order cohort and refund date) and a clear statement of which one is reported.
+2. Refunds aggregated to the order before joining, to avoid fan-out.
+3. Anti-joins for orphans and data checks for over-refunds.
+4. Rolling metrics as ratio of sums over a complete calendar.
+5. Operational awareness: partition pruning, statistics after loads.
+
+**Mistakes candidates make.**
+
+- Joining orders to raw refunds and summing order amounts, which double counts orders with several refunds.
+- Mixing the two views, for example cash refunds over cohort sales.
+- Averaging daily refund rates for a weekly figure.
+- `ROWS` frames over a table with missing days.
+- Filtering a left-joined table in `WHERE` and losing unrefunded orders.
+- Wrapping the partition key in a function and scanning every partition.
