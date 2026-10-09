@@ -16,6 +16,8 @@ followUps: ["How would you do it if you had to fill the result from the front?",
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers"]
 practice: {"platform": "LeetCode", "number": 977, "title": "Squares of a Sorted Array", "url": "https://leetcode.com/problems/squares-of-a-sorted-array/"}
+previous: "interview-questions:dsa/remove-duplicates-from-sorted-array"
+next: "interview-questions:dsa/segregate-0s-and-1s"
 ---
 
 ## Problem

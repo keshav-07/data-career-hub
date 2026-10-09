@@ -16,6 +16,8 @@ followUps: ["Why can the sequence never grow without bound?", "How would you fin
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/linked-list-cycle"]
 practice: {"platform": "LeetCode", "number": 202, "title": "Happy Number", "url": "https://leetcode.com/problems/happy-number/"}
+previous: "interview-questions:dsa/linked-list-cycle"
+next: "interview-questions:dsa/middle-of-the-linked-list"
 ---
 
 ## Problem

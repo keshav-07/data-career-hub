@@ -15,6 +15,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/binary-search", "interview-questions:dsa/find-first-and-last-position"]
 practice: {"platform": "GeeksforGeeks", "title": "Ceil in Sorted Array", "url": "https://www.geeksforgeeks.org/problems/ceil-in-a-sorted-array/1"}
+previous: "interview-questions:dsa/binary-search"
+next: "interview-questions:dsa/time-based-key-value-store"
 ---
 
 ## Problem

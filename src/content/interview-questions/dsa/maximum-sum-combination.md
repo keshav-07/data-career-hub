@@ -16,6 +16,8 @@ followUps: ["Why are (i + 1, j) and (i, j + 1) the only candidates you need to a
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/merge-k-sorted-lists", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "GeeksforGeeks", "title": "Maximum Sum Combination", "url": "https://www.geeksforgeeks.org/problems/maximum-sum-combination/1"}
+previous: "interview-questions:dsa/reorganize-string"
+next: "interview-questions:dsa/find-median-from-data-stream"
 ---
 
 ## Problem

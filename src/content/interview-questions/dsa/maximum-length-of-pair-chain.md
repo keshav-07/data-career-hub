@@ -16,6 +16,8 @@ followUps: ["Prove that choosing the earliest-ending pair first is safe.", "How 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/non-overlapping-intervals", "interview-questions:dsa/longest-increasing-subsequence", "articles:dsa/greedy-and-intervals"]
 practice: {"platform": "LeetCode", "number": 646, "title": "Maximum Length of Pair Chain", "url": "https://leetcode.com/problems/maximum-length-of-pair-chain/"}
+previous: "interview-questions:dsa/valid-parenthesis-string"
+next: "interview-questions:dsa/minimum-add-to-make-parentheses-valid"
 ---
 
 ## Problem

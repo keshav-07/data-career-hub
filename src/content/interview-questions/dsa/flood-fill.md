@@ -16,6 +16,8 @@ followUps: ["Why does the same-colour case cause an infinite loop without a guar
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 733, "title": "Flood Fill", "url": "https://leetcode.com/problems/flood-fill/"}
+previous: "interview-questions:dsa/reconstruct-itinerary"
+next: "interview-questions:dsa/island-perimeter"
 ---
 
 ## Problem

@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/find-peak-element", "interview-questions:dsa/find-minimum-in-rotated-sorted-array"]
 practice: {"platform": "LeetCode", "number": 852, "title": "Peak Index in a Mountain Array", "url": "https://leetcode.com/problems/peak-index-in-a-mountain-array/"}
+previous: "interview-questions:dsa/search-in-rotated-sorted-array"
+next: "interview-questions:dsa/find-peak-element"
 ---
 
 ## Problem

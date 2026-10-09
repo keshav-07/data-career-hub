@@ -16,6 +16,8 @@ followUps: ["How would you return the start index of the best window as well?", 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window"]
 practice: {"platform": "GeeksforGeeks", "title": "Max Sum Subarray of Size K", "url": "https://www.geeksforgeeks.org/problems/max-sum-subarray-of-size-k5313/1"}
+previous: "interview-questions:dsa/maximum-average-subarray-i"
+next: "interview-questions:dsa/longest-substring-without-repeating-characters"
 ---
 
 ## Problem

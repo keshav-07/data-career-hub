@@ -16,6 +16,8 @@ followUps: ["Why does the method break if the array can contain zeros or negativ
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers", "articles:dsa/sliding-window"]
 practice: {"platform": "LeetCode", "number": 713, "title": "Subarray Product Less Than K", "url": "https://leetcode.com/problems/subarray-product-less-than-k/"}
+previous: "interview-questions:dsa/count-triplets-with-sum-smaller-than-x"
+next: "interview-questions:dsa/4sum"
 ---
 
 ## Problem

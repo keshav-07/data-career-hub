@@ -16,6 +16,8 @@ followUps: ["What if the magazine is huge and the note is tiny: which string do 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 383, "title": "Ransom Note", "url": "https://leetcode.com/problems/ransom-note/"}
+previous: "interview-questions:dsa/longest-palindrome"
+next: "interview-questions:dsa/valid-sudoku"
 ---
 
 ## Problem

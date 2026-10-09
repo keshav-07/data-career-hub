@@ -16,6 +16,8 @@ followUps: ["How would you solve it in a single pass, flagging whether each isla
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 1254, "title": "Number of Closed Islands", "url": "https://leetcode.com/problems/number-of-closed-islands/"}
+previous: "interview-questions:dsa/rotting-oranges"
+next: "interview-questions:dsa/course-schedule"
 ---
 
 ## Problem

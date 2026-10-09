@@ -16,6 +16,8 @@ followUps: ["How do you compute the length of the cycle once the pointers meet?"
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/linked-list-cycle", "interview-questions:dsa/find-the-duplicate-number"]
 practice: {"platform": "LeetCode", "number": 142, "title": "Linked List Cycle II", "url": "https://leetcode.com/problems/linked-list-cycle-ii/"}
+previous: "interview-questions:dsa/find-the-duplicate-number"
+next: "interview-questions:dsa/circular-array-loop"
 ---
 
 ## Problem

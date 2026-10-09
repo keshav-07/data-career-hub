@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/find-minimum-in-rotated-sorted-array", "interview-questions:dsa/search-in-rotated-sorted-array"]
 practice: {"platform": "GeeksforGeeks", "title": "Find Rotation Count", "url": "https://www.geeksforgeeks.org/problems/rotation4723/1"}
+previous: "interview-questions:dsa/median-of-two-sorted-arrays"
+next: "interview-questions:dsa/find-minimum-in-rotated-sorted-array"
 ---
 
 ## Problem

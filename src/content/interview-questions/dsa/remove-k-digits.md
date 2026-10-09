@@ -16,6 +16,8 @@ followUps: ["Why is it safe to commit to removing a digit greedily?", "How would
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks"]
 practice: {"platform": "LeetCode", "number": 402, "title": "Remove K Digits", "url": "https://leetcode.com/problems/remove-k-digits/"}
+previous: "interview-questions:dsa/remove-nodes-from-linked-list"
+next: "interview-questions:dsa/132-pattern"
 ---
 
 ## Problem

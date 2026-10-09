@@ -16,6 +16,8 @@ followUps: ["How would you return the three values or indices instead of the sum
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers", "interview-questions:dsa/3sum"]
 practice: {"platform": "LeetCode", "number": 16, "title": "3Sum Closest", "url": "https://leetcode.com/problems/3sum-closest/"}
+previous: "interview-questions:dsa/sort-colors"
+next: "interview-questions:dsa/count-triplets-with-sum-smaller-than-x"
 ---
 
 ## Problem

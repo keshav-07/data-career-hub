@@ -16,6 +16,8 @@ followUps: ["Why does ~n give a negative number in Python?", "How would you flip
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 1009, "title": "Complement of Base 10 Integer", "url": "https://leetcode.com/problems/complement-of-base-10-integer/"}
+previous: "interview-questions:dsa/counting-bits"
+next: "interview-questions:dsa/sum-of-two-integers"
 ---
 
 ## Problem

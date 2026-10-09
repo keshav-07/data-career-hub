@@ -16,6 +16,8 @@ followUps: ["Why does finding the first and last descent alone give the wrong an
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers"]
 practice: {"platform": "LeetCode", "number": 581, "title": "Shortest Unsorted Continuous Subarray", "url": "https://leetcode.com/problems/shortest-unsorted-continuous-subarray/"}
+previous: "interview-questions:dsa/4sum"
+next: "interview-questions:dsa/trapping-rain-water"
 ---
 
 ## Problem

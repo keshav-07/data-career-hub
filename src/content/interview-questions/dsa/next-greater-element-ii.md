@@ -16,6 +16,8 @@ followUps: ["Why is two passes enough to see every element after a given one?", 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks", "interview-questions:dsa/next-greater-element-i", "interview-questions:dsa/daily-temperatures"]
 practice: {"platform": "LeetCode", "number": 503, "title": "Next Greater Element II", "url": "https://leetcode.com/problems/next-greater-element-ii/"}
+previous: "interview-questions:dsa/car-fleet"
+next: "interview-questions:dsa/remove-nodes-from-linked-list"
 ---
 
 ## Problem

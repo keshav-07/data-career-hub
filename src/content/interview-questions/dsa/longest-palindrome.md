@@ -16,6 +16,8 @@ followUps: ["How would you actually build one such palindrome, not just its leng
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 409, "title": "Longest Palindrome", "url": "https://leetcode.com/problems/longest-palindrome/"}
+previous: "interview-questions:dsa/first-unique-character-in-a-string"
+next: "interview-questions:dsa/ransom-note"
 ---
 
 ## Problem

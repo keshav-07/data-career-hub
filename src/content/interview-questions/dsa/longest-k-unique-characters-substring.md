@@ -16,6 +16,8 @@ followUps: ["How would you change it to allow at most k distinct characters?", "
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window"]
 practice: {"platform": "GeeksforGeeks", "title": "Longest K unique characters substring", "url": "https://www.geeksforgeeks.org/problems/longest-k-unique-characters-substring0853/1"}
+previous: "interview-questions:dsa/minimum-size-subarray-sum"
+next: "interview-questions:dsa/fruit-into-baskets"
 ---
 
 ## Problem

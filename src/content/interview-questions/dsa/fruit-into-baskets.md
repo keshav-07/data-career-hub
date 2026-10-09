@@ -16,6 +16,8 @@ followUps: ["How would you generalise to k baskets?", "Can you solve it with a w
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window", "interview-questions:dsa/longest-k-unique-characters-substring"]
 practice: {"platform": "LeetCode", "number": 904, "title": "Fruit Into Baskets", "url": "https://leetcode.com/problems/fruit-into-baskets/"}
+previous: "interview-questions:dsa/longest-k-unique-characters-substring"
+next: "interview-questions:dsa/max-consecutive-ones-iii"
 ---
 
 ## Problem

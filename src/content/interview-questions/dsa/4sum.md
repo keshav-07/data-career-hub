@@ -16,6 +16,8 @@ followUps: ["How would you write a general k-sum that recurses down to two-sum?"
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers", "interview-questions:dsa/3sum"]
 practice: {"platform": "LeetCode", "number": 18, "title": "4Sum", "url": "https://leetcode.com/problems/4sum/"}
+previous: "interview-questions:dsa/subarray-product-less-than-k"
+next: "interview-questions:dsa/shortest-unsorted-continuous-subarray"
 ---
 
 ## Problem

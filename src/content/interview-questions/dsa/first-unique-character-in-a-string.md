@@ -15,6 +15,8 @@ followUps: ["How would you answer the same question for a stream where character
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 387, "title": "First Unique Character in a String", "url": "https://leetcode.com/problems/first-unique-character-in-a-string/"}
+previous: "interview-questions:dsa/two-sum"
+next: "interview-questions:dsa/longest-palindrome"
 ---
 
 ## Problem

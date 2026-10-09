@@ -16,6 +16,8 @@ followUps: ["How would you count triples with sum at most the limit, or exactly 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers", "interview-questions:dsa/3sum"]
 practice: {"platform": "GeeksforGeeks", "title": "Triplets with Smaller Sum", "url": "https://www.geeksforgeeks.org/problems/count-triplets-with-sum-smaller-than-x5549/1"}
+previous: "interview-questions:dsa/3sum-closest"
+next: "interview-questions:dsa/subarray-product-less-than-k"
 ---
 
 ## Problem

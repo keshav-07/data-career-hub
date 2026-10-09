@@ -16,6 +16,8 @@ followUps: ["How does the prefix-sum and binary-search version work, and when wo
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window"]
 practice: {"platform": "LeetCode", "number": 209, "title": "Minimum Size Subarray Sum", "url": "https://leetcode.com/problems/minimum-size-subarray-sum/"}
+previous: "interview-questions:dsa/permutation-in-string"
+next: "interview-questions:dsa/longest-k-unique-characters-substring"
 ---
 
 ## Problem

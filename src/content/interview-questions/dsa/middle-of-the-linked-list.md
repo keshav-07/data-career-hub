@@ -16,6 +16,8 @@ followUps: ["How would you return the first middle node for an even-length list?
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists"]
 practice: {"platform": "LeetCode", "number": 876, "title": "Middle of the Linked List", "url": "https://leetcode.com/problems/middle-of-the-linked-list/"}
+previous: "interview-questions:dsa/happy-number"
+next: "interview-questions:dsa/palindrome-linked-list"
 ---
 
 ## Problem

@@ -16,6 +16,8 @@ followUps: ["How would the complexity change if the graph were given as an edge 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 547, "title": "Number of Provinces", "url": "https://leetcode.com/problems/number-of-provinces/"}
+previous: "interview-questions:dsa/clone-graph"
+next: "interview-questions:dsa/word-ladder"
 ---
 
 ## Problem

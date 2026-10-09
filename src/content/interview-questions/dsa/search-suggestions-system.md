@@ -16,6 +16,8 @@ followUps: ["How would you rank suggestions by popularity instead of alphabetica
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/implement-trie-prefix-tree", "articles:dsa/binary-trees"]
 practice: {"platform": "LeetCode", "number": 1268, "title": "Search Suggestions System", "url": "https://leetcode.com/problems/search-suggestions-system/"}
+previous: "interview-questions:dsa/extra-characters-in-a-string"
+next: "interview-questions:dsa/word-search-ii"
 ---
 
 ## Problem

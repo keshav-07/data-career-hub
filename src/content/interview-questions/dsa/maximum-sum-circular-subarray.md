@@ -16,6 +16,8 @@ followUps: ["Why is the all-negative case the only time total - min gives an emp
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/maximum-subarray"]
 practice: {"platform": "LeetCode", "number": 918, "title": "Maximum Sum Circular Subarray", "url": "https://leetcode.com/problems/maximum-sum-circular-subarray/"}
+previous: "interview-questions:dsa/maximum-absolute-sum-of-any-subarray"
+next: "interview-questions:dsa/rotate-image"
 ---
 
 ## Problem

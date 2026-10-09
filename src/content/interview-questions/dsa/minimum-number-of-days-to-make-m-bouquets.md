@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/koko-eating-bananas"]
 practice: {"platform": "LeetCode", "number": 1482, "title": "Minimum Number of Days to Make m Bouquets", "url": "https://leetcode.com/problems/minimum-number-of-days-to-make-m-bouquets/"}
+previous: "interview-questions:dsa/koko-eating-bananas"
+next: "interview-questions:dsa/aggressive-cows"
 ---
 
 ## Problem

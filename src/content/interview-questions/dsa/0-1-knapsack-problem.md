@@ -16,6 +16,8 @@ followUps: ["Why must the 1D loop go from high capacity to low?", "How would you
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/dynamic-programming"]
 practice: {"platform": "GeeksforGeeks", "title": "0 - 1 Knapsack Problem", "url": "https://www.geeksforgeeks.org/problems/0-1-knapsack-problem0945/1"}
+previous: "interview-questions:dsa/target-sum"
+next: "interview-questions:dsa/subset-sum-problem"
 ---
 
 ## Problem

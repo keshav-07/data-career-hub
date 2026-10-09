@@ -16,6 +16,8 @@ followUps: ["Why must the answer be a contiguous window of the sorted array?", "
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/k-closest-points-to-origin", "interview-questions:dsa/binary-search", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 658, "title": "Find K Closest Elements", "url": "https://leetcode.com/problems/find-k-closest-elements/"}
+previous: "interview-questions:dsa/sort-characters-by-frequency"
+next: "interview-questions:dsa/reorganize-string"
 ---
 
 ## Problem

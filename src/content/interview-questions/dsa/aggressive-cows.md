@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/koko-eating-bananas", "interview-questions:dsa/minimum-number-of-days-to-make-m-bouquets"]
 practice: {"platform": "GeeksforGeeks", "title": "Aggressive Cows", "url": "https://www.geeksforgeeks.org/problems/aggressive-cows/1"}
+previous: "interview-questions:dsa/minimum-number-of-days-to-make-m-bouquets"
+next: "interview-questions:dsa/maximum-candies-allocated-to-k-children"
 ---
 
 ## Problem

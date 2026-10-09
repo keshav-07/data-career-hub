@@ -16,6 +16,8 @@ followUps: ["Why does the reverse-and-scan approach need a running maximum rathe
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks", "articles:dsa/linked-lists", "interview-questions:dsa/reverse-linked-list"]
 practice: {"platform": "LeetCode", "number": 2487, "title": "Remove Nodes From Linked List", "url": "https://leetcode.com/problems/remove-nodes-from-linked-list/"}
+previous: "interview-questions:dsa/next-greater-element-ii"
+next: "interview-questions:dsa/remove-k-digits"
 ---
 
 ## Problem

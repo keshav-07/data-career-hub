@@ -16,6 +16,8 @@ followUps: ["How would you allow up to k deletions?", "Can you solve it with for
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/maximum-subarray"]
 practice: {"platform": "LeetCode", "number": 1186, "title": "Maximum Subarray Sum with One Deletion", "url": "https://leetcode.com/problems/maximum-subarray-sum-with-one-deletion/"}
+previous: "interview-questions:dsa/maximum-product-subarray"
+next: "interview-questions:dsa/maximum-absolute-sum-of-any-subarray"
 ---
 
 ## Problem

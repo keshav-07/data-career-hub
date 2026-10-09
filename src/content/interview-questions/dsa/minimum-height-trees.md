@@ -16,6 +16,8 @@ followUps: ["Why can there never be three minimum-height roots?", "How would you
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 310, "title": "Minimum Height Trees", "url": "https://leetcode.com/problems/minimum-height-trees/"}
+previous: "interview-questions:dsa/topological-sort"
+next: "interview-questions:dsa/alien-dictionary"
 ---
 
 ## Problem

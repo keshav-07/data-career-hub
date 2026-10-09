@@ -16,6 +16,8 @@ followUps: ["How would you return the actual split, not just the count?", "What 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/word-break", "interview-questions:dsa/implement-trie-prefix-tree", "articles:dsa/binary-trees"]
 practice: {"platform": "LeetCode", "number": 2707, "title": "Extra Characters in a String", "url": "https://leetcode.com/problems/extra-characters-in-a-string/"}
+previous: "interview-questions:dsa/design-add-and-search-words"
+next: "interview-questions:dsa/search-suggestions-system"
 ---
 
 ## Problem

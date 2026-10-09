@@ -16,6 +16,8 @@ followUps: ["How many results are there for a string with k letters, and why?", 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/backtracking"]
 practice: {"platform": "LeetCode", "number": 784, "title": "Letter Case Permutation", "url": "https://leetcode.com/problems/letter-case-permutation/"}
+previous: "interview-questions:dsa/letter-combinations-of-a-phone-number"
+next: "interview-questions:dsa/combination-sum"
 ---
 
 ## Problem

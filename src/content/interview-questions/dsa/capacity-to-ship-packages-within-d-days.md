@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/koko-eating-bananas", "interview-questions:dsa/minimum-number-of-days-to-make-m-bouquets"]
 practice: {"platform": "LeetCode", "number": 1011, "title": "Capacity To Ship Packages Within D Days", "url": "https://leetcode.com/problems/capacity-to-ship-packages-within-d-days/"}
+previous: "interview-questions:dsa/maximum-candies-allocated-to-k-children"
+next: "interview-questions:dsa/split-array-largest-sum"
 ---
 
 ## Problem

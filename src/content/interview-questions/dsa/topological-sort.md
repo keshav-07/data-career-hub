@@ -16,6 +16,8 @@ followUps: ["How do you detect a cycle with each method?", "How would you produc
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "GeeksforGeeks", "title": "Topological Sort", "url": "https://www.geeksforgeeks.org/problems/topological-sort/1"}
+previous: "interview-questions:dsa/course-schedule-ii"
+next: "interview-questions:dsa/minimum-height-trees"
 ---
 
 ## Problem

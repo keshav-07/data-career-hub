@@ -16,6 +16,8 @@ followUps: ["Why is it easier to scan from the end than from the start?", "How w
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers"]
 practice: {"platform": "LeetCode", "number": 844, "title": "Backspace String Compare", "url": "https://leetcode.com/problems/backspace-string-compare/"}
+previous: "interview-questions:dsa/segregate-0s-and-1s"
+next: "interview-questions:dsa/two-sum-ii-input-array-is-sorted"
 ---
 
 ## Problem

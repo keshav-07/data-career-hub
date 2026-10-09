@@ -15,6 +15,8 @@ followUps: ["How would you return every pivot index instead of the first?", "How
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 724, "title": "Find Pivot Index", "url": "https://leetcode.com/problems/find-pivot-index/"}
+previous: "interview-questions:dsa/majority-element"
+next: "interview-questions:dsa/product-of-array-except-self"
 ---
 
 ## Problem

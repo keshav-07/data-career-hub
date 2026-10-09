@@ -16,6 +16,8 @@ followUps: ["How many rooms would you need if meetings could run in parallel?", 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/greedy-and-intervals"]
 practice: {"platform": "GeeksforGeeks", "title": "Meeting Rooms", "url": "https://www.geeksforgeeks.org/problems/attend-all-meetings/1"}
+previous: "interview-questions:dsa/remove-duplicate-letters"
+next: "interview-questions:dsa/merge-intervals"
 ---
 
 ## Problem

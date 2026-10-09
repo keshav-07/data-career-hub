@@ -16,6 +16,8 @@ followUps: ["How would you handle a relative path, where leading '..' parts must
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks"]
 practice: {"platform": "LeetCode", "number": 71, "title": "Simplify Path", "url": "https://leetcode.com/problems/simplify-path/"}
+previous: "interview-questions:dsa/remove-all-adjacent-duplicates-in-string-ii"
+next: "interview-questions:dsa/next-greater-element-i"
 ---
 
 ## Problem

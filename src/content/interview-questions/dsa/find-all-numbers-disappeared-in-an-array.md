@@ -16,6 +16,8 @@ followUps: ["How would you also report which numbers appear twice?", "Can you so
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 448, "title": "Find All Numbers Disappeared in an Array", "url": "https://leetcode.com/problems/find-all-numbers-disappeared-in-an-array/"}
+previous: "interview-questions:dsa/missing-number"
+next: "interview-questions:dsa/set-mismatch"
 ---
 
 ## Problem

@@ -16,6 +16,8 @@ followUps: ["Why is it enough to keep only the largest valid '2'?", "Can you sol
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks"]
 practice: {"platform": "LeetCode", "number": 456, "title": "132 Pattern", "url": "https://leetcode.com/problems/132-pattern/"}
+previous: "interview-questions:dsa/remove-k-digits"
+next: "interview-questions:dsa/largest-rectangle-in-histogram"
 ---
 
 ## Problem

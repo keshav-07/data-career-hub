@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/search-a-2d-matrix"]
 practice: {"platform": "LeetCode", "number": 240, "title": "Search a 2D Matrix II", "url": "https://leetcode.com/problems/search-a-2d-matrix-ii/"}
+previous: "interview-questions:dsa/search-a-2d-matrix"
+next: "interview-questions:dsa/kth-smallest-element-in-a-sorted-matrix"
 ---
 
 ## Problem

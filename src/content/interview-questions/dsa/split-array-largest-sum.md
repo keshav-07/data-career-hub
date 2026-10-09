@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/capacity-to-ship-packages-within-d-days", "interview-questions:dsa/koko-eating-bananas"]
 practice: {"platform": "LeetCode", "number": 410, "title": "Split Array Largest Sum", "url": "https://leetcode.com/problems/split-array-largest-sum/"}
+previous: "interview-questions:dsa/capacity-to-ship-packages-within-d-days"
+next: "interview-questions:dsa/search-a-2d-matrix"
 ---
 
 ## Problem

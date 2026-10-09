@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/koko-eating-bananas", "interview-questions:dsa/aggressive-cows"]
 practice: {"platform": "LeetCode", "number": 2226, "title": "Maximum Candies Allocated to K Children", "url": "https://leetcode.com/problems/maximum-candies-allocated-to-k-children/"}
+previous: "interview-questions:dsa/aggressive-cows"
+next: "interview-questions:dsa/capacity-to-ship-packages-within-d-days"
 ---
 
 ## Problem

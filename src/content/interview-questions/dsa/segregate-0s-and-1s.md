@@ -16,6 +16,8 @@ followUps: ["How would you extend this to 0s, 1s and 2s?", "Is the two-pointer p
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers"]
 practice: {"platform": "GeeksforGeeks", "title": "Segregate 0s and 1s", "url": "https://www.geeksforgeeks.org/problems/segregate-0s-and-1s5106/1"}
+previous: "interview-questions:dsa/squares-of-a-sorted-array"
+next: "interview-questions:dsa/backspace-string-compare"
 ---
 
 ## Problem

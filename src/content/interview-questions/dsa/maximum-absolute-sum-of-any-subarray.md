@@ -16,6 +16,8 @@ followUps: ["Why does max prefix minus min prefix work even when the max comes b
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/maximum-subarray"]
 practice: {"platform": "LeetCode", "number": 1749, "title": "Maximum Absolute Sum of Any Subarray", "url": "https://leetcode.com/problems/maximum-absolute-sum-of-any-subarray/"}
+previous: "interview-questions:dsa/maximum-subarray-sum-with-one-deletion"
+next: "interview-questions:dsa/maximum-sum-circular-subarray"
 ---
 
 ## Problem

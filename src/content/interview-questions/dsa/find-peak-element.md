@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/peak-index-in-a-mountain-array"]
 practice: {"platform": "LeetCode", "number": 162, "title": "Find Peak Element", "url": "https://leetcode.com/problems/find-peak-element/"}
+previous: "interview-questions:dsa/peak-index-in-a-mountain-array"
+next: "interview-questions:dsa/koko-eating-bananas"
 ---
 
 ## Problem

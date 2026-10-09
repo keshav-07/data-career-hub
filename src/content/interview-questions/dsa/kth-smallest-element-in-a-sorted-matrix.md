@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/search-a-2d-matrix-ii", "interview-questions:dsa/kth-largest-element-in-an-array"]
 practice: {"platform": "LeetCode", "number": 378, "title": "Kth Smallest Element in a Sorted Matrix", "url": "https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/"}
+previous: "interview-questions:dsa/search-a-2d-matrix-ii"
+next: "interview-questions:dsa/merge-two-sorted-lists"
 ---
 
 ## Problem

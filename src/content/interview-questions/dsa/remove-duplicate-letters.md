@@ -16,6 +16,8 @@ followUps: ["Why is it safe to pop a larger letter only when it occurs again lat
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/daily-temperatures", "articles:dsa/greedy-and-intervals"]
 practice: {"platform": "LeetCode", "number": 316, "title": "Remove Duplicate Letters", "url": "https://leetcode.com/problems/remove-duplicate-letters/"}
+previous: "interview-questions:dsa/minimum-add-to-make-parentheses-valid"
+next: "interview-questions:dsa/attend-all-meetings"
 ---
 
 ## Problem

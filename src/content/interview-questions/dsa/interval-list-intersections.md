@@ -16,6 +16,8 @@ followUps: ["Why is it safe to advance the interval that ends first?", "How woul
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/merge-intervals", "interview-questions:dsa/insert-interval", "articles:dsa/greedy-and-intervals"]
 practice: {"platform": "LeetCode", "number": 986, "title": "Interval List Intersections", "url": "https://leetcode.com/problems/interval-list-intersections/"}
+previous: "interview-questions:dsa/non-overlapping-intervals"
+next: "interview-questions:dsa/attend-all-meetings-ii"
 ---
 
 ## Problem

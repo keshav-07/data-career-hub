@@ -16,6 +16,8 @@ followUps: ["Why should you restore the list after checking it?", "How would you
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/reverse-linked-list", "interview-questions:dsa/middle-of-the-linked-list"]
 practice: {"platform": "LeetCode", "number": 234, "title": "Palindrome Linked List", "url": "https://leetcode.com/problems/palindrome-linked-list/"}
+previous: "interview-questions:dsa/middle-of-the-linked-list"
+next: "interview-questions:dsa/reorder-list"
 ---
 
 ## Problem

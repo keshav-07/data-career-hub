@@ -16,6 +16,8 @@ followUps: ["How would you answer many reachability queries on the same graph ef
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 1971, "title": "Find if Path Exists in Graph", "url": "https://leetcode.com/problems/find-if-path-exists-in-graph/"}
+previous: "interview-questions:dsa/n-queens"
+next: "interview-questions:dsa/clone-graph"
 ---
 
 ## Problem

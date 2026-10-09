@@ -16,6 +16,8 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 related: ["articles:dsa/binary-search", "interview-questions:dsa/find-first-and-last-position", "interview-questions:dsa/ceil-in-a-sorted-array"]
 practice: {"platform": "GeeksforGeeks", "title": "Number of Occurrence", "url": "https://www.geeksforgeeks.org/problems/number-of-occurrence2259/1"}
+previous: "interview-questions:dsa/find-first-and-last-position"
+next: "interview-questions:dsa/median-of-two-sorted-arrays"
 ---
 
 ## Problem

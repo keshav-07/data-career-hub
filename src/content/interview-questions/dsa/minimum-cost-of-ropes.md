@@ -16,6 +16,8 @@ followUps: ["Why is joining the two shortest ropes optimal? Sketch the exchange 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/last-stone-weight", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "GeeksforGeeks", "title": "Min Cost to Connect Ropes", "url": "https://www.geeksforgeeks.org/problems/minimum-cost-of-ropes-1587115620/1"}
+previous: "interview-questions:dsa/task-scheduler"
+next: "interview-questions:dsa/sort-characters-by-frequency"
 ---
 
 ## Problem

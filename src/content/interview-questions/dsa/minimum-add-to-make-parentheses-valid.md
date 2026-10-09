@@ -16,6 +16,8 @@ followUps: ["How would you return one valid string with the minimum insertions?"
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/valid-parentheses", "interview-questions:dsa/valid-parenthesis-string", "articles:dsa/greedy-and-intervals"]
 practice: {"platform": "LeetCode", "number": 921, "title": "Minimum Add to Make Parentheses Valid", "url": "https://leetcode.com/problems/minimum-add-to-make-parentheses-valid/"}
+previous: "interview-questions:dsa/maximum-length-of-pair-chain"
+next: "interview-questions:dsa/remove-duplicate-letters"
 ---
 
 ## Problem

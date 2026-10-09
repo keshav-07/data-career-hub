@@ -16,6 +16,8 @@ followUps: ["Why is it safe to mark every index on a failed path as dead?", "How
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/linked-list-cycle"]
 practice: {"platform": "LeetCode", "number": 457, "title": "Circular Array Loop", "url": "https://leetcode.com/problems/circular-array-loop/"}
+previous: "interview-questions:dsa/linked-list-cycle-ii"
+next: "interview-questions:dsa/reverse-linked-list"
 ---
 
 ## Problem

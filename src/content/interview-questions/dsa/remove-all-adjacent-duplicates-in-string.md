@@ -16,6 +16,8 @@ followUps: ["How does the solution change if only runs of k equal letters are re
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks"]
 practice: {"platform": "LeetCode", "number": 1047, "title": "Remove All Adjacent Duplicates In String", "url": "https://leetcode.com/problems/remove-all-adjacent-duplicates-in-string/"}
+previous: "interview-questions:dsa/valid-parentheses"
+next: "interview-questions:dsa/min-stack"
 ---
 
 ## Problem

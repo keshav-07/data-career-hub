@@ -16,6 +16,8 @@ followUps: ["Why is Dijkstra still correct when you combine costs with max inste
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 1631, "title": "Path With Minimum Effort", "url": "https://leetcode.com/problems/path-with-minimum-effort/"}
+previous: "interview-questions:dsa/is-graph-bipartite"
+next: "interview-questions:dsa/network-delay-time"
 ---
 
 ## Problem

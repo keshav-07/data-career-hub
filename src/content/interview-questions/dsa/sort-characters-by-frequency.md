@@ -16,6 +16,8 @@ followUps: ["How would you make the output deterministic when two characters hav
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/top-k-frequent-elements", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 451, "title": "Sort Characters By Frequency", "url": "https://leetcode.com/problems/sort-characters-by-frequency/"}
+previous: "interview-questions:dsa/minimum-cost-of-ropes"
+next: "interview-questions:dsa/find-k-closest-elements"
 ---
 
 ## Problem

@@ -16,6 +16,8 @@ followUps: ["How would you allow each value to appear at most twice?", "What cha
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/two-pointers"]
 practice: {"platform": "LeetCode", "number": 26, "title": "Remove Duplicates from Sorted Array", "url": "https://leetcode.com/problems/remove-duplicates-from-sorted-array/"}
+previous: "interview-questions:dsa/move-zeroes"
+next: "interview-questions:dsa/squares-of-a-sorted-array"
 ---
 
 ## Problem

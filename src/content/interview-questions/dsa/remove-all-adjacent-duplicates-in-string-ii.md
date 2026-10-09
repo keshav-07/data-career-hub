@@ -16,6 +16,8 @@ followUps: ["Why store counts instead of comparing the last k characters each ti
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/stacks", "interview-questions:dsa/remove-all-adjacent-duplicates-in-string"]
 practice: {"platform": "LeetCode", "number": 1209, "title": "Remove All Adjacent Duplicates in String II", "url": "https://leetcode.com/problems/remove-all-adjacent-duplicates-in-string-ii/"}
+previous: "interview-questions:dsa/evaluate-reverse-polish-notation"
+next: "interview-questions:dsa/simplify-path"
 ---
 
 ## Problem

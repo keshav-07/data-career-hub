@@ -16,6 +16,8 @@ followUps: ["How would you handle a grid with several islands and return each is
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 463, "title": "Island Perimeter", "url": "https://leetcode.com/problems/island-perimeter/"}
+previous: "interview-questions:dsa/flood-fill"
+next: "interview-questions:dsa/number-of-islands"
 ---
 
 ## Problem

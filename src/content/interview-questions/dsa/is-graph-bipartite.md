@@ -16,6 +16,8 @@ followUps: ["Why does an odd cycle make two-colouring impossible?", "How would y
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/graphs"]
 practice: {"platform": "LeetCode", "number": 785, "title": "Is Graph Bipartite?", "url": "https://leetcode.com/problems/is-graph-bipartite/"}
+previous: "interview-questions:dsa/redundant-connection"
+next: "interview-questions:dsa/path-with-minimum-effort"
 ---
 
 ## Problem

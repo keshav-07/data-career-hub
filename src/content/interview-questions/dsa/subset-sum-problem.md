@@ -16,6 +16,8 @@ followUps: ["How would you return one subset that reaches the target, not just t
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/dynamic-programming"]
 practice: {"platform": "GeeksforGeeks", "title": "Subset Sum Problem", "url": "https://www.geeksforgeeks.org/problems/subset-sum-problem-1611555638/1"}
+previous: "interview-questions:dsa/0-1-knapsack-problem"
+next: "interview-questions:dsa/longest-palindromic-substring"
 ---
 
 ## Problem

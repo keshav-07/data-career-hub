@@ -16,6 +16,8 @@ followUps: ["How would you handle the same problem in Java, where -1 % 5 is -1?"
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/subarray-sum-equals-k"]
 practice: {"platform": "LeetCode", "number": 974, "title": "Subarray Sums Divisible by K", "url": "https://leetcode.com/problems/subarray-sums-divisible-by-k/"}
+previous: "interview-questions:dsa/subarray-sum-equals-k"
+next: "interview-questions:dsa/contiguous-array"
 ---
 
 ## Problem
