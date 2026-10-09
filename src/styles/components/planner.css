@@ -249,9 +249,9 @@
     .hero-plan {
       column-gap: clamp(2.5rem, 5vw, 5rem);
     }
-    /* Top of the card lines up with the top of the headline. */
+    /* Top of the card lines up with the eyebrow above the headline. */
     .hero-plan__side {
-      margin-top: var(--sp-4);
+      margin-top: 0;
     }
   }
   .plan-link {
@@ -358,6 +358,19 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--c-accent);
+  }
+  .day-card__eyebrow > span {
+    white-space: nowrap;
+  }
+  .day-card__eyebrow {
+    flex-wrap: wrap;
+  }
+  /* Progress panel straight after the hero: compact spacing. */
+  .section--progress {
+    padding-block: var(--sp-8);
+  }
+  .section--progress .progress-panel {
+    margin-top: 0;
   }
   .day-card__pill {
     padding: 2px 8px;

@@ -48,7 +48,7 @@ export function initDayCard() {
       ? "Completed"
       : shown === open
         ? shown === 1 && Object.keys(done).length === 0
-          ? "Your first day"
+          ? "Start here"
           : "Up next"
         : shown < open
           ? "Catch up"
