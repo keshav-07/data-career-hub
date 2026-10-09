@@ -12,11 +12,11 @@ publishedDate: "2026-10-09"
 updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 shortAnswer: "Neighbouring windows of length k share k − 1 elements, so do not re-add them. Sum the first k values, then for each later index add the value entering the window and subtract the value leaving it, and keep the largest sum seen. This is O(n) time and O(1) space, compared with O(n · k) for summing every window from scratch. Initialise the best with the first window's sum, not zero, so negative inputs work."
-followUps: ["How would you return the start index of the best window as well?", "What changes if you need the longest window whose sum is at most a target?", "How would you compute the sum of every window, as a rolling sum?"]
+followUps: ["Why does the best sum also give the best average when every window has length k?", "How would you return the start index of the best window as well?", "What changes if you need the longest window whose sum is at most a target?", "How would you compute the sum of every window, as a rolling sum?"]
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window"]
 practice: {"platform": "GeeksforGeeks", "title": "Max Sum Subarray of Size K", "url": "https://www.geeksforgeeks.org/problems/max-sum-subarray-of-size-k5313/1"}
-previous: "interview-questions:dsa/maximum-average-subarray-i"
+previous: "interview-questions:dsa/best-time-to-buy-and-sell-stock"
 next: "interview-questions:dsa/longest-substring-without-repeating-characters"
 ---
 
@@ -98,6 +98,21 @@ for _ in range(500):
 
 big = [random.randint(-1000, 1000) for _ in range(100_000)]
 assert max_sum_k(big, 500) == max(max_sum_k(big[:50_000], 500), max_sum_k(big[49_501:], 500))
+```
+
+## Variation: the best average of k consecutive values
+
+LeetCode 643, Maximum Average Subarray I, asks for the largest *average* of a length-k block instead of the largest sum. It is the same problem: every window has the same length, so the window with the largest sum also has the largest average. Track sums as integers and divide once at the end; comparing running averages only adds floating-point rounding.
+
+```python
+import math
+
+def max_average_k(arr, k):
+    return max_sum_k(arr, k) / k
+
+assert max_average_k([3, -2, 8, 4, -6, 5], 2) == 6.0
+assert math.isclose(max_average_k([-3, -1, -7], 3), -11 / 3)   # all negative, k = n
+assert max_average_k([9], 1) == 9.0                            # single element
 ```
 
 ## Edge cases and pitfalls
