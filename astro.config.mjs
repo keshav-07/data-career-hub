@@ -2,8 +2,8 @@ import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 
-// Set SITE_URL in the deployment environment when using a custom canonical domain.
-const site = process.env.SITE_URL ?? "https://datadank.pages.dev";
+// Replace with the production domain before launch (see docs/DEPLOYMENT.md).
+const site = process.env.SITE_URL ?? "https://datadank.example";
 
 export default defineConfig({
   output: "static",
