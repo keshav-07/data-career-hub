@@ -201,7 +201,7 @@ StructField('amount', DoubleType(), True)
 struct<id:int,address:struct<city:string,zip:string>,tags:array<string>,attrs:map<string,string>>
 ```
 
-The DDL string and the `StructType` are equivalent. DDL is shorter and easy to keep in config; `StructType` is easier to build programmatically. `schema.json()` serialises a schema so you can store it alongside a pipeline and reload it with `StructType.fromJson`. Nested types (`StructType`, `ArrayType`, `MapType`) are covered in the nested data and explode lesson.
+The DDL string and the `StructType` are equivalent. DDL is shorter and easy to keep in config; `StructType` is easier to build programmatically. `schema.json()` serialises a schema so you can store it alongside a pipeline and reload it with `StructType.fromJson`. Nested types (`StructType`, `ArrayType`, `MapType`) are covered in [nested data and explode](/pyspark/nested-data-explode/).
 
 ### Common types
 

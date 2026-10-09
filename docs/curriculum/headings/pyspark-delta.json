@@ -98,5 +98,13 @@
   "Pandas API on Spark": {
     "ref": "articles:pyspark/udfs-and-safer-alternatives",
     "heading": "The pandas API on Spark"
+  },
+  "Handling nested/complex types": {
+    "ref": "articles:pyspark/nested-data-explode",
+    "heading": "Structs, arrays and maps"
+  },
+  "explode & posexplode": {
+    "ref": "articles:pyspark/nested-data-explode",
+    "heading": "explode and posexplode"
   }
 }
