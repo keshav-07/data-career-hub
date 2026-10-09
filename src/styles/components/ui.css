@@ -7,9 +7,9 @@
     gap: var(--sp-2);
     min-height: 44px;
     padding: var(--sp-2) var(--sp-5);
-    border-radius: var(--radius-pill);
+    border-radius: 10px;
     border: 1px solid transparent;
-    font-weight: 600;
+    font-weight: 650;
     font-size: var(--fs-md);
     line-height: 1.3;
     text-align: center;
@@ -28,11 +28,11 @@
     padding: 0 var(--sp-6);
     font-size: var(--fs-lg);
   }
+  /* Ink text on orange: white on #ff6a00 is 2.9:1, below WCAG AA for button-sized text. */
   .btn--primary {
-    background: var(--c-primary);
+    background: var(--gradient-primary);
     color: var(--c-on-primary);
-    border-color: var(--c-primary);
-    letter-spacing: 0.01em;
+    border-color: var(--c-primary-edge);
   }
   .btn--primary:hover {
     background: var(--c-primary-hover);

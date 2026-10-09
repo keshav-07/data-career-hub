@@ -27,7 +27,7 @@
     text-decoration-thickness: 2px;
   }
   :focus-visible {
-    outline: 2px solid var(--c-accent);
+    outline: 2px solid var(--c-focus, var(--c-accent));
     outline-offset: 3px;
   }
   ::selection {

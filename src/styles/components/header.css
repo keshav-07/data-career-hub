@@ -15,19 +15,38 @@
     height: 100%;
   }
   .wordmark {
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 1.35rem;
-    letter-spacing: -0.01em;
-    color: var(--c-text);
-    text-decoration: none;
-    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-height: 44px;
+    border-radius: var(--radius-sm);
   }
-  .wordmark:hover {
-    color: var(--c-text);
+  .wordmark__img {
+    height: 28px;
+    width: auto;
   }
-  .wordmark span {
-    color: var(--c-gold);
+  @media (min-width: 1024px) {
+    .wordmark__img {
+      height: 32px;
+    }
+  }
+  /* Logo variants: the light-background artwork by default, the dark-background artwork in dark mode. */
+  .brand-on-dark {
+    display: none;
+  }
+  :root[data-theme="dark"] .brand-on-light {
+    display: none;
+  }
+  :root[data-theme="dark"] .brand-on-dark {
+    display: block;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .brand-on-light {
+      display: none;
+    }
+    :root:not([data-theme="light"]) .brand-on-dark {
+      display: block;
+    }
   }
   .primary-nav {
     display: none;
@@ -228,12 +247,32 @@
     font-size: var(--fs-md);
   }
 
-  /* Footer */
+  /* Footer: always dark charcoal, like the brand board, with the dark-background logo. */
   .site-footer {
     margin-top: var(--sp-16);
-    border-top: 1px solid var(--c-border);
-    background: var(--c-surface);
+    background: var(--color-ink);
+    color: var(--color-cream);
     padding-block: var(--sp-12) var(--sp-8);
+    --c-focus: var(--color-orange);
+  }
+  .footer-brand {
+    display: grid;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-10);
+  }
+  .footer-brand__logo {
+    display: inline-block;
+    width: fit-content;
+    border-radius: var(--radius-sm);
+  }
+  .footer-brand__logo img {
+    height: 56px;
+    width: auto;
+  }
+  .footer-brand p {
+    margin: 0;
+    color: #c9c1b6;
+    max-width: 44ch;
   }
   .footer-grid {
     display: grid;
@@ -242,9 +281,10 @@
   }
   .footer-grid h2 {
     font-size: var(--fs-sm);
-    letter-spacing: 0.06em;
+    font-weight: 650;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--c-text-muted);
+    color: var(--color-orange);
     margin-bottom: var(--sp-3);
   }
   .footer-grid ul {
@@ -257,26 +297,29 @@
   .footer-grid a {
     display: inline-block;
     padding-block: var(--sp-1);
-    color: var(--c-text);
+    color: var(--color-cream);
     text-decoration: none;
     font-size: var(--fs-md);
   }
   .footer-grid a:hover {
-    color: var(--c-accent);
+    color: var(--color-orange);
     text-decoration: underline;
   }
   .footer-bottom {
     margin-top: var(--sp-12);
     padding-top: var(--sp-6);
-    border-top: 1px solid var(--c-border);
+    border-top: 1px solid #333;
     display: flex;
     flex-wrap: wrap;
     gap: var(--sp-2) var(--sp-6);
-    color: var(--c-text-muted);
+    color: #c9c1b6;
     font-size: var(--fs-sm);
   }
   .footer-bottom a {
-    color: var(--c-text-muted);
+    color: #c9c1b6;
+  }
+  .footer-bottom a:hover {
+    color: var(--color-orange);
   }
   @media (min-width: 768px) {
     .footer-grid {

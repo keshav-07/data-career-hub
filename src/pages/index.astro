@@ -8,6 +8,7 @@ import { getCourse } from "../utils/navigation";
 import { SITE, TECH_GROUP_LABELS } from "../data/site";
 import HomeRoadmap from "../components/planner/HomeRoadmap.astro";
 import PlannerRing from "../components/planner/PlannerRing.astro";
+import DataFlow from "../components/content/DataFlow.astro";
 import { planDays, TRACKERS, trackerRows } from "../utils/curriculum";
 
 const hubs = (await getItems("technologies")).sort(
@@ -37,11 +38,12 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
   description={SITE.description}
 >
   <section class="hero hero--plan" data-planner>
+    <DataFlow />
     <div class="container">
       <div class="hero-plan">
         <div class="hero-plan__copy">
           <p class="eyebrow">The DataDank 90-day plan</p>
-          <h1>Become a job-ready Data Engineer in 90 days.</h1>
+          <h1>Become a job-ready Data Engineer <span class="hero-plan__em">in 90 days.</span></h1>
           <p class="deck">
             One clear plan, day by day: SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS and system
             design, with mock interviews and applications built in. Every topic opens a full lesson.

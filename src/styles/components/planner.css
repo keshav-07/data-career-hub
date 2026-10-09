@@ -171,10 +171,70 @@
 
 @layer components {
   /* ---------- Homepage: the 90-day plan as the centrepiece ---------- */
+  /* Dark charcoal brand hero in both themes: the semantic tokens are re-pointed to dark values here, so the
+     buttons, stats, Day 1 card and ring inside it need no one-off colours. */
   .hero--plan {
-    background:
-      radial-gradient(1200px 420px at 85% -10%, var(--c-accent-soft), transparent 70%), var(--c-bg);
-    border-bottom: 1px solid var(--c-border);
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color-scheme: dark;
+    --c-bg: #141414;
+    --c-surface: #1e1e1e;
+    --c-surface-2: #262626;
+    --c-text: #f8f5ef;
+    --c-text-muted: #c9c1b6;
+    --c-text-subtle: #b8b1a9;
+    --c-border: #2e2c29;
+    --c-border-strong: #45413c;
+    --c-accent: #ff8533;
+    --c-accent-hover: #ffa366;
+    --c-accent-soft: #2b1a0e;
+    --c-primary-edge: #ff6a00;
+    --c-focus: #ff8533;
+    color: var(--c-text);
+    background: linear-gradient(135deg, #1a1a1a 0%, #141414 55%, #1f130b 100%);
+    border-bottom: 1px solid #000;
+  }
+  .hero--plan > .container {
+    position: relative;
+    z-index: 1;
+  }
+  .data-flow {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    mask-image: linear-gradient(90deg, transparent 15%, #000 55%);
+  }
+  .data-flow__pulses path {
+    stroke-dasharray: 6 94;
+    animation: data-flow-pulse 9s linear infinite;
+  }
+  .data-flow__pulses path + path {
+    animation-duration: 13s;
+    animation-delay: -4s;
+  }
+  @keyframes data-flow-pulse {
+    to {
+      stroke-dashoffset: -100;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .data-flow__pulses {
+      display: none;
+    }
+  }
+  /* Small screens: fewer competing visuals behind the copy. */
+  @media (max-width: 767px) {
+    .data-flow {
+      opacity: 0.45;
+      mask-image: linear-gradient(180deg, transparent 35%, #000 100%);
+    }
+    .data-flow__pulses {
+      display: none;
+    }
   }
   .hero-plan {
     display: grid;
@@ -183,8 +243,17 @@
   }
   .hero-plan__copy h1 {
     font-size: clamp(2.4rem, 5vw, 4.25rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.06;
     margin-top: var(--sp-4);
     max-width: 14ch;
+  }
+  .hero-plan__em {
+    color: var(--color-orange);
+  }
+  .hero--plan .eyebrow {
+    color: var(--color-orange);
   }
   .hero-plan__copy .deck {
     max-width: 38rem;
@@ -200,10 +269,9 @@
     padding: var(--sp-6);
     border: 1px solid var(--c-border-strong);
     border-radius: 20px;
-    background: var(--c-surface);
-    box-shadow:
-      0 1px 0 var(--c-border),
-      0 24px 48px -28px rgba(22, 23, 27, 0.35);
+    background: color-mix(in srgb, var(--c-surface) 88%, transparent);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8);
   }
   .day-card::before {
     content: "";
@@ -211,7 +279,7 @@
     inset: 0 24px auto;
     height: 3px;
     border-radius: 0 0 3px 3px;
-    background: linear-gradient(90deg, transparent, var(--c-gold), transparent);
+    background: linear-gradient(90deg, transparent, var(--c-brand), transparent);
   }
   .day-card__head {
     display: flex;
@@ -234,7 +302,6 @@
     color: var(--c-accent);
   }
   .day-card__title {
-    font-family: var(--font-display);
     font-size: 1.6rem;
     margin-top: 2px;
   }
@@ -297,11 +364,10 @@
     align-items: flex-start;
   }
   .phase-card__num {
-    font-family: var(--font-display);
     font-size: 2.6rem;
     line-height: 1;
     font-weight: 700;
-    color: var(--c-gold);
+    color: var(--c-brand);
   }
   .phase-card__days {
     font-size: var(--fs-xs);
@@ -311,7 +377,6 @@
     color: var(--c-text-muted);
   }
   .phase-card__title {
-    font-family: var(--font-display);
     font-size: 1.45rem;
     margin-top: 2px;
   }
@@ -339,7 +404,7 @@
     height: 10px;
     border-radius: 50%;
     background: var(--c-bg);
-    border: 2px solid var(--c-gold);
+    border: 2px solid var(--c-brand);
   }
   .phase-card__weeks a {
     display: grid;

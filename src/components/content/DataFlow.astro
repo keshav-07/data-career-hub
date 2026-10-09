@@ -1,0 +1,45 @@
+---
+/**
+ * Decorative orange data-flow lines for dark brand sections (the brand board's hero motif), drawn as a
+ * lightweight inline SVG. Purely decorative: hidden from assistive tech and ignores pointer events.
+ */
+const W = 1200;
+const H = 640;
+const lines = Array.from({ length: 22 }, (_, i) => {
+  const t = i / 21;
+  // Two strands that twist across each other, like a ribbon of thin threads.
+  const a = `M -40 ${600 - t * 90} C 380 ${700 - t * 420} 720 ${40 + t * 380} ${W + 40} ${120 + t * 160}`;
+  const b = `M 160 ${H + 30} C 520 ${520 - t * 360} 820 ${380 + t * 120} ${W + 40} ${20 + t * 300}`;
+  const op = (0.12 + 0.5 * Math.sin(Math.PI * t)).toFixed(2);
+  return { a, b, op };
+});
+---
+
+<svg
+  class="data-flow"
+  viewBox={`0 0 ${W} ${H}`}
+  preserveAspectRatio="xMidYMid slice"
+  aria-hidden="true"
+  focusable="false"
+>
+  <defs>
+    <radialGradient id="df-glow" cx="70%" cy="45%" r="45%">
+      <stop offset="0" stop-color="#ff6a00" stop-opacity="0.28"></stop>
+      <stop offset="1" stop-color="#ff6a00" stop-opacity="0"></stop>
+    </radialGradient>
+    <linearGradient id="df-stroke" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e65100"></stop>
+      <stop offset="0.6" stop-color="#ff6a00"></stop>
+      <stop offset="1" stop-color="#ff9a4d"></stop>
+    </linearGradient>
+  </defs>
+  <rect width={W} height={H} fill="url(#df-glow)"></rect>
+  <g fill="none" stroke="url(#df-stroke)" stroke-width="1.1" stroke-linecap="round">
+    {lines.map((l) => <path d={l.a} opacity={l.op} />)}
+    {lines.map((l, i) => i % 2 === 0 && <path d={l.b} opacity={(Number(l.op) * 0.7).toFixed(2)} />)}
+  </g>
+  <g class="data-flow__pulses" fill="none" stroke="#ffb27a" stroke-width="1.6" stroke-linecap="round">
+    <path d={lines[6].a} pathLength="100"></path>
+    <path d={lines[14].b} pathLength="100"></path>
+  </g>
+</svg>

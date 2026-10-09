@@ -1,13 +1,14 @@
-/* Self-hosted display face (SIL OFL, see /fonts/PlayfairDisplay-OFL.txt). "optional" avoids layout shift. */
+/* Plus Jakarta Sans, self-hosted variable font (SIL OFL, see /fonts/PlusJakartaSans-OFL.txt), weights 200-800.
+   "swap" keeps text visible; the fallback stack has similar metrics. */
 @font-face {
-  font-family: "Playfair Display";
-  src: url("/fonts/playfair-display-latin-wght.woff2") format("woff2");
-  font-weight: 400 900;
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/plus-jakarta-sans-latin-wght.woff2") format("woff2");
+  font-weight: 200 800;
   font-style: normal;
-  font-display: optional;
+  font-display: swap;
   unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC,
-    U+2122, U+2191, U+2193, U+2212, U+2215;
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @layer base {
   h1,
@@ -20,17 +21,18 @@
     text-wrap: balance;
   }
   h1 {
-    font-family: var(--font-display);
     font-size: var(--fs-h1);
-    font-weight: 650;
-    letter-spacing: -0.015em;
+    font-weight: 800;
+    letter-spacing: -0.025em;
   }
-  /* Display serif for page-level headings only; lesson body headings stay in the reading sans. */
+  h3,
+  h4 {
+    font-weight: 650;
+  }
   .section-head h2,
   .display {
-    font-family: var(--font-display);
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    font-weight: 800;
+    letter-spacing: -0.025em;
   }
   h2 {
     font-size: var(--fs-h2);
@@ -50,7 +52,7 @@
   .eyebrow {
     font-size: var(--fs-sm);
     font-weight: 600;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--c-accent);
   }

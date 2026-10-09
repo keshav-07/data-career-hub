@@ -7,8 +7,21 @@ const isActive = (href: string) => (href === "/" ? path === "/" : path.startsWit
 
 <header class="site-header">
   <div class="container container--course site-header__inner">
-    <a class="wordmark" href="/" aria-label={`${SITE.name} home`}>
-      Data<span>Dank</span>
+    <a class="wordmark" href="/">
+      <img
+        class="wordmark__img brand-on-light"
+        src="/brand/datadank-logo-compact-light.webp"
+        alt={`${SITE.name} home`}
+        width="444"
+        height="96"
+      />
+      <img
+        class="wordmark__img brand-on-dark"
+        src="/brand/datadank-logo-compact-dark.webp"
+        alt={`${SITE.name} home`}
+        width="451"
+        height="96"
+      />
     </a>
     <nav class="primary-nav" aria-label="Primary">
       <ul>

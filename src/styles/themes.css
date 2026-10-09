@@ -1,58 +1,64 @@
 @layer tokens {
-  /* DataDank theme: warm ivory and ink with a gold accent (light); deep charcoal with champagne gold (dark). */
+  /*
+   * DataDank brand (orange and black). Brand constants live in tokens.css (--color-*); these semantic tokens map
+   * them to light and dark surfaces. Orange used as text is darkened in light mode (#b34700) so small text
+   * passes WCAG AA; primary buttons carry ink text on orange because white on #ff6a00 is only 2.9:1.
+   */
   :root,
   :root[data-theme="light"] {
     color-scheme: light;
-    --c-bg: #f8f6f1;
+    --c-bg: #f8f5ef;
     --c-surface: #fffdf9;
-    --c-surface-2: #f1ece2;
-    --c-text: #16171b;
-    --c-text-muted: #55504a;
-    --c-text-subtle: #66605a;
-    --c-border: #e6dfd2;
-    --c-border-strong: #d4c9b6;
-    --c-border-input: #8a7f6c;
-    --c-accent: #7d5a14;
-    --c-accent-hover: #5e430e;
-    --c-accent-soft: #f6eedb;
+    --c-surface-2: #efebe3;
+    --c-text: #1a1a1a;
+    --c-text-muted: #5e5852;
+    --c-text-subtle: #6b655e;
+    --c-border: #e5e1d9;
+    --c-border-strong: #d3cdc2;
+    --c-border-input: #8a8178;
+    --c-accent: #b34700;
+    --c-accent-hover: #8f3900;
+    --c-accent-soft: #fff0e5;
     --c-on-accent: #ffffff;
-    --c-primary: #16171b;
-    --c-primary-hover: #2c2d33;
-    --c-on-primary: #f6e7c1;
-    --c-gold: #b8913a;
+    --c-primary: #ff6a00;
+    --c-primary-hover: #e65100;
+    --c-primary-edge: #e65100;
+    --c-on-primary: #1a1a1a;
+    --c-brand: #ff6a00;
     --c-success: #22693f;
     --c-warning: #a24a0b;
     --c-error: #a8231b;
     --c-info: #2f5d8a;
-    --c-code-bg: #121316;
-    --c-code-text: #ece6da;
+    --c-code-bg: #161616;
+    --c-code-text: #ede8df;
   }
 
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --c-bg: #0d0e10;
-    --c-surface: #15171a;
-    --c-surface-2: #1c1f23;
-    --c-text: #f3eee5;
-    --c-text-muted: #b9b1a3;
-    --c-text-subtle: #a0988a;
-    --c-border: #2a2d32;
-    --c-border-strong: #3b3f46;
-    --c-border-input: #857d6f;
-    --c-accent: #d9b56c;
-    --c-accent-hover: #ead097;
-    --c-accent-soft: #2a2417;
-    --c-on-accent: #16171b;
-    --c-primary: #d9b56c;
-    --c-primary-hover: #ead097;
-    --c-on-primary: #16171b;
-    --c-gold: #d9b56c;
+    --c-bg: #121212;
+    --c-surface: #1a1a1a;
+    --c-surface-2: #232323;
+    --c-text: #f8f5ef;
+    --c-text-muted: #b8b1a9;
+    --c-text-subtle: #a8a29e;
+    --c-border: #2e2c29;
+    --c-border-strong: #403d39;
+    --c-border-input: #7a7570;
+    --c-accent: #ff8533;
+    --c-accent-hover: #ffa366;
+    --c-accent-soft: #2b1a0e;
+    --c-on-accent: #1a1a1a;
+    --c-primary: #ff6a00;
+    --c-primary-hover: #ff8533;
+    --c-primary-edge: #ff6a00;
+    --c-on-primary: #1a1a1a;
+    --c-brand: #ff6a00;
     --c-success: #5fc58a;
     --c-warning: #f2a54a;
     --c-error: #f2786e;
     --c-info: #8fb4dc;
-    --c-code-bg: #0a0b0d;
-    --c-code-text: #ece6da;
+    --c-code-bg: #0b0b0b;
+    --c-code-text: #ede8df;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
   }
@@ -60,29 +66,30 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]):not([data-theme="dark"]) {
       color-scheme: dark;
-      --c-bg: #0d0e10;
-      --c-surface: #15171a;
-      --c-surface-2: #1c1f23;
-      --c-text: #f3eee5;
-      --c-text-muted: #b9b1a3;
-      --c-text-subtle: #a0988a;
-      --c-border: #2a2d32;
-      --c-border-strong: #3b3f46;
-      --c-border-input: #857d6f;
-      --c-accent: #d9b56c;
-      --c-accent-hover: #ead097;
-      --c-accent-soft: #2a2417;
-      --c-on-accent: #16171b;
-      --c-primary: #d9b56c;
-      --c-primary-hover: #ead097;
-      --c-on-primary: #16171b;
-      --c-gold: #d9b56c;
+      --c-bg: #121212;
+      --c-surface: #1a1a1a;
+      --c-surface-2: #232323;
+      --c-text: #f8f5ef;
+      --c-text-muted: #b8b1a9;
+      --c-text-subtle: #a8a29e;
+      --c-border: #2e2c29;
+      --c-border-strong: #403d39;
+      --c-border-input: #7a7570;
+      --c-accent: #ff8533;
+      --c-accent-hover: #ffa366;
+      --c-accent-soft: #2b1a0e;
+      --c-on-accent: #1a1a1a;
+      --c-primary: #ff6a00;
+      --c-primary-hover: #ff8533;
+      --c-primary-edge: #ff6a00;
+      --c-on-primary: #1a1a1a;
+      --c-brand: #ff6a00;
       --c-success: #5fc58a;
       --c-warning: #f2a54a;
       --c-error: #f2786e;
       --c-info: #8fb4dc;
-      --c-code-bg: #0a0b0d;
-      --c-code-text: #ece6da;
+      --c-code-bg: #0b0b0b;
+      --c-code-text: #ede8df;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
       --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
     }
