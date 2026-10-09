@@ -1,6 +1,6 @@
 # DataDank Content Audit Report
 
-> **Status: Initial evidence-based audit — not yet a full sign-off.** The counts and findings below describe the baseline source inspected on `main` before the remediation branch. The first implementation pass is now recorded in [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md); current-branch planner figures differ from the baseline. This report does not claim every page has been technically reviewed or that plagiarism has been conclusively detected or ruled out.
+> **Status: Initial evidence-based audit — not yet a full sign-off.** This report records verified repository findings from the source files inspected. It deliberately does not claim that every page has been technically reviewed or that plagiarism has been conclusively detected or ruled out.
 
 ## 1. Executive summary
 

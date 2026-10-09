@@ -19,10 +19,10 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
 
 <ContentLayout
   title="90-Day Data Engineer Study Plan"
-  description="A structured 90-day Data Engineering interview plan that builds foundations before advanced topics, with practice, review, project work and weekly checkpoints."
+  description="A day-by-day 90-day plan for Data Engineering interviews: SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS and system design each day, with milestones."
   crumbs={[HOME, { label: "Study planner", href: "/planner/" }, { label: "90-day plan" }]}
   eyebrow="Study planner"
-  deck={`${days.length} days, ${hours} planned hours. Most days take 2–3 hours and focus on one main capability plus practice or reinforcement. Time estimates are guides, not guarantees of mastery.`}
+  deck={`${days.length} days, ${hours} planned hours: about 3 hours on weekdays and 6 at weekends. Each day pairs one topic from every skill with a mock interview, revision or applications. Every topic links to its lesson.`}
   width="wide"
   indexable
 >
@@ -53,7 +53,7 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
         <h2 id={`phase-${pi + 1}`}>{phase}</h2>
         {weeksOf(phase).map(([week, list]) => (
           <div class="pl-week">
-            <h3 id={days.find((x) => x.week === week)?.day === list[0].day ? `week-${week}` : `phase-${pi + 1}-week-${week}`}>
+            <h3 id={`week-${week}`}>
               Week {week}
               {milestone(week) && (
                 <span class="pl-milestone">{milestone(week)!.replace(/^Wk\d+:\s*/, "")}</span>
@@ -79,13 +79,15 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
                         {t.href ? <a href={t.href}>{t.topic}</a> : <span>{t.topic}</span>}
                       </li>
                     ))}
+                    <li>
+                      <span class="pl-tasks__skill">Also</span>
+                      <span>{d.mock}</span>
+                    </li>
                   </ul>
-                  {(d.monthly || d.outcome || d.budget || d.optional) && (
+                  {(d.monthly || d.outcome) && (
                     <p class="pl-month">
                       {d.monthly && <strong>{d.monthly}</strong>}
-                      {d.outcome && <span> Completion evidence: {d.outcome}.</span>}
-                      {d.budget && <span> Time budget: {d.budget}.</span>}
-                      {d.optional && <span> Optional: {d.optional}</span>}
+                      {d.outcome && <span> Target: {d.outcome}.</span>}
                     </p>
                   )}
                 </li>
