@@ -448,6 +448,103 @@
   .short-answer p {
     font-size: var(--fs-lg);
   }
+  /* External practice link (LeetCode, DataLemur, HackerRank) under the short answer. */
+  .practice-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3) var(--sp-5);
+    max-width: var(--w-reading);
+    margin-top: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    background: var(--c-surface);
+  }
+  .practice-links__body {
+    flex: 1 1 16rem;
+    min-width: 0;
+  }
+  .practice-links__eyebrow {
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--c-accent);
+  }
+  .practice-links__text {
+    margin-top: 2px;
+    font-size: var(--fs-sm);
+    color: var(--c-text-muted);
+  }
+  .practice-links__main {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    column-gap: var(--sp-4);
+    min-width: 0;
+    max-width: 100%;
+    padding: 8px 10px 8px 16px;
+    border: 1px solid var(--c-border-strong);
+    border-radius: 10px;
+    color: var(--c-text);
+    text-decoration: none;
+    transition:
+      border-color var(--dur-fast),
+      background var(--dur-fast);
+  }
+  .practice-links__main:hover {
+    border-color: var(--c-brand);
+    background: var(--c-surface-2);
+    color: var(--c-text);
+  }
+  .practice-links__platform {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--c-text-subtle);
+  }
+  .practice-links__num {
+    letter-spacing: 0.02em;
+  }
+  .practice-links__badge {
+    padding: 0 6px;
+    border: 1px solid var(--c-border-strong);
+    border-radius: var(--radius-pill);
+    font-size: 0.625rem;
+    letter-spacing: 0.04em;
+  }
+  .practice-links__title {
+    grid-column: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 650;
+  }
+  .practice-links__arrow {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--gradient-button);
+    color: #fff;
+    font-weight: 700;
+  }
+  @media (max-width: 479px) {
+    .practice-links__main {
+      width: 100%;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
   .followups {
     list-style: none;
     padding: 0;

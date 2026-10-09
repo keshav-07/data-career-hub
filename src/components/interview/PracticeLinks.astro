@@ -1,0 +1,36 @@
+---
+/**
+ * "Practise it yourself": one verified link to the same problem on an external judge (LeetCode, DataLemur,
+ * LintCode, HackerRank). DataDank's explanations and solutions stay our own; this only points to where the
+ * problem can be run against the platform's tests.
+ */
+interface Props {
+  link?: { platform: string; number?: number; title: string; url: string; premium: boolean };
+}
+const { link } = Astro.props;
+---
+
+{link && (
+  <aside class="practice-links" aria-labelledby="practice-h">
+    <div class="practice-links__body">
+      <h2 id="practice-h" class="practice-links__eyebrow">
+        Practise it yourself
+      </h2>
+      <p class="practice-links__text">
+        Run your solution against the platform's test cases once you have worked through it here.
+      </p>
+    </div>
+    <a class="practice-links__main" href={link.url} target="_blank" rel="noopener external">
+      <span class="practice-links__platform">
+        {link.platform}
+        {link.number && <span class="practice-links__num">#{link.number}</span>}
+        {link.premium && <span class="practice-links__badge">Premium</span>}
+      </span>
+      <span class="practice-links__title">{link.title}</span>
+      <span class="practice-links__arrow" aria-hidden="true">
+        ↗
+      </span>
+      <span class="visually-hidden"> (opens {link.platform} in a new tab)</span>
+    </a>
+  </aside>
+)}

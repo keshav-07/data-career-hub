@@ -55,6 +55,37 @@ const articles = defineCollection({
   }),
 });
 
+/**
+ * Platforms a question can link out to for hands-on practice, with the only hosts their links may use.
+ * Preference: LeetCode or DataLemur; LintCode or HackerRank only when the problem is missing or paywalled there.
+ */
+const PRACTICE_HOSTS = {
+  LeetCode: ["leetcode.com"],
+  DataLemur: ["datalemur.com"],
+  HackerRank: ["www.hackerrank.com", "hackerrank.com"],
+  LintCode: ["www.lintcode.com"],
+} as const;
+const practiceLink = z
+  .object({
+    platform: z.enum(["LeetCode", "DataLemur", "HackerRank", "LintCode"]),
+    /** Problem number on the platform, when it has one (LeetCode, LintCode). */
+    number: z.number().int().positive().optional(),
+    /** The problem's name as the platform shows it. DataDank never copies the problem text itself. */
+    title: z.string().min(2).max(120),
+    url: z.url(),
+    premium: z.boolean().default(false),
+  })
+  .refine(
+    (l) => {
+      const u = new URL(l.url);
+      return (
+        u.protocol === "https:" &&
+        (PRACTICE_HOSTS[l.platform] as readonly string[]).includes(u.host)
+      );
+    },
+    { message: "practice url must be https on the platform's own domain" },
+  );
+
 const interviewQuestions = defineCollection({
   loader: glob({ pattern: "**/*.{md,mdx}", base: "./src/content/interview-questions" }),
   schema: z.object({
@@ -70,6 +101,8 @@ const interviewQuestions = defineCollection({
       .default("representative"),
     shortAnswer: z.string().min(60).max(800),
     followUps: z.array(z.string()).default([]),
+    /** External practice: one verified link to the same problem on a judge site. */
+    practice: practiceLink.optional(),
   }),
 });
 

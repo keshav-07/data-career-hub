@@ -3,6 +3,7 @@ import { getItems, getByRef, type ItemOf } from "../../../utils/content";
 import ArticleLayout from "../../../layouts/ArticleLayout.astro";
 import NextStep from "../../../components/content/NextStep.astro";
 import Callout from "../../../components/content/Callout.astro";
+import PracticeLinks from "../../../components/interview/PracticeLinks.astro";
 import { render } from "astro:content";
 import { breadcrumbsFor } from "../../../utils/breadcrumbs";
 import { relatedGroups } from "../../../utils/related";
@@ -36,15 +37,13 @@ const nav = await interviewNav(item);
   titleClass="question-header-title"
   meta={[d.difficulty, typeText, `~${d.estimatedMinutes} min`, `${d.interviewRelevance} relevance`]}
 >
-  <section
-    slot="header-extra"
-    class="short-answer"
-    aria-labelledby="short-answer-h"
-    style="margin-top: var(--sp-6)"
-  >
-    <h2 id="short-answer-h">Short answer</h2>
-    <p>{d.shortAnswer}</p>
-  </section>
+  <Fragment slot="header-extra">
+    <section class="short-answer" aria-labelledby="short-answer-h" style="margin-top: var(--sp-6)">
+      <h2 id="short-answer-h">Short answer</h2>
+      <p>{d.shortAnswer}</p>
+    </section>
+    <PracticeLinks link={d.practice} />
+  </Fragment>
 
   {prerequisites.length > 0 && (
     <Callout tone="info" title="Review first">

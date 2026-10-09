@@ -52,6 +52,25 @@ sources:
 References use `"<collection>:<id>"`. Related links are shown on both pages automatically.
 The full schema for each collection is in `src/content.config.ts`.
 
+### External practice links (interview questions)
+
+An interview question may carry **one** `practice` link to the same problem on a judge site, shown as
+"Practise it yourself" under the short answer:
+
+```yaml
+practice: { "platform": "LeetCode", "number": 1, "title": "Two Sum", "url": "https://leetcode.com/problems/two-sum/" }
+```
+
+- Prefer LeetCode or DataLemur. Use LintCode or HackerRank only when the problem is missing there or is
+  subscription-only (LeetCode Premium), so every reader can open it.
+- Add a link only when the platform problem genuinely matches the page (same task and inputs). Case studies and
+  conceptual questions usually have none.
+- Verify the URL before adding it, from the platform's own page or a search result that shows that exact URL and
+  title. Do not scrape the platform or call its API.
+- `title` is the platform's problem name only. Never copy its problem statement, test cases or editorial; DataDank's
+  explanations and solutions stay original.
+- The build rejects other platforms and URLs that are not `https` on the platform's own domain.
+
 ## MDX components
 
 `.mdx` files may use `<Callout tone="info|success|warning|danger|neutral" title="...">...</Callout>`.
