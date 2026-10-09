@@ -2,7 +2,7 @@
 
 > This is a tracked plan based on the initial audit report. Tasks are not complete until the validation evidence is recorded. Do not modify or publish content in bulk without reviewing the affected material.
 
-> **Implementation update:** A first remediation pass is on branch `audit/remediation-oct-2026`. The planner, homepage copy, canonical-origin guard, and automated planner checks have been changed, but task checkboxes remain open until the full validation workflow passes. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).
+> **Implementation update:** A first remediation pass is on branch `audit/remediation-oct-2026`. The planner, homepage copy, canonical-origin guard, and automated planner checks have been changed. The full validation workflow passes; REM-005 and REM-009 are checked, while lesson-level and editorial tasks remain open. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).
 
 ## Non-negotiable constraints
 - Preserve Astro, existing URL conventions, visual design, content schemas, and working functionality unless evidence justifies a change.
@@ -99,7 +99,11 @@
 - **Validation:** Inspect built HTML and representative browser-rendered pages; use Search Console only if access/evidence is available.
 - **Done when:** Every route has a recorded SEO/editorial decision and no high-priority defects remain.
 
-## Implementation status\n\nREM-005 and REM-009 have implementation and automated validation evidence on branch `audit/remediation-oct-2026`. The 90-day planner budget check passes for all 90 days, and the built-site QA rejects the placeholder canonical origin; the full validation workflow passed. Other items remain open where lesson-by-lesson, originality, external-link, or human editorial evidence is still missing. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).\n\n## Recommended execution order
+## Implementation status
+
+REM-005 and REM-009 have implementation and automated validation evidence on branch `audit/remediation-oct-2026`. The 90-day planner budget check passes for all 90 days, and the built-site QA rejects the placeholder canonical origin; the full validation workflow passed. Other items remain open where lesson-by-lesson, originality, external-link, or human editorial evidence is still missing. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).
+
+## Recommended execution order
 1. REM-001 (promise correction).
 2. REM-002 to REM-005 (planner repair as one coherent change).
 3. REM-009 and automated release guards.
