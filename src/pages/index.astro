@@ -79,13 +79,15 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
         </div>
         <aside class="day-card" aria-labelledby="day-card-h" data-day-card data-pl-day-card>
           <div class="day-card__head">
-            <div>
+            <div class="day-card__heading">
               <p class="day-card__eyebrow">
-                <span data-dc-status>Day 1 of {days.length}</span> ·
-                <span data-dc-theme>{day1.theme}</span>
+                <span data-dc-status>Day 1 / {days.length}</span>
+                <span class="day-card__pill" data-dc-title>
+                  Your first day
+                </span>
               </p>
-              <h2 id="day-card-h" class="day-card__title" data-dc-title>
-                Your first day
+              <h2 id="day-card-h" class="day-card__title" data-dc-theme>
+                {day1.theme}
               </h2>
             </div>
             <PlannerRing
@@ -98,31 +100,42 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
           <ul class="day-card__tasks" role="list" data-dc-tasks>
             {day1.tasks.map((t) => (
               <li>
-                <span>{t.skill}</span>
-                {t.href ? <a href={t.href}>{t.topic}</a> : <span>{t.topic}</span>}
+                {t.href ? (
+                  <a class="day-task" href={t.href}>
+                    <span class="day-task__skill">{t.skill}</span>
+                    <span class="day-task__topic">{t.topic}</span>
+                  </a>
+                ) : (
+                  <span class="day-task">
+                    <span class="day-task__skill">{t.skill}</span>
+                    <span class="day-task__topic">{t.topic}</span>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
-          <p class="day-card__foot" data-dc-foot>
-            {day1.hours} hours · plus: {day1.mock.toLowerCase()}
-          </p>
-          <div class="day-card__controls js-only">
-            <button type="button" class="day-card__nav" data-dc-prev aria-label="Previous day">
-              <span aria-hidden="true">‹</span>
-            </button>
-            <label class="day-card__done">
-              <input
-                type="checkbox"
-                data-pl-day="1"
-                data-hours={day1.hours}
-                data-dc-check
-                aria-label="Day 1 complete"
-              />
-              <span data-dc-check-label>Mark complete</span>
-            </label>
-            <button type="button" class="day-card__nav" data-dc-next aria-label="Next day">
-              <span aria-hidden="true">›</span>
-            </button>
+          <div class="day-card__bar">
+            <p class="day-card__foot" data-dc-foot>
+              {day1.hours} h · {day1.mock}
+            </p>
+            <div class="day-card__controls js-only">
+              <button type="button" class="day-card__nav" data-dc-prev aria-label="Previous day">
+                <span aria-hidden="true">‹</span>
+              </button>
+              <label class="day-card__done">
+                <input
+                  type="checkbox"
+                  data-pl-day="1"
+                  data-hours={day1.hours}
+                  data-dc-check
+                  aria-label="Day 1 complete"
+                />
+                <span data-dc-check-label>Mark complete</span>
+              </label>
+              <button type="button" class="day-card__nav" data-dc-next aria-label="Next day">
+                <span aria-hidden="true">›</span>
+              </button>
+            </div>
           </div>
           <p class="visually-hidden" aria-live="polite" data-dc-live></p>
           <script

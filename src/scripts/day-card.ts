@@ -42,7 +42,7 @@ export function initDayCard() {
     const done = doneDays();
     const open = firstOpen();
     const isDone = done[String(shown)] !== undefined;
-    $("[data-dc-status]").textContent = `Day ${shown} of ${total}`;
+    $("[data-dc-status]").textContent = `Day ${shown} / ${total}`;
     $("[data-dc-theme]").textContent = day.th;
     $("[data-dc-title]").textContent = isDone
       ? "Completed"
@@ -57,16 +57,21 @@ export function initDayCard() {
     list.replaceChildren(
       ...day.t.map(([skill, topic, href]) => {
         const li = document.createElement("li");
+        const tile = document.createElement(href ? "a" : "span");
+        tile.className = "day-task";
+        if (href) (tile as HTMLAnchorElement).href = href;
         const s = document.createElement("span");
+        s.className = "day-task__skill";
         s.textContent = skill;
-        const t = document.createElement(href ? "a" : "span");
+        const t = document.createElement("span");
+        t.className = "day-task__topic";
         t.textContent = topic;
-        if (href) (t as HTMLAnchorElement).href = href;
-        li.append(s, t);
+        tile.append(s, t);
+        li.append(tile);
         return li;
       }),
     );
-    $("[data-dc-foot]").textContent = `${day.h} hours · plus: ${day.m.toLowerCase()}`;
+    $("[data-dc-foot]").textContent = `${day.h} h · ${day.m}`;
     check.dataset.plDay = String(shown);
     check.dataset.hours = String(day.h);
     check.checked = isDone;
