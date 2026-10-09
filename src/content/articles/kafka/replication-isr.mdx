@@ -1,0 +1,459 @@
+---
+title: "Kafka Replication: Leaders, ISR, min.insync.replicas and KRaft"
+seoTitle: "Kafka Replication: ISR, min.insync and KRaft"
+description: "How Kafka replicates partitions: leaders and followers, the in-sync replica set, min.insync.replicas, unclean leader election, the high watermark, rack awareness and KRaft."
+technology: ["kafka"]
+topic: ["replication", "isr", "high-watermark", "kraft"]
+difficulty: "Advanced"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+learningObjectives:
+  - "Explain how leaders and followers replicate a partition through fetch requests"
+  - "Predict how the ISR, min.insync.replicas and acks decide whether a write succeeds"
+  - "Explain how the high watermark controls what consumers can read and what is lost after a failure"
+  - "Weigh unclean leader election and eligible leader replicas"
+  - "Configure rack awareness and describe how KRaft replaced ZooKeeper"
+prerequisites: ["articles:kafka/producers", "articles:kafka/consumer-groups-rebalancing"]
+related: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/log-storage-retention-compaction"]
+previous: "articles:kafka/consumer-groups-rebalancing"
+sources:
+  - { label: "Apache Kafka documentation: Design (replication)", url: "https://kafka.apache.org/documentation/#design" }
+  - { label: "Apache Kafka 4.0.0 release announcement", url: "https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/" }
+  - { label: "Apache Kafka documentation: Upgrading to 4.0", url: "https://kafka.apache.org/40/getting-started/upgrade/" }
+  - { label: "Apache Kafka documentation: Operations", url: "https://kafka.apache.org/39/operations/" }
+versionContext: "ISR, min.insync.replicas, eligible leader replica and truncation results, and the KRaft quorum output, come from a three-node Apache Kafka 4.3.1 cluster in combined broker-and-controller mode on one machine (Java 21), with brokers stopped deliberately. Defaults are from the 4.3.1 configuration reference. The high-watermark simulation runs on plain Python 3. Rack-aware follower fetching and unclean leader election were not executed; their configuration is shown from the documentation."
+---
+
+Replication is what lets Kafka lose a broker without losing data or stopping. It is also where the most precise interview questions live: what exactly `acks=all` waits for, why a write can be "successful" and still disappear, and what happens when every in-sync replica is gone. This lesson works through the mechanics on a real three-broker cluster, then covers rack awareness and KRaft, the Raft-based metadata layer that replaced ZooKeeper in Kafka 4.0.
+
+## Sample setup
+
+The experiments use a single-partition topic with three replicas and `min.insync.replicas=2`, the standard durable configuration:
+
+```bash
+bin/kafka-topics.sh --bootstrap-server localhost:19092 --create --topic ledger \
+  --partitions 1 --replication-factor 3 --config min.insync.replicas=2
+```
+
+A small Java producer sends one record with a chosen `acks` value, a 5-second request timeout and an 8-second delivery timeout. Brokers are stopped one at a time with `kill`, which looks like a crash to the cluster.
+
+## Leader and followers
+
+**What it is.** Each partition has one **leader** replica and zero or more **followers**. Producers write to the leader, and by default consumers read from it too. Followers exist to take over if the leader fails.
+
+### How it works
+
+- Followers **pull**: each follower broker runs fetcher threads that send fetch requests to the leader, exactly like a consumer, and append what they receive to their own copy of the log.
+- The leader keeps track of how far each follower has fetched. That is how it knows when a record is on enough replicas.
+- Every leader change increments the partition's **leader epoch**. Replicas use the epoch history (`leader-epoch-checkpoint`) to find where their log diverges from a new leader and truncate the difference.
+- The **controller** (one of the KRaft controllers) decides leadership: when a broker fails, it picks a new leader for each partition that broker led.
+
+```text
+Topic: ledger	Partition: 0	Leader: 1	Replicas: 1,2,3	Isr: 1,2,3	Elr: 	LastKnownElr:
+```
+
+`Replicas` is the assigned list, and its first entry is the **preferred leader**. After failures, leadership drifts; `auto.leader.rebalance.enable=true` (the default) moves it back to preferred leaders periodically.
+
+### Pitfalls
+
+- **Leadership concentration after restarts.** In the experiments behind this course, after a full restart most leaders sat on one broker until preferred-leader rebalancing ran. Load follows leadership, not replicas.
+- **Assuming followers serve reads.** They do not, unless you configure follower fetching (see rack awareness).
+
+### In interviews
+
+Explain the pull model, that leaders track follower progress, and that the controller elects leaders. Mention leader epochs if asked how Kafka avoids diverging logs.
+
+## In-Sync Replicas (ISR)
+
+**What it is.** The **ISR** is the set of replicas that are caught up with the leader, including the leader itself. Only ISR members count for `acks=all`, and normally only they can become leader.
+
+### How it works
+
+- A follower is removed from the ISR when it has not fetched, or not caught up to the leader's log end, for `replica.lag.time.max.ms` (30 seconds by default). A broker that shuts down or is fenced by the controller is removed straight away.
+- A removed follower keeps fetching, and rejoins the ISR once it has caught up.
+- `acks=all` means "every replica currently in the ISR has the record". The ISR can shrink, so the meaning of `acks=all` changes with cluster health.
+
+### Worked example: the ISR shrinking
+
+Stopping broker 3, then broker 2, while the leader (broker 1) stays up:
+
+```text
+Topic: ledger	Partition: 0	Leader: 1	Replicas: 1,2,3	Isr: 1,2,3	Elr: 	LastKnownElr:
+acks=all 'deposit 100': written at offset 0
+## stop broker 3
+Topic: ledger	Partition: 0	Leader: 1	Replicas: 1,2,3	Isr: 1,2	Elr: 	LastKnownElr:
+acks=all 'deposit 50': written at offset 1
+## stop broker 2
+Topic: ledger	Partition: 0	Leader: 1	Replicas: 1,2,3	Isr: 1	Elr: 2	LastKnownElr:
+```
+
+The ISR went from three replicas to two to one within seconds. `Elr: 2` is explained under unclean leader election below.
+
+### Monitoring the ISR
+
+| Signal | Meaning |
+|--------|---------|
+| `UnderReplicatedPartitions` (broker JMX) | partitions whose ISR is smaller than their replica list |
+| `UnderMinIsrPartitionCount` | partitions currently rejecting `acks=all` writes |
+| `IsrShrinksPerSec` / `IsrExpandsPerSec` | flapping replicas: slow disks, network trouble, GC pauses |
+| `kafka-topics.sh --describe --under-replicated-partitions` | the same from the CLI |
+
+### Pitfalls
+
+- **Flapping ISR** (repeated shrink and expand) usually points to an overloaded follower, not a bad setting. Raising `replica.lag.time.max.ms` hides the symptom.
+- **Producer timeouts shorter than ISR detection.** The docs recommend keeping the producer's `request.timeout.ms` above `replica.lag.time.max.ms`, to reduce duplicate sends while a slow follower is being removed.
+
+### In interviews
+
+Define the ISR, how replicas leave and rejoin it, and that `acks=all` waits for the current ISR, not for all replicas.
+
+## min.insync.replicas
+
+**What it is.** `min.insync.replicas` is the minimum ISR size for the leader to accept an `acks=all` write. It turns `acks=all` from "whoever is in sync" into "at least N copies". The default is 1, which gives no extra protection.
+
+### Worked example: writes stop instead of becoming unsafe
+
+Continuing the experiment with only broker 1 in the ISR and `min.insync.replicas=2`:
+
+```text
+acks=all 'withdraw 30': TimeoutException: Expiring 1 record(s) for ledger-0:8001 ms has passed since batch creation. The request has not been sent, or no server response has been received yet.
+acks=1 'withdraw 20': written at offset 2
+```
+
+The leader refused the `acks=all` write. The broker returns `NOT_ENOUGH_REPLICAS`, which the producer treats as retriable, so the application only saw a `TimeoutException` when the 8-second delivery timeout ran out. The `acks=1` write was accepted, because `min.insync.replicas` only applies to `acks=all`. What happened to that record is the subject of the high watermark section.
+
+### Choosing values
+
+| Replication factor | `min.insync.replicas` | Tolerates without blocking `acks=all` writes | Acknowledged writes survive |
+|---|---|---|---|
+| 3 | 2 | 1 broker down | any 1 broker loss |
+| 3 | 1 | 2 brokers down | nothing guaranteed if the only ISR member dies |
+| 3 | 3 | 0 brokers down (every restart blocks writes) | 2 broker losses |
+| 2 | 2 | 0 | 1 broker loss |
+
+### Pitfalls
+
+- **Setting it equal to the replication factor**: every rolling restart blocks producers.
+- **Relying on the broker default.** On clusters where eligible leader replicas are enabled (the default for new clusters from 4.1), `min.insync.replicas` is managed as a cluster-level setting and broker-level overrides are not allowed; topic-level settings still work.
+- **Producers with `acks=1`** ignore it completely.
+
+### In interviews
+
+"How do you guarantee no data loss with one broker failure?" Replication factor 3, `min.insync.replicas=2`, `acks=all`, unclean leader election disabled, and producer retries with idempotence. Explain that the trade-off is availability: writes stop when two replicas are down.
+
+## Unclean leader election
+
+**What it is.** If every ISR replica is unavailable, the controller can either wait for one to come back, or elect an **out-of-sync** replica (an *unclean* election). The second option restores availability but discards every record the new leader never received. `unclean.leader.election.enable` is `false` by default.
+
+### How it works
+
+1. Leader b1 has offsets 0 to 5 committed. Follower b3 dropped out of the ISR at offset 3.
+2. b1 and every other ISR member die.
+3. With unclean election disabled, the partition stays **offline** until an ISR member returns.
+4. With it enabled, b3 becomes leader at offset 3. Offsets 3 to 5 are gone, and new writes reuse those offset numbers. When b1 returns, it truncates its log to match b3.
+
+### Eligible leader replicas (ELR)
+
+Kafka 4.0 added **eligible leader replicas** (KIP-966), enabled by default on new clusters from 4.1. Kafka 4.x enforces a "strict" `min.insync.replicas` rule: the high watermark cannot advance while the ISR is smaller than `min.insync.replicas`. A replica that leaves the ISR in that state is therefore guaranteed to hold every committed record, so the controller records it in the ELR and may elect it as a *clean* leader even though it is no longer in the ISR.
+
+In the experiment, broker 2 was stopped when the ISR was `[1,2]` with a minimum of 2, so it went into the ELR (`Elr: 2`) rather than simply disappearing. When the whole cluster later restarted, broker 2 became leader with no data loss, which would have required an unclean election before ELR.
+
+### Running an unclean election deliberately
+
+{/* noexec */}
+```bash
+# Per topic, as a last resort (the controller then performs the election)
+bin/kafka-configs.sh --bootstrap-server localhost:9092 --alter --entity-type topics \
+  --entity-name ledger --add-config unclean.leader.election.enable=true
+
+# Or one-off for specific partitions
+bin/kafka-leader-election.sh --bootstrap-server localhost:9092 \
+  --election-type UNCLEAN --topic ledger --partition 0
+```
+
+### Pitfalls
+
+- **Enabling it cluster-wide "for availability"** turns rare outages into silent data loss.
+- **Forgetting to turn it off** after an emergency.
+- **Downstream offsets.** After an unclean election, offsets are reused; consumers whose committed offsets are past the new log end reset according to `auto.offset.reset`.
+
+### In interviews
+
+Present it as a consistency-versus-availability choice. Mention that it is off by default, what is lost, and that ELR (Kafka 4.x) widens the set of safe leaders without accepting data loss.
+
+## High watermark
+
+**What it is.** The **high watermark** (HW) is the offset up to which a record is on every ISR replica, so it is **committed**. Consumers can only read below the HW. The leader's **log end offset** (LEO) can be ahead of it.
+
+### How it works
+
+- Each follower's fetch request tells the leader the follower's LEO. The leader sets the HW to the minimum LEO across the ISR, and tells followers the new HW in fetch responses.
+- `acks=all` responses are sent when the HW passes the record, which is why `acks=all` adds latency of at least one follower fetch round trip.
+- Under the strict rule in Kafka 4.x, the HW does not advance while the ISR is below `min.insync.replicas`.
+- After a leader change, replicas truncate everything above the point agreed by leader epochs, which can only include records that were never committed.
+
+### Worked example: an acknowledged write that vanished
+
+In the experiment, the `acks=1` write `withdraw 20` was written at offset 2 while only broker 1 was in the ISR. The latest offset visible to consumers (which `kafka-get-offsets.sh` reports from the HW) stayed at 2, so offset 2 was never readable:
+
+```text
+acks=1 'withdraw 20': written at offset 2
+  latest visible offset (high watermark): ledger:0:2
+  records in leader's log: 3 batches
+```
+
+Then all three brokers restarted. Broker 2, which was in the ELR, became leader; broker 1 found its log had diverged and truncated it:
+
+```text
+INFO [ReplicaFetcher replicaId=1, leaderId=2, fetcherId=0] Truncating partition ledger-0 with TruncationState(offset=2, completed=true) ...
+INFO [UnifiedLog partition=ledger-0, dir=.../data1] Truncating to offset 2
+```
+
+Afterwards every broker had two batches, and a consumer reading from the beginning saw only `deposit 100` and `deposit 50`. The producer had received a success for `withdraw 20`, and the record was lost. That is exactly the risk of `acks=1`, shown on a real cluster.
+
+### Simulating HW advancement
+
+The model below applies the rule "HW = minimum LEO across the ISR, frozen while the ISR is below `min.insync.replicas`". It skips the extra fetch round trip a real leader needs to learn a follower's position.
+
+```python
+class PartitionSim:
+    def __init__(self, replicas, min_isr):
+        self.leo = {r: 0 for r in replicas}     # log-end offset per replica
+        self.leader = replicas[0]
+        self.isr = set(replicas)
+        self.min_isr = min_isr
+        self.hw = 0
+
+    def produce(self, n=1):
+        self.leo[self.leader] += n
+
+    def fetch(self, follower):
+        """Follower copies everything up to the leader's LEO, then the leader recomputes the HW."""
+        self.leo[follower] = self.leo[self.leader]
+        self.advance_hw()
+
+    def drop_from_isr(self, follower):
+        self.isr.discard(follower)              # lagged longer than replica.lag.time.max.ms
+        self.advance_hw()
+
+    def advance_hw(self):
+        if len(self.isr) < self.min_isr:
+            return                              # strict min ISR: HW frozen (Kafka 4.x)
+        self.hw = max(self.hw, min(self.leo[r] for r in self.isr))
+
+    def show(self, step):
+        leos = " ".join(f"b{r}={o}" for r, o in self.leo.items())
+        print(f"{step:34} LEO[{leos}] ISR={sorted(self.isr)} HW={self.hw}")
+
+p = PartitionSim(replicas=[1, 2, 3], min_isr=2)
+p.produce(3);          p.show("leader appends offsets 0-2")
+p.fetch(2);            p.show("b2 fetches")
+p.fetch(3);            p.show("b3 fetches")
+p.produce(2);          p.show("leader appends offsets 3-4")
+p.fetch(2);            p.show("b2 fetches (b3 is slow)")
+p.drop_from_isr(3);    p.show("b3 removed from ISR")
+p.produce(1);          p.show("leader appends offset 5")
+p.drop_from_isr(2);    p.show("b2 removed: ISR below min")
+p.fetch(2); p.isr.add(2); p.advance_hw(); p.show("b2 catches up and rejoins")
+```
+
+```text
+leader appends offsets 0-2         LEO[b1=3 b2=0 b3=0] ISR=[1, 2, 3] HW=0
+b2 fetches                         LEO[b1=3 b2=3 b3=0] ISR=[1, 2, 3] HW=0
+b3 fetches                         LEO[b1=3 b2=3 b3=3] ISR=[1, 2, 3] HW=3
+leader appends offsets 3-4         LEO[b1=5 b2=3 b3=3] ISR=[1, 2, 3] HW=3
+b2 fetches (b3 is slow)            LEO[b1=5 b2=5 b3=3] ISR=[1, 2, 3] HW=3
+b3 removed from ISR                LEO[b1=5 b2=5 b3=3] ISR=[1, 2] HW=5
+leader appends offset 5            LEO[b1=6 b2=5 b3=3] ISR=[1, 2] HW=5
+b2 removed: ISR below min          LEO[b1=6 b2=5 b3=3] ISR=[1] HW=5
+b2 catches up and rejoins          LEO[b1=6 b2=6 b3=3] ISR=[1, 2] HW=6
+```
+
+A slow follower holds the HW back (HW 3 while b3 lags) until it is removed from the ISR, at which point the HW jumps to 5. Offset 5 only becomes visible once a second replica has it.
+
+### Pitfalls
+
+- **"Committed" means below the HW**, not "acknowledged to the producer". With `acks=1` the two differ.
+- **End-to-end latency includes replication.** A slow follower in the ISR delays every `acks=all` write and every consumer, until it is dropped.
+- **Transactional consumers** read up to the *last stable offset*, which can be lower than the HW while a transaction is open (see delivery semantics).
+
+### In interviews
+
+"Can a consumer read a record that is later lost?" Not under normal leader changes: consumers read below the HW, and only records above it are truncated. A producer, however, can receive an `acks=1` success for a record that is later truncated, as shown above.
+
+## Replica fetcher
+
+**What it is.** The replica fetcher is the broker component that runs follower replication: background threads that send fetch requests to leaders and append the results.
+
+### How it works
+
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `num.replica.fetchers` | 1 | fetcher threads per source broker; more threads add parallelism for many partitions |
+| `replica.fetch.max.bytes` | 1048576 | per-partition bytes per fetch (soft: a larger first batch is still returned) |
+| `replica.fetch.response.max.bytes` | 10485760 | cap for a whole fetch response |
+| `replica.fetch.wait.max.ms` | 500 | how long the leader holds a fetch when there is no new data |
+| `replica.fetch.min.bytes` | 1 | minimum data before the leader answers |
+| `replica.lag.time.max.ms` | 30000 | time before a lagging follower is removed from the ISR |
+
+The truncation log line above comes from a replica fetcher (`[ReplicaFetcher replicaId=1, leaderId=2, fetcherId=0]`): before fetching from a new leader, it checks the epoch history and truncates any divergent tail.
+
+### Pitfalls
+
+- **Under-replication after adding a broker or reassigning partitions**: catching up competes with client traffic. Use replication throttles during reassignments.
+- **Raising `replica.lag.time.max.ms`** to stop ISR shrinks also delays detection of genuinely stuck followers, and with it `acks=all` latency during failures.
+
+### In interviews
+
+Explain that followers replicate by fetching like consumers, name `num.replica.fetchers` as the parallelism knob, and connect fetcher lag to ISR shrinks and the high watermark.
+
+## Rack awareness
+
+**What it is.** Setting `broker.rack` (for example to the cloud availability zone) lets Kafka spread each partition's replicas across racks, so losing a whole zone loses at most one replica per partition. It also enables **follower fetching**, where consumers read from a replica in their own zone to save cross-zone traffic.
+
+### How it works
+
+- With `broker.rack` set on every broker, topic creation and the reassignment tool place replicas in different racks where possible. The cluster in this course has racks `rack-1` to `rack-3`, one broker each, so every partition's three replicas already sit in three racks.
+- Follower fetching (KIP-392) needs a broker setting and a consumer setting:
+
+{/* noexec */}
+```properties
+# Broker (server.properties)
+broker.rack=eu-west-1a
+replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector
+
+# Consumer
+client.rack=eu-west-1a
+```
+
+- Followers can only serve records below the high watermark they know about, so follower reads can be slightly behind the leader.
+- The consumer protocol's server-side assignors do not yet fully support rack-aware partition assignment (a documented limitation in 4.3), which matters if you rely on it to reduce cross-zone traffic.
+
+### Pitfalls
+
+- **Unbalanced racks.** With two racks and replication factor 3, one rack must hold two replicas of each partition; losing it can drop the ISR below `min.insync.replicas=2`. Use three zones for RF 3.
+- **Forgetting `client.rack`** on consumers: follower fetching then does nothing.
+- **`broker.rack` is read-only**: changing it needs a broker restart, and existing replicas do not move until you reassign them.
+
+### In interviews
+
+"How do you survive an availability-zone outage?" Three zones, `broker.rack` per zone, RF 3 with `min.insync.replicas=2`, and controllers spread across zones. Add follower fetching to reduce cross-zone costs.
+
+## KRaft vs ZooKeeper
+
+**What it is.** Kafka needs a place to store cluster metadata: brokers, topics, partition leaders, ISRs, configs and ACLs. Until 3.x, that was an external **ZooKeeper** ensemble, with one broker acting as controller. **KRaft** (Kafka Raft) stores metadata in an internal, replicated log managed by a quorum of Kafka controller nodes. **Kafka 4.0 removed ZooKeeper mode entirely**: clusters must run KRaft, and ZooKeeper-based clusters must migrate to KRaft on a 3.x bridge release (the last one is 3.9) before upgrading to 4.x.
+
+### How KRaft works
+
+- A small set of **controllers** (typically 3 or 5) run the Raft protocol on the `__cluster_metadata` log. One is the **active controller**; a majority must be alive for the cluster to change metadata.
+- Brokers replicate the metadata log and apply it, instead of being pushed updates.
+- Servers have `process.roles=broker`, `controller`, or both (**combined** mode). The documentation recommends separate controllers for critical deployments; combined mode suits development, like the cluster used in this course.
+- Recent releases support **dynamic quorums** (KIP-853, `kraft.version` 1): `controller.quorum.bootstrap.servers` replaces the static `controller.quorum.voters` list, and controllers can be added or removed without rebuilding the quorum. The 4.3 documentation describes upgrading an existing static quorum to `kraft.version` 1 as supported from release 4.1. This course's cluster used the older static voter list, which is why `kraft.version` shows 0 below.
+
+### Inspecting the quorum
+
+```bash
+bin/kafka-metadata-quorum.sh --bootstrap-server localhost:19092 describe --status
+bin/kafka-metadata-quorum.sh --bootstrap-server localhost:19092 describe --replication
+```
+
+```text
+ClusterId:              dnXyAz12QlOsbBQ3-avgJg
+LeaderId:               1
+LeaderEpoch:            32
+HighWatermark:          93614
+MaxFollowerLag:         0
+MaxFollowerLagTimeMs:   0
+CurrentVoters:          [{"id": 1, "endpoints": ["CONTROLLER://localhost:19093"]}, {"id": 2, "endpoints": ["CONTROLLER://localhost:29093"]}, {"id": 3, "endpoints": ["CONTROLLER://localhost:39093"]}]
+CurrentObservers:       []
+NodeId	DirectoryId           	LogEndOffset	Lag	LastFetchTimestamp	LastCaughtUpTimestamp	Status
+1     	AAAAAAAAAAAAAAAAAAAAAA	93622       	0  	1791483329884     	1791483329884        	Leader
+2     	AAAAAAAAAAAAAAAAAAAAAA	93622       	0  	1791483329545     	1791483329545        	Follower
+3     	AAAAAAAAAAAAAAAAAAAAAA	93622       	0  	1791483329545     	1791483329545        	Follower
+```
+
+The metadata log has its own leader, epoch and high watermark, using the same ideas as partition replication. Feature flags show which protocol versions the cluster has enabled:
+
+```text
+Feature: eligible.leader.replicas.version          SupportedMinVersion: 0      SupportedMaxVersion: 1      FinalizedVersionLevel: 1
+Feature: group.version                             SupportedMinVersion: 0      SupportedMaxVersion: 1      FinalizedVersionLevel: 1
+Feature: kraft.version                             SupportedMinVersion: 0      SupportedMaxVersion: 1      FinalizedVersionLevel: 0
+Feature: metadata.version                          SupportedMinVersion: 3.3-IV3 SupportedMaxVersion: 4.3-IV0 FinalizedVersionLevel: 4.3-IV0
+Feature: transaction.version                       SupportedMinVersion: 0      SupportedMaxVersion: 2      FinalizedVersionLevel: 2
+```
+
+(Columns trimmed and some features omitted.)
+
+### What changed for you
+
+| | ZooKeeper mode (up to 3.x) | KRaft (required from 4.0) |
+|---|---|---|
+| Metadata store | external ZooKeeper ensemble | internal Raft log on Kafka controllers |
+| Systems to operate | Kafka plus ZooKeeper | Kafka only |
+| Controller failover | new controller reloads all metadata from ZooKeeper | standby controllers already have the log |
+| Tools | some used `--zookeeper` | everything uses `--bootstrap-server` (or `--bootstrap-controller`) |
+| Storage setup | auto-formatted | `kafka-storage.sh format` with a cluster ID before first start |
+
+### Pitfalls
+
+- **Even numbers of controllers.** Four controllers tolerate one failure, the same as three. Use 3 or 5.
+- **Old runbooks and tools** that pass `--zookeeper` no longer work on 4.x.
+- **Upgrade path.** A ZooKeeper-mode cluster cannot jump straight to 4.x; it must be migrated to KRaft on a 3.x release first.
+
+### In interviews
+
+"Why did Kafka drop ZooKeeper?" One system to run and secure, metadata stored as a replicated log in Kafka itself, and faster controller failover because standby controllers keep a copy of the metadata. Know that 4.0 is KRaft-only and that a majority of controllers must be up.
+
+## Practice questions
+
+<details>
+<summary>A producer with acks=all is getting NotEnoughReplicasException. What does it mean, and what should you not do?</summary>
+
+The partition's ISR is smaller than `min.insync.replicas`, so the leader refuses `acks=all` writes to protect durability. Find out why replicas left the ISR (broker down, disk or network trouble, overloaded followers) and fix that. Do not lower `min.insync.replicas` or switch the producer to `acks=1` as a reflex: both trade a visible outage for possible silent data loss.
+
+</details>
+
+<details>
+<summary>Explain the high watermark and why consumers cannot read beyond it.</summary>
+
+The high watermark is the offset up to which every ISR replica has the data, so those records are committed. Records above it exist only on some replicas and may be truncated if the leader fails. Restricting consumers to the high watermark means they never see a record that could later disappear, which keeps every consumer's view consistent across leader changes.
+
+</details>
+
+<details>
+<summary>Your topic has RF 3 and min.insync.replicas=2. Two brokers crash. What happens to producers and consumers?</summary>
+
+The ISR shrinks to the one surviving replica. `acks=all` producers are rejected with `NOT_ENOUGH_REPLICAS` (seen as retries and eventually timeouts). Consumers can still read already-committed records from the leader. In Kafka 4.x the high watermark does not advance while the ISR is below the minimum, so `acks=1` writes, if any, are not visible and may be lost. Service resumes when a second replica rejoins.
+
+</details>
+
+<details>
+<summary>When would you enable unclean leader election?</summary>
+
+Only when availability matters more than the data in that topic (for example metrics where a gap is acceptable), or as a one-off emergency action when every in-sync replica is permanently lost and you accept losing the records the new leader never received. For pipelines of record (payments, CDC), keep it disabled and recover the in-sync replicas instead.
+
+</details>
+
+<details>
+<summary>What is an eligible leader replica, and why is it safe to elect?</summary>
+
+A replica that left the ISR while the ISR was at or below `min.insync.replicas`. Because Kafka 4.x does not advance the high watermark when the ISR is below the minimum, such a replica still holds every committed record, so electing it loses nothing. ELR lets the controller recover from more failure patterns without an unclean election. It is enabled by default on new clusters from Kafka 4.1.
+
+</details>
+
+<details>
+<summary>How does KRaft differ from ZooKeeper mode, and what does a three-controller quorum tolerate?</summary>
+
+KRaft stores metadata in a Raft-replicated log on Kafka controller nodes instead of an external ZooKeeper ensemble; brokers follow that log. A three-controller quorum needs two controllers to make progress, so it tolerates one controller failure. ZooKeeper mode was removed in Kafka 4.0.
+
+</details>
+
+## Key takeaways
+
+- Followers pull from the leader; the ISR is the set of replicas caught up within `replica.lag.time.max.ms`.
+- `acks=all` waits for the current ISR, so pair it with `min.insync.replicas=2` on RF 3 topics.
+- The high watermark marks committed data; consumers read below it, and records above it can be truncated, as an `acks=1` write was on a real cluster.
+- Unclean leader election trades data for availability and is off by default; eligible leader replicas (4.x) add safe leaders.
+- `broker.rack` spreads replicas across zones and enables follower fetching with `client.rack`.
+- Kafka 4.0 is KRaft-only: metadata lives in a Raft log on 3 or 5 controllers, and ZooKeeper clusters must migrate on 3.x first.
