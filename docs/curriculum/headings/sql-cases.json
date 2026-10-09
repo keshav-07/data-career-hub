@@ -350,5 +350,37 @@
   "Recursive CTEs → Fraud Pattern Detection": {
     "ref": "interview-questions:sql/fraud-pattern-detection-sql-case-study",
     "heading": "Approach: recursive CTEs to expand fraud rings"
+  },
+  "Multi-table joins → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: multi-table joins at the right grain"
+  },
+  "Join algorithms (hash, merge, nested loop) → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: join algorithms for session reporting"
+  },
+  "Detecting consecutive streaks → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: detecting consecutive-day streaks"
+  },
+  "FIRST_VALUE / LAST_VALUE → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: FIRST_VALUE and LAST_VALUE for entry and exit pages"
+  },
+  "Partitioning strategies → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: partitioning strategies for event tables"
+  },
+  "Month-over-month change → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: month-over-month change"
+  },
+  "PIVOT rows to columns → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: PIVOT rows to columns"
+  },
+  "Query optimization & cost reduction → Session Duration": {
+    "ref": "interview-questions:sql/session-duration-sql-case-study",
+    "heading": "Approach: query optimisation and cost reduction"
   }
 }
