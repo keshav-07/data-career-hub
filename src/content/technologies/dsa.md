@@ -8,8 +8,8 @@ keyFacts: ["Most DE coding rounds are easy to medium: arrays, hashing, strings, 
 whatToLearnFirst: ["articles:dsa/dsa-for-data-engineers"]
 relatedTechnologies: ["python", "sql"]
 monogram: "DSA"
-lessons: ["articles:dsa/dsa-for-data-engineers", "articles:dsa/arrays-and-hashing", "articles:dsa/strings", "articles:dsa/two-pointers", "articles:dsa/sliding-window", "articles:dsa/stacks", "articles:dsa/queues", "articles:dsa/binary-search", "articles:dsa/linked-lists", "articles:dsa/binary-trees", "articles:dsa/binary-search-trees", "articles:dsa/heaps-priority-queues", "articles:dsa/backtracking", "articles:dsa/graphs", "articles:dsa/dynamic-programming", "articles:dsa/greedy-and-intervals"]
-updatedDate: 2026-10-05
+lessons: ["articles:dsa/dsa-for-data-engineers", "articles:dsa/arrays-and-hashing", "articles:dsa/strings", "articles:dsa/bit-manipulation", "articles:dsa/two-pointers", "articles:dsa/queues", "articles:dsa/sliding-window", "articles:dsa/stacks", "articles:dsa/binary-search", "articles:dsa/linked-lists", "articles:dsa/binary-trees", "articles:dsa/binary-search-trees", "articles:dsa/heaps-priority-queues", "articles:dsa/greedy-and-intervals", "articles:dsa/backtracking", "articles:dsa/graphs", "articles:dsa/dynamic-programming"]
+updatedDate: 2026-10-09
 ---
 
 Data Engineering interviews usually include at least one coding round. It is rarely the hardest part of the loop, but it is the easiest one to fail through lack of practice. Expect easy to medium problems built on arrays, hashing, strings, two pointers and sliding windows, with graphs (especially topological sort for dependency resolution) and dynamic programming appearing at some companies.

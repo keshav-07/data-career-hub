@@ -14,7 +14,7 @@ reviewedDate: "2026-10-09"
 shortAnswer: "XOR of all numbers cancels every pair and leaves a ^ b, where a and b are the two singles. Since a != b, that value has at least one set bit, and a and b differ there. Take the lowest one with x & -x, then XOR the numbers that have that bit into one group and the rest into another. Each pair lands in the same group and cancels, so the groups give a and b. O(n) time, O(1) space. A counter is simpler but uses O(n) space. In Python, x & -x works for negatives too, because integers act as infinite two's complement."
 followUps: ["Why is x & -x the lowest set bit?", "How would you find the single number when every other value appears three times?", "What if there were three single numbers?"]
 versionContext: "Python 3 solutions verified with assert-based tests"
-related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/single-number"]
+related: ["articles:dsa/bit-manipulation", "interview-questions:dsa/single-number"]
 practice: {"platform": "LeetCode", "number": 260, "title": "Single Number III", "url": "https://leetcode.com/problems/single-number-iii/"}
 previous: "interview-questions:dsa/sum-of-two-integers"
 next: "interview-questions:dsa/valid-palindrome-ii"
