@@ -166,7 +166,7 @@ spark-submit --master k8s://https://k8s-api.example.internal:6443 --deploy-mode 
 
 - **Standalone** is the simplest: start a master (`sbin/start-master.sh`) and workers, and Spark manages everything. It has no multi-tenant queues beyond basic limits, so it suits clusters dedicated to Spark.
 - **YARN** adds queues, capacity limits and Kerberos-secured HDFS access. Each executor is a container whose size is executor memory plus memory overhead; if the process exceeds the container limit, YARN kills it, which shows up as a lost executor. The [memory and tuning lesson](/spark/memory-executors-tuning/) works through the arithmetic.
-- **Kubernetes** packages Spark and your dependencies in a container image. The driver pod needs a service account allowed to create executor pods. Shared clusters let Spark sit next to other services, with namespaces and resource quotas as the isolation tools. The deployment lesson covers it in depth.
+- **Kubernetes** packages Spark and your dependencies in a container image. The driver pod needs a service account allowed to create executor pods. Shared clusters let Spark sit next to other services, with namespaces and resource quotas as the isolation tools. The [deployment lesson](/spark/deployment-monitoring/) covers it in depth.
 
 ### Pitfalls
 
@@ -261,7 +261,7 @@ Each later lesson zooms into one part of this picture:
 5. [Catalyst and Tungsten](/spark/catalyst-tungsten-optimizer/): how the driver optimises a query.
 6. [Adaptive Query Execution](/spark/adaptive-query-execution/): re-planning at run time.
 7. [Memory and executor tuning](/spark/memory-executors-tuning/): sizing executors.
-8. Deployment and monitoring: Kubernetes and the History Server.
+8. [Deployment and monitoring](/spark/deployment-monitoring/): Kubernetes and the History Server.
 
 ## Practice questions
 

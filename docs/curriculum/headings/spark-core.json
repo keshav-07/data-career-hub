@@ -174,5 +174,13 @@
   "Speculative execution": {
     "ref": "articles:spark/memory-executors-tuning",
     "heading": "Speculative execution"
+  },
+  "Spark on Kubernetes": {
+    "ref": "articles:spark/deployment-monitoring",
+    "heading": "Spark on Kubernetes"
+  },
+  "Monitoring with Spark History Server": {
+    "ref": "articles:spark/deployment-monitoring",
+    "heading": "Monitoring with the Spark History Server"
   }
 }
