@@ -1,0 +1,70 @@
+---
+/**
+ * Homepage centrepiece: the 90-day plan as three phases and thirteen weekly milestones,
+ * each linking into /planner/90-day-plan/. Progress (days ticked) is filled in by scripts/planner.ts.
+ */
+import { planDays } from "../../utils/curriculum";
+
+const days = await planDays();
+const phases = [...new Set(days.map((d) => d.phase))].map((name, i) => {
+  const list = days.filter((d) => d.phase === name);
+  // A week belongs to the phase in which it ends, so weeks that straddle a boundary appear once.
+  const weeks = [...new Set(list.map((d) => d.week))]
+    .filter((w) => list.some((d) => d.day === Math.min(w * 7, days.length)))
+    .map((w) => ({
+      week: w,
+      first: list.find((d) => d.week === w)!.day,
+      milestone: days.find((d) => d.week === w && d.weekly)?.weekly?.replace(/^Wk\d+:\s*/, ""),
+    }));
+  const end = list.at(-1)!;
+  return {
+    n: i + 1,
+    title: name.replace(/^Phase \d+:\s*/, ""),
+    from: list[0].day,
+    to: end.day,
+    hours: list.reduce((a, d) => a + d.hours, 0),
+    monthly: list.find((d) => d.monthly)?.monthly?.replace(/^Month \d+:\s*/, ""),
+    outcome: list.find((d) => d.outcome)?.outcome,
+    weeks,
+  };
+});
+---
+
+<div class="roadmap90" data-planner>
+  <ol class="roadmap90__phases" role="list">
+    {phases.map((p) => (
+      <li class="phase-card" data-phase={p.n}>
+        <div class="phase-card__head">
+          <span class="phase-card__num" aria-hidden="true">
+            {String(p.n).padStart(2, "0")}
+          </span>
+          <div>
+            <p class="phase-card__days">
+              Days {p.from}–{p.to} · {p.hours} hours
+            </p>
+            <h3 class="phase-card__title">{p.title}</h3>
+          </div>
+        </div>
+        {p.monthly && <p class="phase-card__goal">{p.monthly}</p>}
+        <ol class="phase-card__weeks" role="list">
+          {p.weeks.map((w) => (
+            <li>
+              <a href={`/planner/90-day-plan/#week-${w.week}`}>
+                <span class="phase-card__wk">Week {w.week}</span>
+                <span>{w.milestone ?? `Days ${w.first}–${Math.min(w.first + 6, p.to)}`}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+        {p.outcome && (
+          <p class="phase-card__outcome">
+            <span>Target</span> {p.outcome}
+          </p>
+        )}
+        <a class="phase-card__cta" href={`/planner/90-day-plan/#phase-${p.n}`}>
+          Open phase {p.n} <span aria-hidden="true">→</span>
+        </a>
+      </li>
+    ))}
+  </ol>
+</div>
