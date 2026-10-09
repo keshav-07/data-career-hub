@@ -15,7 +15,9 @@ learningObjectives:
   - "Read a JDBC table in parallel with partitionColumn bounds and push work to the database"
   - "Explain partition discovery, partition pruning and dynamic partition overwrite"
 prerequisites: ["articles:pyspark/dataframes-and-schemas"]
-related: ["articles:delta-lake/parquet-vs-avro-vs-orc", "articles:delta-lake/json-vs-parquet"]
+previous: "articles:pyspark/nested-data-explode"
+next: "articles:pyspark/writing-efficient-output"
+related: ["articles:delta-lake/parquet-vs-avro-vs-orc", "articles:delta-lake/json-vs-parquet", "articles:pyspark/writing-efficient-output"]
 versionContext: "All examples run on PySpark 4.2.0 in local mode with Java 21. Avro uses the external spark-avro_2.13:4.2.0 package, downloaded from Maven Central through spark.jars.packages. The JDBC examples use the embedded Apache Derby database whose driver ships with PySpark, so they run without a server; the PostgreSQL variant is shown for reference and was not executed. badRecordsPath was tested on open-source Spark 4.2 and is silently ignored there."
 sources:
   - { label: "Spark SQL guide: Generic load/save functions", url: "https://spark.apache.org/docs/latest/sql-data-sources-load-save-functions.html" }
@@ -148,7 +150,7 @@ Save modes take no locks and are not atomic: with `overwrite`, the existing data
 
 - **Appends are not idempotent.** Rerunning an append job after a partial failure duplicates data. Plain file writes are also not atomic for readers: a reader listing the folder mid-write can see some new files. Table formats such as Delta Lake fix both; see [Delta Lake transactions](/delta-lake/transactions-schema-evolution/).
 - **Schema drift across files.** Spark reads the schema from a sample of footers unless you set `mergeSchema` (covered in [DataFrames and schemas](/pyspark/dataframes-and-schemas/)).
-- **Too many tiny files** destroy Parquet's advantages. See the writing efficient output lesson.
+- **Too many tiny files** destroy Parquet's advantages. See [writing efficient output](/pyspark/writing-efficient-output/).
 
 ### In interviews
 

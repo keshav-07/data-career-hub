@@ -18,6 +18,7 @@ learningObjectives:
 prerequisites: ["articles:pyspark/dataframes-and-schemas", "articles:pyspark/aggregations-pivot-views"]
 related: ["interview-questions:pyspark/avoid-python-udfs", "articles:spark/adaptive-query-execution"]
 previous: "articles:pyspark/window-functions"
+next: "articles:pyspark/nested-data-explode"
 sources:
   - { label: "PySpark user guide: UDFs and UDTFs", url: "https://spark.apache.org/docs/latest/api/python/user_guide/udfandudtf.html" }
   - { label: "PySpark documentation: Apache Arrow in PySpark (pandas UDFs, Arrow UDFs)", url: "https://spark.apache.org/docs/latest/api/python/tutorial/sql/arrow_pandas.html" }
@@ -367,7 +368,7 @@ SplitPostcode(F.lit(1), F.lit("IN-560001")).show()
 +--------+------+
 ```
 
-Registered with `spark.udtf.register`, a UDTF can be called in SQL with `LATERAL` to apply it to each row of a table. For simple splitting, built-ins such as `explode(split(...))` remain faster (see the nested data lesson). Recent releases also add **Arrow UDFs** (`arrow_udf`, `arrow_udtf`) that work directly on PyArrow arrays instead of pandas objects.
+Registered with `spark.udtf.register`, a UDTF can be called in SQL with `LATERAL` to apply it to each row of a table. For simple splitting, built-ins such as `explode(split(...))` remain faster (see [nested data and explode](/pyspark/nested-data-explode/)). Recent releases also add **Arrow UDFs** (`arrow_udf`, `arrow_udtf`) that work directly on PyArrow arrays instead of pandas objects.
 
 ### Choosing
 

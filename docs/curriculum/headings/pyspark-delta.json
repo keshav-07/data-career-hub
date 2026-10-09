@@ -98,5 +98,37 @@
   "Pandas API on Spark": {
     "ref": "articles:pyspark/udfs-and-safer-alternatives",
     "heading": "The pandas API on Spark"
+  },
+  "Handling nested/complex types": {
+    "ref": "articles:pyspark/nested-data-explode",
+    "heading": "Structs, arrays and maps"
+  },
+  "explode & posexplode": {
+    "ref": "articles:pyspark/nested-data-explode",
+    "heading": "explode and posexplode"
+  },
+  "Repartition before write": {
+    "ref": "articles:pyspark/writing-efficient-output",
+    "heading": "Repartition before a write"
+  },
+  "Coalesce on output": {
+    "ref": "articles:pyspark/writing-efficient-output",
+    "heading": "Coalesce on output"
+  },
+  "File size optimization": {
+    "ref": "articles:pyspark/writing-efficient-output",
+    "heading": "Optimising file sizes"
+  },
+  "Small files problem": {
+    "ref": "articles:pyspark/writing-efficient-output",
+    "heading": "The small files problem"
+  },
+  "Avoiding wide transformations": {
+    "ref": "articles:pyspark/writing-efficient-output",
+    "heading": "Avoiding unnecessary wide transformations"
+  },
+  "Custom partitioners": {
+    "ref": "articles:pyspark/writing-efficient-output",
+    "heading": "Custom partitioners"
   }
 }
