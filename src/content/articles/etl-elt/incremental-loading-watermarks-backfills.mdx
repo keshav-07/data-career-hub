@@ -1,0 +1,353 @@
+---
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Incremental Loading, Watermarks, Late Data and Backfills"
+seoTitle: "Incremental Loads, Watermarks and Backfills"
+description: "Load only what changed with a watermark and MERGE, handle commit lag, deletes and late-arriving events, and run backfills safely without corrupting current data."
+technology: ["etl-elt", "data-engineering"]
+topic: ["incremental-loading", "watermarks", "late-data", "backfills"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Choose between full refresh and incremental loading for a table"
+  - "Implement a watermark-driven incremental load with MERGE and a state table in PostgreSQL"
+  - "Explain why a lookback window is needed and how commit lag, equal timestamps and deletes break naive watermarks"
+  - "Reprocess the partitions affected by late-arriving events"
+  - "Plan and run a backfill that is chunked, idempotent and isolated from daily runs"
+prerequisites: ["articles:etl-elt/idempotency-in-data-pipelines"]
+related: ["articles:etl-elt/cdc-patterns-and-failure-modes", "system-designs:backfill-late-data-handling-system", "articles:airflow/operations-backfills-monitoring", "interview-questions:data-engineering/design-incremental-load", "interview-questions:data-engineering/late-arriving-data", "interview-questions:data-engineering/backfill-safely"]
+previous: "articles:etl-elt/idempotency-in-data-pipelines"
+next: "articles:etl-elt/cdc-patterns-and-failure-modes"
+sources:
+  - { label: "PostgreSQL documentation: MERGE", url: "https://www.postgresql.org/docs/current/sql-merge.html" }
+  - { label: "dbt documentation: Configure incremental models", url: "https://docs.getdbt.com/docs/build/incremental-models" }
+  - { label: "Apache Airflow documentation: Backfill", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/backfill.html" }
+versionContext: "SQL examples run on PostgreSQL 16.14; Python examples run on Python 3.11. The Airflow command was checked against the Airflow 3.3 CLI help but not executed against a deployment."
+---
+
+A full refresh rebuilds a table from all of its source data on every run. It is simple and always correct, and it stops being affordable once a table holds years of history. **Incremental loading** processes only what is new or changed since the last run. It is faster and cheaper, and it brings three new problems: remembering where you stopped, catching rows that arrive late, and occasionally re-running history on purpose (a **backfill**).
+
+## Full refresh or incremental?
+
+| | Full refresh | Incremental |
+|--|--------------|-------------|
+| Correctness | Always reflects the source, including deletes | Only as good as the change detection |
+| Cost | Grows with the whole table | Grows with the change volume |
+| Complexity | Low | State, late data, deletes, backfills |
+| Recovery from a logic bug | Just rerun | Backfill the affected history |
+
+Start with full refresh for small tables (dimensions with thousands or a few million rows usually qualify) and switch a table to incremental when its runtime or cost becomes a problem. Many teams keep a scheduled full refresh, weekly or monthly, alongside the incremental runs as a safety net that corrects any drift.
+
+## How do you know what changed?
+
+| Change signal | Example | Catches updates | Catches deletes |
+|---------------|---------|-----------------|-----------------|
+| Monotonic id | `order_id > 41250` | No, only inserts | No |
+| Update timestamp | `updated_at > last_watermark` | Yes, if every write sets it | No, unless soft-deleted |
+| File arrival | New objects under `s3://.../dt=2026-10-05/` | Depends on the producer | No |
+| Change data capture | Database log | Yes | Yes |
+
+Timestamp watermarks are the most common batch technique and the subject of most of this lesson. When updates or deletes must be exact, use [change data capture](/etl-elt/cdc-patterns-and-failure-modes/).
+
+## A watermark-driven load in PostgreSQL
+
+The pattern: store the **high watermark** (the largest `updated_at` already loaded) in a state table; each run reads rows above it and up to an upper bound, merges them into the target, and advances the watermark **in the same transaction** as the merge.
+
+```sql
+CREATE TABLE src_customers (
+    customer_id bigint PRIMARY KEY,
+    email       text NOT NULL,
+    tier        text NOT NULL,
+    updated_at  timestamptz NOT NULL
+);
+
+CREATE TABLE dw_customers (
+    customer_id bigint PRIMARY KEY,
+    email       text NOT NULL,
+    tier        text NOT NULL,
+    updated_at  timestamptz NOT NULL,
+    loaded_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE etl_watermarks (
+    pipeline       text PRIMARY KEY,
+    high_watermark timestamptz NOT NULL
+);
+INSERT INTO etl_watermarks VALUES ('customers', '-infinity');
+
+CREATE PROCEDURE load_customers(p_upper timestamptz, p_lookback interval DEFAULT interval '0 minutes')
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_low timestamptz;
+BEGIN
+    -- Lock the state row so two overlapping runs cannot both advance it.
+    SELECT high_watermark - p_lookback INTO v_low
+    FROM etl_watermarks WHERE pipeline = 'customers' FOR UPDATE;
+
+    MERGE INTO dw_customers AS t
+    USING (
+        SELECT * FROM src_customers
+        WHERE updated_at > v_low AND updated_at <= p_upper
+    ) AS s
+    ON t.customer_id = s.customer_id
+    WHEN MATCHED AND s.updated_at > t.updated_at THEN
+        UPDATE SET email = s.email, tier = s.tier, updated_at = s.updated_at, loaded_at = now()
+    WHEN NOT MATCHED THEN
+        INSERT (customer_id, email, tier, updated_at) VALUES (s.customer_id, s.email, s.tier, s.updated_at);
+
+    -- Advance to the newest change actually loaded, never backwards, never to "now".
+    UPDATE etl_watermarks
+    SET high_watermark = GREATEST(high_watermark, COALESCE(
+        (SELECT max(updated_at) FROM src_customers WHERE updated_at > v_low AND updated_at <= p_upper),
+        high_watermark))
+    WHERE pipeline = 'customers';
+END;
+$$;
+```
+
+`CALL` runs the procedure inside one transaction, so if the merge fails the watermark does not move and the next run simply retries the same window. Load the first two customers, then run the identical call again:
+
+```sql
+INSERT INTO src_customers VALUES
+  (1, 'asha@example.com', 'free', '2026-10-05 09:00+00'),
+  (2, 'ben@example.com',  'pro',  '2026-10-05 09:30+00');
+
+CALL load_customers('2026-10-05 10:00+00');
+CALL load_customers('2026-10-05 10:00+00');   -- a retry changes nothing
+
+SELECT (SELECT count(*) FROM dw_customers) AS rows_loaded,
+       high_watermark AT TIME ZONE 'UTC' AS watermark_utc
+FROM etl_watermarks;
+```
+
+```text
+ rows_loaded |    watermark_utc
+-------------+---------------------
+           2 | 2026-10-05 09:30:00
+```
+
+An update and a new customer arrive, and the next run picks up only those:
+
+```sql
+UPDATE src_customers SET tier = 'pro', updated_at = '2026-10-05 10:15+00' WHERE customer_id = 1;
+INSERT INTO src_customers VALUES (3, 'chen@example.com', 'free', '2026-10-05 10:20+00');
+
+CALL load_customers('2026-10-05 11:00+00');
+
+SELECT customer_id, tier, updated_at AT TIME ZONE 'UTC' AS updated_utc
+FROM dw_customers ORDER BY customer_id;
+```
+
+```text
+ customer_id | tier |     updated_utc
+-------------+------+---------------------
+           1 | pro  | 2026-10-05 10:15:00
+           2 | pro  | 2026-10-05 09:30:00
+           3 | free | 2026-10-05 10:20:00
+```
+
+### Why the upper bound
+
+`p_upper` is the end of the run's window (the data interval end, or "now minus a small safety lag"). Without it, a run that takes ten minutes might see some rows written during those ten minutes and not others, and a retry of the same run reads a different set. With it, a retry reads exactly the same rows.
+
+### Commit lag and the lookback window
+
+A timestamp watermark has a blind spot. `updated_at` is usually set when the row is written, but the row only becomes **visible** when its transaction commits. A long transaction that started at 10:10 and commits at 10:40 produces a row stamped 10:10, after a run has already advanced the watermark to 10:20. The next run asks for `updated_at > 10:20` and never sees it.
+
+```sql
+-- A row stamped 10:10 that only became visible after the watermark reached 10:20.
+INSERT INTO src_customers VALUES (4, 'dana@example.com', 'free', '2026-10-05 10:10+00');
+
+CALL load_customers('2026-10-05 12:00+00');
+SELECT count(*) AS loaded_without_lookback FROM dw_customers WHERE customer_id = 4;
+
+CALL load_customers('2026-10-05 12:00+00', interval '30 minutes');
+SELECT count(*) AS loaded_with_lookback FROM dw_customers WHERE customer_id = 4;
+```
+
+```text
+ loaded_without_lookback
+-------------------------
+                       0
+
+ loaded_with_lookback
+----------------------
+                    1
+```
+
+The fix is a **lookback**: re-read a window before the watermark that is longer than the longest expected commit delay. Re-reading is only safe because the merge is idempotent and guarded by `updated_at`, which is why idempotency comes first in this course. The same overlap handles a second problem: several rows sharing the exact watermark timestamp, where a strict `>` with no overlap could skip the ones committed slightly later.
+
+Choose the lookback from evidence (the longest transactions in the source) and add a margin. When no safe value exists, for example because batch jobs in the source hold transactions open for hours, use CDC instead.
+
+### Other ways a timestamp watermark lies
+
+- **Not every write sets `updated_at`.** Bulk fixes run by hand, or an ORM path that skips the trigger, change rows without moving the timestamp. Ask the source team how the column is maintained, and reconcile counts periodically.
+- **Clock and time zone problems.** Compare in UTC with `timestamptz`; a column stored as local time without a zone jumps by an hour at daylight-saving changes.
+- **Deletes are invisible.** A deleted row has no `updated_at` to find.
+
+### Detecting deletes without CDC
+
+If the source soft-deletes (an `is_deleted` flag or `deleted_at`), deletes are ordinary updates. If it hard-deletes, the batch fallback is a periodic **key reconciliation**: pull the full list of keys (cheap compared with full rows) and remove or flag target rows whose key no longer exists.
+
+```sql
+DELETE FROM src_customers WHERE customer_id = 2;   -- a hard delete in the source
+
+-- Keys present in the warehouse but gone from the source
+SELECT t.customer_id
+FROM dw_customers AS t
+WHERE NOT EXISTS (SELECT 1 FROM src_customers AS s WHERE s.customer_id = t.customer_id);
+```
+
+```text
+ customer_id
+-------------
+           2
+```
+
+Flag those rows as deleted rather than removing them if downstream reports need history.
+
+## Late-arriving data
+
+For event data the question changes from "what changed?" to "which day does this belong to?". An event has an **event time** (when it happened) and an **arrival or ingestion time** (when you received it). Mobile apps that were offline, retries in a producer and delayed partner files all deliver events days after they happened.
+
+If you aggregate by event date, a late event changes a partition you already published. The batch pattern:
+
+1. Select new rows by **ingestion time** for this run's window (deterministic, nothing missed).
+2. Find the **event dates** those rows belong to.
+3. Rebuild just those partitions of the aggregate, idempotently.
+
+```sql
+CREATE TABLE raw_events (
+    event_id    text PRIMARY KEY,
+    event_time  timestamptz NOT NULL,
+    ingested_at timestamptz NOT NULL,
+    amount      numeric(10,2) NOT NULL
+);
+CREATE TABLE daily_sales (sale_date date PRIMARY KEY, total numeric(12,2), event_count int);
+
+INSERT INTO raw_events VALUES
+  ('e1', '2026-10-04 22:00+00', '2026-10-04 22:01+00', 10),
+  ('e2', '2026-10-05 08:00+00', '2026-10-05 08:00+00', 20),
+  ('e3', '2026-10-04 23:30+00', '2026-10-05 09:15+00', 5);   -- late: happened on the 4th, arrived on the 5th
+
+-- Run for the ingestion window 2026-10-05 00:00 to 2026-10-06 00:00
+BEGIN;
+CREATE TEMP TABLE affected_dates ON COMMIT DROP AS
+SELECT DISTINCT (event_time AT TIME ZONE 'UTC')::date AS sale_date
+FROM raw_events
+WHERE ingested_at >= '2026-10-05 00:00+00' AND ingested_at < '2026-10-06 00:00+00';
+
+DELETE FROM daily_sales WHERE sale_date IN (SELECT sale_date FROM affected_dates);
+
+INSERT INTO daily_sales
+SELECT (event_time AT TIME ZONE 'UTC')::date, sum(amount), count(*)
+FROM raw_events
+WHERE (event_time AT TIME ZONE 'UTC')::date IN (SELECT sale_date FROM affected_dates)
+GROUP BY 1;
+COMMIT;
+
+SELECT * FROM daily_sales ORDER BY sale_date;
+```
+
+```text
+ sale_date  | total | event_count
+------------+-------+-------------
+ 2026-10-04 | 15.00 |           2
+ 2026-10-05 | 20.00 |           1
+```
+
+The 4 October partition was rebuilt because a late event arrived for it, and it now includes both events. Running the same window again produces the same table.
+
+Practical rules for late data:
+
+- **Agree a lateness policy** with consumers: for example, "daily figures may change for 3 days, then they are final". Beyond the horizon, late events go to a correction process or are counted in the day they arrived, and that choice is documented.
+- **Bound the reprocessing.** Rebuilding the affected partitions is cheap when late events are rare. If a day's ingestion can touch hundreds of event dates, cap it (rebuild the last N days on every run and log anything older).
+- **Expose completeness.** Publishing "data for 5 October is 98% complete as of 06:00" is often better than waiting.
+- **Streaming has the same problem.** Engines such as Spark Structured Streaming and Flink use event-time **watermarks** to decide how long to keep a window open for late events. Note that the word "watermark" means "how far event time has progressed" in streaming and "where my last load stopped" in batch.
+
+## Backfills
+
+A backfill re-runs a pipeline for past intervals: after fixing a bug, adding a column, onboarding a new source or recovering from an outage. Done carelessly it is the riskiest routine operation in data engineering, because it touches a lot of published data at once.
+
+Rules that keep it safe:
+
+1. **Same code path.** A backfill runs the normal job with past parameters, not a one-off script. If the job is idempotent per interval, backfilling is just running it again for each interval.
+2. **Chunk it.** Process one day (or one partition) per run so a failure retries a small unit and progress is visible.
+3. **Do not move the incremental watermark.** A backfill rewrites history for explicit intervals; it should not reset the state that daily runs depend on.
+4. **Limit concurrency** so the backfill does not starve the daily runs or overload the source.
+5. **Validate before you publish.** For a large or risky change, write to a shadow table, compare it with the current table (row counts, key sets, totals per day), then swap.
+6. **Tell consumers.** Numbers will change; say which dates and why.
+
+Planning the chunks is simple code, and it is worth printing the plan before running it:
+
+```python
+from datetime import date, timedelta
+
+def backfill_plan(start: date, end: date, chunk_days: int = 1) -> list[tuple[date, date]]:
+    """Half-open [from, to) chunks covering start..end inclusive."""
+    chunks, current = [], start
+    while current <= end:
+        nxt = min(current + timedelta(days=chunk_days), end + timedelta(days=1))
+        chunks.append((current, nxt))
+        current = nxt
+    return chunks
+
+def run_backfill(job, start, end, chunk_days=1):
+    done, failed = [], []
+    for lo, hi in backfill_plan(start, end, chunk_days):
+        try:
+            job(lo, hi)           # the normal, idempotent job for one interval
+            done.append(lo)
+        except Exception as exc:  # record and continue; failed chunks are retried individually
+            failed.append((lo, repr(exc)))
+    return done, failed
+
+calls = []
+def fake_job(lo, hi):
+    if lo == date(2026, 9, 3):
+        raise TimeoutError("source busy")
+    calls.append((lo.isoformat(), hi.isoformat()))
+
+done, failed = run_backfill(fake_job, date(2026, 9, 1), date(2026, 9, 4))
+print(calls)
+print(failed)
+```
+
+```text
+[('2026-09-01', '2026-09-02'), ('2026-09-02', '2026-09-03'), ('2026-09-04', '2026-09-05')]
+[(datetime.date(2026, 9, 3), "TimeoutError('source busy')")]
+```
+
+Because each chunk is idempotent, the failed day can be retried on its own without touching the others.
+
+In Airflow 3, backfills are created through the scheduler rather than run by a long-lived CLI process, and they respect `max_active_runs`:
+
+```bash
+airflow backfill create --dag-id daily_sales \
+  --from-date 2026-09-01 --to-date 2026-09-30 \
+  --max-active-runs 2 --reprocess-behavior completed
+```
+
+`--reprocess-behavior completed` re-runs dates that already succeeded (what you want after a logic fix); the default `none` only creates runs for dates that have none. Use `--dry-run` first to see which runs would be created. See [Airflow operations and backfills](/airflow/operations-backfills-monitoring/) for the details.
+
+## Incremental models in dbt
+
+dbt packages the same ideas: an `incremental` model selects only new rows with `is_incremental()`, and a `unique_key` with the `merge` or `delete+insert` strategy makes reruns idempotent. A lookback is written explicitly in the filter. `dbt run --full-refresh` rebuilds the model from scratch, which is your full-refresh safety net. [Modern data modelling with dbt](/data-warehousing/modern-modeling-practice/) covers incremental models in more depth.
+
+## Common mistakes
+
+1. Advancing the watermark to `now()` instead of to the newest change actually loaded.
+2. Advancing the watermark in a separate transaction from the load, so a crash between them skips or repeats data.
+3. A strict `>` with no lookback, which misses late commits and rows that share the watermark timestamp.
+4. Assuming an `updated_at` watermark captures deletes.
+5. Partitioning facts by ingestion date when consumers ask questions by event date (or the reverse) without saying so.
+6. Running a backfill as a hand-written script that differs from the production job.
+7. Backfilling a year in one run with unlimited parallelism, then discovering the source database's limits.
+
+## Interview angle
+
+"Design an incremental load for a 2-billion-row table" is a standard question. Cover: the change signal and its limits, the state table and atomic watermark update, the bounded window, the lookback and why the merge must be idempotent for it to work, delete handling, late data policy, and how you would backfill. Then mention the weekly full refresh or reconciliation as a safety net. Practise with [design an incremental load](/interview/data-engineering/design-incremental-load/), [late-arriving data](/interview/data-engineering/late-arriving-data/) and [backfill safely](/interview/data-engineering/backfill-safely/).
+
+## Key takeaway
+
+Load only what changed, but treat the watermark as state that moves atomically with the data, re-read a lookback window through an idempotent merge, plan for deletes and late events explicitly, and run backfills through the normal job in small, idempotent chunks.

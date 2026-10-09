@@ -1,69 +1,375 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Idempotency in Data Pipelines"
 seoTitle: "Idempotency in Data Pipelines"
-description: "Make every pipeline step safe to rerun: deterministic inputs, overwrite and merge patterns, atomic publishing, idempotent consumers and guarded side effects."
+description: "Make every pipeline step safe to rerun: deterministic partitions, overwrite-partition, MERGE and ON CONFLICT upserts, natural keys, run ids and guarded side effects."
 inventoryId: "SUPPORT-11"
 technology: ["etl-elt", "data-engineering"]
 topic: ["idempotency", "reliability"]
 difficulty: "Intermediate"
-related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:python/idempotent-csv-loader", "interview-questions:airflow/retries-and-idempotency", "articles:etl-elt/pipeline-reliability-and-retries"]
-sources: [{"label": "Apache Airflow documentation: Best practices", "url": "https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html"}]
-versionContext: "Patterns are engine-neutral; SQL shown in standard form"
+learningObjectives:
+  - "Derive each run's input slice from its logical interval instead of the wall clock"
+  - "Write partition overwrites, MERGE and INSERT ... ON CONFLICT loads that give the same result on every rerun"
+  - "Choose natural keys, deduplicate the source before merging and record run ids for traceability"
+  - "Guard side effects such as notifications so a retry does not repeat them"
+  - "Prove idempotency with a run-twice test"
+prerequisites: ["articles:etl-elt/batch-vs-streaming"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:python/idempotent-csv-loader", "interview-questions:airflow/retries-and-idempotency", "articles:etl-elt/pipeline-reliability-and-retries", "articles:etl-elt/incremental-loading-watermarks-backfills"]
+previous: "articles:etl-elt/batch-vs-streaming"
+next: "articles:etl-elt/incremental-loading-watermarks-backfills"
+sources:
+  - { label: "Apache Airflow documentation: Best practices", url: "https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html" }
+  - { label: "PostgreSQL documentation: MERGE", url: "https://www.postgresql.org/docs/current/sql-merge.html" }
+  - { label: "PostgreSQL documentation: INSERT (ON CONFLICT)", url: "https://www.postgresql.org/docs/current/sql-insert.html" }
+versionContext: "SQL examples run on PostgreSQL 16.14 (MERGE needs PostgreSQL 15 or later). Python examples run on Python 3.11 with the standard library sqlite3 module."
 ---
 
-An operation is **idempotent** if doing it twice has the same effect as doing it once. In pipelines this is the property that makes retries, backfills, duplicate triggers and replays safe, so it is worth designing in from the start.
+An operation is **idempotent** if doing it twice has the same effect as doing it once. In pipelines this is the property that makes retries, backfills, duplicate triggers and replays safe, so it is worth designing in from the first version rather than adding after the first duplicate incident.
 
 ## Where reruns come from
 
-Automatic retries, manual reruns after a fix, backfills, schedulers firing twice, streaming consumers reprocessing after a crash, and producers resending messages. In a long-lived system, every step will run more than once eventually.
+Automatic retries after a timeout, manual reruns after a bug fix, backfills of a date range, a scheduler that fires twice after a failover, streaming consumers that reprocess after a crash, producers that resend messages they were not sure were delivered. In a long-lived system every step runs more than once eventually. The question is only whether the second run is harmless.
 
-## The four ingredients
+## The ingredients
 
-### 1. Deterministic scope
+1. **Deterministic scope**: each run processes a precisely defined slice.
+2. **Replace or merge**: writes overwrite the slice or upsert by key, never blindly append.
+3. **Atomic publish**: readers see the old result or the new one, never half of one.
+4. **Guarded side effects**: emails, webhooks and API writes are recorded and checked.
 
-Each run processes a precisely defined slice: a date partition, an offset range, a set of files. The slice comes from parameters (the run's data interval), never from "now". Rerunning the same parameters reads the same input.
+## 1. Deterministic scope
 
-### 2. Replace or merge, never blind append
+Each run processes one slice: a date partition, an offset range, a list of files. The slice comes from the run's **parameters** (in Airflow, the data interval of the run), never from the clock at the moment the code happens to execute.
+
+```python
+from datetime import date, datetime, timedelta, timezone
+
+def interval_for(logical_date: date) -> tuple[datetime, datetime]:
+    """Half-open UTC interval [start, end) for a daily run."""
+    start = datetime(logical_date.year, logical_date.month, logical_date.day, tzinfo=timezone.utc)
+    return start, start + timedelta(days=1)
+
+# A retry on Tuesday of Monday's run still reads Monday's data.
+print(interval_for(date(2026, 10, 5)))
+```
+
+```text
+(datetime.datetime(2026, 10, 5, 0, 0, tzinfo=datetime.timezone.utc), datetime.datetime(2026, 10, 6, 0, 0, tzinfo=datetime.timezone.utc))
+```
+
+Two details matter. The interval is **half-open** (`>= start AND < end`), so a row at exactly midnight belongs to one day only. And it is in **UTC**, so a daylight-saving change does not create a 23-hour or 25-hour day that silently drops or duplicates an hour.
+
+`WHERE created_at >= now() - interval '1 day'` breaks both rules: a retry an hour later reads a different window, and a backfill for last month reads today's data.
+
+## 2. Replace or merge, never blind append
 
 | Pattern | SQL shape | Use when |
 |---------|-----------|----------|
-| Partition overwrite | `INSERT OVERWRITE ... PARTITION (dt=...)` or delete-then-insert for the slice | Output is naturally partitioned by the run's slice |
-| Merge / upsert | `MERGE ... ON key WHEN MATCHED UPDATE WHEN NOT MATCHED INSERT` | Rows have a stable unique key (dimensions, CDC) |
-| Build and swap | Build a new table, then rename or swap atomically | Small tables rebuilt fully |
-| Insert-if-absent | Insert only keys not yet present | Immutable events with unique ids |
+| Partition overwrite | Delete the slice and insert it again in one transaction, or `INSERT OVERWRITE ... PARTITION` in Spark, Hive and Databricks | Output is naturally partitioned by the run's slice (daily facts) |
+| Merge / upsert | `MERGE ... WHEN MATCHED UPDATE WHEN NOT MATCHED INSERT`, or `INSERT ... ON CONFLICT DO UPDATE` | Rows have a stable unique key (dimensions, CDC, corrections) |
+| Build and swap | Build a new table, then rename or swap atomically | Small or medium tables rebuilt in full |
+| Insert-if-absent | `INSERT ... ON CONFLICT DO NOTHING` or `WHERE NOT EXISTS` | Immutable events with a unique event id |
 
-### 3. Atomic publish
+The examples below use a staging table holding what the source delivered for 5 October, including one exact duplicate, which real sources produce more often than you would like.
 
-Readers must never see half a run. Use transactions, table formats with atomic commits, or write to a staging location and swap.
+```sql
+CREATE TABLE staging_orders (
+    order_id    bigint,
+    customer_id bigint,
+    amount      numeric(10,2),
+    order_date  date,
+    updated_at  timestamptz
+);
 
-### 4. Guarded side effects
+INSERT INTO staging_orders VALUES
+  (1, 10, 50.00, '2026-10-05', '2026-10-05 09:00+00'),
+  (2, 11, 20.00, '2026-10-05', '2026-10-05 10:00+00'),
+  (2, 11, 20.00, '2026-10-05', '2026-10-05 10:00+00'),
+  (3, 12, 75.00, '2026-10-05', '2026-10-05 11:00+00');
+```
 
-Emails, webhooks, payments and API writes are not undone by overwriting a table. Record each side effect with a key (run id plus entity id) and check before acting.
+### Partition overwrite
+
+Delete the run's slice and rebuild it inside one transaction. Running it again deletes the same rows and inserts the same rows.
+
+```sql
+CREATE TABLE fact_orders (
+    order_id    bigint,
+    customer_id bigint,
+    amount      numeric(10,2),
+    order_date  date,
+    run_id      text
+);
+
+-- The run for 2026-10-05. Rerunning it any number of times gives the same table.
+BEGIN;
+DELETE FROM fact_orders WHERE order_date = DATE '2026-10-05';
+INSERT INTO fact_orders
+SELECT DISTINCT order_id, customer_id, amount, order_date, 'daily__2026-10-05'
+FROM staging_orders
+WHERE order_date = DATE '2026-10-05';
+COMMIT;
+
+-- Second run (a retry)
+BEGIN;
+DELETE FROM fact_orders WHERE order_date = DATE '2026-10-05';
+INSERT INTO fact_orders
+SELECT DISTINCT order_id, customer_id, amount, order_date, 'daily__2026-10-05'
+FROM staging_orders
+WHERE order_date = DATE '2026-10-05';
+COMMIT;
+
+SELECT order_date, count(*) AS row_count, sum(amount) AS total
+FROM fact_orders GROUP BY order_date;
+```
+
+```text
+ order_date | row_count | total
+------------+-----------+--------
+ 2026-10-05 |         3 | 145.00
+```
+
+The `DELETE` must use exactly the same predicate as the `INSERT`. If the delete covers 5 October but the insert reads "everything since the last run", reruns will still drift.
+
+In Spark the equivalent is a dynamic partition overwrite (`spark.sql.sources.partitionOverwriteMode=dynamic`) or Delta Lake's `replaceWhere`, which replace only the partitions the job writes. A static overwrite without either replaces the whole table, which is a classic way to delete history during a one-day rerun.
+
+### MERGE: deduplicate the source first
+
+`MERGE` matches source rows to target rows on a key. It is the natural fit when the source sends new rows and corrections to existing rows. One rule catches many people: **each target row may be matched by at most one source row**. With the duplicate `order_id = 2` still in staging, PostgreSQL refuses the statement:
+
+```sql
+CREATE TABLE dim_orders (
+    order_id    bigint PRIMARY KEY,
+    customer_id bigint NOT NULL,
+    amount      numeric(10,2) NOT NULL,
+    updated_at  timestamptz NOT NULL,
+    run_id      text NOT NULL
+);
+INSERT INTO dim_orders VALUES (2, 11, 18.00, '2026-10-04 08:00+00', 'daily__2026-10-04');
+```
+
+{/* expect-error */}
+```sql
+MERGE INTO dim_orders AS t
+USING staging_orders AS s
+ON t.order_id = s.order_id
+WHEN MATCHED THEN UPDATE SET amount = s.amount, updated_at = s.updated_at
+WHEN NOT MATCHED THEN INSERT (order_id, customer_id, amount, updated_at, run_id)
+  VALUES (s.order_id, s.customer_id, s.amount, s.updated_at, 'daily__2026-10-05');
+```
+
+```text
+ERROR:  MERGE command cannot affect row a second time
+```
+
+Snowflake, Databricks and BigQuery behave similarly (an error or a nondeterministic result depending on the engine and settings). Fix it by reducing the source to **one row per key**, choosing the latest version deterministically:
+
+```sql
+MERGE INTO dim_orders AS t
+USING (
+    SELECT order_id, customer_id, amount, updated_at
+    FROM (
+        SELECT *, row_number() OVER (PARTITION BY order_id ORDER BY updated_at DESC) AS rn
+        FROM staging_orders
+    ) ranked
+    WHERE rn = 1
+) AS s
+ON t.order_id = s.order_id
+WHEN MATCHED AND s.updated_at > t.updated_at THEN
+  UPDATE SET customer_id = s.customer_id, amount = s.amount,
+             updated_at = s.updated_at, run_id = 'daily__2026-10-05'
+WHEN NOT MATCHED THEN
+  INSERT (order_id, customer_id, amount, updated_at, run_id)
+  VALUES (s.order_id, s.customer_id, s.amount, s.updated_at, 'daily__2026-10-05');
+
+SELECT order_id, amount, run_id FROM dim_orders ORDER BY order_id;
+```
+
+```text
+ order_id | amount |      run_id
+----------+--------+-------------------
+        1 |  50.00 | daily__2026-10-05
+        2 |  20.00 | daily__2026-10-05
+        3 |  75.00 | daily__2026-10-05
+```
+
+The guard `AND s.updated_at > t.updated_at` makes the merge **order-safe** as well as rerun-safe: replaying an older batch after a newer one does not overwrite newer values. If two versions of a row can share the same `updated_at`, add a tie-breaker such as a source sequence number, otherwise "latest" is not well defined.
+
+### INSERT ... ON CONFLICT
+
+PostgreSQL's upsert does the same job in one statement and needs a unique constraint on the key. It has the same one-row-per-key rule (`ON CONFLICT DO UPDATE command cannot affect row a second time`), so deduplicate here too:
+
+```sql
+INSERT INTO dim_orders (order_id, customer_id, amount, updated_at, run_id)
+SELECT DISTINCT ON (order_id) order_id, customer_id, amount, updated_at, 'daily__2026-10-05'
+FROM staging_orders
+ORDER BY order_id, updated_at DESC
+ON CONFLICT (order_id) DO UPDATE
+SET customer_id = EXCLUDED.customer_id,
+    amount      = EXCLUDED.amount,
+    updated_at  = EXCLUDED.updated_at,
+    run_id      = EXCLUDED.run_id
+WHERE EXCLUDED.updated_at > dim_orders.updated_at;
+
+SELECT count(*) AS rows_after_rerun FROM dim_orders;
+```
+
+```text
+ rows_after_rerun
+------------------
+                3
+```
+
+### Insert-if-absent for immutable events
+
+Events never change once emitted, so you only need to avoid inserting one twice:
+
+```sql
+CREATE TABLE events (event_id text PRIMARY KEY, payload jsonb);
+INSERT INTO events VALUES ('e-1', '{"type": "click"}'), ('e-2', '{"type": "view"}')
+ON CONFLICT (event_id) DO NOTHING;
+INSERT INTO events VALUES ('e-2', '{"type": "view"}'), ('e-3', '{"type": "click"}')
+ON CONFLICT (event_id) DO NOTHING;
+SELECT count(*) FROM events;
+```
+
+```text
+ count
+-------
+     3
+```
+
+## Natural keys, surrogate keys and run ids
+
+Upserts are only as good as the key they match on.
+
+- Use a **natural key** from the source (order id, event id, or a composite such as `(source_system, account_id)`) to decide whether a row is "the same row". A surrogate key generated at load time (a sequence or a random UUID) is different on every run, so it cannot detect a duplicate.
+- If the source has no reliable key, derive a **deterministic** one, for example a hash of the columns that define identity. Never use `uuid4()` or a sequence for that purpose.
+- Add a **run id** column (`daily__2026-10-05`, or the orchestrator's run id) and a load timestamp to every row you write. They do not make a load idempotent by themselves, but they let you answer "which run wrote this row?", delete exactly one bad run, and spot a row that a rerun did not touch.
+
+## 3. Atomic publish
+
+Readers must never see half a run. Options, from simplest:
+
+- **One transaction** around delete-and-insert or merge (above). PostgreSQL, Snowflake and most warehouses roll back on failure.
+- **Table formats with atomic commits** (Delta Lake, Iceberg, Hudi): a write either commits a new table version or leaves no trace.
+- **Build and swap**: build into a new table, validate it, then swap names. PostgreSQL DDL is transactional, so the swap below is all-or-nothing:
+
+```sql
+CREATE TABLE daily_revenue (order_date date, revenue numeric(12,2));
+INSERT INTO daily_revenue VALUES ('2026-10-04', 100.00);
+
+-- Build the new version off to the side, check it, then swap.
+CREATE TABLE daily_revenue_new AS
+SELECT order_date, sum(amount)::numeric(12,2) AS revenue
+FROM fact_orders GROUP BY order_date;
+
+BEGIN;
+ALTER TABLE daily_revenue RENAME TO daily_revenue_old;
+ALTER TABLE daily_revenue_new RENAME TO daily_revenue;
+COMMIT;
+DROP TABLE daily_revenue_old;
+
+SELECT * FROM daily_revenue;
+```
+
+```text
+ order_date | revenue
+------------+---------
+ 2026-10-05 |  145.00
+```
+
+Snowflake has `ALTER TABLE ... SWAP WITH` for the same purpose; in many warehouses a view that points at the current version is another way to switch atomically.
+
+## 4. Guarded side effects
+
+Overwriting a table cannot un-send an email or reverse a payment. Give each side effect an **idempotency key** (run id plus entity id), record it in a table with a unique constraint, and act only if the insert actually happened:
+
+```python
+import sqlite3
+
+conn = sqlite3.connect(":memory:")
+conn.execute("CREATE TABLE sent_notifications (idempotency_key TEXT PRIMARY KEY, sent_at TEXT)")
+outbox = []
+
+def notify_once(conn, key: str, message: str) -> bool:
+    with conn:  # claim the key and record the send in one transaction
+        cur = conn.execute(
+            "INSERT INTO sent_notifications VALUES (?, datetime('now')) ON CONFLICT DO NOTHING", (key,)
+        )
+        if cur.rowcount == 0:
+            return False          # already sent by an earlier attempt
+        outbox.append(message)    # stand-in for the real email or webhook call
+        return True
+
+for attempt in range(3):          # three retries of the same task
+    notify_once(conn, "daily__2026-10-05:finance-report", "Finance report for 2026-10-05 is ready")
+print(len(outbox))
+```
+
+```text
+1
+```
+
+There is still a window between claiming the key and the external call succeeding. If the call fails, the transaction rolls back and the key is released for the next retry, but if the process dies after the call and before the commit, a retry sends again. Many APIs (payment providers in particular) accept an idempotency key in the request header, which closes that gap on their side; use it when available.
 
 ## Streaming consumers
 
-Delivery is usually at-least-once, so the sink must tolerate duplicates: upsert on an event id, or deduplicate within a bounded window before writing.
+Stream processing is usually **at-least-once** end to end: after a crash the consumer resumes from its last committed offset and reprocesses some events. Make the sink tolerate duplicates by upserting on an event id, deduplicating within a bounded window, or committing the output and the offsets in one transaction. See [Kafka delivery semantics](/kafka/delivery-semantics-exactly-once/) for how Kafka's transactions fit in.
 
 ## Testing idempotency
 
-The simplest and most valuable pipeline test: run the step twice on the same input and assert the output is identical (row count, keys, checksums of key aggregates). The [idempotent CSV loader tutorial](/python/idempotent-csv-loader/) shows this test in Python.
+The cheapest valuable pipeline test: run the step twice on the same input and assert the output is identical. Compare row counts, the set of keys, and an aggregate checksum.
+
+```python
+import sqlite3
+
+def load_day(conn, rows, day):
+    with conn:
+        conn.execute("DELETE FROM fact WHERE day = ?", (day,))
+        conn.executemany("INSERT INTO fact VALUES (?, ?, ?)", [r for r in rows if r[1] == day])
+
+def snapshot(conn):
+    return conn.execute("SELECT count(*), sum(amount), group_concat(id) FROM (SELECT * FROM fact ORDER BY id)").fetchone()
+
+conn = sqlite3.connect(":memory:")
+conn.execute("CREATE TABLE fact (id INTEGER, day TEXT, amount REAL)")
+rows = [(1, "2026-10-05", 50.0), (2, "2026-10-05", 20.0), (3, "2026-10-06", 75.0)]
+
+load_day(conn, rows, "2026-10-05")
+first = snapshot(conn)
+load_day(conn, rows, "2026-10-05")
+assert snapshot(conn) == first, "second run changed the output"
+print(first)
+```
+
+```text
+(2, 70.0, '1,2')
+```
+
+Run the same test with a failure injected between the delete and the insert to confirm the transaction rolls back. The [idempotent CSV loader tutorial](/python/idempotent-csv-loader/) turns these checks into a pytest suite.
 
 <Callout tone="warning" title="Append is not automatically wrong">
 
-Append-only is fine for immutable event logs **if** each event has a unique id and duplicates are removed downstream. What is wrong is appending without any way to detect a duplicate.
+Append-only is fine for immutable event logs **if** each event has a unique id and duplicates are removed on write or downstream. What is wrong is appending without any way to detect a duplicate.
 
 </Callout>
 
 ## Common mistakes
 
-1. Using the current date to select input.
-2. Delete-then-insert without a transaction.
-3. Upserting without a truly unique key.
-4. Forgetting side effects.
+1. Selecting input with `now()` or `current_date`, so a retry or backfill reads a different slice.
+2. Delete-then-insert without a transaction, or with different predicates in the delete and the insert.
+3. Merging a source that contains several rows per key, which fails or picks a random winner.
+4. Upserting on a key that is not truly unique, or on a surrogate generated at load time.
+5. A static overwrite in Spark that replaces the whole table when only one partition was meant.
+6. Forgetting side effects: the table is correct after the retry, but the customer got two emails.
+
+## Interview angle
+
+"How would you make this pipeline idempotent?" is one of the most common Data Engineer questions. A strong answer names the slice (logical date, half-open interval), the write pattern and why (overwrite partition for daily facts, merge on a natural key for entities), how the write is made atomic, how duplicates in the source are handled before the merge, and how you would test it by running twice. Interviewers often follow up with late data ("what if a row for last Tuesday arrives today?"), which is covered in [incremental loading and backfills](/etl-elt/incremental-loading-watermarks-backfills/). Practise with the [idempotent batch pipeline question](/interview/data-engineering/idempotent-batch-pipeline/).
 
 ## Key takeaway
 
-Fix the input slice, replace or merge instead of appending, publish atomically, and guard side effects. Then test by running twice.
+Fix the input slice from the run's parameters, replace or merge instead of appending, deduplicate before merging, publish atomically, guard side effects with idempotency keys, and prove it all with a run-twice test.

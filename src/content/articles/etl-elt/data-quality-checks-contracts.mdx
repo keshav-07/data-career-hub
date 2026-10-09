@@ -1,69 +1,360 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Data Quality: Checks, Contracts and Failure Handling"
 seoTitle: "Data Quality: Checks, Contracts and Failures"
-description: "Build a data quality practice: which checks to run where, how contracts set expectations between teams, and how to decide whether a failure blocks or alerts."
+description: "Which data quality checks to run and where, how to quarantine bad rows, block bad publishes and write contracts, with Python, SQL, dbt, Great Expectations and Soda examples."
 inventoryId: "SUPPORT-12"
 technology: ["etl-elt", "data-engineering"]
 topic: ["data-quality", "data-contracts"]
 difficulty: "Intermediate"
-related: ["interview-questions:data-engineering/data-quality-checks", "articles:delta-lake/schema-evolution-patterns", "articles:etl-elt/pipeline-observability"]
-sources: [{"label": "dbt documentation: Data tests", "url": "https://docs.getdbt.com/docs/build/data-tests"}]
-versionContext: "Tool-neutral; checks shown as SQL"
+learningObjectives:
+  - "Choose checks by dimension: freshness, volume, schema, uniqueness, completeness, validity, consistency"
+  - "Place checks at ingestion, after transformation and before publish, with a write-audit-publish flow"
+  - "Quarantine bad rows with a reason instead of dropping them silently"
+  - "Decide which failures block and which alert, and set thresholds from history"
+  - "Express the same checks in dbt, Great Expectations and Soda, and write a basic data contract"
+prerequisites: ["articles:etl-elt/cdc-patterns-and-failure-modes"]
+related: ["interview-questions:data-engineering/data-quality-checks", "articles:delta-lake/schema-evolution-patterns", "articles:etl-elt/pipeline-observability", "system-designs:data-quality-framework", "articles:etl-elt/testing-data-pipelines-cicd"]
+previous: "articles:etl-elt/cdc-patterns-and-failure-modes"
+next: "articles:etl-elt/pipeline-observability"
+sources:
+  - { label: "dbt documentation: Data tests", url: "https://docs.getdbt.com/docs/build/data-tests" }
+  - { label: "Great Expectations documentation: GX Core", url: "https://docs.greatexpectations.io/docs/core/introduction/" }
+  - { label: "Soda documentation: SodaCL reference", url: "https://docs.soda.io/soda-cl/soda-cl-overview.html" }
+  - { label: "Bitol: Open Data Contract Standard", url: "https://bitol-io.github.io/open-data-contract-standard/latest/" }
+versionContext: "SQL runs on PostgreSQL 16.14 and Python on Python 3.11 (standard library). The Great Expectations block was run separately with GX Core 1.24 and pandas 3.0. The dbt and Soda YAML follow their current documentation and were not executed."
 ---
 
-Data quality is not a single test suite. It is a set of **expectations**, checked at the right **points**, with a clear **response** when they fail.
+Data quality is not a single test suite. It is a set of **expectations** about data, checked at the right **points** in the pipeline, with a clear **response** when one fails. The hardest part is usually not writing checks but deciding what each failure should do.
 
 ## Dimensions to check
 
-| Dimension | Example check |
-|-----------|---------------|
-| Freshness | Latest partition or `loaded_at` within the agreed delay |
-| Volume | Row count within a range learned from history |
-| Schema | Expected columns and types |
-| Uniqueness | Primary key unique |
-| Completeness | Required fields non-null |
-| Validity | Values within ranges or allowed sets |
-| Consistency | Facts reference existing dimensions; totals reconcile with source |
+| Dimension | Question | Example check |
+|-----------|----------|---------------|
+| Freshness | Is the data current? | Latest `loaded_at` within 2 hours of now |
+| Volume | Is the amount plausible? | Today's rows within 50% to 150% of the median of the last 4 same weekdays |
+| Schema | Is the structure what we expect? | Expected columns present with expected types |
+| Uniqueness | Are keys unique? | `count(*) = count(DISTINCT order_id)` |
+| Completeness | Are required fields filled? | No null `customer_id` |
+| Validity | Are values sensible? | `amount >= 0`, `status` in an allowed set, valid email format |
+| Consistency | Do tables agree? | Every fact row has a matching dimension row |
+| Reconciliation | Does it match the source? | Row count and total amount equal to the source extract |
+| Distribution | Did the shape change? | Share of null `country` not more than 5 points above its usual level |
+
+Freshness, volume, uniqueness and schema catch most real incidents, so start with those on every important table. Add validity and consistency checks where the business rules are known.
 
 ## Where to check
 
-1. **At ingestion**: schema and parseability. Quarantine bad records instead of dropping them silently.
-2. **After transformation**: keys, nulls, relationships and business rules on staging and curated tables.
-3. **Before publishing**: reconciliation with the source and volume checks. This is the last gate before consumers see the data.
+1. **At ingestion**: parseability, schema and contract compliance. Quarantine rows that fail rather than dropping them silently, and fail the load if too many do.
+2. **After transformation**: keys, nulls, relationships and business rules on staging and curated tables. Most bugs introduced by your own code (a join that fans out, a filter that drops a region) show up here.
+3. **Before publishing**: reconciliation with the source, volume against history. This is the last gate before consumers see the data.
+
+A useful pattern for the last step is **write, audit, publish**: write the new data where consumers cannot see it (a staging table, a new partition, a branch in table formats that support branching), audit it with the checks, and publish with an atomic swap or commit only if critical checks pass. If a check fails, consumers keep the previous good version and you investigate without pressure.
+
+## Quarantine instead of silent drops
+
+Row-level problems (an unparseable date, a negative quantity) should not fail a million-row batch, and they should not vanish either. Route them to a quarantine table with the reason, so they can be counted, alerted on, fixed and replayed.
+
+```sql
+CREATE TABLE raw_orders (order_id text, customer_id text, amount text, status text);
+INSERT INTO raw_orders VALUES
+  ('1', '10', '50.00', 'paid'),
+  ('2', '11', '-5.00', 'paid'),
+  ('3', NULL, '20.00', 'paid'),
+  ('4', '12', 'abc',   'paid'),
+  ('5', '13', '12.50', 'shipped'),
+  ('6', '14', '8.00',  'unknown');
+
+CREATE TABLE clean_orders (order_id bigint PRIMARY KEY, customer_id bigint NOT NULL,
+                           amount numeric(10,2) NOT NULL, status text NOT NULL);
+CREATE TABLE quarantine_orders (raw jsonb NOT NULL, reason text NOT NULL,
+                                run_id text NOT NULL, quarantined_at timestamptz DEFAULT now());
+
+BEGIN;
+CREATE TEMP TABLE checked ON COMMIT DROP AS
+SELECT r.*,
+       CASE
+         WHEN customer_id IS NULL                       THEN 'missing customer_id'
+         WHEN amount !~ '^-?[0-9]+(\.[0-9]+)?$'         THEN 'amount not numeric'
+         WHEN amount::numeric < 0                       THEN 'negative amount'
+         WHEN status NOT IN ('paid', 'shipped', 'refunded') THEN 'unknown status'
+       END AS reason
+FROM raw_orders AS r;
+
+INSERT INTO quarantine_orders (raw, reason, run_id)
+SELECT to_jsonb(c) - 'reason', reason, 'daily__2026-10-05' FROM checked AS c WHERE reason IS NOT NULL;
+
+INSERT INTO clean_orders
+SELECT order_id::bigint, customer_id::bigint, amount::numeric, status FROM checked WHERE reason IS NULL;
+COMMIT;
+
+SELECT reason, count(*) FROM quarantine_orders GROUP BY reason ORDER BY reason;
+```
+
+```text
+       reason        | count
+---------------------+-------
+ amount not numeric  |     1
+ missing customer_id |     1
+ negative amount     |     1
+ unknown status      |     1
+```
+
+`CASE` evaluates its branches in order and stops at the first match, which is why the numeric-format test comes before the cast. Two clean rows were loaded. A quarantine rate of 4 in 6 would, in a real pipeline, be a reason to stop: a high rate usually means the source changed, not that four customers made typos. Compute the rate and fail the run above a threshold:
+
+```sql
+SELECT round(100.0 * (SELECT count(*) FROM quarantine_orders WHERE run_id = 'daily__2026-10-05')
+             / (SELECT count(*) FROM raw_orders), 1) AS quarantine_pct;
+```
+
+```text
+ quarantine_pct
+----------------
+           66.7
+```
+
+## Table-level checks in Python
+
+Row checks decide what happens to a row; table checks decide what happens to the **run**. A small framework is enough to make the policy explicit: each check has a name, a severity and a function that returns whether it passed plus a detail for the alert.
+
+```python
+from dataclasses import dataclass
+from statistics import median
+from typing import Callable
+
+@dataclass(frozen=True)
+class Check:
+    name: str
+    severity: str                       # "block" or "warn"
+    fn: Callable[[list[dict]], tuple[bool, str]]
+
+def unique(column):
+    def fn(rows):
+        values = [r[column] for r in rows]
+        dupes = len(values) - len(set(values))
+        return dupes == 0, f"{dupes} duplicate {column} values"
+    return fn
+
+def not_null(column):
+    def fn(rows):
+        missing = sum(1 for r in rows if r.get(column) is None)
+        return missing == 0, f"{missing} null {column}"
+    return fn
+
+def volume_within(history: list[int], low=0.5, high=1.5):
+    def fn(rows):
+        baseline = median(history)
+        ok = low * baseline <= len(rows) <= high * baseline
+        return ok, f"{len(rows)} rows vs baseline {baseline:.0f}"
+    return fn
+
+def run_checks(rows, checks):
+    results = [(c, *c.fn(rows)) for c in checks]
+    for check, passed, detail in results:
+        print(f"{'PASS' if passed else 'FAIL'} [{check.severity}] {check.name}: {detail}")
+    blocking = [c.name for c, passed, _ in results if not passed and c.severity == "block"]
+    if blocking:
+        raise RuntimeError(f"blocking checks failed: {blocking}")
+
+rows = [{"order_id": 1, "customer_id": 10}, {"order_id": 2, "customer_id": 11},
+        {"order_id": 3, "customer_id": None}]
+checks = [
+    Check("order_id unique", "block", unique("order_id")),
+    Check("customer_id not null", "warn", not_null("customer_id")),
+    Check("volume vs last 4 Mondays", "warn", volume_within([3, 4, 4, 5])),
+]
+run_checks(rows, checks)
+
+try:
+    run_checks(rows + [{"order_id": 1, "customer_id": 10}], checks)
+except RuntimeError as exc:
+    print("publish blocked:", exc)
+```
+
+```text
+PASS [block] order_id unique: 0 duplicate order_id values
+FAIL [warn] customer_id not null: 1 null customer_id
+PASS [warn] volume vs last 4 Mondays: 3 rows vs baseline 4
+FAIL [block] order_id unique: 1 duplicate order_id values
+FAIL [warn] customer_id not null: 1 null customer_id
+PASS [warn] volume vs last 4 Mondays: 4 rows vs baseline 4
+publish blocked: blocking checks failed: ['order_id unique']
+```
+
+The first run publishes with a warning about the null `customer_id`. The second run contains a duplicate key, a blocking failure, so it raises and the orchestrator marks the task failed before the publish step runs. Every check still ran and reported, which matters during an incident: you want the full list of what is wrong, not just the first failure.
+
+In practice you would not build this yourself for long: the tools below give you the same checks, history and reporting. But the structure (named check, severity, detail, a run that fails only on blocking checks) is exactly what they implement, and it is worth being able to write it in an interview.
 
 ## Blocking versus alerting
 
 | Severity | Examples | Response |
 |----------|----------|----------|
-| Critical | Duplicate keys in a fact table, missing required columns, reconciliation failure | Block publish; consumers keep the previous good version |
-| Warning | Volume 20% below normal, unusual distribution | Publish, alert owner to investigate |
-| Informational | Small number of quarantined records | Record and trend |
+| Block | Duplicate keys in a fact table, missing required columns, reconciliation failure, quarantine rate above threshold | Do not publish; consumers keep the previous good version; page the owner |
+| Warn | Volume 30% below baseline, unusual null rate, distribution shift | Publish, alert the owner to investigate during working hours |
+| Record | A handful of quarantined rows | Count and trend; review weekly |
 
-Blocking only works if publishing is a separate, atomic step (swap, commit or view switch), so failing it leaves the old data in place.
+Blocking only works if publishing is a separate, atomic step (swap, commit, view switch), so a failed check leaves the old data in place. A check that runs **after** the data is already visible can only tell you about the problem, not prevent it.
 
-## Data contracts
-
-A **data contract** is an agreement between a producing team and consumers: schema, meaning of fields, keys, freshness and how changes are communicated. Contracts move quality upstream: the producer validates against the contract before publishing, and breaking changes follow a process. They work best for important cross-team datasets, not every table.
+Decide severity with the consumer: a finance report may prefer no update over a wrong one, while an operations dashboard may prefer slightly incomplete data now over complete data in three hours.
 
 ## Choosing thresholds
 
-Static thresholds ("at least 10,000 rows") break on weekends and holidays. Compare against a recent baseline for the same weekday, and tune thresholds from observed false alarms.
+Static thresholds ("at least 10,000 rows") alert every weekend and every holiday, and then everyone learns to ignore them. Compare against a recent baseline for the same weekday, use a tolerance band rather than an exact value, and tune from observed false alarms. Store every check result with its run id so that baselines and trends come from your own history:
+
+```sql
+CREATE TABLE dq_results (run_id text, table_name text, check_name text, passed boolean,
+                         observed numeric, checked_at timestamptz DEFAULT now());
+INSERT INTO dq_results (run_id, table_name, check_name, passed, observed) VALUES
+  ('daily__2026-09-14', 'clean_orders', 'row_count', true, 980),
+  ('daily__2026-09-21', 'clean_orders', 'row_count', true, 1010),
+  ('daily__2026-09-28', 'clean_orders', 'row_count', true, 1100),
+  ('daily__2026-10-05', 'clean_orders', 'row_count', true, 1040);
+
+-- Baseline for the next Monday: median of the last four Monday row counts
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY observed) AS median_rows
+FROM dq_results
+WHERE table_name = 'clean_orders' AND check_name = 'row_count';
+```
+
+```text
+ median_rows
+-------------
+        1025
+```
+
+## The same checks in common tools
+
+### dbt data tests
+
+In dbt, generic tests are declared next to the model. `severity` and `warn_if`/`error_if` express the block-or-warn policy, and `store_failures` keeps the failing rows in a table for inspection. Since dbt 1.8 the key is `data_tests` (`tests` still works as an alias), and since dbt 1.10 a test's own arguments are nested under `arguments` (older versions put them directly under the test name).
+
+```yaml
+models:
+  - name: fct_orders
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests:
+          - not_null:
+              config: { severity: warn }
+          - relationships:
+              arguments: { to: ref('dim_customers'), field: customer_id }
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments: { values: ['paid', 'shipped', 'refunded'] }
+```
+
+`dbt build` runs models and tests in dependency order and skips downstream models when a blocking test fails, which gives you write-audit-publish behaviour across a DAG. Source freshness is configured on sources and checked with `dbt source freshness`.
+
+### Great Expectations (GX Core)
+
+GX expresses checks as **expectations** grouped into suites and validated against a batch of data:
+
+{/* noexec */}
+```python
+import pandas as pd
+import great_expectations as gx
+
+df = pd.DataFrame({"order_id": [1, 2, 2, None], "amount": [50.0, -5.0, 20.0, 10.0]})
+
+context = gx.get_context(mode="ephemeral")
+batch = (
+    context.data_sources.add_pandas("orders_source")
+    .add_dataframe_asset(name="orders")
+    .add_batch_definition_whole_dataframe("whole_batch")
+    .get_batch(batch_parameters={"dataframe": df})
+)
+
+suite = gx.ExpectationSuite(name="orders_suite")
+suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="order_id"))
+suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="order_id"))
+suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="amount", min_value=0))
+suite = context.suites.add(suite)
+
+result = batch.validate(suite)
+print(result.success)
+for r in result.results:
+    print(r.expectation_config.type, r.success)
+```
+
+```text
+False
+expect_column_values_to_not_be_null False
+expect_column_values_to_be_unique False
+expect_column_values_to_be_between False
+```
+
+In production the suite runs inside a checkpoint that can trigger actions (store results, send a notification) and render documentation of every validation.
+
+### Soda
+
+Soda checks are written in a YAML language (SodaCL) and run against a warehouse connection:
+
+```yaml
+checks for fct_orders:
+  - row_count > 0
+  - duplicate_count(order_id) = 0
+  - missing_count(customer_id) = 0:
+      name: every order has a customer
+  - invalid_count(status) = 0:
+      valid values: [paid, shipped, refunded]
+  - freshness(loaded_at) < 2h
+```
+
+The tools differ in where they run and how they report, not in what a good check is. Choose the one that fits your stack (dbt tests if transformations are in dbt; GX or Soda when checks must cover non-dbt pipelines or DataFrames), and keep the severity policy the same everywhere.
+
+## Data contracts
+
+A **data contract** is an agreement between the team that produces a dataset and the teams that consume it. It usually covers:
+
+- the schema (columns, types, nullability) and the **meaning** of each field;
+- the key and its uniqueness guarantee;
+- freshness and availability commitments (for example, "complete for the previous day by 06:00 UTC");
+- quality rules the producer promises to enforce;
+- an owner and a **change process**: how breaking changes are announced, versioned and migrated.
+
+```yaml
+dataset: orders
+version: 2.1.0
+owner: checkout-team
+schema:
+  - { name: order_id,    type: bigint,        required: true, unique: true }
+  - { name: customer_id, type: bigint,        required: true }
+  - { name: amount,      type: decimal(10,2), required: true, description: "Order total in EUR including VAT" }
+  - { name: status,      type: string,        required: true, allowed: [paid, shipped, refunded] }
+sla:
+  freshness: "previous day complete by 06:00 UTC"
+changes:
+  breaking: "new major version, 30 days notice, old version kept during migration"
+```
+
+The point of a contract is to move quality **upstream**. The producer validates its output against the contract in its own CI and before publishing, and a pull request that renames `amount` fails there instead of breaking dashboards a week later. Consumers validate at ingestion as a second line of defence. Standards such as the Open Data Contract Standard give a common YAML format, but the agreement and the enforcement matter more than the file format.
+
+Contracts cost effort to agree and maintain, so use them for important cross-team datasets (orders, payments, customer master data), not for every internal table.
 
 <Callout tone="info" title="Every check needs an owner">
 
-A check that fails with no owner or runbook becomes noise and is eventually ignored. Assign an owner and a documented response to each critical check.
+A check that fails with no owner or runbook becomes noise and is eventually ignored. Assign an owner, a severity and a documented response to every blocking check, and delete checks nobody acts on.
 
 </Callout>
 
 ## Common mistakes
 
 1. Testing only after data is already in dashboards.
-2. Dropping bad records without counting them.
-3. Hundreds of low-value checks and alert fatigue.
+2. Dropping bad records without counting them, or quarantining them with no alert on the rate.
+3. Hundreds of low-value checks, alert fatigue, and the one important failure lost in the noise.
+4. Static volume thresholds that fire every weekend.
+5. Checks that run after publishing and therefore cannot block anything.
+6. Contracts written once and never enforced in CI.
+
+## Interview angle
+
+"How do you ensure data quality?" is asked in almost every Data Engineer interview. A strong answer names the dimensions (freshness, volume, schema, uniqueness first), where checks run (ingestion, transformation, publish gate), what happens on failure (quarantine rows, block publish on critical checks, alert on anomalies), how thresholds are set (history, same weekday) and how contracts move quality upstream. Mention one tool you have used and what you checked with it. Practise with [the most important data quality checks](/interview/data-engineering/data-quality-checks/) and the [data quality framework case study](/data-engineering/system-design/data-quality-framework/).
 
 ## Key takeaway
 
-Check freshness, volume, schema, keys and validity at ingestion, transformation and publish; block on critical failures, alert on anomalies, and formalise expectations for important datasets as contracts.
+Check freshness, volume, schema, keys and validity at ingestion, after transformation and before publish; quarantine bad rows with a reason; block on critical failures through an atomic publish step; alert on anomalies against a historical baseline; and formalise expectations for important datasets as enforced contracts.
