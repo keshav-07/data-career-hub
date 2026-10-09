@@ -102,7 +102,7 @@ for f in (three_sum_closest, three_sum_closest_brute):
     assert f([0, 0, 0], 1) == 0
     assert f([-10, -7, -3, -1], -15) == -14        # all negative
     assert f([1, 2, 4, 8, 16], 3) == 7             # target below every sum
-    assert f([1000, -1000, 3, 7], 9) == 10
+    assert f([1000, -1000, 3, 7], 9) == 7               # 1000 and -1000 cancel
 
 def closest_dist(nums, target):
     return abs(three_sum_closest_brute(nums, target) - target)
