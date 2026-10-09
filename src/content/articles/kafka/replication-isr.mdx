@@ -17,6 +17,7 @@ learningObjectives:
 prerequisites: ["articles:kafka/producers", "articles:kafka/consumer-groups-rebalancing"]
 related: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/log-storage-retention-compaction"]
 previous: "articles:kafka/consumer-groups-rebalancing"
+next: "articles:kafka/delivery-semantics-exactly-once"
 sources:
   - { label: "Apache Kafka documentation: Design (replication)", url: "https://kafka.apache.org/documentation/#design" }
   - { label: "Apache Kafka 4.0.0 release announcement", url: "https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/" }
@@ -276,7 +277,7 @@ A slow follower holds the HW back (HW 3 while b3 lags) until it is removed from 
 
 - **"Committed" means below the HW**, not "acknowledged to the producer". With `acks=1` the two differ.
 - **End-to-end latency includes replication.** A slow follower in the ISR delays every `acks=all` write and every consumer, until it is dropped.
-- **Transactional consumers** read up to the *last stable offset*, which can be lower than the HW while a transaction is open (see delivery semantics).
+- **Transactional consumers** read up to the *last stable offset*, which can be lower than the HW while a transaction is open (see [delivery semantics](/kafka/delivery-semantics-exactly-once/)).
 
 ### In interviews
 

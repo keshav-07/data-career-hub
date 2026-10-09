@@ -304,7 +304,7 @@ commit-before: wrote  8 rows, missing ['payment-6', 'payment-7'], duplicated []
 commit-after : wrote 12 rows, missing [], duplicated ['payment-4', 'payment-5']
 ```
 
-Committing first lost the rest of the batch in flight. Committing after processing re-delivered the part of the batch that had been written before the crash. Neither is exactly-once; the at-least-once version is the one you can fix, by making the sink idempotent (upsert by `payment_id`) or by using transactions, as covered in delivery semantics.
+Committing first lost the rest of the batch in flight. Committing after processing re-delivered the part of the batch that had been written before the crash. Neither is exactly-once; the at-least-once version is the one you can fix, by making the sink idempotent (upsert by `payment_id`) or by using transactions, as covered in [delivery semantics](/kafka/delivery-semantics-exactly-once/).
 
 ### Pitfalls
 

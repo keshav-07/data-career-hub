@@ -166,5 +166,29 @@
   "KRaft vs ZooKeeper": {
     "ref": "articles:kafka/replication-isr",
     "heading": "KRaft vs ZooKeeper"
+  },
+  "At-most-once": {
+    "ref": "articles:kafka/delivery-semantics-exactly-once",
+    "heading": "At-most-once"
+  },
+  "At-least-once": {
+    "ref": "articles:kafka/delivery-semantics-exactly-once",
+    "heading": "At-least-once"
+  },
+  "Exactly-once semantics (EOS)": {
+    "ref": "articles:kafka/delivery-semantics-exactly-once",
+    "heading": "Exactly-once semantics (EOS)"
+  },
+  "Transactions in Kafka": {
+    "ref": "articles:kafka/delivery-semantics-exactly-once",
+    "heading": "Transactions in Kafka"
+  },
+  "Idempotence end-to-end": {
+    "ref": "articles:kafka/delivery-semantics-exactly-once",
+    "heading": "Idempotence end to end"
+  },
+  "Read-process-write pattern": {
+    "ref": "articles:kafka/delivery-semantics-exactly-once",
+    "heading": "Read-process-write pattern"
   }
 }
