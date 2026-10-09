@@ -5,8 +5,8 @@ technology: ["data-engineering", "data-lakes", "aws"]
 topic: ["data-lake", "storage", "architecture"]
 difficulty: "Advanced"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 problem: "Design a central data lake on cloud object storage that receives files, database extracts and event streams from dozens of sources, keeps raw data cheaply for years, and lets analysts, Spark jobs and data scientists query curated data with SQL without the lake turning into an ungoverned swamp."
 functionalRequirements:
   - "Land data from batch files, database extracts and streaming sinks into a raw zone without modifying it"
@@ -172,7 +172,7 @@ Readers filter on `order_ts` and Iceberg prunes by day without anyone needing to
 The catalog does two jobs: it is the **commit point** for the table format (the atomic pointer to the current metadata) and the **discovery and permission layer** for people. Options:
 
 - **AWS Glue Data Catalog**: managed, integrates with Athena, EMR and Lake Formation permissions; tied to AWS.
-- **Apache Polaris** or another **Iceberg REST catalog**: engine-neutral, the direction most multi-engine platforms are taking. Polaris graduated to an Apache top-level project in 2026.
+- **Apache Polaris** or another **Iceberg REST catalog**: engine-neutral, the direction most multi-engine platforms are taking.
 - **Unity Catalog**: strongest in Databricks; the open-source version is an LF AI & Data project.
 - **Managed Iceberg storage** such as Amazon S3 Tables, which adds automatic compaction and snapshot management on top of a table bucket.
 

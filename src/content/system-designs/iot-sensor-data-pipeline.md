@@ -5,8 +5,8 @@ technology: ["data-engineering", "kafka", "spark"]
 topic: ["iot", "streaming", "time-series"]
 difficulty: "Advanced"
 publishedDate: "2026-10-06"
-updatedDate: "2026-10-06"
-reviewedDate: "2026-10-06"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 problem: "An industrial company has 500,000 sensors on pumps, compressors and cooling systems across 2,000 sites, many on unreliable cellular links. Design a pipeline that ingests their telemetry securely, raises alerts on dangerous conditions within seconds, stores readings for dashboards and long-term analysis, and supports predictive-maintenance models, despite late, duplicated and out-of-order data."
 functionalRequirements:
   - "Ingest telemetry from devices and site gateways over MQTT; send commands and configuration back"
@@ -25,7 +25,7 @@ scaleAssumptions:
   - "Assumption: 500,000 sensors, each sending one reading every 10 seconds = 50,000 readings/s average"
   - "Assumption: about 200 bytes per reading in JSON, less in a binary format"
   - "Assumption: peaks of 3× when sites reconnect after outages and flush buffers"
-  - "Assumption: 30 days of raw readings hot, 5 years of 1-minute and hourly aggregates"
+  - "Assumption: 30 days of raw readings hot, 1-minute rollups for 1 year and hourly rollups for 5 years"
 architectureSummary: "Devices publish to a managed MQTT broker (or site gateways aggregate local sensors and forward) with per-device X.509 certificates and QoS 1. A bridge forwards messages to Kafka, keyed by device id. A Flink job deduplicates on device sequence numbers, handles event time with watermarks, evaluates rules and anomaly models for alerts, and writes rollups. Raw readings land in a lakehouse for training; a time-series database serves recent data and downsampled history to dashboards. A device registry provides metadata and calibration for enrichment."
 technologies:
   - "MQTT broker (AWS IoT Core, Azure IoT Hub, EMQX or HiveMQ) with per-device certificates"
@@ -241,7 +241,7 @@ At 5 million sensors (500,000 readings/s): more gateway aggregation and batching
 - **Kafka**: 860 GB/day × 3 days × 3 replicas ≈ 7.7 TB before compression; binary encoding and compression reduce this several times.
 - **Lakehouse**: Parquet compresses regular numeric series well; assume 10× smaller than JSON ≈ 86 GB/day ≈ 31 TB/year.
 - **Time-series DB raw tier**: 50,000 readings/s × 86,400 s × 30 days ≈ 130 billion readings; at an assumed 10 bytes per reading after time-series compression ≈ 1.3 TB.
-- **Rollups**: 500,000 devices × 1,440 minutes/day ≈ 720 million 1-minute rows/day; at 1 year that is about 260 billion rows, so many teams keep 1-minute rollups for 90 days and hourly (12 million rows/day) for 5 years.
+- **Rollups**: 500,000 devices × 1,440 minutes/day ≈ 720 million 1-minute rows/day; the 1-year 1-minute tier is about 260 billion rows (a few TB with time-series compression), which is why some teams cut it to 90 days; hourly rollups are only 12 million rows/day, so 5 years of them is small.
 - **Flink state**: dedup state of recent sequence numbers for 500,000 devices × a few hundred bytes ≈ a few hundred MB, small.
 
 ## What a strong answer includes

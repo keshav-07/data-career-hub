@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design an E-Commerce Inventory Sync System"
 description: "A system-design case study for multi-channel inventory: CDC from warehouses, available-to-promise, reservations, channel sync and oversell prevention."
 technology: ["data-engineering", "kafka", "sql"]
@@ -236,7 +236,7 @@ Assumptions: 2 million SKUs × 300 locations, but most SKUs are stocked in few l
 
 - **State**: 10 million SKU-location rows × ~100 bytes ≈ 1 GB, plus reservations: fits comfortably in a relational database with indexes.
 - **Movements**: peak 3,000/s × 500 B = 1.5 MB/s; a day at an average of 500/s ≈ 43 million movements ≈ 22 GB/day.
-- **Channel updates**: if 200,000 SKUs change in a busy hour, coalesced to one update per SKU per minute at most, a channel needs up to about 3,300 updates per minute in that hour. Compare with each marketplace's rate limit; if the limit is lower, prioritisation and bulk endpoints decide what is sent first.
+- **Channel updates**: if 200,000 distinct SKUs change in a busy hour, sending each one at least once means about 3,300 updates per minute per channel on average; SKUs that keep changing add up to one more update per minute each, because of coalescing. Compare with each marketplace's rate limit; if the limit is lower, prioritisation and bulk endpoints decide what is sent first.
 - **Reconciliation**: a full listing read of 2 million SKUs per channel per day through bulk reports or paged APIs; incremental checks for hot SKUs every few minutes.
 
 ## What a strong answer includes

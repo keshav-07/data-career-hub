@@ -5,8 +5,8 @@ technology: ["data-engineering", "kafka", "cloud"]
 topic: ["logging", "observability", "search"]
 difficulty: "Advanced"
 publishedDate: "2026-10-06"
-updatedDate: "2026-10-06"
-reviewedDate: "2026-10-06"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 problem: "A company runs 3,000 services on Kubernetes and VMs across two regions, producing about 20 TB of logs a day. Engineers need to search recent logs within seconds during incidents, security needs a year of audit logs, and the current logging bill grows faster than traffic. Design a log ingestion and search platform that collects, parses, redacts, indexes and retains logs reliably and affordably."
 functionalRequirements:
   - "Collect application, container, system and audit logs from every host and cluster"
@@ -24,7 +24,7 @@ nonFunctionalRequirements:
 scaleAssumptions:
   - "Assumption: 20 TB/day raw logs, about 230 MB/s on average and 600 MB/s at peak"
   - "Assumption: average log line 500 bytes, so roughly 40 billion lines per day"
-  - "Assumption: 7 days hot, 30 days warm/cold, 13 months archive (audit logs longer)"
+  - "Assumption: 7 days on local disks (hot, then warm), searchable snapshots (cold, then frozen) up to 90 days, 13 months in the archive (audit logs longer)"
   - "Assumption: 2,000 engineers, a few hundred concurrent searches during a major incident"
 architectureSummary: "Lightweight agents (Fluent Bit, Vector or the OpenTelemetry Collector) on every node tail logs, add metadata and ship to Kafka, which buffers and decouples producers from indexing. Stream processors parse, enrich, redact, route and sample. Indexers write to Elasticsearch or OpenSearch data streams with index lifecycle policies moving data from hot to warm to cold or frozen tiers. A parallel sink writes compressed Parquet to object storage as the archive, queryable with Trino or Athena. Alerting runs on the stream; access is controlled per team."
 technologies:
@@ -200,7 +200,7 @@ At 200 TB/day, full-text indexing of everything becomes very expensive: index on
 
 - **Volume**: 20 TB/day ≈ 230 MB/s average; peak 600 MB/s.
 - **Kafka**: 20 TB/day × 2 days × 3 replicas = 120 TB raw; with producer compression (logs often compress 5–10×) roughly 15–25 TB of disk.
-- **Hot tier**: indexed log data often takes space comparable to or larger than the raw size depending on mappings; assume 1.2× raw with one replica: 20 TB × 1.2 × 2 × 7 days ≈ 340 TB. This is why hot retention is short and why volume reduction matters.
+- **Hot and warm tiers** (the first 7 days on local disk): indexed log data often takes space comparable to or larger than the raw size depending on mappings; assume 1.2× raw with one replica: 20 TB × 1.2 × 2 × 7 days ≈ 340 TB. This is why hot retention is short and why volume reduction matters.
 - **Reduction**: dropping debug logs and sampling success logs often removes a large share of volume; at an assumed 40% reduction the hot tier falls to about 200 TB.
 - **Archive**: Parquet with zstd on logs might reach 10× compression (assumption; measure on your data) ≈ 2 TB/day ≈ 730 TB/year, in cheap object storage tiers.
 - **Indexing compute**: plan hot nodes by measured indexing throughput per node in load tests, with headroom for incident query load.

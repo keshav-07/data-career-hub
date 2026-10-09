@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Churn Prediction Data Pipeline"
 description: "A system-design case study for churn prediction data: label definition, point-in-time features, training snapshots, batch scoring, CRM write-back and drift checks."
 technology: ["data-engineering", "sql", "spark"]
@@ -25,7 +25,7 @@ scaleAssumptions:
   - "Assumption: 500,000 active subscription accounts"
   - "Assumption: 3 years of history, about 1.5 billion usage events a year"
   - "Assumption: about 150 features per account"
-  - "Assumption: a monthly churn rate of around 2%, so positives are rare"
+  - "Assumption: about 2% of active accounts churn within any 60-day window (roughly 1% a month), so positives are rare"
 architectureSummary: "Raw usage, billing, CRM and support data land in the lakehouse. Feature pipelines compute daily feature snapshots per account (an offline feature store) using only data available as of each date. A label job derives churn outcomes from billing over a fixed horizon. A training-set builder joins snapshots to labels point-in-time and writes versioned datasets. A daily scoring job reads today's snapshot, applies the registered model, and writes scores and explanations to a scores table and the CRM; monitoring compares features, scores and realised outcomes over time."
 technologies: ["Lakehouse tables (Delta Lake or Iceberg)", "Spark or warehouse SQL for features", "Offline feature store (snapshot tables or a feature-store product)", "Orchestrator", "Model registry and experiment tracking", "Reverse ETL or CRM API connector", "Monitoring and data quality tooling"]
 tradeoffs:

@@ -5,8 +5,8 @@ technology: ["data-engineering", "etl-elt", "dbt"]
 topic: ["data-quality", "governance", "architecture"]
 difficulty: "Advanced"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 problem: "Bad data keeps reaching dashboards and models: duplicated orders after a retry, a source that silently sent half its rows, negative prices after an upstream change. Design a company-wide data quality framework that lets teams declare expectations on their datasets, enforces them at the right points in batch and streaming pipelines, stops bad data from being published, and routes problems to the people who can fix them."
 functionalRequirements:
   - "Declare checks as code next to each dataset: schema, keys, nulls, ranges, referential integrity, freshness, volume, custom business rules"
@@ -187,7 +187,7 @@ In a real framework, these checks are generated from YAML declarations rather th
 
 The safest gate for critical tables:
 
-1. **Write** the new data to a staging location: a staging table, a Delta or Iceberg branch, or a new table version that is not yet exposed.
+1. **Write** the new data to a staging location: a staging table, an Iceberg branch (Delta Lake has no branches; use a staging table or a shallow clone), or a new table version that is not yet exposed.
 2. **Audit**: run blocking checks against the staged data.
 3. **Publish**: atomically swap or merge the staged data into the production table (an `ALTER TABLE ... SWAP WITH` in Snowflake, a fast-forward of an Iceberg branch, or a single MERGE/overwrite commit in Delta).
 
@@ -264,7 +264,7 @@ At 150,000 checks a day: generate standard checks automatically from metadata (e
 ## Capacity estimate
 
 - **Results volume**: 15,000 checks/day × about 200 bytes per result ≈ 3 MB/day; a year is about 1 GB. The results store is tiny; keep it all.
-- **Runtime overhead**: a combined profile scan of a 2-billion-row daily partition costs roughly one extra read of that partition. If the build itself does several passes, one extra pass is typically within the 10% target; uniqueness on a large key is the expensive check, so run it on the new partition and keys only.
+- **Runtime overhead**: a combined profile scan of a 2-billion-row daily partition costs roughly one extra read of that partition. That stays within the 10% target only when the build is much heavier than a scan (joins, shuffles and writes usually are); if it is not, compute the aggregates inside the build's own pass or on a sample. Uniqueness on a large key is the expensive check, so run it on the new partition and keys only.
 - **Quarantine**: at 0.01% invalid rows on 2 billion rows, 200,000 rows/day, a small table.
 - **Alert load**: with 15,000 checks and a 0.5% daily failure rate, about 75 failures a day; grouping by dataset and run turns them into perhaps 20–30 actionable alerts for 30 teams, which is manageable.
 

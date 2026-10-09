@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design an A/B Testing Data Pipeline"
 description: "A system-design case study for experiment analytics: assignment and exposure logging, metric computation, sample ratio checks, CUPED and trustworthy results."
 technology: ["data-engineering", "sql", "spark"]
@@ -252,7 +252,7 @@ The expensive part is joining behaviour events to exposures. Scale by:
 - Computing each metric source **once per day for all experiments** (one join of events to a user-to-experiments table), not once per experiment.
 - Pre-aggregating events to user-day grain first (2 billion events become about 20 million user-day rows per source).
 - Storing only sufficient statistics for results, so statistics and UI reads are cheap.
-- At 10× (3,000 experiments), the user-to-experiment table grows to about 200 million rows a day; cluster by user id so the join stays a co-located merge, and drop finished experiments from the daily run.
+- At 10× (3,000 experiments, so each user in about 100 of them), the user-to-experiment table grows from 200 million to about 2 billion rows; cluster by user id so the join stays a co-located merge, and drop finished experiments from the daily run.
 
 ## Capacity estimate
 

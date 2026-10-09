@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Backfill and Late-Data Handling System"
 seoTitle: "Design a Backfill and Late-Data System"
 description: "A system-design case study for backfills and late data: idempotent partition rewrites, affected-partition detection, dependency-aware reruns and validation."
@@ -230,7 +230,7 @@ Assumptions: a 3 TB/year fact table, daily partitions of about 8 GB; 15 dependen
 
 - **Fact backfill for one year**: 365 × 8 GB ≈ 3 TB read and written; at 100 GB/min that is about 30 minutes of pure scanning, realistically 2 to 3 hours with writes and overhead.
 - **Dependants**: 15 × 5% × 3 TB ≈ 2.25 TB to read and rewrite, similar order of time.
-- **Concurrency**: limiting the backfill to 25% of the pool's capacity stretches that to roughly half a day, which meets the "within a day or two" target without hurting production.
+- **Concurrency**: limiting the backfill to 25% of the pool's capacity stretches each of those two phases to roughly 8 to 12 hours, so about a day in total, which meets the "within a day or two" target without hurting production.
 - **Daily late data**: 2% of events arriving late spread over 7 days means every daily run rewrites around 7 to 8 partitions per table instead of 1, multiplying incremental cost by up to 8× for the largest tables. If that is too expensive, use keyed MERGE for the old partitions instead of full rewrites.
 
 ## What a strong answer includes
