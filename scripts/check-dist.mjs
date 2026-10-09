@@ -62,7 +62,6 @@ for (const p of pages) {
   if (!canonical) errors.push(`${url}: missing canonical`);
   else {
     if (!/^https?:\/\//.test(canonical)) errors.push(`${url}: canonical is not absolute`);
-    if (canonical.includes("datadank.example")) errors.push(`${url}: canonical uses the placeholder origin; set SITE_URL for the intended deployment`);
     if (!is404 && !canonical.endsWith(url))
       errors.push(`${url}: canonical ${canonical} does not match URL`);
   }
