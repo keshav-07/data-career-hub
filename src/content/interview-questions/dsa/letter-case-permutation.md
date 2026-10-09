@@ -30,7 +30,7 @@ choice.
 ## Examples
 
 ```text
-"a1b"   ->  ["a1b", "a1B", "A1b", "A1B"]
+"c4d"   ->  ["c4d", "c4D", "C4d", "C4D"]
 "7z"    ->  ["7z", "7Z"]
 "42"    ->  ["42"]          (no letters: one result)
 "Q"     ->  ["q", "Q"]      (input case does not matter)
@@ -116,7 +116,7 @@ def expected(s):
     return sorted({"".join(t) for t in product(*[{c.lower(), c.upper()} for c in s])})
 
 for f in (letter_case_permutation, letter_case_bitmask, letter_case_iterative):
-    assert sorted(f("a1b")) == ["A1B", "A1b", "a1B", "a1b"]
+    assert sorted(f("c4d")) == ["C4D", "C4d", "c4D", "c4d"]
     assert sorted(f("7z")) == ["7Z", "7z"]
     assert f("42") == ["42"]                        # digits only
     assert sorted(f("Q")) == ["Q", "q"]

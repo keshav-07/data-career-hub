@@ -30,10 +30,9 @@ This is LeetCode 463, Island Perimeter. Assume grids of up to 100 by 100.
 ## Examples
 
 ```text
-0 1 0 0
-1 1 1 0     ->  16
-0 1 0 0
-1 1 0 0
+1 1 0
+0 1 1     ->  12    (5 cells * 4 = 20, minus 2 * 4 shared edges)
+0 1 0
 
 1           ->  4     (one cell)
 1 1         ->  6     (two cells share one edge: 8 - 2)
@@ -119,9 +118,9 @@ def island_perimeter_dfs(grid):
 ```python
 import random
 
-sample = [[0, 1, 0, 0], [1, 1, 1, 0], [0, 1, 0, 0], [1, 1, 0, 0]]
+sample = [[1, 1, 0], [0, 1, 1], [0, 1, 0]]
 for f in (island_perimeter, island_perimeter_sides, island_perimeter_dfs):
-    assert f(sample) == 16
+    assert f(sample) == 12
     assert f([[1]]) == 4
     assert f([[1, 1]]) == 6
     assert f([[1], [1], [1]]) == 8                     # vertical strip

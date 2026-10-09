@@ -31,13 +31,13 @@ This is LeetCode 547, Number of Provinces. It is the matrix form of
 ## Examples
 
 ```text
-1 1 0
-1 1 0      ->  2    ({0, 1} and {2})
-0 0 1
+1 0 1 0
+0 1 0 0    ->  3    ({0, 2}, {1} and {3})
+1 0 1 0
+0 0 0 1
 
-1 0 0
-0 1 0      ->  3    (no links)
-0 0 1
+1 1
+1 1        ->  1
 
 1 0 0 1
 0 1 1 0    ->  2    ({0, 3} and {1, 2})
@@ -136,8 +136,9 @@ need the running count after each.
 import random
 
 for f in (find_provinces, find_provinces_labels, find_provinces_dsu):
-    assert f([[1, 1, 0], [1, 1, 0], [0, 0, 1]]) == 2
-    assert f([[1, 0, 0], [0, 1, 0], [0, 0, 1]]) == 3
+    assert f([[1, 0, 1, 0], [0, 1, 0, 0], [1, 0, 1, 0], [0, 0, 0, 1]]) == 3
+    assert f([[1, 1], [1, 1]]) == 1
+    assert f([[1, 0, 0], [0, 1, 0], [0, 0, 1]]) == 3     # no links
     assert f([[1, 0, 0, 1], [0, 1, 1, 0], [0, 1, 1, 0], [1, 0, 0, 1]]) == 2
     assert f([[1]]) == 1                                  # single city
     assert f([[1] * 5 for _ in range(5)]) == 1            # fully connected

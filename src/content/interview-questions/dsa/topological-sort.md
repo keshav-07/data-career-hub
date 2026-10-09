@@ -31,9 +31,8 @@ Assume up to about 10,000 vertices and edges.
 ## Examples
 
 ```text
-V = 4, edges = [[3, 0], [1, 0], [2, 0]]            ->  [3, 1, 2, 0]   (0 must be last; 1, 2, 3 in any order)
-V = 6, edges = [[5, 2], [5, 0], [4, 0], [4, 1],
-                [2, 3], [3, 1]]                     ->  [4, 5, 2, 0, 3, 1] is one valid answer
+V = 4, edges = [[2, 1], [1, 0], [2, 3]]            ->  [2, 1, 3, 0]   (2 first; 0 after 1; 3 anywhere after 2)
+V = 5, edges = [[0, 3], [1, 3], [3, 4], [2, 4]]    ->  [0, 1, 2, 3, 4] is one valid answer
 V = 3, edges = []                                   ->  [0, 1, 2]      (any permutation)
 ```
 
@@ -137,8 +136,8 @@ def is_valid(V, edges, order):
     return sorted(order) == list(range(V)) and all(pos[u] < pos[v] for u, v in edges)
 
 cases = [
-    (4, [[3, 0], [1, 0], [2, 0]]),
-    (6, [[5, 2], [5, 0], [4, 0], [4, 1], [2, 3], [3, 1]]),
+    (4, [[2, 1], [1, 0], [2, 3]]),
+    (5, [[0, 3], [1, 3], [3, 4], [2, 4]]),
     (3, []),                                       # no edges
     (1, []),                                       # single vertex
     (5, [[0, 1], [1, 2], [2, 3], [3, 4]]),         # chain

@@ -30,9 +30,9 @@ generous.
 ## Examples
 
 ```text
-graph = [[1, 3], [0, 2], [1, 3], [0, 2]]      ->  True    (square: {0, 2} and {1, 3})
-graph = [[1, 2], [0, 2], [0, 1]]              ->  False   (triangle: odd cycle)
-graph = [[1], [0], [3], [2], []]              ->  True    (two edges and an isolated vertex)
+graph = [[1, 5], [0, 2], [1, 3], [2, 4], [3, 5], [4, 0]]   ->  True    (6-cycle: {0, 2, 4} and {1, 3, 5})
+graph = [[1, 2], [0, 2], [0, 1]]                           ->  False   (triangle: odd cycle)
+graph = [[1], [0], [3], [2], []]                           ->  True    (two edges and an isolated vertex)
 ```
 
 ## Approach 1: brute force (try every colouring)
@@ -121,7 +121,7 @@ The check runs before each union, and any vertex already merged with a neighbour
 import random
 
 for f in (is_bipartite, is_bipartite_brute, is_bipartite_dsu):
-    assert f([[1, 3], [0, 2], [1, 3], [0, 2]]) is True
+    assert f([[1, 5], [0, 2], [1, 3], [2, 4], [3, 5], [4, 0]]) is True
     assert f([[1, 2], [0, 2], [0, 1]]) is False         # triangle
     assert f([[1], [0], [3], [2], []]) is True          # disconnected, isolated vertex
     assert f([[]]) is True                              # single vertex

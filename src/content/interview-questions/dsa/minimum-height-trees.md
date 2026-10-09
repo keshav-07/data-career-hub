@@ -29,8 +29,8 @@ This is LeetCode 310, Minimum Height Trees. Assume `n` up to about 20,000, which
 ## Examples
 
 ```text
-n = 4, edges = [[1, 0], [1, 2], [1, 3]]                    ->  [1]       (a star: the hub)
-n = 6, edges = [[3, 0], [3, 1], [3, 2], [3, 4], [5, 4]]    ->  [3, 4]    (two centres)
+n = 5, edges = [[0, 2], [2, 1], [2, 3], [2, 4]]            ->  [2]       (a star: the hub)
+n = 6, edges = [[0, 1], [1, 2], [2, 3], [1, 4], [2, 5]]    ->  [1, 2]    (two centres)
 n = 1, edges = []                                          ->  [0]
 n = 2, edges = [[0, 1]]                                    ->  [0, 1]
 ```
@@ -115,8 +115,8 @@ def norm(xs):
     return sorted(xs)
 
 for f in (find_min_height_trees, find_min_height_trees_brute):
-    assert norm(f(4, [[1, 0], [1, 2], [1, 3]])) == [1]
-    assert norm(f(6, [[3, 0], [3, 1], [3, 2], [3, 4], [5, 4]])) == [3, 4]
+    assert norm(f(5, [[0, 2], [2, 1], [2, 3], [2, 4]])) == [2]
+    assert norm(f(6, [[0, 1], [1, 2], [2, 3], [1, 4], [2, 5]])) == [1, 2]
     assert f(1, []) == [0]                                       # single node
     assert norm(f(2, [[0, 1]])) == [0, 1]                        # one edge
     assert norm(f(5, [[0, 1], [1, 2], [2, 3], [3, 4]])) == [2]   # odd path
