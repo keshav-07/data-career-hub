@@ -24,7 +24,7 @@
 
 ## Still not verified
 
-- `npm run validate` has **not yet been executed in a build environment** in this pass. The new GitHub Actions workflow should run it when the branch is opened as a pull request; fix any failures before merging.
+- `npm run validate` passed in [GitHub Actions run 37932774680](https://github.com/keshav-07/datadank/actions/runs/37932774680) after fixing broken week anchors. Astro checks, lint, contrast, inventory, planner validation, build, and built-output checks all passed.
 - Every generated route and anchor has not yet been crawled against the built output.
 - Every SQL/Python/DSA/PySpark/cloud/streaming example and external practice URL has not been technically checked.
 - A passage-by-passage originality comparison and dedicated plagiarism scan have not been run. No plagiarism-free or plagiarism finding is claimed.
@@ -33,4 +33,4 @@
 
 ## Merge gate
 
-The automated validation workflow passes. Merge only after reviewing the PR diff; keep content originality, technical review, and per-route editorial/SEO gates open until there is evidence for each. Keep the content originality, technical review, rendered-route review, and SEO review gates open until there is evidence for each.
+The automated validation workflow passes. Merge only after reviewing the PR diff; keep content originality, technical review, external-link verification, and human editorial/SEO gates open until there is evidence for each.
