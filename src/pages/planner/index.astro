@@ -17,7 +17,7 @@ const hours = days.reduce((a, d) => a + d.hours, 0);
   description={`Track ${total} Data Engineering interview topics across SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS, data modeling and system design, plus a 90-day plan.`}
   crumbs={[HOME, { label: "Study planner" }]}
   eyebrow="Study planner"
-  deck={`Track ${total} topics across ${TRACKERS.length} skill trackers, then follow a 90-day sequence that starts with foundations and builds toward projects and interview practice. Your ticks are saved in this browser; no account needed.`}
+  deck={`Every topic you need for Data Engineering interviews, in ${TRACKERS.length} trackers with ${total} topics, each linked to its study material, plus a day-by-day 90-day plan. Your ticks are saved in this browser; no account needed.`}
   width="wide"
   indexable
 >
@@ -84,7 +84,7 @@ const hours = days.reduce((a, d) => a + d.hours, 0);
           <Tile
             href="/planner/90-day-plan/"
             title="90-day study plan"
-            description="A prerequisite-led study plan with one main focus per day, practice, review and measurable checkpoints."
+            description="A day-by-day plan: one topic per skill each day, mock interviews and applications, with weekly and monthly milestones."
             meta={[`${days.length} days`, `${hours} hours`]}
           />
         </li>
@@ -111,7 +111,8 @@ const hours = days.reduce((a, d) => a + d.hours, 0);
             interview.
           </li>
           <li>
-            Follow the 90-day plan if you want a ready-made order. Most days are estimated at 2–3 hours; adjust the pace to your experience and schedule.
+            Follow the 90-day plan if you want a ready-made order: about 3 hours on weekdays and 6
+            at weekends.
           </li>
         </ol>
       </div>
