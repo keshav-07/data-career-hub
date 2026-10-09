@@ -190,5 +190,33 @@
   "Read-process-write pattern": {
     "ref": "articles:kafka/delivery-semantics-exactly-once",
     "heading": "Read-process-write pattern"
+  },
+  "Connect framework": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Connect framework"
+  },
+  "Source vs sink connectors": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Source vs sink connectors"
+  },
+  "Standalone vs distributed": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Standalone vs distributed"
+  },
+  "Converters & SMTs": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Converters and SMTs"
+  },
+  "Offset storage": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Offset storage"
+  },
+  "Dead letter queue": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Dead letter queue"
+  },
+  "Debezium CDC": {
+    "ref": "articles:kafka/kafka-connect-debezium",
+    "heading": "Debezium CDC"
   }
 }

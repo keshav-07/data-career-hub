@@ -340,7 +340,7 @@ A consumer that rebuilds state from a compacted topic must reach the head within
 
 - **Tombstones on a delete-policy topic do nothing special.** A null value on a `cleanup.policy=delete` topic is just a record with no value.
 - **Serialisers that cannot write null.** Some serialisers turn `null` into an empty object or the string `"null"`. That is not a tombstone, and the key is never deleted.
-- **Debezium sends two records for a delete**: a delete event with the old row, then a tombstone, so that compaction can remove the key. Do not filter the tombstone out if the topic is compacted (see Kafka Connect and Debezium).
+- **Debezium sends two records for a delete**: a delete event with the old row, then a tombstone, so that compaction can remove the key. Do not filter the tombstone out if the topic is compacted (see [Kafka Connect and Debezium](/kafka/kafka-connect-debezium/)).
 
 ### In interviews
 
