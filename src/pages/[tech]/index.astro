@@ -33,6 +33,12 @@ const hubQuestions = course.questions.filter((q) => q.id.startsWith(`${tech}/`))
 const interviewHub = hubQuestions.length > 0;
 // Practice tab: courses with a real problem set (DSA, SQL), every question with its tick and practice link.
 const practice = hubQuestions.length >= 10 ? await practiceGroups(tech, hubQuestions) : [];
+// Every problem on the Practice tab, including practice-only ones awaiting a DataDank write-up.
+const practiceTotal = practice.reduce(
+  (n, g) => n + g.sections.reduce((m, s) => m + s.rows.length, 0),
+  0,
+);
+const questionTotal = Math.max(practiceTotal, hubQuestions.length);
 const hours = Math.max(1, Math.round(course.minutes / 60));
 let lessonNo = 0;
 
@@ -40,7 +46,7 @@ let lessonNo = 0;
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "lessons", label: "Lessons", count: course.lessons.length },
-  practice.length ? { id: "practice", label: "Practice", count: hubQuestions.length } : null,
+  practice.length ? { id: "practice", label: "Practice", count: practiceTotal } : null,
   course.projects.length || course.designs.length
     ? { id: "projects", label: "Projects", count: course.projects.length + course.designs.length }
     : null,
@@ -181,7 +187,7 @@ const tabs = [
               data-ring
               data-kind="question"
               data-course={tech}
-              data-total={hubQuestions.length}
+              data-total={questionTotal}
               data-label="Interview questions"
               role="img"
             >
@@ -193,7 +199,7 @@ const tabs = [
               <span aria-hidden="true">
                 <span class="ring__label">Questions</span>
                 <span class="ring__detail" data-ring-detail>
-                  0 of {hubQuestions.length}
+                  0 of {questionTotal}
                 </span>
               </span>
             </div>

@@ -118,6 +118,7 @@ export type TopicRow = {
   pageTitle?: string;
 };
 
+type PracticeLinkRaw = { platform: string; number?: number | null; title: string; url: string };
 type RawItem = {
   topic: string;
   category: string;
@@ -125,6 +126,11 @@ type RawItem = {
   lesson?: string;
   question?: string;
   design?: string;
+  /** DSA: pattern subfolder inside the topic (category). */
+  pattern?: string;
+  /** DSA practice-only items (no DataDank page yet): future page slug and the verified external link. */
+  slug?: string;
+  practice?: PracticeLinkRaw;
 };
 type Raw = Record<string, { items: RawItem[] }>;
 type Headings = Record<string, { ref: string; heading: string }>;
@@ -236,51 +242,110 @@ export async function planDays(): Promise<PlanDay[]> {
   });
 }
 
-export type PracticeGroup<Q> = {
+/** One row of a Practice tab: a DataDank problem page, or a practice-only problem awaiting its write-up. */
+export type PracticeRow = {
+  title: string;
+  difficulty: string;
+  /** DataDank solution page, when written. */
+  url?: string;
+  /** Key for the done tick (the solution page's address, so ticks carry over once it is written). */
+  doneUrl: string;
+  practice?: { platform: string; number?: number; title: string; url: string };
+};
+export type PracticeSection = { name?: string; rows: PracticeRow[] };
+export type PracticeGroup = {
   name: string;
   lesson?: { url: string; title: string };
-  questions: Q[];
+  sections: PracticeSection[];
 };
 
+type QLike = {
+  ref: string;
+  id: string;
+  url: string;
+  title: string;
+  entry: { data: { difficulty: string; practice?: PracticeRow["practice"] } };
+};
+const rowOf = (q: QLike): PracticeRow => ({
+  title: q.title.split(":")[0],
+  difficulty: q.entry.data.difficulty,
+  url: q.url,
+  doneUrl: q.url,
+  practice: q.entry.data.practice,
+});
+
 /**
- * A course's interview questions grouped for its Practice tab. DSA follows the planner's pattern order (each group
- * links its pattern lesson); SQL splits core questions from business case studies; anything unlisted comes last.
+ * A course's problems grouped for its Practice tab. DSA follows the planner list (curriculum.json): topic sections
+ * in learning order, each split into pattern subfolders, including practice-only problems without a DataDank page.
+ * SQL splits core questions from business case studies; anything unlisted comes last.
  */
-export async function practiceGroups<Q extends { ref: string; id: string }>(
+export async function practiceGroups<Q extends QLike>(
   tech: string,
   questions: Q[],
-): Promise<PracticeGroup<Q>[]> {
+): Promise<PracticeGroup[]> {
   const byRef = new Map(questions.map((q) => [q.ref, q]));
   const used = new Set<string>();
-  const groups: PracticeGroup<Q>[] = [];
+  const groups: PracticeGroup[] = [];
   const pages = new Map((await getAllContent()).map((i) => [i.ref, i]));
   if (tech === "dsa") {
+    const lessonVotes = new Map<string, Map<string, number>>();
     for (const it of (curriculum as unknown as Raw).dsa?.items ?? []) {
       const q = it.question ? byRef.get(it.question) : undefined;
-      if (!q || used.has(q.ref)) continue;
-      let g = groups.find((x) => x.name === it.category);
-      if (!g) {
-        const lesson = it.lesson ? pages.get(it.lesson) : undefined;
-        g = {
-          name: it.category,
-          lesson: lesson && { url: lesson.url, title: lesson.title },
-          questions: [],
+      if (q && used.has(q.ref)) continue;
+      let row: PracticeRow | undefined;
+      if (q) {
+        row = rowOf(q);
+        used.add(q.ref);
+      } else if (it.slug && it.practice) {
+        const pr = it.practice;
+        row = {
+          title: it.topic,
+          difficulty: it.difficulty,
+          doneUrl: `/interview/dsa/${it.slug}/`,
+          practice: {
+            platform: pr.platform,
+            title: pr.title,
+            url: pr.url,
+            number: pr.number ?? undefined,
+          },
         };
-        groups.push(g);
       }
-      g.questions.push(q);
-      used.add(q.ref);
+      if (!row) continue;
+      let g = groups.find((x) => x.name === it.category);
+      if (!g) groups.push((g = { name: it.category, sections: [] }));
+      const pattern = it.pattern ?? "";
+      let sec = g.sections.find((x) => (x.name ?? "") === pattern);
+      if (!sec) g.sections.push((sec = { name: pattern || undefined, rows: [] }));
+      sec.rows.push(row);
+      if (it.lesson) {
+        const votes = lessonVotes.get(g.name) ?? new Map<string, number>();
+        votes.set(it.lesson, (votes.get(it.lesson) ?? 0) + 1);
+        lessonVotes.set(g.name, votes);
+      }
+    }
+    // Each topic links the pattern lesson most of its problems belong to.
+    for (const g of groups) {
+      const votes = [...(lessonVotes.get(g.name) ?? new Map()).entries()].sort(
+        (a, b) => b[1] - a[1],
+      );
+      const lesson = votes.length ? pages.get(votes[0][0]) : undefined;
+      if (lesson) g.lesson = { url: lesson.url, title: lesson.title };
     }
   } else if (tech === "sql") {
     const core = questions.filter((q) => !q.id.endsWith("-sql-case-study"));
     const cases = questions.filter((q) => q.id.endsWith("-sql-case-study"));
-    if (core.length) groups.push({ name: "Core SQL interview questions", questions: core });
-    if (cases.length) groups.push({ name: "Business case studies", questions: cases });
+    if (core.length)
+      groups.push({ name: "Core SQL interview questions", sections: [{ rows: core.map(rowOf) }] });
+    if (cases.length)
+      groups.push({ name: "Business case studies", sections: [{ rows: cases.map(rowOf) }] });
     questions.forEach((q) => used.add(q.ref));
   }
   const rest = questions.filter((q) => !used.has(q.ref));
   if (rest.length)
-    groups.push({ name: groups.length ? "More questions" : "Questions", questions: rest });
+    groups.push({
+      name: groups.length ? "More questions" : "Questions",
+      sections: [{ rows: rest.map(rowOf) }],
+    });
   return groups;
 }
 

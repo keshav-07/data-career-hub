@@ -6966,44 +6966,27 @@
   "hub": "dsa",
   "items": [
    {
-    "topic": "Contains Duplicate",
-    "category": "Arrays",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/contains-duplicate",
-    "heading": null
-   },
-   {
     "topic": "Majority Element",
     "category": "Arrays",
     "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/majority-element",
-    "heading": null
+    "heading": null,
+    "pattern": "Array Basics"
    },
    {
-    "topic": "Number of 1 Bits",
+    "topic": "Find Pivot Index",
     "category": "Arrays",
+    "pattern": "Prefix Sum",
     "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/number-of-1-bits",
-    "heading": null
-   },
-   {
-    "topic": "Reverse Bits",
-    "category": "Arrays",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/reverse-bits",
-    "heading": null
-   },
-   {
-    "topic": "Missing Number",
-    "category": "Arrays",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/missing-number",
-    "heading": null
+    "slug": "find-pivot-index",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find Pivot Index",
+     "url": "https://leetcode.com/problems/find-pivot-index/",
+     "number": 724
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
    },
    {
     "topic": "Product of Array Except Self",
@@ -7011,23 +6994,59 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/product-of-array-except-self",
-    "heading": null
+    "heading": null,
+    "pattern": "Prefix Sum"
    },
    {
-    "topic": "Valid Sudoku",
+    "topic": "Subarray Sum Equals K",
     "category": "Arrays",
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/valid-sudoku",
-    "heading": null
+    "question": "interview-questions:dsa/subarray-sum-equals-k",
+    "heading": null,
+    "pattern": "Prefix Sum"
    },
    {
-    "topic": "Encode and Decode Strings",
+    "topic": "Subarray Sums Divisible by K",
     "category": "Arrays",
+    "pattern": "Prefix Sum",
     "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/encode-and-decode-strings",
-    "heading": null
+    "slug": "subarray-sums-divisible-by-k",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Subarray Sums Divisible by K",
+     "url": "https://leetcode.com/problems/subarray-sums-divisible-by-k/",
+     "number": 974
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Contiguous Array",
+    "category": "Arrays",
+    "pattern": "Prefix Sum",
+    "difficulty": "Medium",
+    "slug": "contiguous-array",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Contiguous Array",
+     "url": "https://leetcode.com/problems/contiguous-array/",
+     "number": 525
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Shortest Subarray with Sum at Least K",
+    "category": "Arrays",
+    "pattern": "Prefix Sum",
+    "difficulty": "Hard",
+    "slug": "shortest-subarray-with-sum-at-least-k",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Shortest Subarray with Sum at Least K",
+     "url": "https://leetcode.com/problems/shortest-subarray-with-sum-at-least-k/",
+     "number": 862
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
    },
    {
     "topic": "Maximum Subarray",
@@ -7035,31 +7054,59 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/maximum-subarray",
-    "heading": null
+    "heading": null,
+    "pattern": "Kadane's Algorithm"
    },
    {
-    "topic": "Merge Intervals",
+    "topic": "Maximum Product Subarray",
     "category": "Arrays",
     "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/merge-intervals",
-    "heading": null
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/maximum-product-subarray",
+    "heading": null,
+    "pattern": "Kadane's Algorithm"
    },
    {
-    "topic": "Insert Interval",
+    "topic": "Maximum Subarray Sum with One Deletion",
     "category": "Arrays",
+    "pattern": "Kadane's Algorithm",
     "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/insert-interval",
-    "heading": null
+    "slug": "maximum-subarray-sum-with-one-deletion",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Maximum Subarray Sum with One Deletion",
+     "url": "https://leetcode.com/problems/maximum-subarray-sum-with-one-deletion/",
+     "number": 1186
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
    },
    {
-    "topic": "Non-overlapping Intervals",
+    "topic": "Maximum Absolute Sum of Any Subarray",
     "category": "Arrays",
+    "pattern": "Kadane's Algorithm",
     "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/non-overlapping-intervals",
-    "heading": null
+    "slug": "maximum-absolute-sum-of-any-subarray",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Maximum Absolute Sum of Any Subarray",
+     "url": "https://leetcode.com/problems/maximum-absolute-sum-of-any-subarray/",
+     "number": 1749
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Maximum Sum Circular Subarray",
+    "category": "Arrays",
+    "pattern": "Kadane's Algorithm",
+    "difficulty": "Medium",
+    "slug": "maximum-sum-circular-subarray",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Maximum Sum Circular Subarray",
+     "url": "https://leetcode.com/problems/maximum-sum-circular-subarray/",
+     "number": 918
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
    },
    {
     "topic": "Rotate Image",
@@ -7067,7 +7114,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/rotate-image",
-    "heading": null
+    "heading": null,
+    "pattern": "Matrix"
    },
    {
     "topic": "Spiral Matrix",
@@ -7075,7 +7123,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/spiral-matrix",
-    "heading": null
+    "heading": null,
+    "pattern": "Matrix"
    },
    {
     "topic": "Set Matrix Zeroes",
@@ -7083,15 +7132,82 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/set-matrix-zeroes",
-    "heading": null
+    "heading": null,
+    "pattern": "Matrix"
    },
    {
-    "topic": "Sum of Two Integers",
+    "topic": "Missing Number",
     "category": "Arrays",
-    "difficulty": "Medium",
+    "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/sum-of-two-integers",
-    "heading": null
+    "question": "interview-questions:dsa/missing-number",
+    "heading": null,
+    "pattern": "Cyclic Sort"
+   },
+   {
+    "topic": "Find All Numbers Disappeared in an Array",
+    "category": "Arrays",
+    "pattern": "Cyclic Sort",
+    "difficulty": "Easy",
+    "slug": "find-all-numbers-disappeared-in-an-array",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find All Numbers Disappeared in an Array",
+     "url": "https://leetcode.com/problems/find-all-numbers-disappeared-in-an-array/",
+     "number": 448
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Set Mismatch",
+    "category": "Arrays",
+    "pattern": "Cyclic Sort",
+    "difficulty": "Easy",
+    "slug": "set-mismatch",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Set Mismatch",
+     "url": "https://leetcode.com/problems/set-mismatch/",
+     "number": 645
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Find All Duplicates in an Array",
+    "category": "Arrays",
+    "pattern": "Cyclic Sort",
+    "difficulty": "Medium",
+    "slug": "find-all-duplicates-in-an-array",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find All Duplicates in an Array",
+     "url": "https://leetcode.com/problems/find-all-duplicates-in-an-array/",
+     "number": 442
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "First Missing Positive",
+    "category": "Arrays",
+    "pattern": "Cyclic Sort",
+    "difficulty": "Hard",
+    "slug": "first-missing-positive",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "First Missing Positive",
+     "url": "https://leetcode.com/problems/first-missing-positive/",
+     "number": 41
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Contains Duplicate",
+    "category": "Hashing",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/contains-duplicate",
+    "heading": null,
+    "pattern": "Hash Maps and Sets"
    },
    {
     "topic": "Valid Anagram",
@@ -7099,7 +7215,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/valid-anagram",
-    "heading": null
+    "heading": null,
+    "pattern": "Hash Maps and Sets"
    },
    {
     "topic": "Two Sum",
@@ -7107,15 +7224,59 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/two-sum",
-    "heading": null
+    "heading": null,
+    "pattern": "Hash Maps and Sets"
    },
    {
-    "topic": "Single Number",
+    "topic": "First Unique Character in a String",
     "category": "Hashing",
+    "pattern": "Hash Maps and Sets",
     "difficulty": "Easy",
+    "slug": "first-unique-character-in-a-string",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "First Unique Character in a String",
+     "url": "https://leetcode.com/problems/first-unique-character-in-a-string/",
+     "number": 387
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Longest Palindrome",
+    "category": "Hashing",
+    "pattern": "Hash Maps and Sets",
+    "difficulty": "Easy",
+    "slug": "longest-palindrome",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Longest Palindrome",
+     "url": "https://leetcode.com/problems/longest-palindrome/",
+     "number": 409
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Ransom Note",
+    "category": "Hashing",
+    "pattern": "Hash Maps and Sets",
+    "difficulty": "Easy",
+    "slug": "ransom-note",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Ransom Note",
+     "url": "https://leetcode.com/problems/ransom-note/",
+     "number": 383
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Valid Sudoku",
+    "category": "Hashing",
+    "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/single-number",
-    "heading": null
+    "question": "interview-questions:dsa/valid-sudoku",
+    "heading": null,
+    "pattern": "Hash Maps and Sets"
    },
    {
     "topic": "Group Anagrams",
@@ -7123,15 +7284,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/group-anagrams",
-    "heading": null
-   },
-   {
-    "topic": "Top K Frequent Elements",
-    "category": "Hashing",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/top-k-frequent-elements",
-    "heading": null
+    "heading": null,
+    "pattern": "Hash Maps and Sets"
    },
    {
     "topic": "Longest Consecutive Sequence",
@@ -7139,15 +7293,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/longest-consecutive-sequence",
-    "heading": null
-   },
-   {
-    "topic": "Subarray Sum Equals K",
-    "category": "Hashing",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/subarray-sum-equals-k",
-    "heading": null
+    "heading": null,
+    "pattern": "Hash Maps and Sets"
    },
    {
     "topic": "Longest Common Prefix",
@@ -7155,7 +7302,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/strings",
     "question": "interview-questions:dsa/longest-common-prefix",
-    "heading": null
+    "heading": null,
+    "pattern": "String Basics"
    },
    {
     "topic": "Reverse String",
@@ -7163,15 +7311,17 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/strings",
     "question": "interview-questions:dsa/reverse-string",
-    "heading": null
+    "heading": null,
+    "pattern": "String Basics"
    },
    {
-    "topic": "Valid Palindrome II",
+    "topic": "Encode and Decode Strings",
     "category": "Strings",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/strings",
-    "question": "interview-questions:dsa/valid-palindrome-ii",
-    "heading": null
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/encode-and-decode-strings",
+    "heading": null,
+    "pattern": "String Basics"
    },
    {
     "topic": "String to Integer (atoi)",
@@ -7179,7 +7329,90 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/strings",
     "question": "interview-questions:dsa/string-to-integer-atoi",
-    "heading": null
+    "heading": null,
+    "pattern": "String Basics"
+   },
+   {
+    "topic": "Number of 1 Bits",
+    "category": "Bit Manipulation",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/number-of-1-bits",
+    "heading": null,
+    "pattern": "Bitwise XOR and Bits"
+   },
+   {
+    "topic": "Reverse Bits",
+    "category": "Bit Manipulation",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/reverse-bits",
+    "heading": null,
+    "pattern": "Bitwise XOR and Bits"
+   },
+   {
+    "topic": "Single Number",
+    "category": "Bit Manipulation",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/single-number",
+    "heading": null,
+    "pattern": "Bitwise XOR and Bits"
+   },
+   {
+    "topic": "Counting Bits",
+    "category": "Bit Manipulation",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/counting-bits",
+    "heading": null,
+    "pattern": "Bitwise XOR and Bits"
+   },
+   {
+    "topic": "Complement of Base 10 Integer",
+    "category": "Bit Manipulation",
+    "pattern": "Bitwise XOR and Bits",
+    "difficulty": "Easy",
+    "slug": "complement-of-base-10-integer",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Complement of Base 10 Integer",
+     "url": "https://leetcode.com/problems/complement-of-base-10-integer/",
+     "number": 1009
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Sum of Two Integers",
+    "category": "Bit Manipulation",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/sum-of-two-integers",
+    "heading": null,
+    "pattern": "Bitwise XOR and Bits"
+   },
+   {
+    "topic": "Single Number III",
+    "category": "Bit Manipulation",
+    "pattern": "Bitwise XOR and Bits",
+    "difficulty": "Medium",
+    "slug": "single-number-iii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Single Number III",
+     "url": "https://leetcode.com/problems/single-number-iii/",
+     "number": 260
+    },
+    "lesson": "articles:dsa/arrays-and-hashing"
+   },
+   {
+    "topic": "Valid Palindrome II",
+    "category": "Two Pointers",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/strings",
+    "question": "interview-questions:dsa/valid-palindrome-ii",
+    "heading": null,
+    "pattern": "Two Pointers"
    },
    {
     "topic": "Valid Palindrome",
@@ -7187,7 +7420,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/valid-palindrome",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
    },
    {
     "topic": "Move Zeroes",
@@ -7195,7 +7429,63 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/move-zeroes",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
+   },
+   {
+    "topic": "Remove Duplicates from Sorted Array",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Easy",
+    "slug": "remove-duplicates-from-sorted-array",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Remove Duplicates from Sorted Array",
+     "url": "https://leetcode.com/problems/remove-duplicates-from-sorted-array/",
+     "number": 26
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "Squares of a Sorted Array",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Easy",
+    "slug": "squares-of-a-sorted-array",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Squares of a Sorted Array",
+     "url": "https://leetcode.com/problems/squares-of-a-sorted-array/",
+     "number": 977
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "Segregate 0s and 1s",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Easy",
+    "slug": "segregate-0s-and-1s",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Segregate 0s and 1s",
+     "url": "https://www.geeksforgeeks.org/problems/segregate-0s-and-1s5106/1"
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "Backspace String Compare",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Easy",
+    "slug": "backspace-string-compare",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Backspace String Compare",
+     "url": "https://leetcode.com/problems/backspace-string-compare/",
+     "number": 844
+    },
+    "lesson": "articles:dsa/two-pointers"
    },
    {
     "topic": "Two Sum II Input Array Is Sorted",
@@ -7203,7 +7493,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/two-sum-ii-input-array-is-sorted",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
    },
    {
     "topic": "3Sum",
@@ -7211,7 +7502,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/3sum",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
    },
    {
     "topic": "Container With Most Water",
@@ -7219,7 +7511,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/container-with-most-water",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
    },
    {
     "topic": "Sort Colors",
@@ -7227,7 +7520,77 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/sort-colors",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
+   },
+   {
+    "topic": "3Sum Closest",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Medium",
+    "slug": "3sum-closest",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "3Sum Closest",
+     "url": "https://leetcode.com/problems/3sum-closest/",
+     "number": 16
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "Triplets with Smaller Sum",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Medium",
+    "slug": "count-triplets-with-sum-smaller-than-x",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Triplets with Smaller Sum",
+     "url": "https://www.geeksforgeeks.org/problems/count-triplets-with-sum-smaller-than-x5549/1"
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "Subarray Product Less Than K",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Medium",
+    "slug": "subarray-product-less-than-k",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Subarray Product Less Than K",
+     "url": "https://leetcode.com/problems/subarray-product-less-than-k/",
+     "number": 713
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "4Sum",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Medium",
+    "slug": "4sum",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "4Sum",
+     "url": "https://leetcode.com/problems/4sum/",
+     "number": 18
+    },
+    "lesson": "articles:dsa/two-pointers"
+   },
+   {
+    "topic": "Shortest Unsorted Continuous Subarray",
+    "category": "Two Pointers",
+    "pattern": "Two Pointers",
+    "difficulty": "Medium",
+    "slug": "shortest-unsorted-continuous-subarray",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Shortest Unsorted Continuous Subarray",
+     "url": "https://leetcode.com/problems/shortest-unsorted-continuous-subarray/",
+     "number": 581
+    },
+    "lesson": "articles:dsa/two-pointers"
    },
    {
     "topic": "Trapping Rain Water",
@@ -7235,7 +7598,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/trapping-rain-water",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Pointers"
    },
    {
     "topic": "Implement Stack using Queues",
@@ -7243,7 +7607,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/queues",
     "question": "interview-questions:dsa/implement-stack-using-queues",
-    "heading": null
+    "heading": null,
+    "pattern": "Queue Design"
    },
    {
     "topic": "Implement Queue using Stacks",
@@ -7251,7 +7616,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/queues",
     "question": "interview-questions:dsa/implement-queue-using-stacks",
-    "heading": null
+    "heading": null,
+    "pattern": "Queue Design"
    },
    {
     "topic": "Number of Recent Calls",
@@ -7259,7 +7625,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/queues",
     "question": "interview-questions:dsa/number-of-recent-calls",
-    "heading": null
+    "heading": null,
+    "pattern": "Queue Design"
    },
    {
     "topic": "Design Circular Queue",
@@ -7267,7 +7634,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/queues",
     "question": "interview-questions:dsa/design-circular-queue",
-    "heading": null
+    "heading": null,
+    "pattern": "Queue Design"
    },
    {
     "topic": "Best Time to Buy and Sell Stock",
@@ -7275,7 +7643,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/best-time-to-buy-and-sell-stock",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
    },
    {
     "topic": "Maximum Average Subarray I",
@@ -7283,7 +7652,21 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/maximum-average-subarray-i",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
+   },
+   {
+    "topic": "Max Sum Subarray of Size K",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Easy",
+    "slug": "max-sum-subarray-of-size-k",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Max Sum Subarray of Size K",
+     "url": "https://www.geeksforgeeks.org/problems/max-sum-subarray-of-size-k5313/1"
+    },
+    "lesson": "articles:dsa/sliding-window"
    },
    {
     "topic": "Longest Substring Without Repeating Characters",
@@ -7291,7 +7674,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/longest-substring-without-repeating-characters",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
    },
    {
     "topic": "Longest Repeating Character Replacement",
@@ -7299,7 +7683,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/longest-repeating-character-replacement",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
    },
    {
     "topic": "Permutation in String",
@@ -7307,7 +7692,77 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/permutation-in-string",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
+   },
+   {
+    "topic": "Minimum Size Subarray Sum",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Medium",
+    "slug": "minimum-size-subarray-sum",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Minimum Size Subarray Sum",
+     "url": "https://leetcode.com/problems/minimum-size-subarray-sum/",
+     "number": 209
+    },
+    "lesson": "articles:dsa/sliding-window"
+   },
+   {
+    "topic": "Longest K unique characters substring",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Medium",
+    "slug": "longest-k-unique-characters-substring",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Longest K unique characters substring",
+     "url": "https://www.geeksforgeeks.org/problems/longest-k-unique-characters-substring0853/1"
+    },
+    "lesson": "articles:dsa/sliding-window"
+   },
+   {
+    "topic": "Fruit Into Baskets",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Medium",
+    "slug": "fruit-into-baskets",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Fruit Into Baskets",
+     "url": "https://leetcode.com/problems/fruit-into-baskets/",
+     "number": 904
+    },
+    "lesson": "articles:dsa/sliding-window"
+   },
+   {
+    "topic": "Max Consecutive Ones III",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Medium",
+    "slug": "max-consecutive-ones-iii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Max Consecutive Ones III",
+     "url": "https://leetcode.com/problems/max-consecutive-ones-iii/",
+     "number": 1004
+    },
+    "lesson": "articles:dsa/sliding-window"
+   },
+   {
+    "topic": "Find All Anagrams in a String",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Medium",
+    "slug": "find-all-anagrams-in-a-string",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find All Anagrams in a String",
+     "url": "https://leetcode.com/problems/find-all-anagrams-in-a-string/",
+     "number": 438
+    },
+    "lesson": "articles:dsa/sliding-window"
    },
    {
     "topic": "Minimum Window Substring",
@@ -7315,7 +7770,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/minimum-window-substring",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
    },
    {
     "topic": "Sliding Window Maximum",
@@ -7323,7 +7779,22 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/sliding-window-maximum",
-    "heading": null
+    "heading": null,
+    "pattern": "Sliding Window"
+   },
+   {
+    "topic": "Substring with Concatenation of All Words",
+    "category": "Sliding Window",
+    "pattern": "Sliding Window",
+    "difficulty": "Hard",
+    "slug": "substring-with-concatenation-of-all-words",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Substring with Concatenation of All Words",
+     "url": "https://leetcode.com/problems/substring-with-concatenation-of-all-words/",
+     "number": 30
+    },
+    "lesson": "articles:dsa/sliding-window"
    },
    {
     "topic": "Valid Parentheses",
@@ -7331,15 +7802,22 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/valid-parentheses",
-    "heading": null
+    "heading": null,
+    "pattern": "Stack Basics"
    },
    {
-    "topic": "Next Greater Element I",
+    "topic": "Remove All Adjacent Duplicates In String",
     "category": "Stack",
+    "pattern": "Stack Basics",
     "difficulty": "Easy",
-    "lesson": "articles:dsa/stacks",
-    "question": "interview-questions:dsa/next-greater-element-i",
-    "heading": null
+    "slug": "remove-all-adjacent-duplicates-in-string",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Remove All Adjacent Duplicates In String",
+     "url": "https://leetcode.com/problems/remove-all-adjacent-duplicates-in-string/",
+     "number": 1047
+    },
+    "lesson": "articles:dsa/stacks"
    },
    {
     "topic": "Min Stack",
@@ -7347,7 +7825,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/min-stack",
-    "heading": null
+    "heading": null,
+    "pattern": "Stack Basics"
    },
    {
     "topic": "Evaluate Reverse Polish Notation",
@@ -7355,15 +7834,45 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/evaluate-reverse-polish-notation",
-    "heading": null
+    "heading": null,
+    "pattern": "Stack Basics"
    },
    {
-    "topic": "Generate Parentheses",
+    "topic": "Remove All Adjacent Duplicates in String II",
     "category": "Stack",
+    "pattern": "Stack Basics",
     "difficulty": "Medium",
+    "slug": "remove-all-adjacent-duplicates-in-string-ii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Remove All Adjacent Duplicates in String II",
+     "url": "https://leetcode.com/problems/remove-all-adjacent-duplicates-in-string-ii/",
+     "number": 1209
+    },
+    "lesson": "articles:dsa/stacks"
+   },
+   {
+    "topic": "Simplify Path",
+    "category": "Stack",
+    "pattern": "Stack Basics",
+    "difficulty": "Medium",
+    "slug": "simplify-path",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Simplify Path",
+     "url": "https://leetcode.com/problems/simplify-path/",
+     "number": 71
+    },
+    "lesson": "articles:dsa/stacks"
+   },
+   {
+    "topic": "Next Greater Element I",
+    "category": "Stack",
+    "difficulty": "Easy",
     "lesson": "articles:dsa/stacks",
-    "question": "interview-questions:dsa/generate-parentheses",
-    "heading": null
+    "question": "interview-questions:dsa/next-greater-element-i",
+    "heading": null,
+    "pattern": "Monotonic Stack"
    },
    {
     "topic": "Daily Temperatures",
@@ -7371,7 +7880,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/daily-temperatures",
-    "heading": null
+    "heading": null,
+    "pattern": "Monotonic Stack"
    },
    {
     "topic": "Car Fleet",
@@ -7379,7 +7889,64 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/car-fleet",
-    "heading": null
+    "heading": null,
+    "pattern": "Monotonic Stack"
+   },
+   {
+    "topic": "Next Greater Element II",
+    "category": "Stack",
+    "pattern": "Monotonic Stack",
+    "difficulty": "Medium",
+    "slug": "next-greater-element-ii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Next Greater Element II",
+     "url": "https://leetcode.com/problems/next-greater-element-ii/",
+     "number": 503
+    },
+    "lesson": "articles:dsa/stacks"
+   },
+   {
+    "topic": "Remove Nodes From Linked List",
+    "category": "Stack",
+    "pattern": "Monotonic Stack",
+    "difficulty": "Medium",
+    "slug": "remove-nodes-from-linked-list",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Remove Nodes From Linked List",
+     "url": "https://leetcode.com/problems/remove-nodes-from-linked-list/",
+     "number": 2487
+    },
+    "lesson": "articles:dsa/stacks"
+   },
+   {
+    "topic": "Remove K Digits",
+    "category": "Stack",
+    "pattern": "Monotonic Stack",
+    "difficulty": "Medium",
+    "slug": "remove-k-digits",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Remove K Digits",
+     "url": "https://leetcode.com/problems/remove-k-digits/",
+     "number": 402
+    },
+    "lesson": "articles:dsa/stacks"
+   },
+   {
+    "topic": "132 Pattern",
+    "category": "Stack",
+    "pattern": "Monotonic Stack",
+    "difficulty": "Medium",
+    "slug": "132-pattern",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "132 Pattern",
+     "url": "https://leetcode.com/problems/132-pattern/",
+     "number": 456
+    },
+    "lesson": "articles:dsa/stacks"
    },
    {
     "topic": "Largest Rectangle in Histogram",
@@ -7387,7 +7954,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/largest-rectangle-in-histogram",
-    "heading": null
+    "heading": null,
+    "pattern": "Monotonic Stack"
    },
    {
     "topic": "Binary Search",
@@ -7395,39 +7963,21 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-search",
     "question": "interview-questions:dsa/binary-search",
-    "heading": null
+    "heading": null,
+    "pattern": "Classic Binary Search"
    },
    {
-    "topic": "Search a 2D Matrix",
+    "topic": "Ceil in Sorted Array",
     "category": "Binary Search",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-search",
-    "question": "interview-questions:dsa/search-a-2d-matrix",
-    "heading": null
-   },
-   {
-    "topic": "Koko Eating Bananas",
-    "category": "Binary Search",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-search",
-    "question": "interview-questions:dsa/koko-eating-bananas",
-    "heading": null
-   },
-   {
-    "topic": "Find Minimum in Rotated Sorted Array",
-    "category": "Binary Search",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-search",
-    "question": "interview-questions:dsa/find-minimum-in-rotated-sorted-array",
-    "heading": null
-   },
-   {
-    "topic": "Search in Rotated Sorted Array",
-    "category": "Binary Search",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-search",
-    "question": "interview-questions:dsa/search-in-rotated-sorted-array",
-    "heading": null
+    "pattern": "Classic Binary Search",
+    "difficulty": "Easy",
+    "slug": "ceil-in-a-sorted-array",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Ceil in Sorted Array",
+     "url": "https://www.geeksforgeeks.org/problems/ceil-in-a-sorted-array/1"
+    },
+    "lesson": "articles:dsa/binary-search"
    },
    {
     "topic": "Time Based Key-Value Store",
@@ -7435,7 +7985,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search",
     "question": "interview-questions:dsa/time-based-key-value-store",
-    "heading": null
+    "heading": null,
+    "pattern": "Classic Binary Search"
    },
    {
     "topic": "Find First and Last Position",
@@ -7443,7 +7994,21 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search",
     "question": "interview-questions:dsa/find-first-and-last-position",
-    "heading": null
+    "heading": null,
+    "pattern": "Classic Binary Search"
+   },
+   {
+    "topic": "Number of Occurrence",
+    "category": "Binary Search",
+    "pattern": "Classic Binary Search",
+    "difficulty": "Medium",
+    "slug": "number-of-occurrence",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Number of Occurrence",
+     "url": "https://www.geeksforgeeks.org/problems/number-of-occurrence2259/1"
+    },
+    "lesson": "articles:dsa/binary-search"
    },
    {
     "topic": "Median of Two Sorted Arrays",
@@ -7451,15 +8016,182 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/binary-search",
     "question": "interview-questions:dsa/median-of-two-sorted-arrays",
-    "heading": null
+    "heading": null,
+    "pattern": "Classic Binary Search"
    },
    {
-    "topic": "Reverse Linked List",
-    "category": "Linked List",
+    "topic": "Find Rotation Count",
+    "category": "Binary Search",
+    "pattern": "Rotated Arrays and Peaks",
     "difficulty": "Easy",
-    "lesson": "articles:dsa/linked-lists",
-    "question": "interview-questions:dsa/reverse-linked-list",
-    "heading": null
+    "slug": "rotation",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Find Rotation Count",
+     "url": "https://www.geeksforgeeks.org/problems/rotation4723/1"
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Find Minimum in Rotated Sorted Array",
+    "category": "Binary Search",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-search",
+    "question": "interview-questions:dsa/find-minimum-in-rotated-sorted-array",
+    "heading": null,
+    "pattern": "Rotated Arrays and Peaks"
+   },
+   {
+    "topic": "Search in Rotated Sorted Array",
+    "category": "Binary Search",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-search",
+    "question": "interview-questions:dsa/search-in-rotated-sorted-array",
+    "heading": null,
+    "pattern": "Rotated Arrays and Peaks"
+   },
+   {
+    "topic": "Peak Index in a Mountain Array",
+    "category": "Binary Search",
+    "pattern": "Rotated Arrays and Peaks",
+    "difficulty": "Medium",
+    "slug": "peak-index-in-a-mountain-array",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Peak Index in a Mountain Array",
+     "url": "https://leetcode.com/problems/peak-index-in-a-mountain-array/",
+     "number": 852
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Find Peak Element",
+    "category": "Binary Search",
+    "pattern": "Rotated Arrays and Peaks",
+    "difficulty": "Medium",
+    "slug": "find-peak-element",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find Peak Element",
+     "url": "https://leetcode.com/problems/find-peak-element/",
+     "number": 162
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Koko Eating Bananas",
+    "category": "Binary Search",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-search",
+    "question": "interview-questions:dsa/koko-eating-bananas",
+    "heading": null,
+    "pattern": "Binary Search on the Answer"
+   },
+   {
+    "topic": "Minimum Number of Days to Make m Bouquets",
+    "category": "Binary Search",
+    "pattern": "Binary Search on the Answer",
+    "difficulty": "Medium",
+    "slug": "minimum-number-of-days-to-make-m-bouquets",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Minimum Number of Days to Make m Bouquets",
+     "url": "https://leetcode.com/problems/minimum-number-of-days-to-make-m-bouquets/",
+     "number": 1482
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Aggressive Cows",
+    "category": "Binary Search",
+    "pattern": "Binary Search on the Answer",
+    "difficulty": "Medium",
+    "slug": "aggressive-cows",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Aggressive Cows",
+     "url": "https://www.geeksforgeeks.org/problems/aggressive-cows/1"
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Maximum Candies Allocated to K Children",
+    "category": "Binary Search",
+    "pattern": "Binary Search on the Answer",
+    "difficulty": "Medium",
+    "slug": "maximum-candies-allocated-to-k-children",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Maximum Candies Allocated to K Children",
+     "url": "https://leetcode.com/problems/maximum-candies-allocated-to-k-children/",
+     "number": 2226
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Capacity To Ship Packages Within D Days",
+    "category": "Binary Search",
+    "pattern": "Binary Search on the Answer",
+    "difficulty": "Medium",
+    "slug": "capacity-to-ship-packages-within-d-days",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Capacity To Ship Packages Within D Days",
+     "url": "https://leetcode.com/problems/capacity-to-ship-packages-within-d-days/",
+     "number": 1011
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Split Array Largest Sum",
+    "category": "Binary Search",
+    "pattern": "Binary Search on the Answer",
+    "difficulty": "Hard",
+    "slug": "split-array-largest-sum",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Split Array Largest Sum",
+     "url": "https://leetcode.com/problems/split-array-largest-sum/",
+     "number": 410
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Search a 2D Matrix",
+    "category": "Binary Search",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-search",
+    "question": "interview-questions:dsa/search-a-2d-matrix",
+    "heading": null,
+    "pattern": "Matrix Search"
+   },
+   {
+    "topic": "Search a 2D Matrix II",
+    "category": "Binary Search",
+    "pattern": "Matrix Search",
+    "difficulty": "Medium",
+    "slug": "search-a-2d-matrix-ii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Search a 2D Matrix II",
+     "url": "https://leetcode.com/problems/search-a-2d-matrix-ii/",
+     "number": 240
+    },
+    "lesson": "articles:dsa/binary-search"
+   },
+   {
+    "topic": "Kth Smallest Element in a Sorted Matrix",
+    "category": "Binary Search",
+    "pattern": "Matrix Search",
+    "difficulty": "Medium",
+    "slug": "kth-smallest-element-in-a-sorted-matrix",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Kth Smallest Element in a Sorted Matrix",
+     "url": "https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/",
+     "number": 378
+    },
+    "lesson": "articles:dsa/binary-search"
    },
    {
     "topic": "Merge Two Sorted Lists",
@@ -7467,23 +8199,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/linked-lists",
     "question": "interview-questions:dsa/merge-two-sorted-lists",
-    "heading": null
-   },
-   {
-    "topic": "Linked List Cycle",
-    "category": "Linked List",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/linked-lists",
-    "question": "interview-questions:dsa/linked-list-cycle",
-    "heading": null
-   },
-   {
-    "topic": "Reorder List",
-    "category": "Linked List",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/linked-lists",
-    "question": "interview-questions:dsa/reorder-list",
-    "heading": null
+    "heading": null,
+    "pattern": "Linked List Basics"
    },
    {
     "topic": "Remove Nth Node From End of List",
@@ -7491,7 +8208,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/linked-lists",
     "question": "interview-questions:dsa/remove-nth-node-from-end-of-list",
-    "heading": null
+    "heading": null,
+    "pattern": "Linked List Basics"
    },
    {
     "topic": "Copy List with Random Pointer",
@@ -7499,7 +8217,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/linked-lists",
     "question": "interview-questions:dsa/copy-list-with-random-pointer",
-    "heading": null
+    "heading": null,
+    "pattern": "Linked List Basics"
    },
    {
     "topic": "Add Two Numbers",
@@ -7507,15 +8226,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/linked-lists",
     "question": "interview-questions:dsa/add-two-numbers",
-    "heading": null
-   },
-   {
-    "topic": "Find the Duplicate Number",
-    "category": "Linked List",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/linked-lists",
-    "question": "interview-questions:dsa/find-the-duplicate-number",
-    "heading": null
+    "heading": null,
+    "pattern": "Linked List Basics"
    },
    {
     "topic": "LRU Cache",
@@ -7523,15 +8235,156 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/linked-lists",
     "question": "interview-questions:dsa/lru-cache",
-    "heading": null
+    "heading": null,
+    "pattern": "Linked List Basics"
    },
    {
-    "topic": "Merge k Sorted Lists",
+    "topic": "Linked List Cycle",
     "category": "Linked List",
-    "difficulty": "Hard",
+    "difficulty": "Easy",
     "lesson": "articles:dsa/linked-lists",
-    "question": "interview-questions:dsa/merge-k-sorted-lists",
-    "heading": null
+    "question": "interview-questions:dsa/linked-list-cycle",
+    "heading": null,
+    "pattern": "Fast and Slow Pointers"
+   },
+   {
+    "topic": "Happy Number",
+    "category": "Linked List",
+    "pattern": "Fast and Slow Pointers",
+    "difficulty": "Easy",
+    "slug": "happy-number",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Happy Number",
+     "url": "https://leetcode.com/problems/happy-number/",
+     "number": 202
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Middle of the Linked List",
+    "category": "Linked List",
+    "pattern": "Fast and Slow Pointers",
+    "difficulty": "Easy",
+    "slug": "middle-of-the-linked-list",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Middle of the Linked List",
+     "url": "https://leetcode.com/problems/middle-of-the-linked-list/",
+     "number": 876
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Palindrome Linked List",
+    "category": "Linked List",
+    "pattern": "Fast and Slow Pointers",
+    "difficulty": "Easy",
+    "slug": "palindrome-linked-list",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Palindrome Linked List",
+     "url": "https://leetcode.com/problems/palindrome-linked-list/",
+     "number": 234
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Reorder List",
+    "category": "Linked List",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/linked-lists",
+    "question": "interview-questions:dsa/reorder-list",
+    "heading": null,
+    "pattern": "Fast and Slow Pointers"
+   },
+   {
+    "topic": "Find the Duplicate Number",
+    "category": "Linked List",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/linked-lists",
+    "question": "interview-questions:dsa/find-the-duplicate-number",
+    "heading": null,
+    "pattern": "Fast and Slow Pointers"
+   },
+   {
+    "topic": "Linked List Cycle II",
+    "category": "Linked List",
+    "pattern": "Fast and Slow Pointers",
+    "difficulty": "Medium",
+    "slug": "linked-list-cycle-ii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Linked List Cycle II",
+     "url": "https://leetcode.com/problems/linked-list-cycle-ii/",
+     "number": 142
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Circular Array Loop",
+    "category": "Linked List",
+    "pattern": "Fast and Slow Pointers",
+    "difficulty": "Medium",
+    "slug": "circular-array-loop",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Circular Array Loop",
+     "url": "https://leetcode.com/problems/circular-array-loop/",
+     "number": 457
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Reverse Linked List",
+    "category": "Linked List",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/linked-lists",
+    "question": "interview-questions:dsa/reverse-linked-list",
+    "heading": null,
+    "pattern": "In-place Reversal"
+   },
+   {
+    "topic": "Reverse Linked List II",
+    "category": "Linked List",
+    "pattern": "In-place Reversal",
+    "difficulty": "Medium",
+    "slug": "reverse-linked-list-ii",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Reverse Linked List II",
+     "url": "https://leetcode.com/problems/reverse-linked-list-ii/",
+     "number": 92
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Swap Nodes in Pairs",
+    "category": "Linked List",
+    "pattern": "In-place Reversal",
+    "difficulty": "Medium",
+    "slug": "swap-nodes-in-pairs",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Swap Nodes in Pairs",
+     "url": "https://leetcode.com/problems/swap-nodes-in-pairs/",
+     "number": 24
+    },
+    "lesson": "articles:dsa/linked-lists"
+   },
+   {
+    "topic": "Rotate List",
+    "category": "Linked List",
+    "pattern": "In-place Reversal",
+    "difficulty": "Medium",
+    "slug": "rotate-list",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Rotate List",
+     "url": "https://leetcode.com/problems/rotate-list/",
+     "number": 61
+    },
+    "lesson": "articles:dsa/linked-lists"
    },
    {
     "topic": "Reverse Nodes in k-Group",
@@ -7539,7 +8392,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/linked-lists",
     "question": "interview-questions:dsa/reverse-nodes-in-k-group",
-    "heading": null
+    "heading": null,
+    "pattern": "In-place Reversal"
    },
    {
     "topic": "Invert Binary Tree",
@@ -7547,7 +8401,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/invert-binary-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Maximum Depth of Binary Tree",
@@ -7555,7 +8410,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/maximum-depth-of-binary-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Diameter of Binary Tree",
@@ -7563,7 +8419,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/diameter-of-binary-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Balanced Binary Tree",
@@ -7571,7 +8428,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/balanced-binary-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Same Tree",
@@ -7579,7 +8437,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/same-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Subtree of Another Tree",
@@ -7587,23 +8446,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/subtree-of-another-tree",
-    "heading": null
-   },
-   {
-    "topic": "Binary Tree Level Order Traversal",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/binary-tree-level-order-traversal",
-    "heading": null
-   },
-   {
-    "topic": "Binary Tree Right Side View",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/binary-tree-right-side-view",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Count Good Nodes in Binary Tree",
@@ -7611,7 +8455,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/count-good-nodes-in-binary-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Construct Tree from Preorder and Inorder",
@@ -7619,7 +8464,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/construct-tree-from-preorder-and-inorder",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Lowest Common Ancestor of Binary Tree",
@@ -7627,23 +8473,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/lowest-common-ancestor-of-binary-tree",
-    "heading": null
-   },
-   {
-    "topic": "Implement Trie (Prefix Tree)",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/implement-trie-prefix-tree",
-    "heading": null
-   },
-   {
-    "topic": "Design Add and Search Words",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/design-add-and-search-words",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Binary Tree Maximum Path Sum",
@@ -7651,7 +8482,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/binary-tree-maximum-path-sum",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
    },
    {
     "topic": "Serialize and Deserialize Binary Tree",
@@ -7659,7 +8491,81 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/binary-trees",
     "question": "interview-questions:dsa/serialize-and-deserialize-binary-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Tree DFS"
+   },
+   {
+    "topic": "Binary Tree Level Order Traversal",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/binary-tree-level-order-traversal",
+    "heading": null,
+    "pattern": "Tree BFS"
+   },
+   {
+    "topic": "Binary Tree Right Side View",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/binary-tree-right-side-view",
+    "heading": null,
+    "pattern": "Tree BFS"
+   },
+   {
+    "topic": "Implement Trie (Prefix Tree)",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/implement-trie-prefix-tree",
+    "heading": null,
+    "pattern": "Trie"
+   },
+   {
+    "topic": "Design Add and Search Words",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/design-add-and-search-words",
+    "heading": null,
+    "pattern": "Trie"
+   },
+   {
+    "topic": "Extra Characters in a String",
+    "category": "Trees",
+    "pattern": "Trie",
+    "difficulty": "Medium",
+    "slug": "extra-characters-in-a-string",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Extra Characters in a String",
+     "url": "https://leetcode.com/problems/extra-characters-in-a-string/",
+     "number": 2707
+    },
+    "lesson": "articles:dsa/binary-trees"
+   },
+   {
+    "topic": "Search Suggestions System",
+    "category": "Trees",
+    "pattern": "Trie",
+    "difficulty": "Medium",
+    "slug": "search-suggestions-system",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Search Suggestions System",
+     "url": "https://leetcode.com/problems/search-suggestions-system/",
+     "number": 1268
+    },
+    "lesson": "articles:dsa/binary-trees"
+   },
+   {
+    "topic": "Word Search II",
+    "category": "Trees",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/backtracking",
+    "question": "interview-questions:dsa/word-search-ii",
+    "heading": null,
+    "pattern": "Trie"
    },
    {
     "topic": "Convert Sorted Array to BST",
@@ -7667,7 +8573,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/convert-sorted-array-to-bst",
-    "heading": null
+    "heading": null,
+    "pattern": "Binary Search Trees"
    },
    {
     "topic": "Validate Binary Search Tree",
@@ -7675,7 +8582,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/validate-binary-search-tree",
-    "heading": null
+    "heading": null,
+    "pattern": "Binary Search Trees"
    },
    {
     "topic": "Kth Smallest Element in a BST",
@@ -7683,7 +8591,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/kth-smallest-element-in-a-bst",
-    "heading": null
+    "heading": null,
+    "pattern": "Binary Search Trees"
    },
    {
     "topic": "Lowest Common Ancestor of a BST",
@@ -7691,7 +8600,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/lowest-common-ancestor-of-a-bst",
-    "heading": null
+    "heading": null,
+    "pattern": "Binary Search Trees"
    },
    {
     "topic": "Insert into a BST",
@@ -7699,7 +8609,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/insert-into-a-bst",
-    "heading": null
+    "heading": null,
+    "pattern": "Binary Search Trees"
    },
    {
     "topic": "Delete Node in a BST",
@@ -7707,7 +8618,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/delete-node-in-a-bst",
-    "heading": null
+    "heading": null,
+    "pattern": "Binary Search Trees"
    },
    {
     "topic": "Kth Largest Element in a Stream",
@@ -7715,7 +8627,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/kth-largest-element-in-a-stream",
-    "heading": null
+    "heading": null,
+    "pattern": "Top K Elements"
    },
    {
     "topic": "Last Stone Weight",
@@ -7723,7 +8636,17 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/last-stone-weight",
-    "heading": null
+    "heading": null,
+    "pattern": "Top K Elements"
+   },
+   {
+    "topic": "Top K Frequent Elements",
+    "category": "Heap",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/top-k-frequent-elements",
+    "heading": null,
+    "pattern": "Top K Elements"
    },
    {
     "topic": "K Closest Points to Origin",
@@ -7731,7 +8654,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/k-closest-points-to-origin",
-    "heading": null
+    "heading": null,
+    "pattern": "Top K Elements"
    },
    {
     "topic": "Kth Largest Element in an Array",
@@ -7739,7 +8663,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/kth-largest-element-in-an-array",
-    "heading": null
+    "heading": null,
+    "pattern": "Top K Elements"
    },
    {
     "topic": "Task Scheduler",
@@ -7747,15 +8672,90 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/task-scheduler",
-    "heading": null
+    "heading": null,
+    "pattern": "Top K Elements"
    },
    {
-    "topic": "Design Twitter",
+    "topic": "Min Cost to Connect Ropes",
     "category": "Heap",
+    "pattern": "Top K Elements",
     "difficulty": "Medium",
-    "lesson": "articles:dsa/heaps-priority-queues",
-    "question": "interview-questions:dsa/design-twitter",
-    "heading": null
+    "slug": "minimum-cost-of-ropes",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Min Cost to Connect Ropes",
+     "url": "https://www.geeksforgeeks.org/problems/minimum-cost-of-ropes-1587115620/1"
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "Sort Characters By Frequency",
+    "category": "Heap",
+    "pattern": "Top K Elements",
+    "difficulty": "Medium",
+    "slug": "sort-characters-by-frequency",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Sort Characters By Frequency",
+     "url": "https://leetcode.com/problems/sort-characters-by-frequency/",
+     "number": 451
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "Find K Closest Elements",
+    "category": "Heap",
+    "pattern": "Top K Elements",
+    "difficulty": "Medium",
+    "slug": "find-k-closest-elements",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find K Closest Elements",
+     "url": "https://leetcode.com/problems/find-k-closest-elements/",
+     "number": 658
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "Reorganize String",
+    "category": "Heap",
+    "pattern": "Top K Elements",
+    "difficulty": "Medium",
+    "slug": "reorganize-string",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Reorganize String",
+     "url": "https://leetcode.com/problems/reorganize-string/",
+     "number": 767
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "Maximum Frequency Stack",
+    "category": "Heap",
+    "pattern": "Top K Elements",
+    "difficulty": "Hard",
+    "slug": "maximum-frequency-stack",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Maximum Frequency Stack",
+     "url": "https://leetcode.com/problems/maximum-frequency-stack/",
+     "number": 895
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "Maximum Sum Combination",
+    "category": "Heap",
+    "pattern": "Two Heaps",
+    "difficulty": "Medium",
+    "slug": "maximum-sum-combination",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Maximum Sum Combination",
+     "url": "https://www.geeksforgeeks.org/problems/maximum-sum-combination/1"
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
    },
    {
     "topic": "Find Median from Data Stream",
@@ -7763,7 +8763,68 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/find-median-from-data-stream",
-    "heading": null
+    "heading": null,
+    "pattern": "Two Heaps"
+   },
+   {
+    "topic": "Sliding Window Median",
+    "category": "Heap",
+    "pattern": "Two Heaps",
+    "difficulty": "Hard",
+    "slug": "sliding-window-median",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Sliding Window Median",
+     "url": "https://leetcode.com/problems/sliding-window-median/",
+     "number": 480
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "IPO",
+    "category": "Heap",
+    "pattern": "Two Heaps",
+    "difficulty": "Hard",
+    "slug": "ipo",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "IPO",
+     "url": "https://leetcode.com/problems/ipo/",
+     "number": 502
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
+   },
+   {
+    "topic": "Design Twitter",
+    "category": "Heap",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/heaps-priority-queues",
+    "question": "interview-questions:dsa/design-twitter",
+    "heading": null,
+    "pattern": "K-way Merge"
+   },
+   {
+    "topic": "Merge k Sorted Lists",
+    "category": "Heap",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/linked-lists",
+    "question": "interview-questions:dsa/merge-k-sorted-lists",
+    "heading": null,
+    "pattern": "K-way Merge"
+   },
+   {
+    "topic": "Smallest Range Covering Elements from K Lists",
+    "category": "Heap",
+    "pattern": "K-way Merge",
+    "difficulty": "Hard",
+    "slug": "smallest-range-covering-elements-from-k-lists",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Smallest Range Covering Elements from K Lists",
+     "url": "https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/",
+     "number": 632
+    },
+    "lesson": "articles:dsa/heaps-priority-queues"
    },
    {
     "topic": "Jump Game",
@@ -7771,7 +8832,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/jump-game",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
    },
    {
     "topic": "Jump Game II",
@@ -7779,7 +8841,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/jump-game-ii",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
    },
    {
     "topic": "Gas Station",
@@ -7787,7 +8850,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/gas-station",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
    },
    {
     "topic": "Hand of Straights",
@@ -7795,7 +8859,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/hand-of-straights",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
    },
    {
     "topic": "Merge Triplets to Form Target",
@@ -7803,7 +8868,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/merge-triplets-to-form-target",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
    },
    {
     "topic": "Partition Labels",
@@ -7811,7 +8877,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/partition-labels",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
    },
    {
     "topic": "Valid Parenthesis String",
@@ -7819,7 +8886,140 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/greedy-and-intervals",
     "question": "interview-questions:dsa/valid-parenthesis-string",
-    "heading": null
+    "heading": null,
+    "pattern": "Greedy Choices"
+   },
+   {
+    "topic": "Maximum Length of Pair Chain",
+    "category": "Greedy",
+    "pattern": "Greedy Choices",
+    "difficulty": "Medium",
+    "slug": "maximum-length-of-pair-chain",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Maximum Length of Pair Chain",
+     "url": "https://leetcode.com/problems/maximum-length-of-pair-chain/",
+     "number": 646
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "Minimum Add to Make Parentheses Valid",
+    "category": "Greedy",
+    "pattern": "Greedy Choices",
+    "difficulty": "Medium",
+    "slug": "minimum-add-to-make-parentheses-valid",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Minimum Add to Make Parentheses Valid",
+     "url": "https://leetcode.com/problems/minimum-add-to-make-parentheses-valid/",
+     "number": 921
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "Remove Duplicate Letters",
+    "category": "Greedy",
+    "pattern": "Greedy Choices",
+    "difficulty": "Medium",
+    "slug": "remove-duplicate-letters",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Remove Duplicate Letters",
+     "url": "https://leetcode.com/problems/remove-duplicate-letters/",
+     "number": 316
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "Meeting Rooms",
+    "category": "Greedy",
+    "pattern": "Intervals",
+    "difficulty": "Easy",
+    "slug": "attend-all-meetings",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Meeting Rooms",
+     "url": "https://www.geeksforgeeks.org/problems/attend-all-meetings/1"
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "Merge Intervals",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/merge-intervals",
+    "heading": null,
+    "pattern": "Intervals"
+   },
+   {
+    "topic": "Insert Interval",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/insert-interval",
+    "heading": null,
+    "pattern": "Intervals"
+   },
+   {
+    "topic": "Non-overlapping Intervals",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/non-overlapping-intervals",
+    "heading": null,
+    "pattern": "Intervals"
+   },
+   {
+    "topic": "Interval List Intersections",
+    "category": "Greedy",
+    "pattern": "Intervals",
+    "difficulty": "Medium",
+    "slug": "interval-list-intersections",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Interval List Intersections",
+     "url": "https://leetcode.com/problems/interval-list-intersections/",
+     "number": 986
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "Meeting Rooms II",
+    "category": "Greedy",
+    "pattern": "Intervals",
+    "difficulty": "Medium",
+    "slug": "attend-all-meetings-ii",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Meeting Rooms II",
+     "url": "https://www.geeksforgeeks.org/problems/attend-all-meetings-ii/1"
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "My Calendar I",
+    "category": "Greedy",
+    "pattern": "Intervals",
+    "difficulty": "Medium",
+    "slug": "my-calendar-i",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "My Calendar I",
+     "url": "https://leetcode.com/problems/my-calendar-i/",
+     "number": 729
+    },
+    "lesson": "articles:dsa/greedy-and-intervals"
+   },
+   {
+    "topic": "Generate Parentheses",
+    "category": "Backtracking",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/stacks",
+    "question": "interview-questions:dsa/generate-parentheses",
+    "heading": null,
+    "pattern": "Subsets and Permutations"
    },
    {
     "topic": "Subsets",
@@ -7827,15 +9027,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/backtracking",
     "question": "interview-questions:dsa/subsets",
-    "heading": null
-   },
-   {
-    "topic": "Combination Sum",
-    "category": "Backtracking",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/backtracking",
-    "question": "interview-questions:dsa/combination-sum",
-    "heading": null
+    "heading": null,
+    "pattern": "Subsets and Permutations"
    },
    {
     "topic": "Permutations",
@@ -7843,7 +9036,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/backtracking",
     "question": "interview-questions:dsa/permutations",
-    "heading": null
+    "heading": null,
+    "pattern": "Subsets and Permutations"
    },
    {
     "topic": "Subsets II",
@@ -7851,31 +9045,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/backtracking",
     "question": "interview-questions:dsa/subsets-ii",
-    "heading": null
-   },
-   {
-    "topic": "Combination Sum II",
-    "category": "Backtracking",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/backtracking",
-    "question": "interview-questions:dsa/combination-sum-ii",
-    "heading": null
-   },
-   {
-    "topic": "Word Search",
-    "category": "Backtracking",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/backtracking",
-    "question": "interview-questions:dsa/word-search",
-    "heading": null
-   },
-   {
-    "topic": "Palindrome Partitioning",
-    "category": "Backtracking",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/backtracking",
-    "question": "interview-questions:dsa/palindrome-partitioning",
-    "heading": null
+    "heading": null,
+    "pattern": "Subsets and Permutations"
    },
    {
     "topic": "Letter Combinations of a Phone Number",
@@ -7883,15 +9054,58 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/backtracking",
     "question": "interview-questions:dsa/letter-combinations-of-a-phone-number",
-    "heading": null
+    "heading": null,
+    "pattern": "Subsets and Permutations"
    },
    {
-    "topic": "Word Search II",
+    "topic": "Letter Case Permutation",
     "category": "Backtracking",
-    "difficulty": "Hard",
+    "pattern": "Subsets and Permutations",
+    "difficulty": "Medium",
+    "slug": "letter-case-permutation",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Letter Case Permutation",
+     "url": "https://leetcode.com/problems/letter-case-permutation/",
+     "number": 784
+    },
+    "lesson": "articles:dsa/backtracking"
+   },
+   {
+    "topic": "Combination Sum",
+    "category": "Backtracking",
+    "difficulty": "Medium",
     "lesson": "articles:dsa/backtracking",
-    "question": "interview-questions:dsa/word-search-ii",
-    "heading": null
+    "question": "interview-questions:dsa/combination-sum",
+    "heading": null,
+    "pattern": "Combinations and Search"
+   },
+   {
+    "topic": "Combination Sum II",
+    "category": "Backtracking",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/backtracking",
+    "question": "interview-questions:dsa/combination-sum-ii",
+    "heading": null,
+    "pattern": "Combinations and Search"
+   },
+   {
+    "topic": "Word Search",
+    "category": "Backtracking",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/backtracking",
+    "question": "interview-questions:dsa/word-search",
+    "heading": null,
+    "pattern": "Combinations and Search"
+   },
+   {
+    "topic": "Palindrome Partitioning",
+    "category": "Backtracking",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/backtracking",
+    "question": "interview-questions:dsa/palindrome-partitioning",
+    "heading": null,
+    "pattern": "Combinations and Search"
    },
    {
     "topic": "N-Queens",
@@ -7899,15 +9113,36 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/backtracking",
     "question": "interview-questions:dsa/n-queens",
-    "heading": null
+    "heading": null,
+    "pattern": "Combinations and Search"
    },
    {
-    "topic": "Number of Islands",
+    "topic": "Sudoku Solver",
+    "category": "Backtracking",
+    "pattern": "Combinations and Search",
+    "difficulty": "Hard",
+    "slug": "sudoku-solver",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Sudoku Solver",
+     "url": "https://leetcode.com/problems/sudoku-solver/",
+     "number": 37
+    },
+    "lesson": "articles:dsa/backtracking"
+   },
+   {
+    "topic": "Find if Path Exists in Graph",
     "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/number-of-islands",
-    "heading": null
+    "pattern": "Graph Traversal",
+    "difficulty": "Easy",
+    "slug": "find-if-path-exists-in-graph",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Find if Path Exists in Graph",
+     "url": "https://leetcode.com/problems/find-if-path-exists-in-graph/",
+     "number": 1971
+    },
+    "lesson": "articles:dsa/graphs"
    },
    {
     "topic": "Clone Graph",
@@ -7915,103 +9150,22 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/graphs",
     "question": "interview-questions:dsa/clone-graph",
-    "heading": null
+    "heading": null,
+    "pattern": "Graph Traversal"
    },
    {
-    "topic": "Max Area of Island",
+    "topic": "Number of Provinces",
     "category": "Graph",
+    "pattern": "Graph Traversal",
     "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/max-area-of-island",
-    "heading": null
-   },
-   {
-    "topic": "Pacific Atlantic Water Flow",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/pacific-atlantic-water-flow",
-    "heading": null
-   },
-   {
-    "topic": "Surrounded Regions",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/surrounded-regions",
-    "heading": null
-   },
-   {
-    "topic": "Rotting Oranges",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/rotting-oranges",
-    "heading": null
-   },
-   {
-    "topic": "Course Schedule",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/course-schedule",
-    "heading": null
-   },
-   {
-    "topic": "Course Schedule II",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/course-schedule-ii",
-    "heading": null
-   },
-   {
-    "topic": "Graph Valid Tree",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/graph-valid-tree",
-    "heading": null
-   },
-   {
-    "topic": "Number of Connected Components",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/number-of-connected-components",
-    "heading": null
-   },
-   {
-    "topic": "Redundant Connection",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/redundant-connection",
-    "heading": null
-   },
-   {
-    "topic": "Network Delay Time",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/network-delay-time",
-    "heading": null
-   },
-   {
-    "topic": "Cheapest Flights Within K Stops",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/cheapest-flights-within-k-stops",
-    "heading": null
-   },
-   {
-    "topic": "Min Cost to Connect All Points",
-    "category": "Graph",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/min-cost-to-connect-all-points",
-    "heading": null
+    "slug": "number-of-provinces",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Number of Provinces",
+     "url": "https://leetcode.com/problems/number-of-provinces/",
+     "number": 547
+    },
+    "lesson": "articles:dsa/graphs"
    },
    {
     "topic": "Word Ladder",
@@ -8019,7 +9173,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/graphs",
     "question": "interview-questions:dsa/word-ladder",
-    "heading": null
+    "heading": null,
+    "pattern": "Graph Traversal"
    },
    {
     "topic": "Reconstruct Itinerary",
@@ -8027,15 +9182,140 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/graphs",
     "question": "interview-questions:dsa/reconstruct-itinerary",
-    "heading": null
+    "heading": null,
+    "pattern": "Graph Traversal"
    },
    {
-    "topic": "Swim in Rising Water",
+    "topic": "Flood Fill",
     "category": "Graph",
-    "difficulty": "Hard",
+    "pattern": "Islands (Matrix Traversal)",
+    "difficulty": "Easy",
+    "slug": "flood-fill",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Flood Fill",
+     "url": "https://leetcode.com/problems/flood-fill/",
+     "number": 733
+    },
+    "lesson": "articles:dsa/graphs"
+   },
+   {
+    "topic": "Island Perimeter",
+    "category": "Graph",
+    "pattern": "Islands (Matrix Traversal)",
+    "difficulty": "Easy",
+    "slug": "island-perimeter",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Island Perimeter",
+     "url": "https://leetcode.com/problems/island-perimeter/",
+     "number": 463
+    },
+    "lesson": "articles:dsa/graphs"
+   },
+   {
+    "topic": "Number of Islands",
+    "category": "Graph",
+    "difficulty": "Medium",
     "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/swim-in-rising-water",
-    "heading": null
+    "question": "interview-questions:dsa/number-of-islands",
+    "heading": null,
+    "pattern": "Islands (Matrix Traversal)"
+   },
+   {
+    "topic": "Max Area of Island",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/max-area-of-island",
+    "heading": null,
+    "pattern": "Islands (Matrix Traversal)"
+   },
+   {
+    "topic": "Pacific Atlantic Water Flow",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/pacific-atlantic-water-flow",
+    "heading": null,
+    "pattern": "Islands (Matrix Traversal)"
+   },
+   {
+    "topic": "Surrounded Regions",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/surrounded-regions",
+    "heading": null,
+    "pattern": "Islands (Matrix Traversal)"
+   },
+   {
+    "topic": "Rotting Oranges",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/rotting-oranges",
+    "heading": null,
+    "pattern": "Islands (Matrix Traversal)"
+   },
+   {
+    "topic": "Number of Closed Islands",
+    "category": "Graph",
+    "pattern": "Islands (Matrix Traversal)",
+    "difficulty": "Medium",
+    "slug": "number-of-closed-islands",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Number of Closed Islands",
+     "url": "https://leetcode.com/problems/number-of-closed-islands/",
+     "number": 1254
+    },
+    "lesson": "articles:dsa/graphs"
+   },
+   {
+    "topic": "Course Schedule",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/course-schedule",
+    "heading": null,
+    "pattern": "Topological Sort"
+   },
+   {
+    "topic": "Course Schedule II",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/course-schedule-ii",
+    "heading": null,
+    "pattern": "Topological Sort"
+   },
+   {
+    "topic": "Topological Sort",
+    "category": "Graph",
+    "pattern": "Topological Sort",
+    "difficulty": "Medium",
+    "slug": "topological-sort",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Topological Sort",
+     "url": "https://www.geeksforgeeks.org/problems/topological-sort/1"
+    },
+    "lesson": "articles:dsa/graphs"
+   },
+   {
+    "topic": "Minimum Height Trees",
+    "category": "Graph",
+    "pattern": "Topological Sort",
+    "difficulty": "Medium",
+    "slug": "minimum-height-trees",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Minimum Height Trees",
+     "url": "https://leetcode.com/problems/minimum-height-trees/",
+     "number": 310
+    },
+    "lesson": "articles:dsa/graphs"
    },
    {
     "topic": "Alien Dictionary",
@@ -8043,7 +9323,99 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/graphs",
     "question": "interview-questions:dsa/alien-dictionary",
-    "heading": null
+    "heading": null,
+    "pattern": "Topological Sort"
+   },
+   {
+    "topic": "Graph Valid Tree",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/graph-valid-tree",
+    "heading": null,
+    "pattern": "Union Find"
+   },
+   {
+    "topic": "Number of Connected Components",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/number-of-connected-components",
+    "heading": null,
+    "pattern": "Union Find"
+   },
+   {
+    "topic": "Redundant Connection",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/redundant-connection",
+    "heading": null,
+    "pattern": "Union Find"
+   },
+   {
+    "topic": "Is Graph Bipartite?",
+    "category": "Graph",
+    "pattern": "Union Find",
+    "difficulty": "Medium",
+    "slug": "is-graph-bipartite",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Is Graph Bipartite?",
+     "url": "https://leetcode.com/problems/is-graph-bipartite/",
+     "number": 785
+    },
+    "lesson": "articles:dsa/graphs"
+   },
+   {
+    "topic": "Path With Minimum Effort",
+    "category": "Graph",
+    "pattern": "Union Find",
+    "difficulty": "Medium",
+    "slug": "path-with-minimum-effort",
+    "practice": {
+     "platform": "LeetCode",
+     "title": "Path With Minimum Effort",
+     "url": "https://leetcode.com/problems/path-with-minimum-effort/",
+     "number": 1631
+    },
+    "lesson": "articles:dsa/graphs"
+   },
+   {
+    "topic": "Network Delay Time",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/network-delay-time",
+    "heading": null,
+    "pattern": "Shortest Paths and MST"
+   },
+   {
+    "topic": "Cheapest Flights Within K Stops",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/cheapest-flights-within-k-stops",
+    "heading": null,
+    "pattern": "Shortest Paths and MST"
+   },
+   {
+    "topic": "Min Cost to Connect All Points",
+    "category": "Graph",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/min-cost-to-connect-all-points",
+    "heading": null,
+    "pattern": "Shortest Paths and MST"
+   },
+   {
+    "topic": "Swim in Rising Water",
+    "category": "Graph",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/swim-in-rising-water",
+    "heading": null,
+    "pattern": "Shortest Paths and MST"
    },
    {
     "topic": "Climbing Stairs",
@@ -8051,7 +9423,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/climbing-stairs",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "Min Cost Climbing Stairs",
@@ -8059,15 +9432,8 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/min-cost-climbing-stairs",
-    "heading": null
-   },
-   {
-    "topic": "Counting Bits",
-    "category": "Dynamic Programming",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/counting-bits",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "House Robber",
@@ -8075,7 +9441,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/house-robber",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "House Robber II",
@@ -8083,23 +9450,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/house-robber-ii",
-    "heading": null
-   },
-   {
-    "topic": "Longest Palindromic Substring",
-    "category": "Dynamic Programming",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/longest-palindromic-substring",
-    "heading": null
-   },
-   {
-    "topic": "Palindromic Substrings",
-    "category": "Dynamic Programming",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/palindromic-substrings",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "Decode Ways",
@@ -8107,7 +9459,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/decode-ways",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "Coin Change",
@@ -8115,15 +9468,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/coin-change",
-    "heading": null
-   },
-   {
-    "topic": "Maximum Product Subarray",
-    "category": "Dynamic Programming",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/maximum-product-subarray",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "Word Break",
@@ -8131,7 +9477,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/word-break",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "Longest Increasing Subsequence",
@@ -8139,31 +9486,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/longest-increasing-subsequence",
-    "heading": null
-   },
-   {
-    "topic": "Partition Equal Subset Sum",
-    "category": "Dynamic Programming",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/partition-equal-subset-sum",
-    "heading": null
-   },
-   {
-    "topic": "Unique Paths",
-    "category": "Dynamic Programming",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/unique-paths",
-    "heading": null
-   },
-   {
-    "topic": "Longest Common Subsequence",
-    "category": "Dynamic Programming",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/longest-common-subsequence",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
    },
    {
     "topic": "Best Time to Buy/Sell with Cooldown",
@@ -8171,7 +9495,17 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/best-time-to-buy-sell-with-cooldown",
-    "heading": null
+    "heading": null,
+    "pattern": "1D DP"
+   },
+   {
+    "topic": "Partition Equal Subset Sum",
+    "category": "Dynamic Programming",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/partition-equal-subset-sum",
+    "heading": null,
+    "pattern": "Knapsack"
    },
    {
     "topic": "Coin Change II",
@@ -8179,7 +9513,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/coin-change-ii",
-    "heading": null
+    "heading": null,
+    "pattern": "Knapsack"
    },
    {
     "topic": "Target Sum",
@@ -8187,7 +9522,96 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/target-sum",
-    "heading": null
+    "heading": null,
+    "pattern": "Knapsack"
+   },
+   {
+    "topic": "0 - 1 Knapsack Problem",
+    "category": "Dynamic Programming",
+    "pattern": "Knapsack",
+    "difficulty": "Medium",
+    "slug": "0-1-knapsack-problem",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "0 - 1 Knapsack Problem",
+     "url": "https://www.geeksforgeeks.org/problems/0-1-knapsack-problem0945/1"
+    },
+    "lesson": "articles:dsa/dynamic-programming"
+   },
+   {
+    "topic": "Subset Sum Problem",
+    "category": "Dynamic Programming",
+    "pattern": "Knapsack",
+    "difficulty": "Medium",
+    "slug": "subset-sum-problem",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Subset Sum Problem",
+     "url": "https://www.geeksforgeeks.org/problems/subset-sum-problem-1611555638/1"
+    },
+    "lesson": "articles:dsa/dynamic-programming"
+   },
+   {
+    "topic": "Count Subsets with Sum",
+    "category": "Dynamic Programming",
+    "pattern": "Knapsack",
+    "difficulty": "Medium",
+    "slug": "perfect-sum-problem",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Count Subsets with Sum",
+     "url": "https://www.geeksforgeeks.org/problems/perfect-sum-problem5633/1"
+    },
+    "lesson": "articles:dsa/dynamic-programming"
+   },
+   {
+    "topic": "Partition Into 2 Subsets with Min Sum Diff",
+    "category": "Dynamic Programming",
+    "pattern": "Knapsack",
+    "difficulty": "Hard",
+    "slug": "minimum-sum-partition",
+    "practice": {
+     "platform": "GeeksforGeeks",
+     "title": "Partition Into 2 Subsets with Min Sum Diff",
+     "url": "https://www.geeksforgeeks.org/problems/minimum-sum-partition3317/1"
+    },
+    "lesson": "articles:dsa/dynamic-programming"
+   },
+   {
+    "topic": "Longest Palindromic Substring",
+    "category": "Dynamic Programming",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/longest-palindromic-substring",
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
+   },
+   {
+    "topic": "Palindromic Substrings",
+    "category": "Dynamic Programming",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/palindromic-substrings",
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
+   },
+   {
+    "topic": "Unique Paths",
+    "category": "Dynamic Programming",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/unique-paths",
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
+   },
+   {
+    "topic": "Longest Common Subsequence",
+    "category": "Dynamic Programming",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/longest-common-subsequence",
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
    },
    {
     "topic": "Interleaving String",
@@ -8195,7 +9619,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/interleaving-string",
-    "heading": null
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
    },
    {
     "topic": "Edit Distance",
@@ -8203,7 +9628,8 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/edit-distance",
-    "heading": null
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
    },
    {
     "topic": "Burst Balloons",
@@ -8211,7 +9637,8 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/burst-balloons",
-    "heading": null
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
    },
    {
     "topic": "Regular Expression Matching",
@@ -8219,7 +9646,134 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/regular-expression-matching",
-    "heading": null
+    "heading": null,
+    "pattern": "2D DP: Strings and Grids"
+   }
+  ],
+  "topicOrder": [
+   {
+    "topic": "Arrays",
+    "patterns": [
+     "Array Basics",
+     "Prefix Sum",
+     "Kadane's Algorithm",
+     "Matrix",
+     "Cyclic Sort"
+    ]
+   },
+   {
+    "topic": "Hashing",
+    "patterns": [
+     "Hash Maps and Sets"
+    ]
+   },
+   {
+    "topic": "Strings",
+    "patterns": [
+     "String Basics"
+    ]
+   },
+   {
+    "topic": "Bit Manipulation",
+    "patterns": [
+     "Bitwise XOR and Bits"
+    ]
+   },
+   {
+    "topic": "Two Pointers",
+    "patterns": [
+     "Two Pointers"
+    ]
+   },
+   {
+    "topic": "Queue",
+    "patterns": [
+     "Queue Design"
+    ]
+   },
+   {
+    "topic": "Sliding Window",
+    "patterns": [
+     "Sliding Window"
+    ]
+   },
+   {
+    "topic": "Stack",
+    "patterns": [
+     "Stack Basics",
+     "Monotonic Stack"
+    ]
+   },
+   {
+    "topic": "Binary Search",
+    "patterns": [
+     "Classic Binary Search",
+     "Rotated Arrays and Peaks",
+     "Binary Search on the Answer",
+     "Matrix Search"
+    ]
+   },
+   {
+    "topic": "Linked List",
+    "patterns": [
+     "Linked List Basics",
+     "Fast and Slow Pointers",
+     "In-place Reversal"
+    ]
+   },
+   {
+    "topic": "Trees",
+    "patterns": [
+     "Tree DFS",
+     "Tree BFS",
+     "Trie"
+    ]
+   },
+   {
+    "topic": "BST",
+    "patterns": [
+     "Binary Search Trees"
+    ]
+   },
+   {
+    "topic": "Heap",
+    "patterns": [
+     "Top K Elements",
+     "Two Heaps",
+     "K-way Merge"
+    ]
+   },
+   {
+    "topic": "Greedy",
+    "patterns": [
+     "Greedy Choices",
+     "Intervals"
+    ]
+   },
+   {
+    "topic": "Backtracking",
+    "patterns": [
+     "Subsets and Permutations",
+     "Combinations and Search"
+    ]
+   },
+   {
+    "topic": "Graph",
+    "patterns": [
+     "Graph Traversal",
+     "Islands (Matrix Traversal)",
+     "Topological Sort",
+     "Union Find",
+     "Shortest Paths and MST"
+    ]
+   },
+   {
+    "topic": "Dynamic Programming",
+    "patterns": [
+     "1D DP",
+     "Knapsack",
+     "2D DP: Strings and Grids"
+    ]
    }
   ]
  },

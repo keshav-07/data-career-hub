@@ -883,3 +883,44 @@
     }
   }
 }
+
+@layer components {
+  /* Pattern subfolders inside a Practice topic. */
+  .practice-section + .practice-section {
+    margin-top: var(--sp-2);
+  }
+  .practice-section__name {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-3) var(--sp-5) var(--sp-1);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--c-accent);
+  }
+  .practice-section__count {
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    background: var(--c-surface-2);
+    color: var(--c-text-muted);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.02em;
+  }
+  .practice-row__title--plain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px var(--sp-2);
+  }
+  .practice-row__soon {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--c-text-subtle);
+  }
+  .practice-row:has(.practice-row__check:checked) .practice-row__title--plain {
+    text-decoration: line-through;
+    text-decoration-color: var(--c-text-subtle);
+  }
+}
