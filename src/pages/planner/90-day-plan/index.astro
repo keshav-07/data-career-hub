@@ -53,7 +53,7 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
         <h2 id={`phase-${pi + 1}`}>{phase}</h2>
         {weeksOf(phase).map(([week, list]) => (
           <div class="pl-week">
-            <h3 id={`week-${week}`}>
+            <h3 id={`phase-${pi + 1}-week-${week}`}>
               Week {week}
               {milestone(week) && (
                 <span class="pl-milestone">{milestone(week)!.replace(/^Wk\d+:\s*/, "")}</span>
