@@ -6,8 +6,8 @@ technology: ["aws", "data-engineering"]
 topic: ["aws-services", "networking", "cdc", "cost"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain the VPC building blocks a data pipeline needs: subnets, routing, NAT, security groups and VPC endpoints"
   - "Extract data safely from RDS, Aurora and DynamoDB"
@@ -168,7 +168,7 @@ Key SQS settings:
 
 - **Visibility timeout** (default 30 seconds, up to 12 hours): after a consumer receives a message, it is hidden for this long. If the consumer does not delete it in time, it reappears and is processed again.
 - **Retention**: from 1 minute to 14 days (default 4 days).
-- **Message size**: up to 1 MiB (raised from 256 KiB in August 2025); larger payloads go to S3 with a pointer, for example with the extended client libraries. SNS also supports 1 MiB payloads since September 2026.
+- **Message size**: up to 1 MiB (raised from 256 KiB in August 2025); larger payloads go to S3 with a pointer, for example with the extended client libraries. SNS has also accepted payloads up to 1 MiB since September 2026, but only as an opt-in: a topic keeps the 256 KiB default unless you raise its `MaximumMessageSize` attribute, and a topic above 256 KiB supports only SQS, Firehose and Lambda subscriptions.
 - **Long polling** (`WaitTimeSeconds` up to 20) reduces empty receives and cost.
 - **Dead-letter queue**: a redrive policy moves a message to a DLQ after `maxReceiveCount` receives, so one poison message cannot loop forever. You can redrive messages from the DLQ back to the source queue once fixed.
 
@@ -419,6 +419,6 @@ Open Cost Explorer grouped by service, then by usage type and by cost allocation
 - Run data services in private subnets across two AZs; use an S3 gateway endpoint instead of routing lake traffic through NAT.
 - Extract from RDS and Aurora read replicas, snapshot exports, DMS CDC or zero-ETL, never with heavy queries on the primary.
 - DynamoDB is designed around access patterns; export to S3 for analytics and use conditional writes for idempotency.
-- SQS buffers (visibility timeout, DLQ, at least once), SNS broadcasts, and EventBridge routes by content; SQS and SNS now take 1 MiB messages.
+- SQS buffers (visibility timeout, DLQ, at least once), SNS broadcasts, and EventBridge routes by content; SQS takes 1 MiB messages, and SNS topics can opt in to 1 MiB.
 - DMS full load plus CDC lands I/U/D change records; apply the latest change per key with a merge.
 - Control cost with activated tags, Cost Explorer, Budgets and anomaly detection, and review designs against the six Well-Architected pillars.

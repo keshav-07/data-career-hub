@@ -1,8 +1,8 @@
 ---
 seoTitle: "Airflow Scheduling, Logical Dates and Assets"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Airflow Scheduling: Intervals, Logical Dates, Catchup, Timetables and Assets"
 description: "How the Airflow 3 scheduler creates runs: cron and presets, logical dates and data intervals, catchup pitfalls, timetables, asset-aware scheduling and deadline alerts."
 inventoryId: "TECH-30"
@@ -414,7 +414,7 @@ The producer run recorded an asset event with its metadata. In a running deploym
 
 ### What it was
 
-An **SLA** (service level agreement) in Airflow 2 was a per-task `sla=timedelta(...)` measured from the start of the DAG run's data interval end. When a task had not finished in time, the scheduler recorded an SLA miss, sent an email and called the DAG's `sla_miss_callback`. It was widely used for "the finance tables must be ready by 07:00" alerts.
+An **SLA** (service level agreement) in Airflow 2 was a per-task `sla=timedelta(...)` measured from the end of the DAG run's data interval (roughly, the time the run was scheduled to start). When a task had not finished in time, the scheduler recorded an SLA miss, sent an email and called the DAG's `sla_miss_callback`. It was widely used for "the finance tables must be ready by 07:00" alerts.
 
 ### Why it went
 
@@ -437,6 +437,8 @@ task still has an sla attribute: False
 ### What replaces it: deadline alerts
 
 **Deadline alerts** (added in Airflow 3.1) attach a deadline to a DAG run: a **reference** time, an **interval** after (or before) it, and a **callback** to run if the DAG run has not finished by then. Built-in references include `DeadlineReference.DAGRUN_QUEUED_AT` (time since the run was queued), `DAGRUN_LOGICAL_DATE` (time since the run's logical date), `FIXED_DATETIME(...)` and `AVERAGE_RUNTIME(...)`. Callbacks are an `AsyncCallback` (runs in the triggerer) or, from Airflow 3.2, a `SyncCallback` (runs on an executor); either can wrap a notifier (for example a Slack notifier from its provider) or your own function given by import path.
+
+The deadline alerts documentation marked the feature experimental when it arrived in 3.1, and import paths moved between minor releases (`AsyncCallback` is importable from `airflow.sdk` from 3.2), so check the docs for your exact version before copying an example.
 
 ```python
 from airflow.sdk import AsyncCallback, DeadlineAlert, DeadlineReference

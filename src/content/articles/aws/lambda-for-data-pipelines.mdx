@@ -5,8 +5,8 @@ technology: ["aws"]
 topic: ["lambda", "serverless", "event-driven"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain Lambda's execution model, hard limits and when Lambda is the wrong tool for a data job"
   - "Wire Lambda to S3, SQS and Kinesis and know which invocation model each uses"
@@ -20,6 +20,7 @@ next: "articles:aws/glue-catalog-crawlers-etl"
 versionContext: "Limits checked against the AWS Lambda documentation in October 2026. Python handler and sizing examples run locally on Python 3.11 with simulated events; deployment commands, boto3 calls and JSON configuration were written from the Lambda documentation and not executed against AWS. Duration figures in the memory-tuning example are illustrative inputs, not measurements."
 sources:
   - { label: "AWS Lambda Developer Guide: Lambda quotas", url: "https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html" }
+  - { label: "AWS What's New: Lambda asynchronous payloads up to 1 MB (October 2025)", url: "https://aws.amazon.com/about-aws/whats-new/2025/10/aws-lambda-payload-size-256-kb-1-mb-invocations" }
   - { label: "AWS Lambda Developer Guide: Understanding Lambda function scaling", url: "https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html" }
   - { label: "AWS Lambda Developer Guide: Lambda scaling behavior", url: "https://docs.aws.amazon.com/lambda/latest/dg/scaling-behavior.html" }
   - { label: "AWS Lambda Developer Guide: Configure Lambda function memory", url: "https://docs.aws.amazon.com/lambda/latest/dg/configuration-memory.html" }
@@ -50,6 +51,7 @@ The limits that shape data designs:
 | Memory | 128 MB to 10,240 MB in 1 MB steps; CPU scales with memory |
 | Ephemeral storage (`/tmp`) | 512 MB to 10,240 MB |
 | Synchronous request and response payload | 6 MB each |
+| Asynchronous invocation payload | 1 MB (raised from 256 KB in October 2025; the part above 256 KB is billed as extra requests) |
 | Deployment package | 250 MB unzipped including layers; container images up to 10 GB |
 | Default account concurrency | 1,000 concurrent executions per Region (can be raised) |
 
