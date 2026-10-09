@@ -3,17 +3,43 @@
  * one complete. Completion is stored by scripts/planner.ts (the checkbox is a normal `data-pl-day` input); this
  * module only chooses which day the card shows and re-renders it on `planner:change`.
  */
-type Day = { d: number; th: string; h: number; m: string; t: [string, string, string][] };
+type Day = { d: number; th: string; h: number; m: string; t: [string, string, string, string][] };
 
 const KEY = "dch-planner-v1";
 
-function doneDays(): Record<string, number> {
+type Stored = { days?: Record<string, number>; t?: Record<string, { learn?: 1 }> };
+function stored(): Stored {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY) ?? "null") as { days?: Record<string, number> };
-    return s?.days ?? {};
+    return (JSON.parse(localStorage.getItem(KEY) ?? "null") as Stored) ?? {};
   } catch {
     return {};
   }
+}
+const doneDays = () => stored().days ?? {};
+
+/** One topic tile: the lesson link plus a "studied" checkbox (saved by planner.ts like the tracker pages). */
+function tile([skill, topic, href, key]: [string, string, string, string]) {
+  const li = document.createElement("li");
+  li.className = "day-task";
+  li.title = `${skill}: ${topic}`;
+  const link = document.createElement(href ? "a" : "span");
+  link.className = "day-task__link";
+  if (href) (link as HTMLAnchorElement).href = href;
+  const s = document.createElement("span");
+  s.className = "day-task__skill";
+  s.textContent = skill;
+  const t = document.createElement("span");
+  t.className = "day-task__topic";
+  t.textContent = topic;
+  link.append(s, t);
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.className = "day-task__check";
+  box.dataset.plKey = key;
+  box.dataset.plField = "learn";
+  box.setAttribute("aria-label", `Studied: ${skill}, ${topic}`);
+  li.append(link, box);
+  return li;
 }
 
 export function initDayCard() {
@@ -53,25 +79,20 @@ export function initDayCard() {
         : shown < open
           ? "Catch up"
           : "Coming up";
+    // Rebuild the tiles only when the day changes, so a ticked checkbox keeps keyboard focus.
     const list = $("[data-dc-tasks]");
-    list.replaceChildren(
-      ...day.t.map(([skill, topic, href]) => {
-        const li = document.createElement("li");
-        const tile = document.createElement(href ? "a" : "span");
-        tile.className = "day-task";
-        tile.title = `${skill}: ${topic}`;
-        if (href) (tile as HTMLAnchorElement).href = href;
-        const s = document.createElement("span");
-        s.className = "day-task__skill";
-        s.textContent = skill;
-        const t = document.createElement("span");
-        t.className = "day-task__topic";
-        t.textContent = topic;
-        tile.append(s, t);
-        li.append(tile);
-        return li;
-      }),
-    );
+    if (list.dataset.day !== String(shown)) {
+      list.replaceChildren(...day.t.map(tile));
+      list.dataset.day = String(shown);
+    }
+    const topics = stored().t ?? {};
+    let studied = 0;
+    list.querySelectorAll<HTMLInputElement>("input[data-pl-key]").forEach((b) => {
+      b.checked = !!topics[b.dataset.plKey!]?.learn;
+      b.closest("li")!.toggleAttribute("data-done", b.checked);
+      if (b.checked) studied++;
+    });
+    $("[data-dc-count]").textContent = `${studied}/${day.t.length} topics`;
     $("[data-dc-foot]").textContent = `${day.h} h · ${day.m}`;
     check.dataset.plDay = String(shown);
     check.dataset.hours = String(day.h);

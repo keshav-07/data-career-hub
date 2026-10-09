@@ -463,26 +463,39 @@
     }
   }
   .day-task {
+    position: relative;
     display: grid;
-    align-content: start;
-    gap: 1px;
-    height: 100%;
-    padding: 8px 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.03);
-    color: var(--c-text);
-    text-decoration: none;
     transition:
       border-color var(--dur-fast),
       background var(--dur-fast);
   }
-  a.day-task:hover {
+  .day-task__link {
+    display: grid;
+    align-content: start;
+    gap: 1px;
+    height: 100%;
+    padding: 8px 40px 8px 12px;
+    border-radius: inherit;
+    color: var(--c-text);
+    text-decoration: none;
+  }
+  .day-task:has(a.day-task__link:hover) {
     border-color: rgba(255, 106, 0, 0.55);
     background: rgba(255, 106, 0, 0.07);
+  }
+  a.day-task__link:hover {
     color: var(--c-text);
   }
+  a.day-task__link:hover .day-task__topic {
+    color: #ffb27a;
+  }
   .day-task__skill {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -499,12 +512,64 @@
     line-clamp: 2;
     overflow: hidden;
   }
-  a.day-task:hover .day-task__topic {
-    color: #ffb27a;
+  /* Small round "studied" tick in the top-right corner of each topic tile. */
+  .day-task__check {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    appearance: none;
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    transition:
+      border-color var(--dur-fast),
+      background var(--dur-fast);
+  }
+  .day-task__check:hover {
+    border-color: var(--c-brand);
+  }
+  .day-task__check:checked {
+    border-color: transparent;
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.5 10.5l3 3 6-6.5' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+        center / 100% no-repeat,
+      var(--gradient-button);
+  }
+  .day-task__check:focus-visible {
+    outline: 2px solid var(--c-focus, var(--c-accent));
+    outline-offset: 2px;
+  }
+  @media (forced-colors: active) {
+    .day-task__check {
+      appearance: auto;
+    }
+  }
+  .day-task[data-done] {
+    border-color: rgba(255, 106, 0, 0.3);
+    background: rgba(255, 106, 0, 0.06);
+  }
+  .day-task[data-done] .day-task__topic {
+    color: var(--c-text-muted);
+  }
+  /* Bigger touch target for the tick on phones. */
+  @media (pointer: coarse) {
+    .day-task__check {
+      top: 7px;
+      right: 7px;
+      width: 22px;
+      height: 22px;
+    }
   }
   @container (max-width: 420px) {
-    .day-task {
-      padding: 7px 10px;
+    .day-task__link {
+      padding: 7px 34px 7px 10px;
+    }
+    .day-task__skill {
+      letter-spacing: 0.06em;
     }
     .day-task__topic {
       font-size: 0.8125rem;
@@ -517,6 +582,14 @@
     justify-content: space-between;
     gap: var(--sp-3);
     margin-top: var(--sp-4);
+  }
+  .day-card__count {
+    margin-right: 6px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--c-text);
+    font-weight: 650;
   }
   .day-card__foot {
     min-width: 0;

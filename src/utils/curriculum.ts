@@ -185,7 +185,8 @@ export type PlanDay = {
   phase: string;
   theme: string;
   hours: number;
-  tasks: { skill: string; tracker?: string; topic: string; href?: string }[];
+  /** key: the planner topic key (`tracker:slug`) used to tick the topic as studied. */
+  tasks: { skill: string; tracker?: string; topic: string; key: string; href?: string }[];
   mock: string;
   weekly?: string;
   monthly?: string;
@@ -219,7 +220,13 @@ export async function planDays(): Promise<PlanDay[]> {
       hours: Number(d["Planned Hrs"]),
       tasks: PLAN_SKILLS.map(([skill, tracker]) => {
         const topic = String(d[skill]);
-        return { skill, tracker, topic, href: lookup.get(keyOf(tracker, topic))?.href };
+        return {
+          skill,
+          tracker,
+          topic,
+          key: keyOf(tracker, topic),
+          href: lookup.get(keyOf(tracker, topic))?.href,
+        };
       }),
       mock: String(d["Mock / Apply"]),
       weekly: (d["Weekly Milestone"] as string) ?? undefined,

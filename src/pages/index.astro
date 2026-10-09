@@ -103,24 +103,36 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
             </div>
             <ul class="day-card__tasks" role="list" data-dc-tasks>
               {day1.tasks.map((t) => (
-                <li>
+                <li class="day-task" title={`${t.skill}: ${t.topic}`}>
                   {t.href ? (
-                    <a class="day-task" href={t.href} title={`${t.skill}: ${t.topic}`}>
+                    <a class="day-task__link" href={t.href}>
                       <span class="day-task__skill">{t.skill}</span>
                       <span class="day-task__topic">{t.topic}</span>
                     </a>
                   ) : (
-                    <span class="day-task" title={`${t.skill}: ${t.topic}`}>
+                    <span class="day-task__link">
                       <span class="day-task__skill">{t.skill}</span>
                       <span class="day-task__topic">{t.topic}</span>
                     </span>
                   )}
+                  <input
+                    type="checkbox"
+                    class="day-task__check js-only"
+                    data-pl-key={t.key}
+                    data-pl-field="learn"
+                    aria-label={`Studied: ${t.skill}, ${t.topic}`}
+                  />
                 </li>
               ))}
             </ul>
             <div class="day-card__bar">
-              <p class="day-card__foot" data-dc-foot>
-                {day1.hours} h · {day1.mock}
+              <p class="day-card__foot">
+                <span class="day-card__count js-only" data-dc-count>
+                  0/{day1.tasks.length} topics
+                </span>
+                <span data-dc-foot>
+                  {day1.hours} h · {day1.mock}
+                </span>
               </p>
               <div class="day-card__controls js-only">
                 <button type="button" class="day-card__nav" data-dc-prev aria-label="Previous day">
@@ -151,7 +163,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
                   th: d.theme,
                   h: d.hours,
                   m: d.mock,
-                  t: d.tasks.map((t) => [t.skill, t.topic, t.href ?? ""]),
+                  t: d.tasks.map((t) => [t.skill, t.topic, t.href ?? "", t.key]),
                 })),
               ).replace(/</g, "\\u003c")}
             />
