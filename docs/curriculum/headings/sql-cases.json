@@ -382,5 +382,33 @@
   "Query optimization & cost reduction → Session Duration": {
     "ref": "interview-questions:sql/session-duration-sql-case-study",
     "heading": "Approach: query optimisation and cost reduction"
+  },
+  "Sessionization of events → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: sessionization of experiment traffic"
+  },
+  "Common Table Expressions (CTEs) → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Core solution: a CTE pipeline"
+  },
+  "Approximate distinct (HLL) → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: approximate distinct counts for monitoring"
+  },
+  "Regex matching in SQL → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: regex matching to parse variants and filter bots"
+  },
+  "RIGHT JOIN & FULL OUTER JOIN → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: RIGHT JOIN and FULL OUTER JOIN to reconcile logs"
+  },
+  "Deadlocks & locking → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: deadlocks and locking in the assignment service"
+  },
+  "Conditional window frames → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: conditional window frames for cumulative results"
   }
 }
