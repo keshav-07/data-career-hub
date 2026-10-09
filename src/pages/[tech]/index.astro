@@ -11,6 +11,8 @@ import AdSlot from "../../components/content/AdSlot.astro";
 import { breadcrumbsFor } from "../../utils/breadcrumbs";
 import { breadcrumbSchema } from "../../utils/seo";
 import { TECH_GROUP_LABELS } from "../../data/site";
+import PracticeList from "../../components/interview/PracticeList.astro";
+import { practiceGroups } from "../../utils/curriculum";
 
 export async function getStaticPaths() {
   const hubs = await getItems("technologies");
@@ -29,6 +31,8 @@ const relatedCourses = await Promise.all(related.map((r) => getCourse(r.id)));
 const first = course.lessons[0];
 const hubQuestions = course.questions.filter((q) => q.id.startsWith(`${tech}/`));
 const interviewHub = hubQuestions.length > 0;
+// Practice tab: courses with a real problem set (DSA, SQL), every question with its tick and practice link.
+const practice = hubQuestions.length >= 10 ? await practiceGroups(tech, hubQuestions) : [];
 const hours = Math.max(1, Math.round(course.minutes / 60));
 let lessonNo = 0;
 
@@ -36,6 +40,7 @@ let lessonNo = 0;
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "lessons", label: "Lessons", count: course.lessons.length },
+  practice.length ? { id: "practice", label: "Practice", count: hubQuestions.length } : null,
   course.projects.length || course.designs.length
     ? { id: "projects", label: "Projects", count: course.projects.length + course.designs.length }
     : null,
@@ -246,6 +251,13 @@ const tabs = [
       </ul>
       <AdSlot placement="inline" />
     </section>
+
+    {practice.length > 0 && (
+      <section id="practice" class="tab-panel" role="tabpanel" aria-labelledby="tab-practice">
+        <h2 class="tab-panel__title">Practice</h2>
+        <PracticeList groups={practice} course={tech} />
+      </section>
+    )}
 
     <section id="lessons" class="tab-panel" role="tabpanel" aria-labelledby="tab-lessons">
       <h2 class="tab-panel__title">Lessons</h2>

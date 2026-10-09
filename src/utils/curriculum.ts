@@ -235,3 +235,51 @@ export async function planDays(): Promise<PlanDay[]> {
     };
   });
 }
+
+export type PracticeGroup<Q> = {
+  name: string;
+  lesson?: { url: string; title: string };
+  questions: Q[];
+};
+
+/**
+ * A course's interview questions grouped for its Practice tab. DSA follows the planner's pattern order (each group
+ * links its pattern lesson); SQL splits core questions from business case studies; anything unlisted comes last.
+ */
+export async function practiceGroups<Q extends { ref: string; id: string }>(
+  tech: string,
+  questions: Q[],
+): Promise<PracticeGroup<Q>[]> {
+  const byRef = new Map(questions.map((q) => [q.ref, q]));
+  const used = new Set<string>();
+  const groups: PracticeGroup<Q>[] = [];
+  const pages = new Map((await getAllContent()).map((i) => [i.ref, i]));
+  if (tech === "dsa") {
+    for (const it of (curriculum as unknown as Raw).dsa?.items ?? []) {
+      const q = it.question ? byRef.get(it.question) : undefined;
+      if (!q || used.has(q.ref)) continue;
+      let g = groups.find((x) => x.name === it.category);
+      if (!g) {
+        const lesson = it.lesson ? pages.get(it.lesson) : undefined;
+        g = {
+          name: it.category,
+          lesson: lesson && { url: lesson.url, title: lesson.title },
+          questions: [],
+        };
+        groups.push(g);
+      }
+      g.questions.push(q);
+      used.add(q.ref);
+    }
+  } else if (tech === "sql") {
+    const core = questions.filter((q) => !q.id.endsWith("-sql-case-study"));
+    const cases = questions.filter((q) => q.id.endsWith("-sql-case-study"));
+    if (core.length) groups.push({ name: "Core SQL interview questions", questions: core });
+    if (cases.length) groups.push({ name: "Business case studies", questions: cases });
+    questions.forEach((q) => used.add(q.ref));
+  }
+  const rest = questions.filter((q) => !used.has(q.ref));
+  if (rest.length)
+    groups.push({ name: groups.length ? "More questions" : "Questions", questions: rest });
+  return groups;
+}

@@ -1,0 +1,111 @@
+---
+/**
+ * Course "Practice" tab: every problem grouped by topic, each with a done tick (shared with the interview pages via
+ * scripts/progress.ts), DataDank's own solution and one external practice link. Groups follow the planner order.
+ */
+import type { ItemOf } from "../../utils/content";
+
+interface Group {
+  name: string;
+  lesson?: { url: string; title: string };
+  questions: ItemOf<"interview-questions">[];
+}
+interface Props {
+  groups: Group[];
+  course: string;
+}
+const { groups, course } = Astro.props;
+const total = groups.reduce((n, g) => n + g.questions.length, 0);
+---
+
+<div class="practice" data-practice>
+  <p class="practice__intro">
+    {total} problems in {groups.length} {groups.length === 1 ? "topic" : "topics"}. Work through the
+    DataDank solution, then practise on the linked platform where there is one.
+    <span class="js-only">
+      {" "}
+      <strong data-practice-done>0</strong> of {total} done.
+    </span>
+  </p>
+  {groups.map((g, gi) => (
+    <details class="practice-group" open={gi < 3} data-practice-group>
+      <summary class="practice-group__head">
+        <span class="practice-group__name">{g.name}</span>
+        <span class="practice-group__count">
+          <span class="js-only">
+            <span data-group-done>0</span>/
+          </span>
+          {g.questions.length}
+        </span>
+      </summary>
+      {g.lesson && (
+        <p class="practice-group__lesson">
+          Pattern lesson: <a href={g.lesson.url}>{g.lesson.title}</a>
+        </p>
+      )}
+      <ol class="practice-rows" role="list">
+        {g.questions.map((q) => {
+          const p = q.entry.data.practice;
+          return (
+            <li class="practice-row">
+              <input
+                type="checkbox"
+                class="practice-row__check js-only"
+                data-done-url={q.url}
+                data-kind="question"
+                data-course={course}
+                data-title={q.title}
+                aria-label={`Mark "${q.title}" as done`}
+              />
+              <a class="practice-row__title" href={q.url} data-progress-url={q.url}>
+                {q.title.split(":")[0]}
+              </a>
+              <span class={`diff diff--${q.entry.data.difficulty.toLowerCase()}`}>
+                {q.entry.data.difficulty}
+              </span>
+              {p ? (
+                <a
+                  class="practice-row__ext"
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener external"
+                  title={`${p.platform}${p.number ? ` ${p.number}` : ""}: ${p.title}`}
+                >
+                  {p.platform}
+                  <span aria-hidden="true"> ↗</span>
+                  <span class="visually-hidden"> (opens in a new tab)</span>
+                </a>
+              ) : (
+                <span class="practice-row__ext practice-row__ext--none">DataDank only</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  ))}
+  <p class="muted js-only" style="margin-top: var(--sp-3); font-size: var(--fs-sm)">
+    Ticks are saved in this browser only and match the ticks on the interview pages.
+  </p>
+</div>
+
+<script>
+  // Done counts per topic and overall, kept in step with the ticks (scripts/progress.ts saves them).
+  const root = document.querySelector<HTMLElement>("[data-practice]");
+  if (root) {
+    const update = () => {
+      let all = 0;
+      root.querySelectorAll<HTMLElement>("[data-practice-group]").forEach((g) => {
+        const n = g.querySelectorAll("input[data-done-url]:checked").length;
+        all += n;
+        const out = g.querySelector("[data-group-done]");
+        if (out) out.textContent = String(n);
+      });
+      const done = root.querySelector("[data-practice-done]");
+      if (done) done.textContent = String(all);
+    };
+    root.addEventListener("change", () => setTimeout(update));
+    window.addEventListener("load", update);
+    update();
+  }
+</script>
