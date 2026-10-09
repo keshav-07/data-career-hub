@@ -13,10 +13,10 @@ estimatedMinutes: 30
 interviewRelevance: "Medium"
 shortAnswer: "Compare each pair of adjacent words: the first position where they differ gives one ordering rule, an edge from the earlier word's letter to the later word's letter. If a word is followed by its own proper prefix, the input is invalid. Every letter that appears is a node, even without edges. Topologically sort the letters with Kahn's algorithm; if not all letters come out, the rules contain a cycle and no order exists. With C total characters and an alphabet of size U, the time is O(C + U^2) at most and the space O(U^2) for the edges."
 followUps: ["Why do you only compare adjacent words and not every pair?", "How would you tell whether the order is unique?", "Why must the prefix case be rejected?"]
-previous: "interview-questions:dsa/swim-in-rising-water"
-next: "interview-questions:dsa/climbing-stairs"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "GeeksforGeeks", "title": "Alien Dictionary", "url": "https://www.geeksforgeeks.org/problems/alien-dictionary/1"}
+previous: "interview-questions:dsa/swim-in-rising-water"
+next: "interview-questions:dsa/climbing-stairs"
 ---
 
 ## Problem

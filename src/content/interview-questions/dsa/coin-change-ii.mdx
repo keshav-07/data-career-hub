@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Let ways(i, a) be the number of combinations that make amount a using only the first i coin types. Either coin i - 1 is not used, or it is used at least once: ways(i, a) = ways(i - 1, a) + ways(i, a - coin). With one array, put the coin loop outside and the amount loop inside, going upwards so a coin can be reused: ways[a] += ways[a - coin], starting from ways[0] = 1. Time O(k * A), space O(A). Swapping the loops counts ordered sequences instead."
 followUps: ["Why does swapping the two loops count permutations?", "How would you count combinations if each coin could be used at most once?", "How does this relate to Combination Sum?"]
-previous: "interview-questions:dsa/best-time-to-buy-sell-with-cooldown"
-next: "interview-questions:dsa/target-sum"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 518, "title": "Coin Change II", "url": "https://leetcode.com/problems/coin-change-ii/"}
+previous: "interview-questions:dsa/best-time-to-buy-sell-with-cooldown"
+next: "interview-questions:dsa/target-sum"
 ---
 
 ## Problem

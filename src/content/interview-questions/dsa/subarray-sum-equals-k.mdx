@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "The sum of a slice equals prefix[j] - prefix[i], so a slice ending at j sums to k exactly when an earlier prefix equals prefix[j] - k. Walk the array keeping the running prefix sum and a hash map counting how often each prefix value has occurred, starting with {0: 1}. At each step add the count stored for prefix - k to the answer, then record the current prefix. This is O(n) time and O(n) space, and unlike a sliding window it works with negative numbers."
 followUps: ["Why does a sliding window fail when the array contains negative numbers?", "How would you return the length of the longest subarray with sum k instead of the count?", "How would you count subarrays whose sum is divisible by k?"]
-previous: "interview-questions:dsa/set-matrix-zeroes"
-next: "interview-questions:dsa/majority-element"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 560, "title": "Subarray Sum Equals K", "url": "https://leetcode.com/problems/subarray-sum-equals-k/"}
+previous: "interview-questions:dsa/longest-consecutive-sequence"
+next: "interview-questions:dsa/longest-common-prefix"
 ---
 
 ## Problem

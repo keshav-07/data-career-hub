@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Build a graph with an edge from each prerequisite to the course that needs it and count in-degrees. Kahn's algorithm repeatedly takes a course with in-degree zero, appends it to the order and decrements its successors. If the order contains every course it is a valid topological order; otherwise a cycle blocked some courses and you return an empty list. A DFS that appends nodes after their descendants and then reverses the list works too. Both are O(V + E)."
 followUps: ["How would you return the lexicographically smallest valid order?", "How would you group courses into semesters so the number of semesters is minimal?", "How would you verify that a given order is valid?"]
-previous: "interview-questions:dsa/course-schedule"
-next: "interview-questions:dsa/graph-valid-tree"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 210, "title": "Course Schedule II", "url": "https://leetcode.com/problems/course-schedule-ii/"}
+previous: "interview-questions:dsa/course-schedule"
+next: "interview-questions:dsa/graph-valid-tree"
 ---
 
 ## Problem

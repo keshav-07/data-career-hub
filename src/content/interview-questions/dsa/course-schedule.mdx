@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Model courses as nodes and each prerequisite pair as a directed edge from the prerequisite to the course. All courses can be finished exactly when this graph has no cycle. Kahn's algorithm counts in-degrees, repeatedly removes nodes with in-degree zero and lowers their neighbours' in-degrees; if every node gets removed there is no cycle. A three-colour DFS that finds an edge back to a node still on the stack is the alternative. Both run in O(V + E) time and space."
 followUps: ["How would you return a valid order rather than true or false?", "How would you report the courses that form the cycle?", "How do Airflow or dbt use the same check when they parse a DAG?", "What if some prerequisites are optional (either A or B)?"]
-previous: "interview-questions:dsa/rotting-oranges"
-next: "interview-questions:dsa/course-schedule-ii"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 207, "title": "Course Schedule", "url": "https://leetcode.com/problems/course-schedule/"}
+previous: "interview-questions:dsa/rotting-oranges"
+next: "interview-questions:dsa/course-schedule-ii"
 ---
 
 ## Problem

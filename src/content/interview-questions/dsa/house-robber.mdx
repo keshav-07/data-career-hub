@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Let best(i) be the most you can collect from the first i houses. For house i - 1 you either skip it (best(i - 1)) or take it, which forbids its left neighbour (best(i - 2) + value). So best(i) = max(best(i - 1), best(i - 2) + nums[i - 1]) with best(0) = 0 and best(1) = nums[0]. Keeping the last two values gives O(n) time and O(1) space."
 followUps: ["How do you handle houses arranged in a circle (House Robber II)?", "How would you return which houses were chosen?", "How does the problem change on a binary tree (House Robber III)?"]
-previous: "interview-questions:dsa/min-cost-climbing-stairs"
-next: "interview-questions:dsa/house-robber-ii"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 198, "title": "House Robber", "url": "https://leetcode.com/problems/house-robber/"}
+previous: "interview-questions:dsa/counting-bits"
+next: "interview-questions:dsa/house-robber-ii"
 ---
 
 ## Problem

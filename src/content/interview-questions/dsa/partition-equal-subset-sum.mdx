@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Two equal halves exist exactly when the total is even and some subset sums to half of it. That is 0/1 subset sum: can(i, t) = can(i - 1, t) or can(i - 1, t - nums[i - 1]), with can(0, 0) true. Using a one-dimensional boolean array of size target + 1, iterate each number once and loop the target downwards so each number is used at most once. Time O(n * T) and space O(T), where T is half the total."
 followUps: ["Why must the inner loop go downwards in the 1D version?", "How would you return the two groups?", "How would you split into k equal groups?", "How does a Python integer used as a bitset speed this up?"]
-previous: "interview-questions:dsa/longest-increasing-subsequence"
-next: "interview-questions:dsa/unique-paths"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 416, "title": "Partition Equal Subset Sum", "url": "https://leetcode.com/problems/partition-equal-subset-sum/"}
+previous: "interview-questions:dsa/longest-increasing-subsequence"
+next: "interview-questions:dsa/unique-paths"
 ---
 
 ## Problem

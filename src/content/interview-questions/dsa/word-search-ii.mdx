@@ -13,9 +13,10 @@ estimatedMinutes: 30
 interviewRelevance: "High"
 shortAnswer: "Load all words into a trie, then start a depth-first search from every cell, moving down the trie one letter at a time and abandoning a path as soon as the prefix is not in the trie. Mark a cell as visited while it is on the path and restore it on the way back. Record a word when you reach its end node and clear the marker so it is reported once. The trie costs O(total letters) to build; the search is bounded by O(R * C * 4 * 3^(L-1)) for longest word length L, but prefix pruning makes it far faster in practice."
 followUps: ["How would you prune trie nodes once all words below them have been found?", "Why is running single-word search once per word too slow?", "How does the complexity change if the grid also allows diagonal moves?", "How would you return each word with the path of cells that spells it?"]
-next: "interview-questions:dsa/subsets"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 212, "title": "Word Search II", "url": "https://leetcode.com/problems/word-search-ii/"}
+previous: "interview-questions:dsa/letter-combinations-of-a-phone-number"
+next: "interview-questions:dsa/n-queens"
 ---
 
 ## Problem

@@ -13,10 +13,9 @@ estimatedMinutes: 30
 interviewRelevance: "Medium"
 shortAnswer: "Let match(i, j) mean the first i characters of the text match the first j characters of the pattern. If the pattern character is a letter or a dot, it must match the text character and match(i - 1, j - 1) must hold. If it is a star, the star and its preceding element either match zero times (match(i, j - 2)) or match one more character, which requires the preceding element to match the text character and match(i - 1, j). match(0, 0) is true, and match(0, j) is true only for patterns like a*b*. The table is O(m * n) in time and space."
 followUps: ["How does the problem change for wildcard matching, where * matches any sequence on its own?", "Why must the star look at the element before it?", "How do real regex engines avoid exponential backtracking?"]
-previous: "interview-questions:dsa/burst-balloons"
-next: "interview-questions:dsa/jump-game"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 10, "title": "Regular Expression Matching", "url": "https://leetcode.com/problems/regular-expression-matching/"}
+previous: "interview-questions:dsa/burst-balloons"
 ---
 
 ## Problem

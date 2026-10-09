@@ -13,10 +13,10 @@ estimatedMinutes: 10
 interviewRelevance: "Medium"
 shortAnswer: "Merging takes the element-wise maximum, so values can only grow. Any triplet with some coordinate larger than the target's would push that coordinate past the target forever, so discard it. Merging all remaining triplets is harmless, because none of them can overshoot. The target is reachable exactly when, for each of the three positions, some remaining triplet equals the target there. One pass, O(n) time and O(1) space."
 followUps: ["Why is merging every safe triplet never harmful?", "How would you generalise to vectors of length k?", "How would you return a minimal set of triplets to merge?"]
-previous: "interview-questions:dsa/hand-of-straights"
-next: "interview-questions:dsa/partition-labels"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 1899, "title": "Merge Triplets to Form Target Triplet", "url": "https://leetcode.com/problems/merge-triplets-to-form-target-triplet/"}
+previous: "interview-questions:dsa/hand-of-straights"
+next: "interview-questions:dsa/partition-labels"
 ---
 
 ## Problem

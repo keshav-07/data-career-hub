@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Sort the candidates, then backtrack with a start index and a remaining total. At each step try candidates from the start index onward; recurse with the same index so a value can be reused, and break out of the loop as soon as a candidate exceeds what is left. Starting at the current index rather than 0 stops the same multiset appearing in different orders. The running time is exponential, roughly O(n^(T/m + 1)) for target T and smallest candidate m, and the extra space is O(T/m) for the path."
 followUps: ["How does the code change if each candidate may be used at most once?", "How would you count the combinations instead of listing them?", "What if candidates could be zero or negative?"]
-previous: "interview-questions:dsa/subsets"
-next: "interview-questions:dsa/permutations"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 39, "title": "Combination Sum", "url": "https://leetcode.com/problems/combination-sum/"}
+previous: "interview-questions:dsa/subsets"
+next: "interview-questions:dsa/permutations"
 ---
 
 ## Problem

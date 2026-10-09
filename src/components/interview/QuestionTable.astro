@@ -4,11 +4,19 @@ interface Props {
   questions: ItemOf<"interview-questions">[];
   /** Show the topic column (used on the all-questions page). */
   topics?: Record<string, string>;
+  /** Topic per question ref (DSA patterns); shows the topic column, with filter options in list order. */
+  topicOf?: Record<string, string>;
   caption: string;
 }
-const { questions, topics, caption } = Astro.props;
+const { questions, topics: folderTopics, topicOf, caption } = Astro.props;
+// A topic key and label for each question: its pattern when given, otherwise its technology folder.
+const keyOf = (q: (typeof questions)[number]) =>
+  topicOf ? (topicOf[q.ref] ?? "More") : q.id.split("/")[0];
+const topics = topicOf
+  ? Object.fromEntries(questions.map((q) => [keyOf(q), keyOf(q)]))
+  : folderTopics;
 const types = [...new Set(questions.flatMap((q) => q.entry.data.questionType))].sort();
-const topicIds = topics ? [...new Set(questions.map((q) => q.id.split("/")[0]))] : [];
+const topicIds = topics ? [...new Set(questions.map(keyOf))] : [];
 // External practice column, only when at least one question in the list has a practice link.
 const hasPractice = questions.some((q) => q.entry.data.practice);
 const levels = ["Easy", "Medium", "Hard"].filter((l) =>
@@ -104,7 +112,7 @@ const levels = ["Easy", "Medium", "Hard"].filter((l) =>
       </thead>
       <tbody>
         {questions.map((q, i) => {
-          const topic = q.id.split("/")[0];
+          const topic = keyOf(q);
           return (
             <tr
               data-difficulty={q.entry.data.difficulty}
@@ -159,7 +167,7 @@ const levels = ["Easy", "Medium", "Hard"].filter((l) =>
                   class="js-only"
                   data-done-url={q.url}
                   data-kind="question"
-                  data-course={topic}
+                  data-course={q.id.split("/")[0]}
                   data-title={q.title}
                   aria-label={`Mark "${q.title}" as done`}
                 />

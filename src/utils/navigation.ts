@@ -1,4 +1,5 @@
 import { getAllContent, getItems, getHub, type Item, type ItemOf } from "./content";
+import { inLearningOrder, questionOrder } from "./curriculum";
 
 export type NavLink = { title: string; url: string; meta?: string; number?: number };
 export type NavGroup = { title: string; links: NavLink[] };
@@ -77,13 +78,16 @@ async function buildCourse(tech: string): Promise<Course | undefined> {
   }
   const lessons = modules.flatMap((m) => m.lessons);
 
-  const questions = (await getItems("interview-questions"))
-    .filter((q) => q.id.startsWith(`${tech}/`) || q.technology.includes(tech))
-    .sort(
-      (a, b) =>
-        QUESTION_ORDER.indexOf(a.entry.data.difficulty) -
-          QUESTION_ORDER.indexOf(b.entry.data.difficulty) || a.title.localeCompare(b.title),
-    );
+  const questions = inLearningOrder(
+    tech,
+    (await getItems("interview-questions"))
+      .filter((q) => q.id.startsWith(`${tech}/`) || q.technology.includes(tech))
+      .sort(
+        (a, b) =>
+          QUESTION_ORDER.indexOf(a.entry.data.difficulty) -
+            QUESTION_ORDER.indexOf(b.entry.data.difficulty) || a.title.localeCompare(b.title),
+      ),
+  );
   const projects = (await getItems("projects")).filter(
     (p) =>
       p.technology.includes(tech) ||
@@ -158,17 +162,38 @@ export async function courseNav(item: ItemOf<"articles">): Promise<SectionNav | 
 /** Interview question navigation: every question in the same interview hub, by difficulty. */
 export async function interviewNav(item: ItemOf<"interview-questions">): Promise<SectionNav> {
   const tech = item.id.split("/")[0];
-  const all = (await getItems("interview-questions"))
-    .filter((q) => q.id.startsWith(`${tech}/`))
-    .sort(
-      (a, b) =>
-        QUESTION_ORDER.indexOf(a.entry.data.difficulty) -
-          QUESTION_ORDER.indexOf(b.entry.data.difficulty) || a.title.localeCompare(b.title),
-    );
-  const groups: NavGroup[] = QUESTION_ORDER.map((d) => ({
-    title: d,
-    links: all.filter((q) => q.entry.data.difficulty === d).map((q) => link(q)),
-  })).filter((g) => g.links.length);
+  const all = inLearningOrder(
+    tech,
+    (await getItems("interview-questions"))
+      .filter((q) => q.id.startsWith(`${tech}/`))
+      .sort(
+        (a, b) =>
+          QUESTION_ORDER.indexOf(a.entry.data.difficulty) -
+            QUESTION_ORDER.indexOf(b.entry.data.difficulty) || a.title.localeCompare(b.title),
+      ),
+  );
+  // Sidebar groups: by topic in learning order where the planner defines one (DSA), otherwise by difficulty.
+  const order = questionOrder(tech);
+  const topics = [
+    ...new Set(all.map((q) => order.get(q.ref)?.topic).filter((t): t is string => !!t)),
+  ];
+  const groups: NavGroup[] = (
+    topics.length
+      ? [
+          ...topics.map((t) => ({
+            title: t,
+            links: all.filter((q) => order.get(q.ref)?.topic === t).map((q) => link(q)),
+          })),
+          {
+            title: "More questions",
+            links: all.filter((q) => !order.has(q.ref)).map((q) => link(q)),
+          },
+        ]
+      : QUESTION_ORDER.map((d) => ({
+          title: d,
+          links: all.filter((q) => q.entry.data.difficulty === d).map((q) => link(q)),
+        }))
+  ).filter((g) => g.links.length);
   const hub = await getHub(tech);
   const more: NavLink[] = [{ title: "All interview topics", url: "/interview/" }];
   if (hub) more.unshift({ title: `${hub.entry.data.shortName} course`, url: hub.url });

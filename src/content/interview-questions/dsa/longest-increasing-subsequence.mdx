@@ -13,10 +13,10 @@ estimatedMinutes: 25
 interviewRelevance: "High"
 shortAnswer: "The DP is: lis(i) = 1 + the largest lis(j) over j before i with nums[j] smaller than nums[i], or 1 if there is none; the answer is the maximum lis(i). That is O(n^2). The faster method keeps tails, where tails[k] is the smallest possible last value of an increasing subsequence of length k + 1. For each value, binary-search the first tail that is not smaller and replace it, or append when the value is larger than every tail. The length of tails is the answer, in O(n log n) time and O(n) space."
 followUps: ["How do you reconstruct an actual subsequence, not just its length?", "What changes for a non-decreasing subsequence?", "Why is the tails array always sorted?", "How does this solve the Russian doll envelopes problem?"]
-previous: "interview-questions:dsa/word-break"
-next: "interview-questions:dsa/partition-equal-subset-sum"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 300, "title": "Longest Increasing Subsequence", "url": "https://leetcode.com/problems/longest-increasing-subsequence/"}
+previous: "interview-questions:dsa/word-break"
+next: "interview-questions:dsa/partition-equal-subset-sum"
 ---
 
 ## Problem

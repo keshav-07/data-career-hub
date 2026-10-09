@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "With a single queue, make every push restore stack order: append the new item, then rotate the queue by moving the n - 1 older items from the front to the back. The newest item is now at the front, so pop and top are O(1) front operations. Push costs O(n). The alternative keeps push O(1) and pays O(n) on every pop by moving items to a second queue."
 followUps: ["Which operation would you make expensive if pops are much rarer than pushes?", "Can you make both operations amortised O(1) here, as you can for a queue built from stacks?", "Why does Python's deque make this exercise artificial?"]
-previous: "interview-questions:dsa/next-greater-element-i"
-next: "interview-questions:dsa/implement-queue-using-stacks"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 225, "title": "Implement Stack using Queues", "url": "https://leetcode.com/problems/implement-stack-using-queues/"}
+previous: "interview-questions:dsa/trapping-rain-water"
+next: "interview-questions:dsa/implement-queue-using-stacks"
 ---
 
 ## Problem

@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Think of BFS where each level is a contiguous range of indices reachable with the same number of jumps. Scan left to right keeping current_end (the end of the current level) and furthest (the furthest index reachable with one more jump). When i reaches current_end, you must jump: increase the count and set current_end to furthest. Stop once current_end covers the last index. This is O(n) time and O(1) space."
 followUps: ["Why can the levels be treated as contiguous ranges?", "How would you return the actual indices you jump to?", "What would you return if the end were unreachable?"]
-previous: "interview-questions:dsa/jump-game"
-next: "interview-questions:dsa/gas-station"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 45, "title": "Jump Game II", "url": "https://leetcode.com/problems/jump-game-ii/"}
+previous: "interview-questions:dsa/jump-game"
+next: "interview-questions:dsa/gas-station"
 ---
 
 ## Problem

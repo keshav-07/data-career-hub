@@ -16,12 +16,13 @@ learningObjectives:
   - "Apply interval and greedy techniques to sessionisation and time-range merging in pipelines"
 prerequisites: ["articles:dsa/arrays-and-hashing", "articles:dsa/heaps-priority-queues"]
 related: ["articles:sql/window-functions"]
-previous: "articles:dsa/dynamic-programming"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
   - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
   - { label: "Python documentation: collections.Counter", url: "https://docs.python.org/3/library/collections.html#collections.Counter" }
+previous: "articles:dsa/heaps-priority-queues"
+next: "articles:dsa/backtracking"
 ---
 
 A greedy algorithm builds an answer by making the choice that looks best right now and never revisiting it. When that is valid, greedy solutions are short, fast and usually O(n) or O(n log n). The difficulty is knowing when it is valid: many problems have a tempting greedy answer that is wrong (Coin Change in the dynamic programming lesson is the classic example). Interval problems, where you sort by start or end and sweep, are the most common family of greedy problems, and they matter to Data Engineers because sessionisation and time-range merging are interval sweeps.

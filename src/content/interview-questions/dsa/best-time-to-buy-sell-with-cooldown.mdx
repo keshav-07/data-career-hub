@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Track three states at the end of each day: hold (you own a share), sold (you sold today, so tomorrow is a cooldown) and rest (you own nothing and are free to buy). Transitions: hold = max(hold, rest - price), sold = hold + price, rest = max(rest, sold), all computed from the previous day's values. Start with hold = minus infinity, sold = minus infinity and rest = 0. The answer is max(sold, rest) after the last day, in O(n) time and O(1) space."
 followUps: ["How do you add a transaction fee instead of a cooldown?", "How does the state machine change if at most k transactions are allowed?", "How would you recover the actual buy and sell days?"]
-previous: "interview-questions:dsa/longest-common-subsequence"
-next: "interview-questions:dsa/coin-change-ii"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 309, "title": "Best Time to Buy and Sell Stock with Cooldown", "url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock-with-cooldown/"}
+previous: "interview-questions:dsa/longest-common-subsequence"
+next: "interview-questions:dsa/coin-change-ii"
 ---
 
 ## Problem

@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Keep a deque of indices whose values are in decreasing order. When a new value arrives, pop indices from the back while their values are not larger, because they can never be a maximum again; then push the new index. Pop from the front when that index has left the window. The front is always the current window's maximum. Each index is pushed and popped at most once: O(n) time and O(k) space. A max-heap with lazy deletion gives O(n log n)."
 followUps: ["Why is it safe to discard smaller values behind a new value?", "How would you compute the sliding window minimum, or both at once?", "How would a heap-based solution handle elements that have left the window?"]
-previous: "interview-questions:dsa/minimum-window-substring"
-next: "interview-questions:dsa/maximum-average-subarray-i"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 239, "title": "Sliding Window Maximum", "url": "https://leetcode.com/problems/sliding-window-maximum/"}
+previous: "interview-questions:dsa/minimum-window-substring"
+next: "interview-questions:dsa/valid-parentheses"
 ---
 
 ## Problem

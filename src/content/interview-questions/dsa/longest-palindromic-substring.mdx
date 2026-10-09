@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Every palindrome has a centre: a single character (odd length) or a gap between two characters (even length). For each of the 2n - 1 centres, expand outwards while the characters on both sides match, and keep the longest span. That is O(n^2) time and O(1) space. The interval DP, where pal[i][j] is true when s[i] == s[j] and pal[i + 1][j - 1] is true, is also O(n^2) but needs O(n^2) memory. Manacher's algorithm achieves O(n) if asked."
 followUps: ["How does Manacher's algorithm reach O(n)?", "How would you count all palindromic substrings instead?", "How is this different from the longest palindromic subsequence?"]
-previous: "interview-questions:dsa/house-robber-ii"
-next: "interview-questions:dsa/palindromic-substrings"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 5, "title": "Longest Palindromic Substring", "url": "https://leetcode.com/problems/longest-palindromic-substring/"}
+previous: "interview-questions:dsa/house-robber-ii"
+next: "interview-questions:dsa/palindromic-substrings"
 ---
 
 ## Problem

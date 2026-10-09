@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "A cell can only be entered from above or from the left, so paths(r, c) = paths(r - 1, c) + paths(r, c - 1), with every cell in the first row and first column equal to 1. Filling the grid row by row gives O(m * n) time, and keeping one row reduces space to O(n). Combinatorially, every route is a sequence of m - 1 downs and n - 1 rights, so the answer is C(m + n - 2, m - 1), computable in O(min(m, n))."
 followUps: ["How do you handle blocked cells (Unique Paths II)?", "How would you find the minimum-cost path instead of the count?", "Why does the binomial coefficient count the routes?"]
-previous: "interview-questions:dsa/partition-equal-subset-sum"
-next: "interview-questions:dsa/longest-common-subsequence"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 62, "title": "Unique Paths", "url": "https://leetcode.com/problems/unique-paths/"}
+previous: "interview-questions:dsa/partition-equal-subset-sum"
+next: "interview-questions:dsa/longest-common-subsequence"
 ---
 
 ## Problem

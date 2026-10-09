@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Because the existing intervals are sorted and disjoint, one pass in three phases is enough. Copy every interval that ends before the new one starts. Then absorb every interval that overlaps the new one by widening it to the minimum start and maximum end. Append the widened interval, then copy everything that remains. This is O(n) time and O(n) space for the output."
 followUps: ["How would you find the first overlapping interval with binary search, and does it change the overall complexity?", "How would you remove an interval instead of inserting one?", "What if the existing list could contain overlaps?"]
-previous: "interview-questions:dsa/merge-intervals"
-next: "interview-questions:dsa/non-overlapping-intervals"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 57, "title": "Insert Interval", "url": "https://leetcode.com/problems/insert-interval/"}
+previous: "interview-questions:dsa/merge-intervals"
+next: "interview-questions:dsa/non-overlapping-intervals"
 ---
 
 ## Problem

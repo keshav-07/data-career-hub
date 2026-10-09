@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Try every cell as a start. From a cell that matches the current letter, mark it as used, recurse into the four neighbours with the next letter, then restore it. Return true as soon as the index reaches the end of the word. The time is O(R * C * 3^L) for word length L (four choices at the first step, at most three afterwards) and the extra space is O(L) for the recursion."
 followUps: ["How would you speed this up when you must search for many words?", "What cheap checks can reject the word before any search?", "Why does starting from the rarer end of the word help?"]
-previous: "interview-questions:dsa/combination-sum-ii"
-next: "interview-questions:dsa/palindrome-partitioning"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 79, "title": "Word Search", "url": "https://leetcode.com/problems/word-search/"}
+previous: "interview-questions:dsa/combination-sum-ii"
+next: "interview-questions:dsa/palindrome-partitioning"
 ---
 
 ## Problem

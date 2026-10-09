@@ -283,3 +283,25 @@ export async function practiceGroups<Q extends { ref: string; id: string }>(
     groups.push({ name: groups.length ? "More questions" : "Questions", questions: rest });
   return groups;
 }
+
+/**
+ * Learning order for a course's interview questions, when the planner defines one (DSA: topic from basic to
+ * advanced, then Easy → Medium → Hard, as listed in curriculum.json). Maps question ref → position and topic.
+ */
+export function questionOrder(tech: string): Map<string, { index: number; topic: string }> {
+  const order = new Map<string, { index: number; topic: string }>();
+  if (tech !== "dsa") return order;
+  for (const it of (curriculum as unknown as Raw).dsa?.items ?? []) {
+    if (it.question && !order.has(it.question))
+      order.set(it.question, { index: order.size, topic: it.category });
+  }
+  return order;
+}
+
+/** Sorts questions into the planner's learning order when one exists; otherwise returns them unchanged. */
+export function inLearningOrder<Q extends { ref: string }>(tech: string, questions: Q[]): Q[] {
+  const order = questionOrder(tech);
+  if (!order.size) return questions;
+  const pos = (q: Q) => order.get(q.ref)?.index ?? Number.MAX_SAFE_INTEGER;
+  return [...questions].sort((a, b) => pos(a) - pos(b));
+}

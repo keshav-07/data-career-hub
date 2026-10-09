@@ -15,13 +15,12 @@ learningObjectives:
   - "Reduce DP memory by keeping only the rows or values the transition needs"
   - "Connect DP to fuzzy matching, diffs and incremental computation in data work"
 prerequisites: ["articles:dsa/backtracking"]
-previous: "articles:dsa/graphs"
-next: "articles:dsa/greedy-and-intervals"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: functools (lru_cache and cache)", url: "https://docs.python.org/3/library/functools.html" }
   - { label: "Python documentation: itertools", url: "https://docs.python.org/3/library/itertools.html" }
   - { label: "Python documentation: bisect", url: "https://docs.python.org/3/library/bisect.html" }
+previous: "articles:dsa/graphs"
 ---
 
 Dynamic programming (DP) solves a problem by breaking it into smaller subproblems, solving each **once**, and reusing the answers. It applies when a brute-force recursion would solve the same subproblems again and again. DP has a reputation for being hard, but most interview DP problems fall into a handful of families, and every one is solved with the same four steps. Data Engineering interviews ask DP less often than arrays or graphs, but medium problems such as Coin Change, House Robber and Longest Common Subsequence do come up.

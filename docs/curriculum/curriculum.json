@@ -989,7 +989,7 @@
     "heading": null
    },
    {
-    "topic": "Recursive CTEs \u2192 Daily Active Users",
+    "topic": "Recursive CTEs → Daily Active Users",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Recursive CTEs",
@@ -998,7 +998,7 @@
     "heading": null
    },
    {
-    "topic": "Query optimization & cost reduction \u2192 Monthly Revenue",
+    "topic": "Query optimization & cost reduction → Monthly Revenue",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Query optimization & cost reduction",
@@ -1007,7 +1007,7 @@
     "heading": null
    },
    {
-    "topic": "RIGHT JOIN & FULL OUTER JOIN \u2192 Customer Lifetime Value",
+    "topic": "RIGHT JOIN & FULL OUTER JOIN → Customer Lifetime Value",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "RIGHT JOIN & FULL OUTER JOIN",
@@ -1016,7 +1016,7 @@
     "heading": null
    },
    {
-    "topic": "Hierarchical / org-chart queries \u2192 Churn Rate",
+    "topic": "Hierarchical / org-chart queries → Churn Rate",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Hierarchical / org-chart queries",
@@ -1025,7 +1025,7 @@
     "heading": null
    },
    {
-    "topic": "Reading EXPLAIN / execution plans \u2192 Average Order Value",
+    "topic": "Reading EXPLAIN / execution plans → Average Order Value",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Reading EXPLAIN / execution plans",
@@ -1034,7 +1034,7 @@
     "heading": null
    },
    {
-    "topic": "Self Join patterns \u2192 Conversion Funnel",
+    "topic": "Self Join patterns → Conversion Funnel",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Self Join patterns",
@@ -1043,7 +1043,7 @@
     "heading": null
    },
    {
-    "topic": "Graph traversal in SQL \u2192 New vs Returning Customers",
+    "topic": "Graph traversal in SQL → New vs Returning Customers",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Graph traversal in SQL",
@@ -1052,7 +1052,7 @@
     "heading": null
    },
    {
-    "topic": "Index design (B-tree, composite) \u2192 Top Selling Products",
+    "topic": "Index design (B-tree, composite) → Top Selling Products",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Index design (B-tree, composite)",
@@ -1061,7 +1061,7 @@
     "heading": null
    },
    {
-    "topic": "Cross Join & cartesian products \u2192 Inventory Turnover",
+    "topic": "Cross Join & cartesian products → Inventory Turnover",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Cross Join & cartesian products",
@@ -1070,7 +1070,7 @@
     "heading": null
    },
    {
-    "topic": "Gaps and Islands problem \u2192 Employee Hierarchy",
+    "topic": "Gaps and Islands problem → Employee Hierarchy",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Gaps and Islands problem",
@@ -1079,7 +1079,7 @@
     "heading": null
    },
    {
-    "topic": "Covering indexes \u2192 Fraud Pattern Detection",
+    "topic": "Covering indexes → Fraud Pattern Detection",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Covering indexes",
@@ -1088,7 +1088,7 @@
     "heading": null
    },
    {
-    "topic": "Multi-table joins \u2192 Session Duration",
+    "topic": "Multi-table joins → Session Duration",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Multi-table joins",
@@ -1097,7 +1097,7 @@
     "heading": null
    },
    {
-    "topic": "Sessionization of events \u2192 A/B Test Results",
+    "topic": "Sessionization of events → A/B Test Results",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Sessionization of events",
@@ -1106,7 +1106,7 @@
     "heading": null
    },
    {
-    "topic": "Index selectivity & cardinality \u2192 Subscription Renewals",
+    "topic": "Index selectivity & cardinality → Subscription Renewals",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Index selectivity & cardinality",
@@ -1115,7 +1115,7 @@
     "heading": null
    },
    {
-    "topic": "Anti-join (NOT EXISTS / LEFT JOIN NULL) \u2192 Refund Analysis",
+    "topic": "Anti-join (NOT EXISTS / LEFT JOIN NULL) → Refund Analysis",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Anti-join (NOT EXISTS / LEFT JOIN NULL)",
@@ -1124,7 +1124,7 @@
     "heading": null
    },
    {
-    "topic": "Retention analysis \u2192 Lead Scoring",
+    "topic": "Retention analysis → Lead Scoring",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Retention analysis",
@@ -1133,7 +1133,7 @@
     "heading": null
    },
    {
-    "topic": "Partitioning strategies \u2192 Page View Paths",
+    "topic": "Partitioning strategies → Page View Paths",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Partitioning strategies",
@@ -1142,7 +1142,7 @@
     "heading": null
    },
    {
-    "topic": "Semi-join with EXISTS \u2192 Cart Abandonment",
+    "topic": "Semi-join with EXISTS → Cart Abandonment",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Semi-join with EXISTS",
@@ -1151,7 +1151,7 @@
     "heading": null
    },
    {
-    "topic": "Cohort analysis \u2192 Loyalty Tiers",
+    "topic": "Cohort analysis → Loyalty Tiers",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Cohort analysis",
@@ -1160,7 +1160,7 @@
     "heading": null
    },
    {
-    "topic": "Partition pruning \u2192 Regional Sales Split",
+    "topic": "Partition pruning → Regional Sales Split",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Partition pruning",
@@ -1169,7 +1169,7 @@
     "heading": null
    },
    {
-    "topic": "Subqueries in WHERE \u2192 Daily Active Users",
+    "topic": "Subqueries in WHERE → Daily Active Users",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Subqueries in WHERE",
@@ -1178,7 +1178,7 @@
     "heading": null
    },
    {
-    "topic": "Funnel / conversion analysis \u2192 Monthly Revenue",
+    "topic": "Funnel / conversion analysis → Monthly Revenue",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Funnel / conversion analysis",
@@ -1187,7 +1187,7 @@
     "heading": null
    },
    {
-    "topic": "Materialized views \u2192 Customer Lifetime Value",
+    "topic": "Materialized views → Customer Lifetime Value",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Materialized views",
@@ -1196,7 +1196,7 @@
     "heading": null
    },
    {
-    "topic": "Subqueries in FROM (derived tables) \u2192 Churn Rate",
+    "topic": "Subqueries in FROM (derived tables) → Churn Rate",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Subqueries in FROM (derived tables)",
@@ -1205,7 +1205,7 @@
     "heading": null
    },
    {
-    "topic": "Median & percentile (PERCENTILE_CONT) \u2192 Average Order Value",
+    "topic": "Median & percentile (PERCENTILE_CONT) → Average Order Value",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Median & percentile (PERCENTILE_CONT)",
@@ -1214,7 +1214,7 @@
     "heading": null
    },
    {
-    "topic": "Query rewriting for performance \u2192 Conversion Funnel",
+    "topic": "Query rewriting for performance → Conversion Funnel",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Query rewriting for performance",
@@ -1223,7 +1223,7 @@
     "heading": null
    },
    {
-    "topic": "Scalar subqueries \u2192 New vs Returning Customers",
+    "topic": "Scalar subqueries → New vs Returning Customers",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Scalar subqueries",
@@ -1232,7 +1232,7 @@
     "heading": null
    },
    {
-    "topic": "Top-N per group \u2192 Top Selling Products",
+    "topic": "Top-N per group → Top Selling Products",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Top-N per group",
@@ -1241,7 +1241,7 @@
     "heading": null
    },
    {
-    "topic": "Avoiding full table scans \u2192 Inventory Turnover",
+    "topic": "Avoiding full table scans → Inventory Turnover",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Avoiding full table scans",
@@ -1250,7 +1250,7 @@
     "heading": null
    },
    {
-    "topic": "Correlated subqueries \u2192 Employee Hierarchy",
+    "topic": "Correlated subqueries → Employee Hierarchy",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Correlated subqueries",
@@ -1259,7 +1259,7 @@
     "heading": null
    },
    {
-    "topic": "Deduplicate keeping latest record \u2192 Fraud Pattern Detection",
+    "topic": "Deduplicate keeping latest record → Fraud Pattern Detection",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Deduplicate keeping latest record",
@@ -1268,7 +1268,7 @@
     "heading": null
    },
    {
-    "topic": "Join algorithms (hash, merge, nested loop) \u2192 Session Duration",
+    "topic": "Join algorithms (hash, merge, nested loop) → Session Duration",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Join algorithms (hash, merge, nested loop)",
@@ -1277,7 +1277,7 @@
     "heading": null
    },
    {
-    "topic": "Common Table Expressions (CTEs) \u2192 A/B Test Results",
+    "topic": "Common Table Expressions (CTEs) → A/B Test Results",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Common Table Expressions (CTEs)",
@@ -1286,7 +1286,7 @@
     "heading": null
    },
    {
-    "topic": "Year-over-year growth \u2192 Subscription Renewals",
+    "topic": "Year-over-year growth → Subscription Renewals",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Year-over-year growth",
@@ -1295,7 +1295,7 @@
     "heading": null
    },
    {
-    "topic": "Statistics & the optimizer \u2192 Refund Analysis",
+    "topic": "Statistics & the optimizer → Refund Analysis",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Statistics & the optimizer",
@@ -1304,7 +1304,7 @@
     "heading": null
    },
    {
-    "topic": "Multiple chained CTEs \u2192 Lead Scoring",
+    "topic": "Multiple chained CTEs → Lead Scoring",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Multiple chained CTEs",
@@ -1313,7 +1313,7 @@
     "heading": null
    },
    {
-    "topic": "Month-over-month change \u2192 Page View Paths",
+    "topic": "Month-over-month change → Page View Paths",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Month-over-month change",
@@ -1322,7 +1322,7 @@
     "heading": null
    },
    {
-    "topic": "Deadlocks & locking \u2192 Cart Abandonment",
+    "topic": "Deadlocks & locking → Cart Abandonment",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Deadlocks & locking",
@@ -1331,7 +1331,7 @@
     "heading": null
    },
    {
-    "topic": "Conditional aggregation \u2192 Loyalty Tiers",
+    "topic": "Conditional aggregation → Loyalty Tiers",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Conditional aggregation",
@@ -1340,7 +1340,7 @@
     "heading": null
    },
    {
-    "topic": "Rolling 7/30 day metrics \u2192 Regional Sales Split",
+    "topic": "Rolling 7/30 day metrics → Regional Sales Split",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Rolling 7/30 day metrics",
@@ -1349,7 +1349,7 @@
     "heading": null
    },
    {
-    "topic": "Isolation levels (ACID) \u2192 Daily Active Users",
+    "topic": "Isolation levels (ACID) → Daily Active Users",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Isolation levels (ACID)",
@@ -1358,7 +1358,7 @@
     "heading": null
    },
    {
-    "topic": "PIVOT rows to columns \u2192 Monthly Revenue",
+    "topic": "PIVOT rows to columns → Monthly Revenue",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "PIVOT rows to columns",
@@ -1367,7 +1367,7 @@
     "heading": null
    },
    {
-    "topic": "First & last touch attribution \u2192 Customer Lifetime Value",
+    "topic": "First & last touch attribution → Customer Lifetime Value",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "First & last touch attribution",
@@ -1376,7 +1376,7 @@
     "heading": null
    },
    {
-    "topic": "MVCC concepts \u2192 Churn Rate",
+    "topic": "MVCC concepts → Churn Rate",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "MVCC concepts",
@@ -1385,7 +1385,7 @@
     "heading": null
    },
    {
-    "topic": "UNPIVOT columns to rows \u2192 Average Order Value",
+    "topic": "UNPIVOT columns to rows → Average Order Value",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "UNPIVOT columns to rows",
@@ -1394,7 +1394,7 @@
     "heading": null
    },
    {
-    "topic": "Market basket / co-occurrence \u2192 Conversion Funnel",
+    "topic": "Market basket / co-occurrence → Conversion Funnel",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Market basket / co-occurrence",
@@ -1403,7 +1403,7 @@
     "heading": null
    },
    {
-    "topic": "Window function performance tuning \u2192 New vs Returning Customers",
+    "topic": "Window function performance tuning → New vs Returning Customers",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Window function performance tuning",
@@ -1412,7 +1412,7 @@
     "heading": null
    },
    {
-    "topic": "GROUPING SETS \u2192 Top Selling Products",
+    "topic": "GROUPING SETS → Top Selling Products",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "GROUPING SETS",
@@ -1421,7 +1421,7 @@
     "heading": null
    },
    {
-    "topic": "Slowly changing dimension queries \u2192 Inventory Turnover",
+    "topic": "Slowly changing dimension queries → Inventory Turnover",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Slowly changing dimension queries",
@@ -1430,7 +1430,7 @@
     "heading": null
    },
    {
-    "topic": "Handling skew in aggregations \u2192 Employee Hierarchy",
+    "topic": "Handling skew in aggregations → Employee Hierarchy",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Handling skew in aggregations",
@@ -1439,7 +1439,7 @@
     "heading": null
    },
    {
-    "topic": "ROLLUP and CUBE \u2192 Fraud Pattern Detection",
+    "topic": "ROLLUP and CUBE → Fraud Pattern Detection",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "ROLLUP and CUBE",
@@ -1448,7 +1448,7 @@
     "heading": null
    },
    {
-    "topic": "Detecting consecutive streaks \u2192 Session Duration",
+    "topic": "Detecting consecutive streaks → Session Duration",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Detecting consecutive streaks",
@@ -1457,7 +1457,7 @@
     "heading": null
    },
    {
-    "topic": "Approximate distinct (HLL) \u2192 A/B Test Results",
+    "topic": "Approximate distinct (HLL) → A/B Test Results",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Approximate distinct (HLL)",
@@ -1466,7 +1466,7 @@
     "heading": null
    },
    {
-    "topic": "Window function basics (OVER) \u2192 Subscription Renewals",
+    "topic": "Window function basics (OVER) → Subscription Renewals",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Window function basics (OVER)",
@@ -1475,7 +1475,7 @@
     "heading": null
    },
    {
-    "topic": "Pivoting dynamic columns \u2192 Refund Analysis",
+    "topic": "Pivoting dynamic columns → Refund Analysis",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Pivoting dynamic columns",
@@ -1484,7 +1484,7 @@
     "heading": null
    },
    {
-    "topic": "Bitmap indexing \u2192 Lead Scoring",
+    "topic": "Bitmap indexing → Lead Scoring",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Bitmap indexing",
@@ -1493,7 +1493,7 @@
     "heading": null
    },
    {
-    "topic": "PARTITION BY clause \u2192 Page View Paths",
+    "topic": "PARTITION BY clause → Page View Paths",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "PARTITION BY clause",
@@ -1502,7 +1502,7 @@
     "heading": null
    },
    {
-    "topic": "Conditional window frames \u2192 Cart Abandonment",
+    "topic": "Conditional window frames → Cart Abandonment",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Conditional window frames",
@@ -1511,7 +1511,7 @@
     "heading": null
    },
    {
-    "topic": "Columnar vs row storage \u2192 Loyalty Tiers",
+    "topic": "Columnar vs row storage → Loyalty Tiers",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Columnar vs row storage",
@@ -1520,7 +1520,7 @@
     "heading": null
    },
    {
-    "topic": "ROW_NUMBER() \u2192 Regional Sales Split",
+    "topic": "ROW_NUMBER() → Regional Sales Split",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "ROW_NUMBER()",
@@ -1529,7 +1529,7 @@
     "heading": null
    },
    {
-    "topic": "EXCEPT / INTERSECT set operations \u2192 Daily Active Users",
+    "topic": "EXCEPT / INTERSECT set operations → Daily Active Users",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "EXCEPT / INTERSECT set operations",
@@ -1538,7 +1538,7 @@
     "heading": null
    },
    {
-    "topic": "Sharding & distributed SQL \u2192 Monthly Revenue",
+    "topic": "Sharding & distributed SQL → Monthly Revenue",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Sharding & distributed SQL",
@@ -1547,7 +1547,7 @@
     "heading": null
    },
    {
-    "topic": "RANK() vs DENSE_RANK() \u2192 Customer Lifetime Value",
+    "topic": "RANK() vs DENSE_RANK() → Customer Lifetime Value",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "RANK() vs DENSE_RANK()",
@@ -1556,7 +1556,7 @@
     "heading": null
    },
    {
-    "topic": "LATERAL / CROSS APPLY joins \u2192 Churn Rate",
+    "topic": "LATERAL / CROSS APPLY joins → Churn Rate",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "LATERAL / CROSS APPLY joins",
@@ -1565,7 +1565,7 @@
     "heading": null
    },
    {
-    "topic": "CTE materialization trade-offs \u2192 Average Order Value",
+    "topic": "CTE materialization trade-offs → Average Order Value",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "CTE materialization trade-offs",
@@ -1574,7 +1574,7 @@
     "heading": null
    },
    {
-    "topic": "NTILE() bucketing \u2192 Conversion Funnel",
+    "topic": "NTILE() bucketing → Conversion Funnel",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "NTILE() bucketing",
@@ -1583,7 +1583,7 @@
     "heading": null
    },
    {
-    "topic": "JSON parsing in SQL \u2192 New vs Returning Customers",
+    "topic": "JSON parsing in SQL → New vs Returning Customers",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "JSON parsing in SQL",
@@ -1592,7 +1592,7 @@
     "heading": null
    },
    {
-    "topic": "Spilling & memory management \u2192 Top Selling Products",
+    "topic": "Spilling & memory management → Top Selling Products",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Spilling & memory management",
@@ -1601,7 +1601,7 @@
     "heading": null
    },
    {
-    "topic": "LAG() and LEAD() \u2192 Inventory Turnover",
+    "topic": "LAG() and LEAD() → Inventory Turnover",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "LAG() and LEAD()",
@@ -1610,7 +1610,7 @@
     "heading": null
    },
    {
-    "topic": "Array & nested data handling \u2192 Employee Hierarchy",
+    "topic": "Array & nested data handling → Employee Hierarchy",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Array & nested data handling",
@@ -1619,7 +1619,7 @@
     "heading": null
    },
    {
-    "topic": "Anti-pattern detection \u2192 Fraud Pattern Detection",
+    "topic": "Anti-pattern detection → Fraud Pattern Detection",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Anti-pattern detection",
@@ -1628,7 +1628,7 @@
     "heading": null
    },
    {
-    "topic": "FIRST_VALUE / LAST_VALUE \u2192 Session Duration",
+    "topic": "FIRST_VALUE / LAST_VALUE → Session Duration",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "FIRST_VALUE / LAST_VALUE",
@@ -1637,7 +1637,7 @@
     "heading": null
    },
    {
-    "topic": "Regex matching in SQL \u2192 A/B Test Results",
+    "topic": "Regex matching in SQL → A/B Test Results",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Regex matching in SQL",
@@ -1646,7 +1646,7 @@
     "heading": null
    },
    {
-    "topic": "Cardinality estimation \u2192 Subscription Renewals",
+    "topic": "Cardinality estimation → Subscription Renewals",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Cardinality estimation",
@@ -1655,7 +1655,7 @@
     "heading": null
    },
    {
-    "topic": "Running totals with SUM OVER \u2192 Refund Analysis",
+    "topic": "Running totals with SUM OVER → Refund Analysis",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Running totals with SUM OVER",
@@ -1664,7 +1664,7 @@
     "heading": null
    },
    {
-    "topic": "Recursive CTEs \u2192 Lead Scoring",
+    "topic": "Recursive CTEs → Lead Scoring",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Recursive CTEs",
@@ -1673,7 +1673,7 @@
     "heading": null
    },
    {
-    "topic": "Query optimization & cost reduction \u2192 Page View Paths",
+    "topic": "Query optimization & cost reduction → Page View Paths",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Query optimization & cost reduction",
@@ -1682,7 +1682,7 @@
     "heading": null
    },
    {
-    "topic": "Moving average with frame clause \u2192 Cart Abandonment",
+    "topic": "Moving average with frame clause → Cart Abandonment",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Moving average with frame clause",
@@ -1691,7 +1691,7 @@
     "heading": null
    },
    {
-    "topic": "Hierarchical / org-chart queries \u2192 Loyalty Tiers",
+    "topic": "Hierarchical / org-chart queries → Loyalty Tiers",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Hierarchical / org-chart queries",
@@ -1700,7 +1700,7 @@
     "heading": null
    },
    {
-    "topic": "Reading EXPLAIN / execution plans \u2192 Regional Sales Split",
+    "topic": "Reading EXPLAIN / execution plans → Regional Sales Split",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Reading EXPLAIN / execution plans",
@@ -1709,7 +1709,7 @@
     "heading": null
    },
    {
-    "topic": "Percent of total \u2192 Daily Active Users",
+    "topic": "Percent of total → Daily Active Users",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Percent of total",
@@ -1718,7 +1718,7 @@
     "heading": null
    },
    {
-    "topic": "Graph traversal in SQL \u2192 Monthly Revenue",
+    "topic": "Graph traversal in SQL → Monthly Revenue",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Graph traversal in SQL",
@@ -1727,7 +1727,7 @@
     "heading": null
    },
    {
-    "topic": "Index design (B-tree, composite) \u2192 Customer Lifetime Value",
+    "topic": "Index design (B-tree, composite) → Customer Lifetime Value",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Index design (B-tree, composite)",
@@ -1736,7 +1736,7 @@
     "heading": null
    },
    {
-    "topic": "Cumulative distribution \u2192 Churn Rate",
+    "topic": "Cumulative distribution → Churn Rate",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Cumulative distribution",
@@ -1745,7 +1745,7 @@
     "heading": null
    },
    {
-    "topic": "Gaps and Islands problem \u2192 Average Order Value",
+    "topic": "Gaps and Islands problem → Average Order Value",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Gaps and Islands problem",
@@ -1754,7 +1754,7 @@
     "heading": null
    },
    {
-    "topic": "Covering indexes \u2192 Conversion Funnel",
+    "topic": "Covering indexes → Conversion Funnel",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Covering indexes",
@@ -1763,7 +1763,7 @@
     "heading": null
    },
    {
-    "topic": "Date truncation & bucketing \u2192 New vs Returning Customers",
+    "topic": "Date truncation & bucketing → New vs Returning Customers",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Date truncation & bucketing",
@@ -1772,7 +1772,7 @@
     "heading": null
    },
    {
-    "topic": "Sessionization of events \u2192 Top Selling Products",
+    "topic": "Sessionization of events → Top Selling Products",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Sessionization of events",
@@ -1781,7 +1781,7 @@
     "heading": null
    },
    {
-    "topic": "Index selectivity & cardinality \u2192 Inventory Turnover",
+    "topic": "Index selectivity & cardinality → Inventory Turnover",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Index selectivity & cardinality",
@@ -1790,7 +1790,7 @@
     "heading": null
    },
    {
-    "topic": "Generate date series / calendar table \u2192 Employee Hierarchy",
+    "topic": "Generate date series / calendar table → Employee Hierarchy",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Generate date series / calendar table",
@@ -1799,7 +1799,7 @@
     "heading": null
    },
    {
-    "topic": "Retention analysis \u2192 Fraud Pattern Detection",
+    "topic": "Retention analysis → Fraud Pattern Detection",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Retention analysis",
@@ -1808,7 +1808,7 @@
     "heading": null
    },
    {
-    "topic": "Partitioning strategies \u2192 Session Duration",
+    "topic": "Partitioning strategies → Session Duration",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Partitioning strategies",
@@ -1817,7 +1817,7 @@
     "heading": null
    },
    {
-    "topic": "RIGHT JOIN & FULL OUTER JOIN \u2192 A/B Test Results",
+    "topic": "RIGHT JOIN & FULL OUTER JOIN → A/B Test Results",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "RIGHT JOIN & FULL OUTER JOIN",
@@ -1826,7 +1826,7 @@
     "heading": null
    },
    {
-    "topic": "Cohort analysis \u2192 Subscription Renewals",
+    "topic": "Cohort analysis → Subscription Renewals",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Cohort analysis",
@@ -1835,7 +1835,7 @@
     "heading": null
    },
    {
-    "topic": "Partition pruning \u2192 Refund Analysis",
+    "topic": "Partition pruning → Refund Analysis",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Partition pruning",
@@ -1844,7 +1844,7 @@
     "heading": null
    },
    {
-    "topic": "Self Join patterns \u2192 Lead Scoring",
+    "topic": "Self Join patterns → Lead Scoring",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Self Join patterns",
@@ -1853,7 +1853,7 @@
     "heading": null
    },
    {
-    "topic": "Funnel / conversion analysis \u2192 Page View Paths",
+    "topic": "Funnel / conversion analysis → Page View Paths",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Funnel / conversion analysis",
@@ -1862,7 +1862,7 @@
     "heading": null
    },
    {
-    "topic": "Materialized views \u2192 Cart Abandonment",
+    "topic": "Materialized views → Cart Abandonment",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Materialized views",
@@ -1871,7 +1871,7 @@
     "heading": null
    },
    {
-    "topic": "Cross Join & cartesian products \u2192 Loyalty Tiers",
+    "topic": "Cross Join & cartesian products → Loyalty Tiers",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Cross Join & cartesian products",
@@ -1880,7 +1880,7 @@
     "heading": null
    },
    {
-    "topic": "Median & percentile (PERCENTILE_CONT) \u2192 Regional Sales Split",
+    "topic": "Median & percentile (PERCENTILE_CONT) → Regional Sales Split",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Median & percentile (PERCENTILE_CONT)",
@@ -1889,7 +1889,7 @@
     "heading": null
    },
    {
-    "topic": "Query rewriting for performance \u2192 Daily Active Users",
+    "topic": "Query rewriting for performance → Daily Active Users",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Query rewriting for performance",
@@ -1898,7 +1898,7 @@
     "heading": null
    },
    {
-    "topic": "Multi-table joins \u2192 Monthly Revenue",
+    "topic": "Multi-table joins → Monthly Revenue",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Multi-table joins",
@@ -1907,7 +1907,7 @@
     "heading": null
    },
    {
-    "topic": "Top-N per group \u2192 Customer Lifetime Value",
+    "topic": "Top-N per group → Customer Lifetime Value",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Top-N per group",
@@ -1916,7 +1916,7 @@
     "heading": null
    },
    {
-    "topic": "Avoiding full table scans \u2192 Churn Rate",
+    "topic": "Avoiding full table scans → Churn Rate",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Avoiding full table scans",
@@ -1925,7 +1925,7 @@
     "heading": null
    },
    {
-    "topic": "Anti-join (NOT EXISTS / LEFT JOIN NULL) \u2192 Average Order Value",
+    "topic": "Anti-join (NOT EXISTS / LEFT JOIN NULL) → Average Order Value",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Anti-join (NOT EXISTS / LEFT JOIN NULL)",
@@ -1934,7 +1934,7 @@
     "heading": null
    },
    {
-    "topic": "Deduplicate keeping latest record \u2192 Conversion Funnel",
+    "topic": "Deduplicate keeping latest record → Conversion Funnel",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Deduplicate keeping latest record",
@@ -1943,7 +1943,7 @@
     "heading": null
    },
    {
-    "topic": "Join algorithms (hash, merge, nested loop) \u2192 New vs Returning Customers",
+    "topic": "Join algorithms (hash, merge, nested loop) → New vs Returning Customers",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Join algorithms (hash, merge, nested loop)",
@@ -1952,7 +1952,7 @@
     "heading": null
    },
    {
-    "topic": "Semi-join with EXISTS \u2192 Top Selling Products",
+    "topic": "Semi-join with EXISTS → Top Selling Products",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Semi-join with EXISTS",
@@ -1961,7 +1961,7 @@
     "heading": null
    },
    {
-    "topic": "Year-over-year growth \u2192 Inventory Turnover",
+    "topic": "Year-over-year growth → Inventory Turnover",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Year-over-year growth",
@@ -1970,7 +1970,7 @@
     "heading": null
    },
    {
-    "topic": "Statistics & the optimizer \u2192 Employee Hierarchy",
+    "topic": "Statistics & the optimizer → Employee Hierarchy",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Statistics & the optimizer",
@@ -1979,7 +1979,7 @@
     "heading": null
    },
    {
-    "topic": "Subqueries in WHERE \u2192 Fraud Pattern Detection",
+    "topic": "Subqueries in WHERE → Fraud Pattern Detection",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Subqueries in WHERE",
@@ -1988,7 +1988,7 @@
     "heading": null
    },
    {
-    "topic": "Month-over-month change \u2192 Session Duration",
+    "topic": "Month-over-month change → Session Duration",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Month-over-month change",
@@ -1997,7 +1997,7 @@
     "heading": null
    },
    {
-    "topic": "Deadlocks & locking \u2192 A/B Test Results",
+    "topic": "Deadlocks & locking → A/B Test Results",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Deadlocks & locking",
@@ -2006,7 +2006,7 @@
     "heading": null
    },
    {
-    "topic": "Subqueries in FROM (derived tables) \u2192 Subscription Renewals",
+    "topic": "Subqueries in FROM (derived tables) → Subscription Renewals",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Subqueries in FROM (derived tables)",
@@ -2015,7 +2015,7 @@
     "heading": null
    },
    {
-    "topic": "Rolling 7/30 day metrics \u2192 Refund Analysis",
+    "topic": "Rolling 7/30 day metrics → Refund Analysis",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Rolling 7/30 day metrics",
@@ -2024,7 +2024,7 @@
     "heading": null
    },
    {
-    "topic": "Isolation levels (ACID) \u2192 Lead Scoring",
+    "topic": "Isolation levels (ACID) → Lead Scoring",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Isolation levels (ACID)",
@@ -2033,7 +2033,7 @@
     "heading": null
    },
    {
-    "topic": "Scalar subqueries \u2192 Page View Paths",
+    "topic": "Scalar subqueries → Page View Paths",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Scalar subqueries",
@@ -2042,7 +2042,7 @@
     "heading": null
    },
    {
-    "topic": "First & last touch attribution \u2192 Cart Abandonment",
+    "topic": "First & last touch attribution → Cart Abandonment",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "First & last touch attribution",
@@ -2051,7 +2051,7 @@
     "heading": null
    },
    {
-    "topic": "MVCC concepts \u2192 Loyalty Tiers",
+    "topic": "MVCC concepts → Loyalty Tiers",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "MVCC concepts",
@@ -2060,7 +2060,7 @@
     "heading": null
    },
    {
-    "topic": "Correlated subqueries \u2192 Regional Sales Split",
+    "topic": "Correlated subqueries → Regional Sales Split",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Correlated subqueries",
@@ -2069,7 +2069,7 @@
     "heading": null
    },
    {
-    "topic": "Market basket / co-occurrence \u2192 Daily Active Users",
+    "topic": "Market basket / co-occurrence → Daily Active Users",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Market basket / co-occurrence",
@@ -2078,7 +2078,7 @@
     "heading": null
    },
    {
-    "topic": "Window function performance tuning \u2192 Monthly Revenue",
+    "topic": "Window function performance tuning → Monthly Revenue",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Window function performance tuning",
@@ -2087,7 +2087,7 @@
     "heading": null
    },
    {
-    "topic": "Common Table Expressions (CTEs) \u2192 Customer Lifetime Value",
+    "topic": "Common Table Expressions (CTEs) → Customer Lifetime Value",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Common Table Expressions (CTEs)",
@@ -2096,7 +2096,7 @@
     "heading": null
    },
    {
-    "topic": "Slowly changing dimension queries \u2192 Churn Rate",
+    "topic": "Slowly changing dimension queries → Churn Rate",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Slowly changing dimension queries",
@@ -2105,7 +2105,7 @@
     "heading": null
    },
    {
-    "topic": "Handling skew in aggregations \u2192 Average Order Value",
+    "topic": "Handling skew in aggregations → Average Order Value",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Handling skew in aggregations",
@@ -2114,7 +2114,7 @@
     "heading": null
    },
    {
-    "topic": "Multiple chained CTEs \u2192 Conversion Funnel",
+    "topic": "Multiple chained CTEs → Conversion Funnel",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Multiple chained CTEs",
@@ -2123,7 +2123,7 @@
     "heading": null
    },
    {
-    "topic": "Detecting consecutive streaks \u2192 New vs Returning Customers",
+    "topic": "Detecting consecutive streaks → New vs Returning Customers",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Detecting consecutive streaks",
@@ -2132,7 +2132,7 @@
     "heading": null
    },
    {
-    "topic": "Approximate distinct (HLL) \u2192 Top Selling Products",
+    "topic": "Approximate distinct (HLL) → Top Selling Products",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Approximate distinct (HLL)",
@@ -2141,7 +2141,7 @@
     "heading": null
    },
    {
-    "topic": "Conditional aggregation \u2192 Inventory Turnover",
+    "topic": "Conditional aggregation → Inventory Turnover",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Conditional aggregation",
@@ -2150,7 +2150,7 @@
     "heading": null
    },
    {
-    "topic": "Pivoting dynamic columns \u2192 Employee Hierarchy",
+    "topic": "Pivoting dynamic columns → Employee Hierarchy",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Pivoting dynamic columns",
@@ -2159,7 +2159,7 @@
     "heading": null
    },
    {
-    "topic": "Bitmap indexing \u2192 Fraud Pattern Detection",
+    "topic": "Bitmap indexing → Fraud Pattern Detection",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Bitmap indexing",
@@ -2168,7 +2168,7 @@
     "heading": null
    },
    {
-    "topic": "PIVOT rows to columns \u2192 Session Duration",
+    "topic": "PIVOT rows to columns → Session Duration",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "PIVOT rows to columns",
@@ -2177,7 +2177,7 @@
     "heading": null
    },
    {
-    "topic": "Conditional window frames \u2192 A/B Test Results",
+    "topic": "Conditional window frames → A/B Test Results",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Conditional window frames",
@@ -2186,7 +2186,7 @@
     "heading": null
    },
    {
-    "topic": "Columnar vs row storage \u2192 Subscription Renewals",
+    "topic": "Columnar vs row storage → Subscription Renewals",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Columnar vs row storage",
@@ -2195,7 +2195,7 @@
     "heading": null
    },
    {
-    "topic": "UNPIVOT columns to rows \u2192 Refund Analysis",
+    "topic": "UNPIVOT columns to rows → Refund Analysis",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "UNPIVOT columns to rows",
@@ -2204,7 +2204,7 @@
     "heading": null
    },
    {
-    "topic": "EXCEPT / INTERSECT set operations \u2192 Lead Scoring",
+    "topic": "EXCEPT / INTERSECT set operations → Lead Scoring",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "EXCEPT / INTERSECT set operations",
@@ -2213,7 +2213,7 @@
     "heading": null
    },
    {
-    "topic": "Sharding & distributed SQL \u2192 Page View Paths",
+    "topic": "Sharding & distributed SQL → Page View Paths",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Sharding & distributed SQL",
@@ -2222,7 +2222,7 @@
     "heading": null
    },
    {
-    "topic": "GROUPING SETS \u2192 Cart Abandonment",
+    "topic": "GROUPING SETS → Cart Abandonment",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "GROUPING SETS",
@@ -2231,7 +2231,7 @@
     "heading": null
    },
    {
-    "topic": "LATERAL / CROSS APPLY joins \u2192 Loyalty Tiers",
+    "topic": "LATERAL / CROSS APPLY joins → Loyalty Tiers",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "LATERAL / CROSS APPLY joins",
@@ -2240,7 +2240,7 @@
     "heading": null
    },
    {
-    "topic": "CTE materialization trade-offs \u2192 Regional Sales Split",
+    "topic": "CTE materialization trade-offs → Regional Sales Split",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "CTE materialization trade-offs",
@@ -2249,7 +2249,7 @@
     "heading": null
    },
    {
-    "topic": "ROLLUP and CUBE \u2192 Daily Active Users",
+    "topic": "ROLLUP and CUBE → Daily Active Users",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "ROLLUP and CUBE",
@@ -2258,7 +2258,7 @@
     "heading": null
    },
    {
-    "topic": "JSON parsing in SQL \u2192 Monthly Revenue",
+    "topic": "JSON parsing in SQL → Monthly Revenue",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "JSON parsing in SQL",
@@ -2267,7 +2267,7 @@
     "heading": null
    },
    {
-    "topic": "Spilling & memory management \u2192 Customer Lifetime Value",
+    "topic": "Spilling & memory management → Customer Lifetime Value",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Spilling & memory management",
@@ -2276,7 +2276,7 @@
     "heading": null
    },
    {
-    "topic": "Window function basics (OVER) \u2192 Churn Rate",
+    "topic": "Window function basics (OVER) → Churn Rate",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "Window function basics (OVER)",
@@ -2285,7 +2285,7 @@
     "heading": null
    },
    {
-    "topic": "Array & nested data handling \u2192 Average Order Value",
+    "topic": "Array & nested data handling → Average Order Value",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Array & nested data handling",
@@ -2294,7 +2294,7 @@
     "heading": null
    },
    {
-    "topic": "Anti-pattern detection \u2192 Conversion Funnel",
+    "topic": "Anti-pattern detection → Conversion Funnel",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Anti-pattern detection",
@@ -2303,7 +2303,7 @@
     "heading": null
    },
    {
-    "topic": "PARTITION BY clause \u2192 New vs Returning Customers",
+    "topic": "PARTITION BY clause → New vs Returning Customers",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "PARTITION BY clause",
@@ -2312,7 +2312,7 @@
     "heading": null
    },
    {
-    "topic": "Regex matching in SQL \u2192 Top Selling Products",
+    "topic": "Regex matching in SQL → Top Selling Products",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Regex matching in SQL",
@@ -2321,7 +2321,7 @@
     "heading": null
    },
    {
-    "topic": "Cardinality estimation \u2192 Inventory Turnover",
+    "topic": "Cardinality estimation → Inventory Turnover",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Cardinality estimation",
@@ -2330,7 +2330,7 @@
     "heading": null
    },
    {
-    "topic": "ROW_NUMBER() \u2192 Employee Hierarchy",
+    "topic": "ROW_NUMBER() → Employee Hierarchy",
     "category": "Intermediate",
     "difficulty": "Intermediate",
     "technique": "ROW_NUMBER()",
@@ -2339,7 +2339,7 @@
     "heading": null
    },
    {
-    "topic": "Recursive CTEs \u2192 Fraud Pattern Detection",
+    "topic": "Recursive CTEs → Fraud Pattern Detection",
     "category": "Advanced",
     "difficulty": "Advanced",
     "technique": "Recursive CTEs",
@@ -2348,7 +2348,7 @@
     "heading": null
    },
    {
-    "topic": "Query optimization & cost reduction \u2192 Session Duration",
+    "topic": "Query optimization & cost reduction → Session Duration",
     "category": "Expert",
     "difficulty": "Expert",
     "technique": "Query optimization & cost reduction",
@@ -6974,35 +6974,35 @@
     "heading": null
    },
    {
-    "topic": "Valid Anagram",
-    "category": "Hashing",
+    "topic": "Majority Element",
+    "category": "Arrays",
     "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/valid-anagram",
+    "question": "interview-questions:dsa/majority-element",
     "heading": null
    },
    {
-    "topic": "Two Sum",
-    "category": "Hashing",
+    "topic": "Number of 1 Bits",
+    "category": "Arrays",
     "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/two-sum",
+    "question": "interview-questions:dsa/number-of-1-bits",
     "heading": null
    },
    {
-    "topic": "Group Anagrams",
-    "category": "Hashing",
-    "difficulty": "Medium",
+    "topic": "Reverse Bits",
+    "category": "Arrays",
+    "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/group-anagrams",
+    "question": "interview-questions:dsa/reverse-bits",
     "heading": null
    },
    {
-    "topic": "Top K Frequent Elements",
-    "category": "Hashing",
-    "difficulty": "Medium",
+    "topic": "Missing Number",
+    "category": "Arrays",
+    "difficulty": "Easy",
     "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/top-k-frequent-elements",
+    "question": "interview-questions:dsa/missing-number",
     "heading": null
    },
    {
@@ -7027,14 +7027,6 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/arrays-and-hashing",
     "question": "interview-questions:dsa/encode-and-decode-strings",
-    "heading": null
-   },
-   {
-    "topic": "Longest Consecutive Sequence",
-    "category": "Hashing",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/longest-consecutive-sequence",
     "heading": null
    },
    {
@@ -7094,6 +7086,62 @@
     "heading": null
    },
    {
+    "topic": "Sum of Two Integers",
+    "category": "Arrays",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/sum-of-two-integers",
+    "heading": null
+   },
+   {
+    "topic": "Valid Anagram",
+    "category": "Hashing",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/valid-anagram",
+    "heading": null
+   },
+   {
+    "topic": "Two Sum",
+    "category": "Hashing",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/two-sum",
+    "heading": null
+   },
+   {
+    "topic": "Single Number",
+    "category": "Hashing",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/single-number",
+    "heading": null
+   },
+   {
+    "topic": "Group Anagrams",
+    "category": "Hashing",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/group-anagrams",
+    "heading": null
+   },
+   {
+    "topic": "Top K Frequent Elements",
+    "category": "Hashing",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/top-k-frequent-elements",
+    "heading": null
+   },
+   {
+    "topic": "Longest Consecutive Sequence",
+    "category": "Hashing",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/longest-consecutive-sequence",
+    "heading": null
+   },
+   {
     "topic": "Subarray Sum Equals K",
     "category": "Hashing",
     "difficulty": "Medium",
@@ -7102,11 +7150,35 @@
     "heading": null
    },
    {
-    "topic": "Majority Element",
-    "category": "Arrays",
+    "topic": "Longest Common Prefix",
+    "category": "Strings",
     "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/majority-element",
+    "lesson": "articles:dsa/strings",
+    "question": "interview-questions:dsa/longest-common-prefix",
+    "heading": null
+   },
+   {
+    "topic": "Reverse String",
+    "category": "Strings",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/strings",
+    "question": "interview-questions:dsa/reverse-string",
+    "heading": null
+   },
+   {
+    "topic": "Valid Palindrome II",
+    "category": "Strings",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/strings",
+    "question": "interview-questions:dsa/valid-palindrome-ii",
+    "heading": null
+   },
+   {
+    "topic": "String to Integer (atoi)",
+    "category": "Strings",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/strings",
+    "question": "interview-questions:dsa/string-to-integer-atoi",
     "heading": null
    },
    {
@@ -7115,6 +7187,14 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/two-pointers",
     "question": "interview-questions:dsa/valid-palindrome",
+    "heading": null
+   },
+   {
+    "topic": "Move Zeroes",
+    "category": "Two Pointers",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/two-pointers",
+    "question": "interview-questions:dsa/move-zeroes",
     "heading": null
    },
    {
@@ -7142,22 +7222,6 @@
     "heading": null
    },
    {
-    "topic": "Trapping Rain Water",
-    "category": "Two Pointers",
-    "difficulty": "Hard",
-    "lesson": "articles:dsa/two-pointers",
-    "question": "interview-questions:dsa/trapping-rain-water",
-    "heading": null
-   },
-   {
-    "topic": "Move Zeroes",
-    "category": "Two Pointers",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/two-pointers",
-    "question": "interview-questions:dsa/move-zeroes",
-    "heading": null
-   },
-   {
     "topic": "Sort Colors",
     "category": "Two Pointers",
     "difficulty": "Medium",
@@ -7166,11 +7230,59 @@
     "heading": null
    },
    {
+    "topic": "Trapping Rain Water",
+    "category": "Two Pointers",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/two-pointers",
+    "question": "interview-questions:dsa/trapping-rain-water",
+    "heading": null
+   },
+   {
+    "topic": "Implement Stack using Queues",
+    "category": "Queue",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/queues",
+    "question": "interview-questions:dsa/implement-stack-using-queues",
+    "heading": null
+   },
+   {
+    "topic": "Implement Queue using Stacks",
+    "category": "Queue",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/queues",
+    "question": "interview-questions:dsa/implement-queue-using-stacks",
+    "heading": null
+   },
+   {
+    "topic": "Number of Recent Calls",
+    "category": "Queue",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/queues",
+    "question": "interview-questions:dsa/number-of-recent-calls",
+    "heading": null
+   },
+   {
+    "topic": "Design Circular Queue",
+    "category": "Queue",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/queues",
+    "question": "interview-questions:dsa/design-circular-queue",
+    "heading": null
+   },
+   {
     "topic": "Best Time to Buy and Sell Stock",
     "category": "Sliding Window",
     "difficulty": "Easy",
     "lesson": "articles:dsa/sliding-window",
     "question": "interview-questions:dsa/best-time-to-buy-and-sell-stock",
+    "heading": null
+   },
+   {
+    "topic": "Maximum Average Subarray I",
+    "category": "Sliding Window",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/sliding-window",
+    "question": "interview-questions:dsa/maximum-average-subarray-i",
     "heading": null
    },
    {
@@ -7214,19 +7326,19 @@
     "heading": null
    },
    {
-    "topic": "Maximum Average Subarray I",
-    "category": "Sliding Window",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/sliding-window",
-    "question": "interview-questions:dsa/maximum-average-subarray-i",
-    "heading": null
-   },
-   {
     "topic": "Valid Parentheses",
     "category": "Stack",
     "difficulty": "Easy",
     "lesson": "articles:dsa/stacks",
     "question": "interview-questions:dsa/valid-parentheses",
+    "heading": null
+   },
+   {
+    "topic": "Next Greater Element I",
+    "category": "Stack",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/stacks",
+    "question": "interview-questions:dsa/next-greater-element-i",
     "heading": null
    },
    {
@@ -7278,46 +7390,6 @@
     "heading": null
    },
    {
-    "topic": "Next Greater Element I",
-    "category": "Stack",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/stacks",
-    "question": "interview-questions:dsa/next-greater-element-i",
-    "heading": null
-   },
-   {
-    "topic": "Implement Stack using Queues",
-    "category": "Queue",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/queues",
-    "question": "interview-questions:dsa/implement-stack-using-queues",
-    "heading": null
-   },
-   {
-    "topic": "Implement Queue using Stacks",
-    "category": "Queue",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/queues",
-    "question": "interview-questions:dsa/implement-queue-using-stacks",
-    "heading": null
-   },
-   {
-    "topic": "Design Circular Queue",
-    "category": "Queue",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/queues",
-    "question": "interview-questions:dsa/design-circular-queue",
-    "heading": null
-   },
-   {
-    "topic": "Number of Recent Calls",
-    "category": "Queue",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/queues",
-    "question": "interview-questions:dsa/number-of-recent-calls",
-    "heading": null
-   },
-   {
     "topic": "Binary Search",
     "category": "Binary Search",
     "difficulty": "Easy",
@@ -7366,19 +7438,19 @@
     "heading": null
    },
    {
-    "topic": "Median of Two Sorted Arrays",
-    "category": "Binary Search",
-    "difficulty": "Hard",
-    "lesson": "articles:dsa/binary-search",
-    "question": "interview-questions:dsa/median-of-two-sorted-arrays",
-    "heading": null
-   },
-   {
     "topic": "Find First and Last Position",
     "category": "Binary Search",
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search",
     "question": "interview-questions:dsa/find-first-and-last-position",
+    "heading": null
+   },
+   {
+    "topic": "Median of Two Sorted Arrays",
+    "category": "Binary Search",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/binary-search",
+    "question": "interview-questions:dsa/median-of-two-sorted-arrays",
     "heading": null
    },
    {
@@ -7550,6 +7622,30 @@
     "heading": null
    },
    {
+    "topic": "Lowest Common Ancestor of Binary Tree",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/lowest-common-ancestor-of-binary-tree",
+    "heading": null
+   },
+   {
+    "topic": "Implement Trie (Prefix Tree)",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/implement-trie-prefix-tree",
+    "heading": null
+   },
+   {
+    "topic": "Design Add and Search Words",
+    "category": "Trees",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/binary-trees",
+    "question": "interview-questions:dsa/design-add-and-search-words",
+    "heading": null
+   },
+   {
     "topic": "Binary Tree Maximum Path Sum",
     "category": "Trees",
     "difficulty": "Hard",
@@ -7566,11 +7662,11 @@
     "heading": null
    },
    {
-    "topic": "Lowest Common Ancestor of Binary Tree",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/lowest-common-ancestor-of-binary-tree",
+    "topic": "Convert Sorted Array to BST",
+    "category": "BST",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/binary-search-trees",
+    "question": "interview-questions:dsa/convert-sorted-array-to-bst",
     "heading": null
    },
    {
@@ -7611,38 +7707,6 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/binary-search-trees",
     "question": "interview-questions:dsa/delete-node-in-a-bst",
-    "heading": null
-   },
-   {
-    "topic": "Convert Sorted Array to BST",
-    "category": "BST",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/binary-search-trees",
-    "question": "interview-questions:dsa/convert-sorted-array-to-bst",
-    "heading": null
-   },
-   {
-    "topic": "Implement Trie (Prefix Tree)",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/implement-trie-prefix-tree",
-    "heading": null
-   },
-   {
-    "topic": "Design Add and Search Words",
-    "category": "Trees",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/binary-trees",
-    "question": "interview-questions:dsa/design-add-and-search-words",
-    "heading": null
-   },
-   {
-    "topic": "Word Search II",
-    "category": "Backtracking",
-    "difficulty": "Hard",
-    "lesson": "articles:dsa/backtracking",
-    "question": "interview-questions:dsa/word-search-ii",
     "heading": null
    },
    {
@@ -7699,6 +7763,62 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/heaps-priority-queues",
     "question": "interview-questions:dsa/find-median-from-data-stream",
+    "heading": null
+   },
+   {
+    "topic": "Jump Game",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/jump-game",
+    "heading": null
+   },
+   {
+    "topic": "Jump Game II",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/jump-game-ii",
+    "heading": null
+   },
+   {
+    "topic": "Gas Station",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/gas-station",
+    "heading": null
+   },
+   {
+    "topic": "Hand of Straights",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/hand-of-straights",
+    "heading": null
+   },
+   {
+    "topic": "Merge Triplets to Form Target",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/merge-triplets-to-form-target",
+    "heading": null
+   },
+   {
+    "topic": "Partition Labels",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/partition-labels",
+    "heading": null
+   },
+   {
+    "topic": "Valid Parenthesis String",
+    "category": "Greedy",
+    "difficulty": "Medium",
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/valid-parenthesis-string",
     "heading": null
    },
    {
@@ -7763,6 +7883,14 @@
     "difficulty": "Medium",
     "lesson": "articles:dsa/backtracking",
     "question": "interview-questions:dsa/letter-combinations-of-a-phone-number",
+    "heading": null
+   },
+   {
+    "topic": "Word Search II",
+    "category": "Backtracking",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/backtracking",
+    "question": "interview-questions:dsa/word-search-ii",
     "heading": null
    },
    {
@@ -7862,14 +7990,6 @@
     "heading": null
    },
    {
-    "topic": "Word Ladder",
-    "category": "Graph",
-    "difficulty": "Hard",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/word-ladder",
-    "heading": null
-   },
-   {
     "topic": "Network Delay Time",
     "category": "Graph",
     "difficulty": "Medium",
@@ -7886,19 +8006,27 @@
     "heading": null
    },
    {
-    "topic": "Reconstruct Itinerary",
-    "category": "Graph",
-    "difficulty": "Hard",
-    "lesson": "articles:dsa/graphs",
-    "question": "interview-questions:dsa/reconstruct-itinerary",
-    "heading": null
-   },
-   {
     "topic": "Min Cost to Connect All Points",
     "category": "Graph",
     "difficulty": "Medium",
     "lesson": "articles:dsa/graphs",
     "question": "interview-questions:dsa/min-cost-to-connect-all-points",
+    "heading": null
+   },
+   {
+    "topic": "Word Ladder",
+    "category": "Graph",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/word-ladder",
+    "heading": null
+   },
+   {
+    "topic": "Reconstruct Itinerary",
+    "category": "Graph",
+    "difficulty": "Hard",
+    "lesson": "articles:dsa/graphs",
+    "question": "interview-questions:dsa/reconstruct-itinerary",
     "heading": null
    },
    {
@@ -7931,6 +8059,14 @@
     "difficulty": "Easy",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/min-cost-climbing-stairs",
+    "heading": null
+   },
+   {
+    "topic": "Counting Bits",
+    "category": "Dynamic Programming",
+    "difficulty": "Easy",
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/counting-bits",
     "heading": null
    },
    {
@@ -8083,142 +8219,6 @@
     "difficulty": "Hard",
     "lesson": "articles:dsa/dynamic-programming",
     "question": "interview-questions:dsa/regular-expression-matching",
-    "heading": null
-   },
-   {
-    "topic": "Jump Game",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/jump-game",
-    "heading": null
-   },
-   {
-    "topic": "Jump Game II",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/jump-game-ii",
-    "heading": null
-   },
-   {
-    "topic": "Gas Station",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/gas-station",
-    "heading": null
-   },
-   {
-    "topic": "Hand of Straights",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/hand-of-straights",
-    "heading": null
-   },
-   {
-    "topic": "Merge Triplets to Form Target",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/merge-triplets-to-form-target",
-    "heading": null
-   },
-   {
-    "topic": "Partition Labels",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/partition-labels",
-    "heading": null
-   },
-   {
-    "topic": "Valid Parenthesis String",
-    "category": "Greedy",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/greedy-and-intervals",
-    "question": "interview-questions:dsa/valid-parenthesis-string",
-    "heading": null
-   },
-   {
-    "topic": "Longest Common Prefix",
-    "category": "Strings",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/strings",
-    "question": "interview-questions:dsa/longest-common-prefix",
-    "heading": null
-   },
-   {
-    "topic": "Reverse String",
-    "category": "Strings",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/strings",
-    "question": "interview-questions:dsa/reverse-string",
-    "heading": null
-   },
-   {
-    "topic": "Valid Palindrome II",
-    "category": "Strings",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/strings",
-    "question": "interview-questions:dsa/valid-palindrome-ii",
-    "heading": null
-   },
-   {
-    "topic": "String to Integer (atoi)",
-    "category": "Strings",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/strings",
-    "question": "interview-questions:dsa/string-to-integer-atoi",
-    "heading": null
-   },
-   {
-    "topic": "Single Number",
-    "category": "Hashing",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/single-number",
-    "heading": null
-   },
-   {
-    "topic": "Number of 1 Bits",
-    "category": "Arrays",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/number-of-1-bits",
-    "heading": null
-   },
-   {
-    "topic": "Counting Bits",
-    "category": "Dynamic Programming",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/dynamic-programming",
-    "question": "interview-questions:dsa/counting-bits",
-    "heading": null
-   },
-   {
-    "topic": "Reverse Bits",
-    "category": "Arrays",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/reverse-bits",
-    "heading": null
-   },
-   {
-    "topic": "Missing Number",
-    "category": "Arrays",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/missing-number",
-    "heading": null
-   },
-   {
-    "topic": "Sum of Two Integers",
-    "category": "Arrays",
-    "difficulty": "Medium",
-    "lesson": "articles:dsa/arrays-and-hashing",
-    "question": "interview-questions:dsa/sum-of-two-integers",
     "heading": null
    }
   ]

@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "Medium"
 shortAnswer: "An undirected graph with n nodes is a tree exactly when it has n - 1 edges and is connected (equivalently, n - 1 edges and no cycle). Check the edge count first, then either union the endpoints of every edge with union-find and fail if an edge joins two nodes already in the same set, or run BFS from node 0 and check that all n nodes are reached. Union-find runs in O(n + E * α(n)) and BFS in O(n + E)."
 followUps: ["Why is n - 1 edges plus connectivity enough, without a separate cycle check?", "How do you detect a cycle in an undirected graph with DFS without flagging the edge back to the parent?", "How would you find the edge to remove so the graph becomes a tree?"]
-previous: "interview-questions:dsa/course-schedule-ii"
-next: "interview-questions:dsa/number-of-connected-components"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "GeeksforGeeks", "title": "Graph is Tree or Not", "url": "https://www.geeksforgeeks.org/problems/is-it-a-tree/1"}
+previous: "interview-questions:dsa/course-schedule-ii"
+next: "interview-questions:dsa/number-of-connected-components"
 ---
 
 ## Problem

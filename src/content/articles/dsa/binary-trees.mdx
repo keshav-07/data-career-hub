@@ -15,13 +15,13 @@ learningObjectives:
   - "Build, serialise and deserialise trees, and find lowest common ancestors"
   - "Implement a trie for prefix search and wildcard matching"
 prerequisites: ["articles:dsa/stacks", "articles:dsa/queues"]
-previous: "articles:dsa/linked-lists"
-next: "articles:dsa/binary-search-trees"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
   - { label: "Python documentation: Data structures tutorial", url: "https://docs.python.org/3/tutorial/datastructures.html" }
   - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+previous: "articles:dsa/linked-lists"
+next: "articles:dsa/binary-search-trees"
 ---
 
 A tree is a hierarchy: one root, and every other node has exactly one parent. A binary tree allows each node at most two children. Tree problems test whether you can think recursively, and almost all of them reduce to one of two traversals: depth-first (go down a branch, then backtrack) or breadth-first (level by level). This lesson also covers tries, prefix trees used for autocomplete and prefix matching.

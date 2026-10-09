@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Use an inbox stack for pushes and an outbox stack for pops. Pop and peek read from the outbox; only when the outbox is empty, move every item from the inbox to the outbox, which reverses them into FIFO order. Each item is pushed and popped at most twice in total, so every operation is amortised O(1), with O(n) worst case for a single pop that triggers a transfer."
 followUps: ["Explain why the cost is amortised O(1) even though one pop can be O(n).", "Why must you not transfer while the outbox still has items?", "How would you get worst-case O(1) per operation?"]
-previous: "interview-questions:dsa/implement-stack-using-queues"
-next: "interview-questions:dsa/design-circular-queue"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 232, "title": "Implement Queue using Stacks", "url": "https://leetcode.com/problems/implement-queue-using-stacks/"}
+previous: "interview-questions:dsa/implement-stack-using-queues"
+next: "interview-questions:dsa/number-of-recent-calls"
 ---
 
 ## Problem

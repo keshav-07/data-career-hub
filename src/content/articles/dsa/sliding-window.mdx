@@ -15,13 +15,13 @@ learningObjectives:
   - "Map sliding windows to rolling metrics and time-based windows in streaming pipelines"
 prerequisites: ["articles:dsa/two-pointers"]
 related: ["articles:sql/window-functions"]
-next: "articles:dsa/stacks"
-previous: "articles:dsa/two-pointers"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
   - { label: "Python documentation: collections.Counter", url: "https://docs.python.org/3/library/collections.html#collections.Counter" }
   - { label: "Apache Spark documentation: Structured Streaming programming guide", url: "https://spark.apache.org/docs/latest/streaming/index.html" }
+previous: "articles:dsa/queues"
+next: "articles:dsa/stacks"
 ---
 
 A sliding window is a pair of pointers that marks a contiguous range of an array or string. Instead of recomputing every range from scratch, you update the answer as the window's right edge moves forward and its left edge catches up, so an O(n²) or O(n·k) scan becomes O(n). It is one of the most common patterns in Data Engineering interviews, partly because it is exactly how streaming systems compute rolling metrics.

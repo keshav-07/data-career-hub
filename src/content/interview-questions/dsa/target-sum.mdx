@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Split the numbers into those with a plus sign (sum P) and a minus sign (sum N). Then P - N = target and P + N = total, so P = (total + target) / 2. If that is not a non-negative integer, the answer is 0. Otherwise count subsets that sum to P with 0/1 knapsack counting: ways[s] += ways[s - v], looping s downwards for each number, starting from ways[0] = 1. Time O(n * P), space O(P). A memoised search over (index, running sum) also works in O(n * total)."
 followUps: ["Why do zeros double the count?", "How would you list the expressions rather than count them?", "What happens if the target is larger than the total?"]
-previous: "interview-questions:dsa/coin-change-ii"
-next: "interview-questions:dsa/interleaving-string"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 494, "title": "Target Sum", "url": "https://leetcode.com/problems/target-sum/"}
+previous: "interview-questions:dsa/coin-change-ii"
+next: "interview-questions:dsa/interleaving-string"
 ---
 
 ## Problem

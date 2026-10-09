@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Sort the input so equal values sit next to each other, then run the start-index subsets backtracking. Inside the loop, skip a value when it equals the value just before it at the same level (i > start and nums[i] == nums[i - 1]); that means each distinct value is chosen as the next element only once per level. Time is O(n * 2^n) in the worst case and the extra space is O(n)."
 followUps: ["Why is the condition i > start and not i > 0?", "How would you solve it by counting each value's frequency instead?", "How does the same skip rule apply to Combination Sum II and Permutations II?"]
-previous: "interview-questions:dsa/permutations"
-next: "interview-questions:dsa/combination-sum-ii"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 90, "title": "Subsets II", "url": "https://leetcode.com/problems/subsets-ii/"}
+previous: "interview-questions:dsa/permutations"
+next: "interview-questions:dsa/combination-sum-ii"
 ---
 
 ## Problem

@@ -14,13 +14,13 @@ learningObjectives:
   - "Compact and partition arrays in place with read-write and three-way pointers"
   - "Relate two-pointer merging to sort-merge joins and merging sorted files"
 prerequisites: ["articles:dsa/arrays-and-hashing"]
-previous: "articles:dsa/strings"
-next: "articles:dsa/sliding-window"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
   - { label: "Python documentation: heapq.merge", url: "https://docs.python.org/3/library/heapq.html#heapq.merge" }
   - { label: "PostgreSQL documentation: Planner/optimizer (join strategies)", url: "https://www.postgresql.org/docs/current/planner-optimizer.html" }
+previous: "articles:dsa/strings"
+next: "articles:dsa/queues"
 ---
 
 The two pointers pattern keeps two indices into the data and moves them according to a rule, so one pass does the work of a nested loop. It turns many O(n²) pair searches into O(n), and it does in-place array work in O(1) extra space. For Data Engineers it is also the idea behind the sort-merge join and merging sorted files.

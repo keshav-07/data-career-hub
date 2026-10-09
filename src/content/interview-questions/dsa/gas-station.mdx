@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "If total gas is less than total cost, no start works. Otherwise exactly one start works, and one pass finds it: keep a running tank from the current candidate start; when the tank drops below zero at station i, no station between the candidate and i can be the start, so move the candidate to i + 1 and reset the tank to 0. The candidate left at the end is the answer. O(n) time, O(1) space."
 followUps: ["Why can every station between the old start and the failure point be skipped?", "Why does a non-negative total guarantee that the final candidate works?", "How would you handle several valid starts if uniqueness were not guaranteed?"]
-previous: "interview-questions:dsa/jump-game-ii"
-next: "interview-questions:dsa/hand-of-straights"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 134, "title": "Gas Station", "url": "https://leetcode.com/problems/gas-station/"}
+previous: "interview-questions:dsa/jump-game-ii"
+next: "interview-questions:dsa/hand-of-straights"
 ---
 
 ## Problem

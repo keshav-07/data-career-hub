@@ -13,10 +13,10 @@ estimatedMinutes: 30
 interviewRelevance: "Medium"
 shortAnswer: "Pad the list with a 1 at each end. Let best(l, r) be the most coins from bursting every balloon strictly between positions l and r. Choose k, the last balloon burst in that range: at that moment its neighbours are l and r, so it earns v[l] * v[k] * v[r], and the two sides are independent subproblems. best(l, r) = max over k of best(l, k) + v[l] * v[k] * v[r] + best(k, r), with best(l, l + 1) = 0. Filling by increasing interval length is O(n^3) time and O(n^2) space."
 followUps: ["Why does choosing the first balloon to burst not give independent subproblems?", "How would you reconstruct the bursting order?", "Which other problems use the same 'last operation' interval trick?"]
-previous: "interview-questions:dsa/edit-distance"
-next: "interview-questions:dsa/regular-expression-matching"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 312, "title": "Burst Balloons", "url": "https://leetcode.com/problems/burst-balloons/"}
+previous: "interview-questions:dsa/edit-distance"
+next: "interview-questions:dsa/regular-expression-matching"
 ---
 
 ## Problem

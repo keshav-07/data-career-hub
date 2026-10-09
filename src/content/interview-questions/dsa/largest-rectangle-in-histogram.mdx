@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "The best rectangle uses some bar as its height and extends left and right until a shorter bar. Keep a stack of indices with increasing heights. When a shorter bar arrives, pop taller bars: for each popped bar, the current index is its right limit and the new stack top is its left limit, so its area is height times (i - top - 1). A sentinel bar of height 0 at the end flushes the stack. Each bar is pushed and popped once: O(n) time, O(n) space."
 followUps: ["Why does the new stack top give the left boundary of the popped bar?", "How does this solve Maximal Rectangle in a 0/1 matrix?", "How would the divide-and-conquer solution work, and what is its complexity?"]
-previous: "interview-questions:dsa/car-fleet"
-next: "interview-questions:dsa/next-greater-element-i"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 84, "title": "Largest Rectangle in Histogram", "url": "https://leetcode.com/problems/largest-rectangle-in-histogram/"}
+previous: "interview-questions:dsa/car-fleet"
+next: "interview-questions:dsa/binary-search"
 ---
 
 ## Problem

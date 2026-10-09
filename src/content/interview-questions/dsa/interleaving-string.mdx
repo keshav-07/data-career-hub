@@ -13,10 +13,10 @@ estimatedMinutes: 25
 interviewRelevance: "Medium"
 shortAnswer: "First check that the lengths add up. Let ok(i, j) mean the first i characters of a and the first j of b can form the first i + j characters of c. Then ok(i, j) is true if ok(i - 1, j) and a[i - 1] == c[i + j - 1], or ok(i, j - 1) and b[j - 1] == c[i + j - 1], with ok(0, 0) true. Filling the table takes O(m * n) time; one row of length n + 1 is enough, giving O(n) space."
 followUps: ["Why does a greedy two-pointer merge fail?", "How would you reconstruct which characters came from which string?", "How does BFS over (i, j) states solve the same problem?"]
-previous: "interview-questions:dsa/target-sum"
-next: "interview-questions:dsa/edit-distance"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 97, "title": "Interleaving String", "url": "https://leetcode.com/problems/interleaving-string/"}
+previous: "interview-questions:dsa/target-sum"
+next: "interview-questions:dsa/edit-distance"
 ---
 
 ## Problem

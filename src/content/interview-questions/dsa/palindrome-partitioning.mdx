@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "Medium"
 shortAnswer: "Backtrack over the position of the next cut: from index start, try every end index whose substring s[start..end] is a palindrome, add it to the path and recurse from end + 1; record the path when start reaches the end of the string. Precompute an n by n table of which substrings are palindromes so each check is O(1). There can be 2^(n-1) partitions, so the time is O(n * 2^n) and the table costs O(n^2) space."
 followUps: ["How would you return only the minimum number of cuts (Palindrome Partitioning II)?", "How do you fill the palindrome table in O(n^2)?", "How many partitions does a string of identical letters have?"]
-previous: "interview-questions:dsa/word-search"
-next: "interview-questions:dsa/letter-combinations-of-a-phone-number"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 131, "title": "Palindrome Partitioning", "url": "https://leetcode.com/problems/palindrome-partitioning/"}
+previous: "interview-questions:dsa/word-search"
+next: "interview-questions:dsa/letter-combinations-of-a-phone-number"
 ---
 
 ## Problem

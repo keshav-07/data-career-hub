@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Sort the candidates and backtrack with a start index and the remaining total. Recurse with i + 1 because each element may be used once, skip a candidate equal to its left neighbour at the same level (i > start and c[i] == c[i - 1]) so the same combination is not built twice, and break when a candidate exceeds the remainder. The worst case is O(n * 2^n) time and O(n) extra space."
 followUps: ["What changes if you only need to know whether any combination exists?", "How would you count combinations with dynamic programming instead?", "Why can you break rather than continue when a candidate is too large?"]
-previous: "interview-questions:dsa/subsets-ii"
-next: "interview-questions:dsa/word-search"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 40, "title": "Combination Sum II", "url": "https://leetcode.com/problems/combination-sum-ii/"}
+previous: "interview-questions:dsa/subsets-ii"
+next: "interview-questions:dsa/word-search"
 ---
 
 ## Problem

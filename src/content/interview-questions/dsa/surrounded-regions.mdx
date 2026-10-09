@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "Medium"
 shortAnswer: "A region of O cells survives exactly when it touches the border. So flood-fill (BFS or DFS) from every O on the border and mark those cells as safe. Then sweep the grid once: any O that is not marked is enclosed and becomes X, and marked cells go back to O. Each cell is processed a constant number of times, so the time is O(R * C) and the extra space is O(R * C) in the worst case for the queue."
 followUps: ["Why is starting from the border easier than starting from each region?", "How would union-find with a virtual border node solve it?", "How would you do it without modifying the grid in place?"]
-previous: "interview-questions:dsa/pacific-atlantic-water-flow"
-next: "interview-questions:dsa/rotting-oranges"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 130, "title": "Surrounded Regions", "url": "https://leetcode.com/problems/surrounded-regions/"}
+previous: "interview-questions:dsa/pacific-atlantic-water-flow"
+next: "interview-questions:dsa/rotting-oranges"
 ---
 
 ## Problem

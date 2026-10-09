@@ -13,10 +13,10 @@ estimatedMinutes: 25
 interviewRelevance: "High"
 shortAnswer: "Let dist(i, j) be the edits needed to turn the first i characters of a into the first j characters of b. If a[i - 1] equals b[j - 1], dist(i, j) = dist(i - 1, j - 1). Otherwise it is 1 + the minimum of dist(i - 1, j) (delete), dist(i, j - 1) (insert) and dist(i - 1, j - 1) (replace). Base cases: dist(i, 0) = i and dist(0, j) = j. Filling the table is O(m * n) time; two rows reduce space to O(min(m, n))."
 followUps: ["How would you return the actual sequence of edits?", "How do you add transpositions (Damerau-Levenshtein)?", "How would you check only whether the distance is at most k, faster than the full table?"]
-previous: "interview-questions:dsa/interleaving-string"
-next: "interview-questions:dsa/burst-balloons"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 72, "title": "Edit Distance", "url": "https://leetcode.com/problems/edit-distance/"}
+previous: "interview-questions:dsa/interleaving-string"
+next: "interview-questions:dsa/burst-balloons"
 ---
 
 ## Problem

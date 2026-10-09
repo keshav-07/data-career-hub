@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Because timestamps arrive in increasing order, the requests inside the window always form a contiguous block at the end of the history. Keep them in a deque: on each new request, append its time, then pop from the front while the oldest time is earlier than t - 3000. The deque length is the answer. Each timestamp is added and removed once, so the cost is amortised O(1) per call, with space bounded by the number of requests in one window."
 followUps: ["What changes if timestamps can arrive out of order?", "How would you count per user or per API key?", "How would you bound memory if a window could hold millions of requests?"]
-previous: "interview-questions:dsa/design-circular-queue"
-next: "interview-questions:dsa/longest-common-prefix"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 933, "title": "Number of Recent Calls", "url": "https://leetcode.com/problems/number-of-recent-calls/"}
+previous: "interview-questions:dsa/implement-queue-using-stacks"
+next: "interview-questions:dsa/design-circular-queue"
 ---
 
 ## Problem

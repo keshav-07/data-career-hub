@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "This is single-source shortest paths with non-negative weights, so use Dijkstra's algorithm. Keep a min-heap of (distance, node), pop the closest unsettled node, settle it, and relax its outgoing edges by pushing any shorter distance found. The answer is the largest settled distance, or -1 if some node was never reached. With a binary heap the time is O(E log V) and the space is O(V + E)."
 followUps: ["Why does Dijkstra fail with negative edge weights, and what would you use instead?", "How would you return the actual path to each node?", "Why is it safe to skip stale heap entries instead of decreasing keys?"]
-previous: "interview-questions:dsa/word-ladder"
-next: "interview-questions:dsa/cheapest-flights-within-k-stops"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 743, "title": "Network Delay Time", "url": "https://leetcode.com/problems/network-delay-time/"}
+previous: "interview-questions:dsa/redundant-connection"
+next: "interview-questions:dsa/cheapest-flights-within-k-stops"
 ---
 
 ## Problem

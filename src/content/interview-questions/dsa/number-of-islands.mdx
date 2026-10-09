@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Treat each land cell as a graph node connected to its land neighbours up, down, left and right. Scan the grid; whenever you meet unvisited land, increase the count and flood-fill the whole island with BFS or DFS, marking every cell visited so it is never counted again. Each cell is visited a constant number of times, so the time is O(R * C); a BFS queue or visited set needs O(R * C) space in the worst case. Union-find gives the same count and also works when land arrives incrementally."
 followUps: ["How would you handle cells that turn into land one at a time (Number of Islands II)?", "What breaks if you use recursive DFS on a 1000 by 1000 grid of land?", "How would you count islands that include diagonal neighbours?", "How would you count distinct island shapes?"]
-previous: "interview-questions:dsa/n-queens"
-next: "interview-questions:dsa/clone-graph"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 200, "title": "Number of Islands", "url": "https://leetcode.com/problems/number-of-islands/"}
+previous: "interview-questions:dsa/n-queens"
+next: "interview-questions:dsa/clone-graph"
 ---
 
 ## Problem

@@ -13,10 +13,10 @@ estimatedMinutes: 30
 interviewRelevance: "High"
 shortAnswer: "Treat each word as a node and connect words that differ in exactly one position. The shortest transformation is a shortest path in an unweighted graph, so use BFS from the start word, counting levels. To find neighbours quickly, group dictionary words by wildcard patterns such as h*t, so each word's neighbours are the words sharing one of its L patterns. With N words of length L the time is O(N * L^2) (L patterns per word, each costing O(L) to build) and the space is O(N * L^2) for the buckets."
 followUps: ["How does bidirectional BFS reduce the work, and when should you expand the smaller side?", "How would you return one actual shortest ladder, or all of them (Word Ladder II)?", "Why is DFS the wrong tool for this question?"]
-previous: "interview-questions:dsa/redundant-connection"
-next: "interview-questions:dsa/network-delay-time"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 127, "title": "Word Ladder", "url": "https://leetcode.com/problems/word-ladder/"}
+previous: "interview-questions:dsa/min-cost-to-connect-all-points"
+next: "interview-questions:dsa/reconstruct-itinerary"
 ---
 
 ## Problem

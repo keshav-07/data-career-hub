@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Start with n components, one per node. For each edge, union its endpoints with union-find; every union that joins two different sets reduces the count by one, and the final count is the answer. Path compression and union by size make each operation effectively constant, so the total is O(n + E * α(n)) time and O(n) space. A BFS or DFS that launches a new search from every unvisited node gives the same count in O(n + E)."
 followUps: ["Which approach would you choose if edges arrive as a stream?", "How would you return the members of each component?", "How do you compute connected components on a graph too big for one machine?"]
-previous: "interview-questions:dsa/graph-valid-tree"
-next: "interview-questions:dsa/redundant-connection"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "GeeksforGeeks", "title": "Number of Connected Components", "url": "https://www.geeksforgeeks.org/problems/number-of-provinces/1"}
+previous: "interview-questions:dsa/graph-valid-tree"
+next: "interview-questions:dsa/redundant-connection"
 ---
 
 ## Problem

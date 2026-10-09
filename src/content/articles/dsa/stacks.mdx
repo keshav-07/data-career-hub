@@ -15,12 +15,12 @@ learningObjectives:
   - "Apply monotonic stacks to next-greater and histogram problems in O(n)"
   - "Use explicit stacks for nested parsing and deep traversals in pipeline code"
 prerequisites: ["articles:dsa/arrays-and-hashing"]
-previous: "articles:dsa/sliding-window"
-next: "articles:dsa/queues"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: Using lists as stacks", url: "https://docs.python.org/3/tutorial/datastructures.html#using-lists-as-stacks" }
   - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
+previous: "articles:dsa/sliding-window"
+next: "articles:dsa/binary-search"
 ---
 
 A stack is a last-in, first-out (LIFO) collection: you add and remove items at the same end, like a pile of plates. It is the natural structure for anything **nested** (brackets, function calls, JSON) and, as a monotonic stack, for "what is the next bigger value?" questions. In Python, a plain `list` is an efficient stack.

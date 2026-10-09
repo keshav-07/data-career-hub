@@ -15,13 +15,13 @@ learningObjectives:
   - "Handle rotated arrays, 2D matrices and the median of two sorted arrays"
   - "Use bisect for partition lookup and point-in-time (as-of) lookups in pipelines"
 prerequisites: ["articles:dsa/arrays-and-hashing"]
-previous: "articles:dsa/queues"
-next: "articles:dsa/linked-lists"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests. bisect's key argument needs Python 3.10 or later."
 sources:
   - { label: "Python documentation: bisect", url: "https://docs.python.org/3/library/bisect.html" }
   - { label: "Python documentation: Sorting techniques", url: "https://docs.python.org/3/howto/sorting.html" }
   - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+previous: "articles:dsa/stacks"
+next: "articles:dsa/linked-lists"
 ---
 
 Binary search finds a target in sorted data by halving the search range on every step, so a million items need about 20 comparisons. In interviews it appears in two forms: searching a sorted array (including awkward ones such as rotated arrays), and **searching for an answer** when the question is "what is the smallest value that works?". In Data Engineering it is how you find which partition, file or version of a record a timestamp belongs to.

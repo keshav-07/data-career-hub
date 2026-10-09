@@ -13,10 +13,10 @@ estimatedMinutes: 25
 interviewRelevance: "High"
 shortAnswer: "A route with at most k stops uses at most k + 1 flights, and round i of Bellman-Ford finds the cheapest prices using at most i edges. So run exactly k + 1 rounds, and in each round relax every flight from a copy of the previous round's prices, so one round cannot chain two flights. The answer is the destination's price after the last round, or -1. This is O(k * E) time and O(n) space. Plain Dijkstra on price alone is wrong because a cheaper path may use too many stops."
 followUps: ["Why must each round read from a copy of the previous distances?", "How would you adapt Dijkstra by putting (cost, node, stops) in the heap, and what must you track to prune?", "How would you return the route itself?"]
-previous: "interview-questions:dsa/network-delay-time"
-next: "interview-questions:dsa/reconstruct-itinerary"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 787, "title": "Cheapest Flights Within K Stops", "url": "https://leetcode.com/problems/cheapest-flights-within-k-stops/"}
+previous: "interview-questions:dsa/network-delay-time"
+next: "interview-questions:dsa/min-cost-to-connect-all-points"
 ---
 
 ## Problem

@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "Medium"
 shortAnswer: "Reverse the direction of flow. Start a BFS from every cell on the Pacific edges (top row and left column) and move to a neighbour only if it is at least as high, which collects every cell that can drain to the Pacific; do the same from the Atlantic edges (bottom row and right column). The answer is the intersection of the two visited sets. Each search touches each cell once, so the time and space are O(R * C)."
 followUps: ["Why is searching from every cell towards the oceans slower?", "How would you change it if water could also flow diagonally?", "How would you return, for each cell, which oceans it reaches?"]
-previous: "interview-questions:dsa/max-area-of-island"
-next: "interview-questions:dsa/surrounded-regions"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 417, "title": "Pacific Atlantic Water Flow", "url": "https://leetcode.com/problems/pacific-atlantic-water-flow/"}
+previous: "interview-questions:dsa/max-area-of-island"
+next: "interview-questions:dsa/surrounded-regions"
 ---
 
 ## Problem

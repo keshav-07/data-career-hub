@@ -5,6 +5,7 @@ import IndexMeta from "../../../components/content/IndexMeta.astro";
 import Tile from "../../../components/content/Tile.astro";
 import QuestionTable from "../../../components/interview/QuestionTable.astro";
 import { HOME } from "../../../utils/breadcrumbs";
+import { inLearningOrder, questionOrder } from "../../../utils/curriculum";
 
 export async function getStaticPaths() {
   const qs = await getItems("interview-questions");
@@ -15,13 +16,21 @@ export async function getStaticPaths() {
 const ORDER = ["Easy", "Medium", "Hard"];
 const { tech } = Astro.params;
 const label = await techLabel(tech!);
-const qs = (await getItems("interview-questions"))
-  .filter((q) => q.id.startsWith(`${tech}/`))
-  .sort(
-    (a, b) =>
-      ORDER.indexOf(a.entry.data.difficulty) - ORDER.indexOf(b.entry.data.difficulty) ||
-      a.title.localeCompare(b.title),
-  );
+const qs = inLearningOrder(
+  tech!,
+  (await getItems("interview-questions"))
+    .filter((q) => q.id.startsWith(`${tech}/`))
+    .sort(
+      (a, b) =>
+        ORDER.indexOf(a.entry.data.difficulty) - ORDER.indexOf(b.entry.data.difficulty) ||
+        a.title.localeCompare(b.title),
+    ),
+);
+// Topic column when the planner orders this course by topic (DSA).
+const order = questionOrder(tech!);
+const topicOf = order.size
+  ? Object.fromEntries(qs.map((q) => [q.ref, order.get(q.ref)?.topic ?? "More"]))
+  : undefined;
 const articles = (await getItems("articles")).filter(
   (a) => a.technology[0] === tech && a.entry.data.section === "learn",
 );
@@ -41,7 +50,7 @@ const hub = await getHub(tech!);
     <h2 id="qs-h" class="group-title">
       All {label} questions
     </h2>
-    <QuestionTable questions={qs} caption={`${label} interview questions`} />
+    <QuestionTable questions={qs} topicOf={topicOf} caption={`${label} interview questions`} />
   </section>
 
   {articles.length > 0 && (

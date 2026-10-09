@@ -15,13 +15,13 @@ learningObjectives:
   - "Maintain a running median with two heaps and schedule tasks by priority"
   - "Apply heaps to streaming top-K, k-way merges and job scheduling in pipelines"
 prerequisites: ["articles:dsa/arrays-and-hashing", "articles:dsa/binary-trees"]
-previous: "articles:dsa/binary-search-trees"
-next: "articles:dsa/backtracking"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests. The heapq max-heap functions added in Python 3.14 are mentioned but not executed."
 sources:
   - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
   - { label: "Python documentation: collections.Counter", url: "https://docs.python.org/3/library/collections.html#collections.Counter" }
   - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+previous: "articles:dsa/binary-search-trees"
+next: "articles:dsa/greedy-and-intervals"
 ---
 
 A heap is a tree-shaped structure that always gives you the smallest (or largest) item in O(1) and lets you add or remove items in O(log n). That makes it the right tool whenever a problem says "top K", "k-th largest", "closest", "next to run" or "median of a stream". It is also one of the most practical structures for Data Engineers, because a heap of size k computes top-K over data of any size with bounded memory.

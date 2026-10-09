@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Let lcs(i, j) be the answer for the first i characters of a and the first j characters of b. If a[i - 1] equals b[j - 1], that character extends the answer: lcs(i, j) = lcs(i - 1, j - 1) + 1. Otherwise drop a character from one string: lcs(i, j) = max(lcs(i - 1, j), lcs(i, j - 1)). Row 0 and column 0 are 0. Filling the table is O(m * n) time; keeping two rows cuts space to O(min(m, n)). Walking back through the full table reconstructs the subsequence."
 followUps: ["How do you reconstruct the subsequence itself?", "How does LCS relate to diff tools and to edit distance?", "How does the longest common substring differ?"]
-previous: "interview-questions:dsa/unique-paths"
-next: "interview-questions:dsa/best-time-to-buy-sell-with-cooldown"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 1143, "title": "Longest Common Subsequence", "url": "https://leetcode.com/problems/longest-common-subsequence/"}
+previous: "interview-questions:dsa/unique-paths"
+next: "interview-questions:dsa/best-time-to-buy-sell-with-cooldown"
 ---
 
 ## Problem

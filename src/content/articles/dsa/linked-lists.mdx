@@ -15,13 +15,13 @@ learningObjectives:
   - "Build an LRU cache from a hash map and a doubly linked list"
   - "Merge k sorted streams with a heap, as in an external sort"
 prerequisites: ["articles:dsa/two-pointers"]
-previous: "articles:dsa/binary-search"
-next: "articles:dsa/binary-trees"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: collections (OrderedDict)", url: "https://docs.python.org/3/library/collections.html" }
   - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
   - { label: "Python wiki: Time complexity", url: "https://wiki.python.org/moin/TimeComplexity" }
+previous: "articles:dsa/binary-search"
+next: "articles:dsa/binary-trees"
 ---
 
 A linked list stores each value in a node that points to the next node, instead of in one contiguous block. You rarely build one in pipeline code, but linked-list problems are a favourite way for interviewers to test careful pointer handling, and two of them (the LRU cache and merging k sorted lists) are directly useful in data systems.

@@ -13,10 +13,10 @@ estimatedMinutes: 15
 interviewRelevance: "High"
 shortAnswer: "Walk the values in order and, at each index, branch twice: once leaving the value out and once putting it in, recording the current path at the leaves (or at every node with the start-index form). There are 2^n subsets and copying each costs up to O(n), so the time is O(n * 2^n) and the output dominates the space; the recursion itself uses O(n) extra space."
 followUps: ["How do you change the solution when the input contains duplicates?", "How would you generate only subsets of size k?", "How would you produce subsets lazily with a generator instead of a list?"]
-previous: "interview-questions:dsa/word-search-ii"
-next: "interview-questions:dsa/combination-sum"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 78, "title": "Subsets", "url": "https://leetcode.com/problems/subsets/"}
+previous: "interview-questions:dsa/valid-parenthesis-string"
+next: "interview-questions:dsa/combination-sum"
 ---
 
 ## Problem

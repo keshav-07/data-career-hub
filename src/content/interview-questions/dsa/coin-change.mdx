@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Let fewest(a) be the minimum number of coins that sum to a. The last coin used is some c, so fewest(a) = 1 + min over coins c <= a of fewest(a - c), with fewest(0) = 0 and unreachable amounts marked as infinity. Fill a table from 0 up to the target and return -1 if the target stays infinite. With A the amount and k coin types this is O(A * k) time and O(A) space. Greedy (largest coin first) is wrong for many coin sets."
 followUps: ["Why does greedy work for some coin systems but not others?", "How would you count the number of combinations instead (Coin Change II)?", "How would you return the actual coins used?", "How does a BFS over amounts solve the same problem?"]
-previous: "interview-questions:dsa/decode-ways"
-next: "interview-questions:dsa/maximum-product-subarray"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 322, "title": "Coin Change", "url": "https://leetcode.com/problems/coin-change/"}
+previous: "interview-questions:dsa/decode-ways"
+next: "interview-questions:dsa/maximum-product-subarray"
 ---
 
 ## Problem

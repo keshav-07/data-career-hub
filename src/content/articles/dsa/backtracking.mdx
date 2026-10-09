@@ -15,12 +15,12 @@ learningObjectives:
   - "Search grids with backtracking and combine it with a trie for many words"
   - "Know when itertools replaces hand-written backtracking in production code"
 prerequisites: ["articles:dsa/binary-trees"]
-previous: "articles:dsa/heaps-priority-queues"
-next: "articles:dsa/graphs"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: itertools (combinatoric iterators)", url: "https://docs.python.org/3/library/itertools.html" }
   - { label: "Python documentation: Data structures tutorial", url: "https://docs.python.org/3/tutorial/datastructures.html" }
+previous: "articles:dsa/greedy-and-intervals"
+next: "articles:dsa/graphs"
 ---
 
 Backtracking explores every possible sequence of choices by building a candidate one step at a time, and undoing the last step when it reaches a dead end or a complete answer. It is how you generate all subsets, combinations and permutations, and how you solve puzzles such as N-Queens or finding words in a grid. The searches are exponential by nature, so the craft lies in pruning branches early and avoiding duplicate results.

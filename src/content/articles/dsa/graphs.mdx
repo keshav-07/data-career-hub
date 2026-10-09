@@ -16,13 +16,13 @@ learningObjectives:
   - "Apply graph algorithms to DAG scheduling, lineage and entity resolution in pipelines"
 prerequisites: ["articles:dsa/queues", "articles:dsa/heaps-priority-queues"]
 related: ["articles:airflow/dags-scheduling-retries"]
-next: "articles:dsa/dynamic-programming"
-previous: "articles:dsa/backtracking"
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests. graphlib needs Python 3.9 or later."
 sources:
   - { label: "Python documentation: graphlib (TopologicalSorter)", url: "https://docs.python.org/3/library/graphlib.html" }
   - { label: "Python documentation: heapq", url: "https://docs.python.org/3/library/heapq.html" }
   - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
+previous: "articles:dsa/backtracking"
+next: "articles:dsa/dynamic-programming"
 ---
 
 A graph is a set of nodes connected by edges. Trees, grids, road maps, social networks and, above all for Data Engineers, **pipeline DAGs** are graphs. Graph questions look varied, but they reuse a small toolkit: depth-first and breadth-first traversal, topological sort, union-find and a couple of shortest-path algorithms. Topological sort deserves special attention: it is exactly how Airflow, dbt and every other orchestrator decide the order in which to run tasks.

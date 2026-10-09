@@ -13,10 +13,10 @@ estimatedMinutes: 25
 interviewRelevance: "Medium"
 shortAnswer: "Place exactly one queen per row. For each row, try every column that is not already used and whose two diagonals are free; cells share a diagonal when row - col is equal, and an anti-diagonal when row + col is equal. Keep three sets for the occupied columns and diagonals so each check is O(1), add the queen, recurse to the next row, then remove it. The search is bounded by O(n!) and uses O(n) extra space."
 followUps: ["How would you count solutions only, and how can bitmasks make that faster?", "How can symmetry halve the work?", "Why does one queen per row reduce the search so much compared with trying all cells?"]
-previous: "interview-questions:dsa/letter-combinations-of-a-phone-number"
-next: "interview-questions:dsa/number-of-islands"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 51, "title": "N-Queens", "url": "https://leetcode.com/problems/n-queens/"}
+previous: "interview-questions:dsa/word-search-ii"
+next: "interview-questions:dsa/number-of-islands"
 ---
 
 ## Problem

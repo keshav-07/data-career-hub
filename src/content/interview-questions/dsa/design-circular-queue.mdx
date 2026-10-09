@@ -13,10 +13,10 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 shortAnswer: "Allocate an array of capacity k once. Keep the index of the front element and the number of stored elements. Enqueue writes at (head + count) % k, dequeue advances head = (head + 1) % k, and the rear is at (head + count - 1) % k. Storing the count removes the classic ambiguity between full and empty when head and tail meet. Every operation is O(1) time, and space is O(k)."
 followUps: ["How would you tell full from empty if you stored head and tail but no count?", "How would you make the buffer safe for one producer and one consumer thread?", "What should happen on enqueue when full: reject, block, or overwrite the oldest?"]
-previous: "interview-questions:dsa/implement-queue-using-stacks"
-next: "interview-questions:dsa/number-of-recent-calls"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 622, "title": "Design Circular Queue", "url": "https://leetcode.com/problems/design-circular-queue/"}
+previous: "interview-questions:dsa/number-of-recent-calls"
+next: "interview-questions:dsa/best-time-to-buy-and-sell-stock"
 ---
 
 ## Problem

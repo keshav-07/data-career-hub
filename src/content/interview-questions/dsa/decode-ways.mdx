@@ -13,10 +13,10 @@ estimatedMinutes: 20
 interviewRelevance: "High"
 shortAnswer: "Let ways(i) be the number of decodings of the first i digits. The last letter used either one digit (valid if it is 1 to 9) or two digits (valid if they form 10 to 26), so ways(i) = (ways(i - 1) if s[i - 1] != '0') + (ways(i - 2) if 10 <= int(s[i - 2:i]) <= 26). Base cases: ways(0) = 1 and ways(1) = 1 if the first digit is not 0, else 0. Keeping the last two values gives O(n) time and O(1) space."
 followUps: ["How does the problem change if a '*' wildcard can stand for 1 to 9 (Decode Ways II)?", "How would you list the decodings, and how many could there be?", "Why is ways(0) = 1 the right base case?"]
-previous: "interview-questions:dsa/palindromic-substrings"
-next: "interview-questions:dsa/coin-change"
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 91, "title": "Decode Ways", "url": "https://leetcode.com/problems/decode-ways/"}
+previous: "interview-questions:dsa/palindromic-substrings"
+next: "interview-questions:dsa/coin-change"
 ---
 
 ## Problem
