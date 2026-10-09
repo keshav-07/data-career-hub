@@ -206,7 +206,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
-    mask-image: linear-gradient(90deg, transparent 15%, #000 55%);
+    mask-image: linear-gradient(90deg, transparent 30%, #000 65%);
   }
   .data-flow__pulses path {
     stroke-dasharray: 6 94;
