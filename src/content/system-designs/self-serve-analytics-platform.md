@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Self-Serve Analytics Platform"
-description: "A system-design case study for self-serve analytics: certified datasets, a semantic layer, catalog and access requests, sandboxes, row-level security and cost guardrails."
+description: "A system-design case study for self-serve analytics: certified datasets, a semantic layer, a catalog, sandboxes, row-level security and cost guardrails."
 technology: ["data-engineering", "data-warehousing", "sql"]
 topic: ["platform", "governance", "analytics", "architecture"]
 tags: ["self-serve-analytics", "semantic-layer", "data-catalog", "row-level-security", "data-products", "cost-guardrails"]
@@ -72,6 +72,7 @@ sources:
   - { label: "Databricks documentation: Unity Catalog", url: "https://docs.databricks.com/en/data-governance/unity-catalog/index.html" }
   - { label: "dbt documentation: data tests", url: "https://docs.getdbt.com/docs/build/data-tests" }
 previous: "system-designs:schema-registry-contract-system"
+next: "system-designs:llm-rag-data-ingestion-pipeline"
 ---
 
 ## Approach
