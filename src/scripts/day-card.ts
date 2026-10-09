@@ -69,9 +69,8 @@ export function initDayCard() {
     check.dataset.plDay = String(shown);
     check.dataset.hours = String(day.h);
     check.checked = isDone;
-    $("[data-dc-check-label]").textContent = isDone
-      ? `Day ${shown} completed`
-      : `Mark Day ${shown} complete`;
+    $("[data-dc-check-label]").textContent = isDone ? "Completed" : "Mark complete";
+    check.setAttribute("aria-label", `Day ${shown} complete`);
     card.dataset.state = isDone ? "done" : "";
     prev.disabled = shown <= 1;
     next.disabled = shown >= total;

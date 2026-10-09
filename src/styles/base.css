@@ -19,8 +19,8 @@
   }
   a {
     color: var(--c-link, var(--c-accent));
-    text-decoration-color: color-mix(in srgb, var(--c-link-line, currentColor) 75%, transparent);
-    text-decoration-thickness: 1.5px;
+    text-decoration-color: color-mix(in srgb, var(--c-link-line, currentColor) 55%, transparent);
+    text-decoration-thickness: 1px;
     text-underline-offset: 0.24em;
     transition:
       color var(--dur-fast),

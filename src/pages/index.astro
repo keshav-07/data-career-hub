@@ -111,8 +111,14 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
               <span aria-hidden="true">‹</span>
             </button>
             <label class="day-card__done">
-              <input type="checkbox" data-pl-day="1" data-hours={day1.hours} data-dc-check />
-              <span data-dc-check-label>Mark Day 1 complete</span>
+              <input
+                type="checkbox"
+                data-pl-day="1"
+                data-hours={day1.hours}
+                data-dc-check
+                aria-label="Day 1 complete"
+              />
+              <span data-dc-check-label>Mark complete</span>
             </label>
             <button type="button" class="day-card__nav" data-dc-next aria-label="Next day">
               <span aria-hidden="true">›</span>
