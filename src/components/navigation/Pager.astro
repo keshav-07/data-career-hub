@@ -3,7 +3,7 @@ import type { NavLink } from "../../utils/navigation";
 interface Props {
   prev?: NavLink;
   next?: NavLink;
-  /** compact: buttons only (top of page); full: buttons with titles (bottom). */
+  /** compact: top of page; full: end of page. Both show small buttons; the title is for screen readers and tooltips. */
   variant: "compact" | "full";
   noun?: string;
 }
@@ -13,19 +13,17 @@ const { prev, next, variant, noun = "Lesson" } = Astro.props;
 {(prev || next) && (
   <nav class={`pager pager--${variant}`} aria-label={`Previous and next ${noun.toLowerCase()}`}>
     {prev ? (
-      <a class="pager__link pager__link--prev" href={prev.url} rel="prev">
-        <span class="pager__dir">← Previous</span>
-        {variant === "full" && <span class="pager__title">{prev.title}</span>}
-        {variant === "compact" && <span class="visually-hidden">: {prev.title}</span>}
+      <a class="pager__link pager__link--prev" href={prev.url} rel="prev" title={prev.title}>
+        <span aria-hidden="true">←</span> Previous
+        <span class="visually-hidden">: {prev.title}</span>
       </a>
     ) : (
       <span />
     )}
     {next && (
-      <a class="pager__link pager__link--next" href={next.url} rel="next">
-        <span class="pager__dir">Next →</span>
-        {variant === "full" && <span class="pager__title">{next.title}</span>}
-        {variant === "compact" && <span class="visually-hidden">: {next.title}</span>}
+      <a class="pager__link pager__link--next" href={next.url} rel="next" title={next.title}>
+        Next <span aria-hidden="true">→</span>
+        <span class="visually-hidden">: {next.title}</span>
       </a>
     )}
   </nav>

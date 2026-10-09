@@ -275,69 +275,56 @@
   }
 
   /* ---------- Previous / next ---------- */
+  /* Previous / next: small buttons; next uses the primary burnt-orange gradient. */
   .pager {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: var(--sp-3);
   }
   .pager--compact {
     margin-top: var(--sp-6);
   }
   .pager--full {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
     margin-top: var(--sp-10);
   }
   .pager__link {
     display: inline-flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    min-height: 44px;
-    padding: var(--sp-2) var(--sp-4);
-    border-radius: var(--radius-md);
+    align-items: center;
+    gap: var(--sp-2);
+    min-height: 40px;
+    padding: 0 18px;
+    border-radius: 10px;
     border: 1px solid var(--c-border-strong);
-    background: var(--c-surface);
+    background: transparent;
     color: var(--c-text);
-    text-decoration: none;
+    font-size: 0.9375rem;
     font-weight: 650;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      background var(--dur-fast),
+      border-color var(--dur-fast),
+      box-shadow var(--dur-fast);
   }
   .pager__link:hover {
-    border-color: var(--c-accent);
+    border-color: var(--c-text);
+    background: var(--c-surface);
     color: var(--c-text);
   }
   .pager__link--next {
     margin-left: auto;
-    text-align: right;
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-    color: var(--c-on-accent);
+    background: var(--gradient-button);
+    border-color: var(--c-primary-edge);
+    color: var(--c-on-primary);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 8px 20px -12px rgba(168, 55, 10, 0.7);
   }
   .pager__link--next:hover {
-    background: var(--c-accent-hover);
-    border-color: var(--c-accent-hover);
-    color: var(--c-on-accent);
-  }
-  .pager--full .pager__link {
-    padding: var(--sp-4);
-  }
-  .pager__dir {
-    font-size: var(--fs-sm);
-  }
-  .pager--full .pager__dir {
-    font-size: var(--fs-xs);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    opacity: 0.85;
-  }
-  .pager__title {
-    font-size: var(--fs-md);
-    line-height: 1.35;
-  }
-  @media (max-width: 559px) {
-    .pager--full {
-      grid-template-columns: 1fr;
-    }
+    background: var(--c-primary-hover);
+    border-color: var(--c-primary-edge);
+    color: var(--c-on-primary);
   }
 
   /* ---------- Tiles (clickable cards) ---------- */
