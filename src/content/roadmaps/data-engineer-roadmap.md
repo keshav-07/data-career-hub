@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Data Engineer Roadmap: Beginner to Interview Ready"
 seoTitle: "Data Engineer Roadmap 2026: Interview Prep"
-description: "An ordered Data Engineering roadmap from foundations to job ready: SQL, Python, warehousing, ETL/ELT, PySpark, cloud, streaming, system design, projects and interviews."
+description: "An ordered Data Engineering roadmap from foundations to interview preparation: SQL, Python, warehousing, ETL/ELT, PySpark, cloud, streaming, system design and projects."
 inventoryId: "ROAD-01"
 technology: ["data-engineering"]
 topic: ["roadmap"]
