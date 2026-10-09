@@ -176,7 +176,7 @@ Each reduce task asks the driver's map output tracker where its partition's bloc
 
 ### Who serves the files
 
-Shuffle files belong to the executor that wrote them. If that executor is removed, reducers cannot fetch its output and Spark must rerun those map tasks. Two mechanisms keep files available when executors come and go: an **external shuffle service** on each node (`spark.shuffle.service.enabled`, common on YARN), or **shuffle tracking** (`spark.dynamicAllocation.shuffleTracking.enabled`, on by default), which keeps executors holding live shuffle data alive. Both matter mostly with dynamic allocation, covered in the memory and tuning lesson.
+Shuffle files belong to the executor that wrote them. If that executor is removed, reducers cannot fetch its output and Spark must rerun those map tasks. Two mechanisms keep files available when executors come and go: an **external shuffle service** on each node (`spark.shuffle.service.enabled`, common on YARN), or **shuffle tracking** (`spark.dynamicAllocation.shuffleTracking.enabled`, on by default), which keeps executors holding live shuffle data alive. Both matter mostly with dynamic allocation, covered in the [memory and tuning lesson](/spark/memory-executors-tuning/).
 
 ### Pitfalls
 

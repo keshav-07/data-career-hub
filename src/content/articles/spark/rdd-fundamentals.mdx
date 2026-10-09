@@ -99,7 +99,7 @@ RDD ids vary between runs, and `<block 2>:2` is the source location of the `redu
 
 ### RDDs versus DataFrames today
 
-RDD records are opaque Python objects, so Spark cannot optimise them: no column pruning, no predicate pushdown, no code generation, and every record crosses between the JVM and Python. DataFrames carry a schema, so the Catalyst optimiser can do all of that (see Catalyst and Tungsten). Use DataFrames by default and drop to RDDs for genuinely unstructured processing or low-level control. Also note that **Spark Connect clients have no RDD API at all**, which is a growing reason to keep RDD code out of new pipelines.
+RDD records are opaque Python objects, so Spark cannot optimise them: no column pruning, no predicate pushdown, no code generation, and every record crosses between the JVM and Python. DataFrames carry a schema, so the Catalyst optimiser can do all of that (see [Catalyst and Tungsten](/spark/catalyst-tungsten-optimizer/)). Use DataFrames by default and drop to RDDs for genuinely unstructured processing or low-level control. Also note that **Spark Connect clients have no RDD API at all**, which is a growing reason to keep RDD code out of new pipelines.
 
 ### Pitfalls
 
@@ -379,7 +379,7 @@ counter on driver: 0
 accumulator: 100
 ```
 
-In local mode, with some cluster setups, code like this can appear to work, which is why the RDD programming guide calls its behaviour undefined. Use an accumulator for counters, or better, compute the value with an action.
+In local mode, with some cluster setups, code like this can appear to work, which is why the RDD programming guide calls its behaviour undefined. Use an [accumulator](/spark/caching-broadcast-accumulators/) for counters, or better, compute the value with an action.
 
 **2. Everything in the closure must be serializable.** Locks, open sockets, database connections, file handles and SparkContext itself cannot be pickled:
 

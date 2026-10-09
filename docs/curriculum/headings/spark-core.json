@@ -146,5 +146,41 @@
   "Dynamic partition pruning": {
     "ref": "articles:spark/adaptive-query-execution",
     "heading": "Dynamic partition pruning"
+  },
+  "Memory management (unified)": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "Unified memory management"
+  },
+  "Executor sizing": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "Executor sizing"
+  },
+  "Cores & memory config": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "Cores and memory configuration"
+  },
+  "GC tuning": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "GC tuning"
+  },
+  "Spill to disk diagnosis": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "Diagnosing spill to disk"
+  },
+  "Dynamic allocation": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "Dynamic allocation"
+  },
+  "Speculative execution": {
+    "ref": "articles:spark/memory-executors-tuning",
+    "heading": "Speculative execution"
+  },
+  "Spark on Kubernetes": {
+    "ref": "articles:spark/deployment-monitoring",
+    "heading": "Spark on Kubernetes"
+  },
+  "Monitoring with Spark History Server": {
+    "ref": "articles:spark/deployment-monitoring",
+    "heading": "Monitoring with the Spark History Server"
   }
 }
