@@ -16,6 +16,8 @@ followUps: ["Why is the greedy choice safe here? What would break it?", "How wou
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/task-scheduler", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 502, "title": "IPO", "url": "https://leetcode.com/problems/ipo/"}
+previous: "interview-questions:dsa/sliding-window-median"
+next: "interview-questions:dsa/design-twitter"
 ---
 
 ## Problem

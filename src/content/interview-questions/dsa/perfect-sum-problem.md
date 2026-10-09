@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/dynamic-programming"]
 practice: {"platform": "GeeksforGeeks", "title": "Count Subsets with Sum", "url": "https://www.geeksforgeeks.org/problems/perfect-sum-problem5633/1"}
 previous: "interview-questions:dsa/subset-sum-problem"
-next: "interview-questions:dsa/longest-palindromic-substring"
+next: "interview-questions:dsa/minimum-sum-partition"
 ---
 
 ## Problem

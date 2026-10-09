@@ -16,6 +16,8 @@ followUps: ["Why can the answer never be larger than n + 1?", "How would you sol
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/find-all-numbers-disappeared-in-an-array"]
 practice: {"platform": "LeetCode", "number": 41, "title": "First Missing Positive", "url": "https://leetcode.com/problems/first-missing-positive/"}
+previous: "interview-questions:dsa/find-all-duplicates-in-an-array"
+next: "interview-questions:dsa/contains-duplicate"
 ---
 
 ## Problem

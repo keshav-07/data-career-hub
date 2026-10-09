@@ -16,6 +16,8 @@ followUps: ["Why is it enough to look only at sums up to half the total?", "How 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/dynamic-programming"]
 practice: {"platform": "GeeksforGeeks", "title": "Partition Into 2 Subsets with Min Sum Diff", "url": "https://www.geeksforgeeks.org/problems/minimum-sum-partition3317/1"}
+previous: "interview-questions:dsa/perfect-sum-problem"
+next: "interview-questions:dsa/longest-palindromic-substring"
 ---
 
 ## Problem

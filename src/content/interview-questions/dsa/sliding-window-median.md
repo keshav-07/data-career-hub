@@ -16,6 +16,8 @@ followUps: ["Why is lazy deletion needed, and what bounds the size of the heaps?
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/find-median-from-data-stream", "interview-questions:dsa/sliding-window-maximum", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 480, "title": "Sliding Window Median", "url": "https://leetcode.com/problems/sliding-window-median/"}
+previous: "interview-questions:dsa/find-median-from-data-stream"
+next: "interview-questions:dsa/ipo"
 ---
 
 ## Problem

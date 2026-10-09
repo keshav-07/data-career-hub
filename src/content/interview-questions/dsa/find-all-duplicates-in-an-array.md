@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/find-all-numbers-disappeared-in-an-array"]
 practice: {"platform": "LeetCode", "number": 442, "title": "Find All Duplicates in an Array", "url": "https://leetcode.com/problems/find-all-duplicates-in-an-array/"}
 previous: "interview-questions:dsa/set-mismatch"
-next: "interview-questions:dsa/contains-duplicate"
+next: "interview-questions:dsa/first-missing-positive"
 ---
 
 ## Problem

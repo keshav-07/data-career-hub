@@ -7131,14 +7131,8 @@
     "category": "Arrays",
     "pattern": "Cyclic Sort",
     "difficulty": "Hard",
-    "slug": "first-missing-positive",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "First Missing Positive",
-     "url": "https://leetcode.com/problems/first-missing-positive/",
-     "number": 41
-    },
-    "lesson": "articles:dsa/arrays-and-hashing"
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/first-missing-positive"
    },
    {
     "topic": "Contains Duplicate",
@@ -8385,28 +8379,16 @@
     "category": "Heap",
     "pattern": "Two Heaps",
     "difficulty": "Hard",
-    "slug": "sliding-window-median",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Sliding Window Median",
-     "url": "https://leetcode.com/problems/sliding-window-median/",
-     "number": 480
-    },
-    "lesson": "articles:dsa/heaps-priority-queues"
+    "lesson": "articles:dsa/heaps-priority-queues",
+    "question": "interview-questions:dsa/sliding-window-median"
    },
    {
     "topic": "IPO",
     "category": "Heap",
     "pattern": "Two Heaps",
     "difficulty": "Hard",
-    "slug": "ipo",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "IPO",
-     "url": "https://leetcode.com/problems/ipo/",
-     "number": 502
-    },
-    "lesson": "articles:dsa/heaps-priority-queues"
+    "lesson": "articles:dsa/heaps-priority-queues",
+    "question": "interview-questions:dsa/ipo"
    },
    {
     "topic": "Design Twitter",
@@ -9063,13 +9045,8 @@
     "category": "Dynamic Programming",
     "pattern": "Knapsack",
     "difficulty": "Hard",
-    "slug": "minimum-sum-partition",
-    "practice": {
-     "platform": "GeeksforGeeks",
-     "title": "Partition Into 2 Subsets with Min Sum Diff",
-     "url": "https://www.geeksforgeeks.org/problems/minimum-sum-partition3317/1"
-    },
-    "lesson": "articles:dsa/dynamic-programming"
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/minimum-sum-partition"
    },
    {
     "topic": "Longest Palindromic Substring",
