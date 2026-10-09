@@ -196,7 +196,7 @@ The aggregation and its shuffle no longer run; the filter reads the cached colum
 
 Caching is not free. It costs:
 
-- **Memory taken from execution.** Storage and execution share one unified memory region (see the memory lesson later in this course). Cached blocks can push joins and aggregations into spilling.
+- **Memory taken from execution.** Storage and execution share one unified memory region (see the [memory lesson](/spark/memory-executors-tuning/)). Cached blocks can push joins and aggregations into spilling.
 - **The cost of writing the cache.** Converting to the columnar cache format (or serializing to disk) on the first pass takes time; if the data is used once, that is pure overhead.
 - **Lost optimisations.** A cached DataFrame is a fixed result. Later queries cannot push filters or column pruning into the *source* below the cache; a query that needs one column of a wide cached table still reads it from the cache rather than from a columnar file with pruning.
 - **Garbage collection pressure** with large deserialized caches.

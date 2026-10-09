@@ -275,10 +275,10 @@ Every running application serves a web UI from the driver, on port 4040 by defau
 |---------|--------------|--------|
 | A few tasks far slower than the rest | Data skew on a hot key | [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) |
 | Large shuffle read and write | Wide transformation over too much data; filter or aggregate earlier, broadcast the small side | [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) |
-| Spill to memory and disk | Partitions too large for execution memory | Memory and executor tuning |
+| Spill to memory and disk | Partitions too large for execution memory | [Memory and executor tuning](/spark/memory-executors-tuning/) |
 | Thousands of tasks lasting milliseconds | Too many small partitions or small files | [Partitions, shuffles and skew](/spark/partitions-shuffles-skew/) |
 | Huge row counts after a join | Fan-out on a non-unique key | [Joins and join strategy](/pyspark/joins-and-join-strategy/) |
-| High GC time | Memory pressure, large cached objects, wide rows | Memory and executor tuning |
+| High GC time | Memory pressure, large cached objects, wide rows | [Memory and executor tuning](/spark/memory-executors-tuning/) |
 
 <Callout tone="info" title="Name your jobs">
 
