@@ -16,6 +16,8 @@ followUps: ["Why is it enough to advance only the list holding the minimum?", "H
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/merge-k-sorted-lists", "interview-questions:dsa/minimum-window-substring", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 632, "title": "Smallest Range Covering Elements from K Lists", "url": "https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/"}
+previous: "interview-questions:dsa/merge-k-sorted-lists"
+next: "interview-questions:dsa/jump-game"
 ---
 
 ## Problem

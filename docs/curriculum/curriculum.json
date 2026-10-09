@@ -8413,14 +8413,8 @@
     "category": "Heap",
     "pattern": "K-way Merge",
     "difficulty": "Hard",
-    "slug": "smallest-range-covering-elements-from-k-lists",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Smallest Range Covering Elements from K Lists",
-     "url": "https://leetcode.com/problems/smallest-range-covering-elements-from-k-lists/",
-     "number": 632
-    },
-    "lesson": "articles:dsa/heaps-priority-queues"
+    "lesson": "articles:dsa/heaps-priority-queues",
+    "question": "interview-questions:dsa/smallest-range-covering-elements-from-k-lists"
    },
    {
     "topic": "Jump Game",
