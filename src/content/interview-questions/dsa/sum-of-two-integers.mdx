@@ -1,0 +1,106 @@
+---
+title: "Sum of Two Integers: Add Without the Plus or Minus Operator"
+seoTitle: "Sum of Two Integers Without + or -"
+description: "Add two integers using only bitwise operations. XOR gives the sum without carries, AND shifted left gives the carries; repeat until no carry remains, with 32-bit masking."
+technology: ["dsa"]
+topic: ["arrays", "bit-manipulation"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 10
+interviewRelevance: "Medium"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+shortAnswer: "a ^ b adds the bits without carrying, and (a & b) << 1 is exactly the carry. Replace a with the partial sum and b with the carry, and repeat until the carry is 0. In fixed-width languages that is all. In Python, integers are unbounded, so mask every step to 32 bits with 0xFFFFFFFF and convert the final value back to a signed number if its top bit is set. At most 32 iterations: O(1) time and space."
+followUps: ["Why does the loop terminate for negative numbers in 32-bit arithmetic but not with Python's unbounded integers?", "How would you subtract using the same idea?", "How does a hardware ripple-carry adder relate to this loop?"]
+previous: "interview-questions:dsa/missing-number"
+versionContext: "Python 3 solutions verified with assert-based tests"
+---
+
+## Problem
+
+Given two integers `a` and `b` in the signed 32-bit range, return their sum without using the `+` or `-` operators. Assume the true sum also fits in 32 bits. This is widely known as LeetCode 371, Sum of Two Integers.
+
+## Examples
+
+```text
+a = 5,   b = 9    ->  14
+a = -6,  b = 2    ->  -4
+a = -1,  b = 1    ->  0
+```
+
+## Approach 1: brute force (one bit at a time)
+
+Simulate pencil-and-paper binary addition: walk the 32 bit positions from lowest to highest, combine the two input bits with the incoming carry, and set the result bit.
+
+```python
+def add_ripple(a, b):
+    result, carry = 0, 0
+    for i in range(32):
+        x, y = (a >> i) & 1, (b >> i) & 1
+        result |= (x ^ y ^ carry) << i
+        carry = (x & y) | (carry & (x ^ y))
+    return result if result < 2**31 else ~(result ^ 0xFFFFFFFF)
+```
+
+**Complexity:** always 32 iterations: O(1) time and space for fixed width, O(w) for w-bit integers. Correct, and a good way to show you understand carries, but it handles one bit per step.
+
+## Approach 2: optimal (XOR and carry)
+
+**Key insight:** process all 32 positions at once. Adding two bits gives a sum bit `x ^ y` and a carry bit `x & y` that belongs one position to the left. Doing this for all bits at once gives `a ^ b` and `(a & b) << 1`; adding those two is the same problem with a smaller carry, so repeat.
+
+Walkthrough on `5 + 9` (`0101 + 1001`):
+
+| Step | `a` | `b` (carry) | `a ^ b` | `(a & b) << 1` |
+|---|---|---|---|---|
+| 1 | 0101 | 1001 | 1100 | 0010 |
+| 2 | 1100 | 0010 | 1110 | 0000 |
+| 3 | 1110 | 0000 | done: 14 | |
+
+```python
+MASK = 0xFFFFFFFF
+INT_MAX = 0x7FFFFFFF
+
+def get_sum(a, b):
+    a &= MASK
+    b &= MASK
+    while b:
+        a, b = (a ^ b) & MASK, ((a & b) << 1) & MASK
+    return a if a <= INT_MAX else ~(a ^ MASK)
+```
+
+The final line turns a 32-bit pattern with the top bit set back into a negative Python int: `a ^ MASK` flips the low 32 bits, and `~` flips all bits of the now-small number, which yields the two's-complement value. For example, the pattern `0xFFFFFFFC` becomes -4.
+
+**Complexity:** at most 32 iterations, because each round pushes the carry at least one position left: O(1) time and space.
+
+## Tests
+
+```python
+import random
+
+for f in (get_sum, add_ripple):
+    assert f(5, 9) == 14
+    assert f(-6, 2) == -4                        # mixed signs
+    assert f(-1, 1) == 0                         # sum is zero
+    assert f(0, 0) == 0
+    assert f(-7, -8) == -15                      # both negative
+    assert f(2**31 - 2, 1) == 2**31 - 1          # largest 32-bit value
+    assert f(-2**31 + 1, -1) == -2**31           # smallest 32-bit value
+    assert f(123456, -123456) == 0
+
+random.seed(52)
+for _ in range(2000):
+    a = random.randint(-2**30, 2**30)
+    b = random.randint(-2**30, 2**30)
+    assert get_sum(a, b) == add_ripple(a, b) == a + b
+```
+
+## Edge cases and pitfalls
+
+- Without the mask, Python loops forever on inputs like `-1` and `1`: the carry keeps moving left through an unbounded run of 1 bits and never becomes 0.
+- Remember to convert back to signed at the end; returning the masked value gives 4294967292 instead of -4.
+- The problem assumes no overflow. If the true sum exceeds 32 bits, this code wraps around like a 32-bit machine would.
+
+## Where this shows up in data engineering
+
+Rarely. The real lesson is that integer width matters: Python ints are unbounded, but the columns you load into are not. A sum that fits in Python can overflow an `INT` column in a warehouse or wrap in a JVM-based engine, which is why aggregates of large integer columns are usually typed as `BIGINT` or `DECIMAL`.
