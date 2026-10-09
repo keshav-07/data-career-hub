@@ -1,8 +1,8 @@
 export const SITE = {
   name: "DataDank",
-  tagline: "A structured path to Data Engineering interview readiness.",
+  tagline: "Your 90-day plan to a Data Engineering job.",
   description:
-    "DataDank is a structured learning hub for Data Engineering interviews, with SQL, Python, Spark, data pipelines, cloud, projects and system design.",
+    "DataDank is a 90-day plan and complete study hub for Data Engineering interviews: SQL, Spark, Kafka, Airflow, AWS, data modeling, DSA and system design.",
   // Real contact route is not configured yet. Set when an address exists (docs/DECISIONS.md D-012).
   contactEmail: "" as string,
   social: [] as { label: string; url: string }[],
