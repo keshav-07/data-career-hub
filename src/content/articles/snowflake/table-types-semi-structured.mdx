@@ -18,7 +18,7 @@ learningObjectives:
 prerequisites: ["articles:snowflake/loading-copy-snowpipe", "articles:snowflake/time-travel-fail-safe-cloning"]
 related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "articles:snowflake/streams-and-tasks"]
 previous: "articles:snowflake/time-travel-fail-safe-cloning"
-next: "articles:snowflake/security-access-control"
+next: "articles:snowflake/streams-and-tasks"
 sources:
   - { label: "Snowflake documentation: Working with temporary and transient tables", url: "https://docs.snowflake.com/en/user-guide/tables-temp-transient" }
   - { label: "Snowflake documentation: Introduction to external tables", url: "https://docs.snowflake.com/en/user-guide/tables-external-intro" }
@@ -317,7 +317,7 @@ Key settings:
 |---------|---------|
 | `TARGET_LAG` | Maximum staleness relative to the base tables, for example `'15 minutes'`. The minimum is 60 seconds. Actual lag can exceed it if refreshes take longer |
 | `TARGET_LAG = DOWNSTREAM` | No schedule of its own: refresh when dynamic tables that depend on it refresh. Typical for intermediate tables |
-| `WAREHOUSE` | Required: the warehouse that runs refreshes |
+| `WAREHOUSE` | The warehouse that runs refreshes, billed like any other warehouse use. This is the standard setup in the documentation's examples; check the `CREATE DYNAMIC TABLE` reference for other compute options in your account |
 | `REFRESH_MODE` | `INCREMENTAL` (process only changes), `FULL` (recompute), or `AUTO` (Snowflake chooses at creation based on the query). The documentation lists the current set of modes |
 | `INITIALIZE` | `ON_CREATE` (populate immediately, the default) or `ON_SCHEDULE` |
 

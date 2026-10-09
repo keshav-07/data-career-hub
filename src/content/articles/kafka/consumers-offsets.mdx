@@ -468,7 +468,7 @@ Without the `catch` and `seek`, every `poll()` throws again at offset 1 and the 
 ### Patterns for bad records
 
 - **Dead-letter topic.** Consume as bytes (`ByteArrayDeserializer`), deserialise in your own code, and send failures with error headers to a `<topic>.dlq` topic.
-- **Schema Registry.** Prevents most poison pills by rejecting incompatible schemas at produce time (see Schema Registry).
+- **Schema Registry.** Prevents most poison pills by rejecting incompatible schemas at produce time (see [Schema Registry and schema evolution](/kafka/schema-registry-schema-evolution/)).
 - **Framework support.** Kafka Connect's `errors.tolerance` and DLQ, and Kafka Streams' deserialisation exception handlers, implement these patterns for you.
 
 ### Pitfalls

@@ -16,7 +16,7 @@ learningObjectives:
   - "Explain secure views, network policies and rules, encryption and authentication options"
 prerequisites: ["articles:snowflake/architecture-virtual-warehouses"]
 related: ["articles:databricks/unity-catalog-governance", "articles:etl-elt/data-quality-checks-contracts"]
-previous: "articles:snowflake/table-types-semi-structured"
+previous: "articles:snowflake/streams-and-tasks"
 next: "articles:snowflake/cost-optimization"
 sources:
   - { label: "Snowflake documentation: Overview of access control", url: "https://docs.snowflake.com/en/user-guide/security-access-control-overview" }
@@ -61,6 +61,8 @@ GRANT ROLE analyst TO USER asha;
 ```
 
 In a session, a user has a **primary role** (set with `USE ROLE`) and can activate **secondary roles** (`USE SECONDARY ROLES ALL`), so privileges from all their granted roles apply to queries. Object creation is always owned by the primary role.
+
+Secondary roles are on by default for most users today: the 2024_08 behaviour change bundle made `('ALL')` the default value of the user property `DEFAULT_SECONDARY_ROLES` when it is not set explicitly. A user who expects "I only have the privileges of the role I selected" may therefore read tables through another granted role. Set `DEFAULT_SECONDARY_ROLES = ()` on users (or service users) that must work with exactly one role, and use `IS_ROLE_IN_SESSION` in policies, which takes secondary roles into account.
 
 **Pitfalls**
 

@@ -385,7 +385,7 @@ The output topic physically holds eight audit records, but a `read_committed` co
 
 ### In interviews
 
-Write the loop from memory: `initTransactions`, `beginTransaction`, sends, `sendOffsetsToTransaction(offsets, groupMetadata)`, `commitTransaction`, with `read_committed` and auto-commit off. Then say that Kafka Streams gives you this with one setting, `processing.guarantee=exactly_once_v2` (see Kafka Streams).
+Write the loop from memory: `initTransactions`, `beginTransaction`, sends, `sendOffsetsToTransaction(offsets, groupMetadata)`, `commitTransaction`, with `read_committed` and auto-commit off. Then say that Kafka Streams gives you this with one setting, `processing.guarantee=exactly_once_v2` (see [Kafka Streams basics](/kafka/kafka-streams-basics/)).
 
 ## Practice questions
 
