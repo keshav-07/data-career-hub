@@ -77,13 +77,19 @@ const tabs = [
               </span>
             )}
             <a
-              class="btn btn--primary btn--lg btn--block-mobile"
+              class="resume-btn"
               href={first?.url ?? hub.url}
               data-continue
               data-course={tech}
               hidden
             >
-              Continue: <span data-continue-title></span>
+              <span class="resume-btn__text">
+                <span class="resume-btn__label">Continue</span>
+                <span class="resume-btn__title" data-continue-title></span>
+              </span>
+              <span class="resume-btn__arrow" aria-hidden="true">
+                →
+              </span>
             </a>
             {interviewHub && (
               <Button href={`/interview/${tech}/`} variant="secondary" size="lg" fullWidthOnMobile>

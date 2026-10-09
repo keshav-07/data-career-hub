@@ -40,11 +40,15 @@ const designs = await getItems("system-designs");
       All questions
     </h2>
     <a class="continue-link" href="/interview/questions/">
-      <span>
-        <strong>All {qs.length} interview questions</strong> in one filterable list, with progress
-        you can tick off.
+      <span class="continue-link__text">
+        <span class="continue-link__label">
+          One filterable list, with progress you can tick off
+        </span>
+        <strong>All {qs.length} interview questions</strong>
       </span>
-      <span aria-hidden="true">→</span>
+      <span class="continue-link__arrow" aria-hidden="true">
+        →
+      </span>
     </a>
   </section>
 

@@ -79,6 +79,7 @@ function decorate() {
       a.href = target.url;
       const t = a.querySelector("[data-continue-title]");
       if (t) t.textContent = target.title;
+      a.title = `Continue: ${target.title}`;
       a.hidden = false;
       document
         .querySelectorAll<HTMLElement>(`[data-hide-when-continue${course ? `="${course}"` : ""}]`)

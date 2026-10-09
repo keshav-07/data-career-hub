@@ -230,10 +230,13 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
           Open a lesson or tick off an interview question and your progress appears here.
         </p>
         <a class="continue-link" href="/data-engineering/" data-continue hidden>
-          <span>
-            Continue where you left off: <strong data-continue-title></strong>
+          <span class="continue-link__text">
+            <span class="continue-link__label">Continue where you left off</span>
+            <strong data-continue-title></strong>
           </span>
-          <span aria-hidden="true">→</span>
+          <span class="continue-link__arrow" aria-hidden="true">
+            →
+          </span>
         </a>
       </div>
     </div>
