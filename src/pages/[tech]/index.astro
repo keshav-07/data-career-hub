@@ -204,41 +204,6 @@ const tabs = [
               )}
             </div>
           </div>
-
-          <h3 class="group-title" style="margin-top: var(--sp-10)">
-            Practise
-          </h3>
-          <ul class="tile-grid" role="list">
-            {interviewHub && (
-              <li>
-                <Tile
-                  href={`/interview/${tech}/`}
-                  eyebrow="Interview"
-                  title={`${d.shortName} interview questions`}
-                  description="The full list with difficulty, type and a box to tick off each one."
-                  meta={[plural(hubQuestions.length, "question")]}
-                />
-              </li>
-            )}
-            {course.cheatSheets.slice(0, 1).map((c) => (
-              <li>
-                <Tile
-                  href={c.url}
-                  eyebrow="Cheat sheet"
-                  title={c.title}
-                  description={c.description}
-                />
-              </li>
-            ))}
-            <li>
-              <Tile
-                href="/interview/questions/"
-                eyebrow="Interview"
-                title="All interview questions"
-                description="Every question across all topics in one filterable list."
-              />
-            </li>
-          </ul>
         </div>
         <aside aria-labelledby="facts-h">
           <h2 id="facts-h" class="tile__eyebrow" style="margin-bottom: var(--sp-3)">
@@ -272,6 +237,35 @@ const tabs = [
           </ul>
         </>
       )}
+      <h2 class="group-title" style="margin-top: var(--sp-12)">
+        Practise
+      </h2>
+      <ul class="tile-grid" role="list">
+        {interviewHub && (
+          <li>
+            <Tile
+              href={`/interview/${tech}/`}
+              eyebrow="Interview"
+              title={`${d.shortName} interview questions`}
+              description="The full list with difficulty, type and a box to tick off each one."
+              meta={[plural(hubQuestions.length, "question")]}
+            />
+          </li>
+        )}
+        {course.cheatSheets.slice(0, 1).map((c) => (
+          <li>
+            <Tile href={c.url} eyebrow="Cheat sheet" title={c.title} description={c.description} />
+          </li>
+        ))}
+        <li>
+          <Tile
+            href="/interview/questions/"
+            eyebrow="Interview"
+            title="All interview questions"
+            description="Every question across all topics in one filterable list."
+          />
+        </li>
+      </ul>
     </section>
 
     <section id="lessons" class="tab-panel" role="tabpanel" aria-labelledby="tab-lessons">
