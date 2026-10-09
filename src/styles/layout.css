@@ -5,6 +5,10 @@
     margin-inline: auto;
     padding-inline: var(--gutter);
   }
+  /* Home page: wider, so its content lines up with the full-width header on common laptop screens. */
+  .container--home {
+    max-width: calc(1440px + 2 * var(--gutter));
+  }
   .container--wide {
     max-width: calc(var(--w-wide) + 2 * var(--gutter));
   }

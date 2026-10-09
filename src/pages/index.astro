@@ -39,7 +39,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
 >
   <section class="hero hero--plan" data-planner>
     <DataFlow />
-    <div class="container">
+    <div class="container container--home">
       <div class="hero-plan">
         <div class="hero-plan__copy">
           <p class="eyebrow">The DataDank 90-day plan</p>
@@ -53,9 +53,6 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
           <div class="hero__actions">
             <Button href="/planner/90-day-plan/#day-1" size="lg" fullWidthOnMobile data-plan-cta>
               <span data-plan-cta-label>Start Day 1</span>
-            </Button>
-            <Button href="/planner/90-day-plan/" variant="secondary" size="lg" fullWidthOnMobile>
-              See the full plan
             </Button>
           </div>
           <dl class="hero__stats">
@@ -77,101 +74,104 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
             </div>
           </dl>
         </div>
-        <aside class="day-card" aria-labelledby="day-card-h" data-day-card data-pl-day-card>
-          <div class="day-card__head">
-            <div class="day-card__heading">
-              <p class="day-card__eyebrow">
-                <span data-dc-status>Day 1 / {days.length}</span>
-                <span class="day-card__pill" data-dc-title>
-                  Your first day
-                </span>
-              </p>
-              <h2 id="day-card-h" class="day-card__title" data-dc-theme>
-                {day1.theme}
-              </h2>
-            </div>
-            <PlannerRing
-              tracker="days"
-              label="Plan progress"
-              total={days.length}
-              hours={planHours}
-            />
-          </div>
-          <ul class="day-card__tasks" role="list" data-dc-tasks>
-            {day1.tasks.map((t) => (
-              <li>
-                {t.href ? (
-                  <a class="day-task" href={t.href} title={`${t.skill}: ${t.topic}`}>
-                    <span class="day-task__skill">{t.skill}</span>
-                    <span class="day-task__topic">{t.topic}</span>
-                  </a>
-                ) : (
-                  <span class="day-task" title={`${t.skill}: ${t.topic}`}>
-                    <span class="day-task__skill">{t.skill}</span>
-                    <span class="day-task__topic">{t.topic}</span>
+        <div class="hero-plan__side">
+          <aside class="day-card" aria-labelledby="day-card-h" data-day-card data-pl-day-card>
+            <div class="day-card__head">
+              <div class="day-card__heading">
+                <p class="day-card__eyebrow">
+                  <span>Today’s focus</span>
+                  <span class="day-card__pill" data-dc-title>
+                    Your first day
                   </span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <div class="day-card__bar">
-            <p class="day-card__foot" data-dc-foot>
-              {day1.hours} h · {day1.mock}
-            </p>
-            <div class="day-card__controls js-only">
-              <button type="button" class="day-card__nav" data-dc-prev aria-label="Previous day">
-                <span aria-hidden="true">‹</span>
-              </button>
-              <label class="day-card__done">
-                <input
-                  type="checkbox"
-                  data-pl-day="1"
-                  data-hours={day1.hours}
-                  data-dc-check
-                  aria-label="Day 1 complete"
-                />
-                <span data-dc-check-label>Mark complete</span>
-              </label>
-              <button type="button" class="day-card__nav" data-dc-next aria-label="Next day">
-                <span aria-hidden="true">›</span>
-              </button>
+                </p>
+                <p class="day-card__day" data-dc-status-wrap>
+                  <span class="day-card__daynum">
+                    Day <span data-dc-status>1</span>
+                  </span>
+                  <span class="day-card__of">/ {days.length}</span>
+                </p>
+                <h2 id="day-card-h" class="day-card__title" data-dc-theme>
+                  {day1.theme}
+                </h2>
+              </div>
+              <PlannerRing
+                tracker="days"
+                label="Plan progress"
+                total={days.length}
+                hours={planHours}
+              />
             </div>
-          </div>
-          <p class="visually-hidden" aria-live="polite" data-dc-live></p>
-          <script
-            type="application/json"
-            data-dc-data
-            set:html={JSON.stringify(
-              days.map((d) => ({
-                d: d.day,
-                th: d.theme,
-                h: d.hours,
-                m: d.mock,
-                t: d.tasks.map((t) => [t.skill, t.topic, t.href ?? ""]),
-              })),
-            ).replace(/</g, "\\u003c")}
-          />
-        </aside>
+            <ul class="day-card__tasks" role="list" data-dc-tasks>
+              {day1.tasks.map((t) => (
+                <li>
+                  {t.href ? (
+                    <a class="day-task" href={t.href} title={`${t.skill}: ${t.topic}`}>
+                      <span class="day-task__skill">{t.skill}</span>
+                      <span class="day-task__topic">{t.topic}</span>
+                    </a>
+                  ) : (
+                    <span class="day-task" title={`${t.skill}: ${t.topic}`}>
+                      <span class="day-task__skill">{t.skill}</span>
+                      <span class="day-task__topic">{t.topic}</span>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div class="day-card__bar">
+              <p class="day-card__foot" data-dc-foot>
+                {day1.hours} h · {day1.mock}
+              </p>
+              <div class="day-card__controls js-only">
+                <button type="button" class="day-card__nav" data-dc-prev aria-label="Previous day">
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <label class="day-card__done">
+                  <input
+                    type="checkbox"
+                    data-pl-day="1"
+                    data-hours={day1.hours}
+                    data-dc-check
+                    aria-label="Day 1 complete"
+                  />
+                  <span data-dc-check-label>Mark complete</span>
+                </label>
+                <button type="button" class="day-card__nav" data-dc-next aria-label="Next day">
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
+            </div>
+            <p class="visually-hidden" aria-live="polite" data-dc-live></p>
+            <script
+              type="application/json"
+              data-dc-data
+              set:html={JSON.stringify(
+                days.map((d) => ({
+                  d: d.day,
+                  th: d.theme,
+                  h: d.hours,
+                  m: d.mock,
+                  t: d.tasks.map((t) => [t.skill, t.topic, t.href ?? ""]),
+                })),
+              ).replace(/</g, "\\u003c")}
+            />
+          </aside>
+          <a class="plan-link" href="/planner/90-day-plan/">
+            <span>
+              <strong>See the full 90-day plan</strong>
+              <span class="plan-link__sub">Every day, week and phase, with milestones</span>
+            </span>
+            <span class="plan-link__arrow" aria-hidden="true">
+              →
+            </span>
+          </a>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="section section--plan" aria-labelledby="plan-h">
-    <div class="container">
-      <div class="section-head">
-        <p class="eyebrow">The roadmap</p>
-        <h2 id="plan-h">Three phases. Thirteen weeks. One goal.</h2>
-        <p>
-          Foundations first, then advanced topics and projects, then interview mastery. Each week
-          ends with a clear milestone, and every day has one topic per skill.
-        </p>
-      </div>
-      <HomeRoadmap />
-    </div>
-  </section>
-
-  <section class="section section--tight" aria-labelledby="progress-h">
-    <div class="container">
+  <section class="section section--tight section--progress" aria-labelledby="progress-h">
+    <div class="container container--home">
       <div class="progress-panel js-only" aria-labelledby="progress-h">
         <div class="progress-panel__head">
           <h2 id="progress-h">Your progress</h2>
@@ -227,8 +227,22 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
     </div>
   </section>
 
+  <section class="section section--plan" aria-labelledby="plan-h">
+    <div class="container container--home">
+      <div class="section-head">
+        <p class="eyebrow">The roadmap</p>
+        <h2 id="plan-h">Three phases. Thirteen weeks. One goal.</h2>
+        <p>
+          Foundations first, then advanced topics and projects, then interview mastery. Each week
+          ends with a clear milestone, and every day has one topic per skill.
+        </p>
+      </div>
+      <HomeRoadmap />
+    </div>
+  </section>
+
   <section class="section" aria-labelledby="learn-h">
-    <div class="container">
+    <div class="container container--home">
       <div class="section-head">
         <p class="eyebrow">Courses</p>
         <h2 id="learn-h">Pick a technology and start learning</h2>
@@ -257,7 +271,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
 
   {stages.length > 0 && (
     <section class="section" aria-labelledby="road-h">
-      <div class="container">
+      <div class="container container--home">
         <div class="section-head">
           <p class="eyebrow">Roadmap</p>
           <h2 id="road-h">Data Engineer roadmap</h2>
@@ -285,7 +299,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
   )}
 
   <section class="section" aria-labelledby="int-h">
-    <div class="container">
+    <div class="container container--home">
       <div class="section-head">
         <p class="eyebrow">Interview</p>
         <h2 id="int-h">Three focused ways to prepare</h2>
@@ -324,7 +338,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
 
   {featuredProjects.length > 0 && (
     <section class="section" aria-labelledby="proj-h">
-      <div class="container">
+      <div class="container container--home">
         <div class="section-head">
           <p class="eyebrow">Projects</p>
           <h2 id="proj-h">Build something you can explain</h2>
@@ -353,7 +367,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
 
   {featured.length > 0 && (
     <section class="section" aria-labelledby="feat-h">
-      <div class="container">
+      <div class="container container--home">
         <div class="section-head">
           <p class="eyebrow">Featured guides</p>
           <h2 id="feat-h">Start with these</h2>
@@ -377,7 +391,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
   )}
 
   <section class="section" aria-labelledby="trust-h">
-    <div class="container">
+    <div class="container container--home">
       <div class="section-head">
         <p class="eyebrow">How we write</p>
         <h2 id="trust-h">Editorial principles</h2>

@@ -42,7 +42,7 @@ export function initDayCard() {
     const done = doneDays();
     const open = firstOpen();
     const isDone = done[String(shown)] !== undefined;
-    $("[data-dc-status]").textContent = `Day ${shown} / ${total}`;
+    $("[data-dc-status]").textContent = String(shown);
     $("[data-dc-theme]").textContent = day.th;
     $("[data-dc-title]").textContent = isDone
       ? "Completed"
