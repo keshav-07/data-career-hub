@@ -382,5 +382,89 @@
   "Query optimization & cost reduction → Session Duration": {
     "ref": "interview-questions:sql/session-duration-sql-case-study",
     "heading": "Approach: query optimisation and cost reduction"
+  },
+  "Sessionization of events → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: sessionization of experiment traffic"
+  },
+  "Common Table Expressions (CTEs) → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Core solution: a CTE pipeline"
+  },
+  "Approximate distinct (HLL) → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: approximate distinct counts for monitoring"
+  },
+  "Regex matching in SQL → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: regex matching to parse variants and filter bots"
+  },
+  "RIGHT JOIN & FULL OUTER JOIN → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: RIGHT JOIN and FULL OUTER JOIN to reconcile logs"
+  },
+  "Deadlocks & locking → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: deadlocks and locking in the assignment service"
+  },
+  "Conditional window frames → A/B Test Results": {
+    "ref": "interview-questions:sql/a-b-test-results-sql-case-study",
+    "heading": "Approach: conditional window frames for cumulative results"
+  },
+  "Index selectivity & cardinality → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: index selectivity and cardinality for renewal queues"
+  },
+  "Year-over-year growth → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: year-over-year growth in renewal rate"
+  },
+  "Window function basics (OVER) → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: window function basics with OVER"
+  },
+  "Cardinality estimation → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: cardinality estimation with expressions"
+  },
+  "Cohort analysis → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: cohort analysis of renewal curves"
+  },
+  "Subqueries in FROM (derived tables) → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: subqueries in FROM (derived tables)"
+  },
+  "Columnar vs row storage → Subscription Renewals": {
+    "ref": "interview-questions:sql/subscription-renewals-sql-case-study",
+    "heading": "Approach: columnar vs row storage for renewal analytics"
+  },
+  "Anti-join (NOT EXISTS / LEFT JOIN NULL) → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: anti-joins for orphans and clean orders"
+  },
+  "Statistics & the optimizer → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: statistics and the optimizer after bulk loads"
+  },
+  "Pivoting dynamic columns → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: pivoting dynamic columns by reason code"
+  },
+  "Running totals with SUM OVER → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: running totals with SUM OVER"
+  },
+  "Partition pruning → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: partition pruning on a partitioned refunds table"
+  },
+  "Rolling 7/30 day metrics → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: rolling 7-day and 30-day metrics"
+  },
+  "UNPIVOT columns to rows → Refund Analysis": {
+    "ref": "interview-questions:sql/refund-analysis-sql-case-study",
+    "heading": "Approach: UNPIVOT columns to rows by refund method"
   }
 }

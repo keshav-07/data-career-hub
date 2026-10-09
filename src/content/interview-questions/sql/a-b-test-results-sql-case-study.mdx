@@ -1,0 +1,577 @@
+---
+seoTitle: "A/B Test Results SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "A/B Test Results: SQL Case Study with 7 Approaches"
+description: "Analyse an A/B test in SQL: clean assignments, conversions after exposure, lift and a two-proportion z-test, plus sessions, regex, outer joins, frames and locking."
+technology: ["sql"]
+topic: ["case-study", "experimentation", "statistics"]
+difficulty: "Hard"
+questionType: ["coding", "scenario", "optimization"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Take each user's first assignment, exclude users who were assigned to both variants, bots and users never exposed, and count a user as converted only if they converted after their exposure within the test window. Conversion rate per variant is converters divided by exposed users; lift is the relative difference; significance comes from a two-proportion z-test using the pooled rate. Check the sample ratio first: if the split is far from the designed 50/50, the assignment is broken and the result should not be trusted."
+followUps:
+  - "A user appears in both variants. What do you do with them?"
+  - "Why count conversions only after exposure?"
+  - "How do you compute a z-score and p-value in SQL?"
+  - "What is a sample ratio mismatch and how do you detect it?"
+  - "Why might approximate distinct counts be unsuitable for the significance test?"
+  - "The assignment service deadlocks under load. Why, and how do you fix it?"
+prerequisites: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/aggregations-group-by-having"]
+related: ["interview-questions:sql/conversion-funnel-sql-case-study", "interview-questions:sql/session-duration-sql-case-study", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/joins", "articles:sql/window-functions"]
+previous: "interview-questions:sql/session-duration-sql-case-study"
+next: "interview-questions:sql/subscription-renewals-sql-case-study"
+versionContext: "Queries run on PostgreSQL 16.14 (erf() is used for the normal distribution) and one approximate-count example on DuckDB 1.5.6, with scripts/verify-examples.py. The deadlock output was produced by two concurrent psql sessions on the same server and is shown as text; that block is not run by the verifier."
+sources:
+  - { label: "PostgreSQL 16 documentation: WITH queries", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Explicit locking and deadlocks", url: "https://www.postgresql.org/docs/16/explicit-locking.html" }
+  - { label: "PostgreSQL 16 documentation: Pattern matching", url: "https://www.postgresql.org/docs/16/functions-matching.html" }
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Table expressions (joins)", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html" }
+---
+
+Analysing an A/B test looks like a group-by on variant, but most wrong experiment readouts come from the data, not the statistics: users in both arms, conversions that happened before the user saw the change, bots, and logging gaps between assignment and exposure. This case study cleans a small experiment dataset step by step, computes lift and significance in SQL, and then covers seven techniques interviewers attach to the question.
+
+## The business question
+
+**"Did the new checkout (variant B) increase the purchase rate compared with the current one (A), and can we trust the result?"** Product teams decide whether to ship on this number, so the analysis must be reproducible and conservative. Definitions:
+
+- **Unit**: the user. Each user's **first** assignment decides their variant.
+- **Exclusions**: users assigned to both variants (contamination), bot traffic (user agent matching a bot pattern), and users who were assigned but never **exposed** (never saw the checkout page).
+- **Conversion**: at least one `purchase` event **after** the user's first exposure, within the test window (14 days).
+- **Conversion rate** = converters ÷ exposed users, per variant. **Lift** = (rate B − rate A) ÷ rate A.
+- **Significance**: a two-sided two-proportion z-test; report the p-value and a 95% confidence interval for the difference.
+- **Sample ratio check**: the design is 50/50; a large deviation in exposed users signals a broken assignment or logging, and invalidates the test.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE assignments (
+  user_id     INT NOT NULL,
+  experiment  TEXT NOT NULL,
+  variant     TEXT NOT NULL,
+  assigned_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE exposures (
+  user_id    INT NOT NULL,
+  exposed_at TIMESTAMP NOT NULL,
+  page_url   TEXT NOT NULL,
+  user_agent TEXT NOT NULL
+);
+
+CREATE TABLE events (user_id INT NOT NULL, event TEXT NOT NULL, event_ts TIMESTAMP NOT NULL);
+
+INSERT INTO assignments VALUES
+  (1,  'checkout_v2', 'A', '2026-05-01 09:00'), (2,  'checkout_v2', 'B', '2026-05-01 09:05'),
+  (3,  'checkout_v2', 'A', '2026-05-01 10:00'), (4,  'checkout_v2', 'B', '2026-05-01 11:00'),
+  (5,  'checkout_v2', 'A', '2026-05-02 08:00'), (6,  'checkout_v2', 'B', '2026-05-02 09:00'),
+  (7,  'checkout_v2', 'A', '2026-05-02 12:00'), (7,  'checkout_v2', 'B', '2026-05-03 12:00'),   -- in both arms
+  (8,  'checkout_v2', 'B', '2026-05-03 14:00'), (8,  'checkout_v2', 'B', '2026-05-03 14:00'),   -- logged twice
+  (9,  'checkout_v2', 'A', '2026-05-03 15:00'),                                                -- never exposed
+  (11, 'checkout_v2', 'A', '2026-05-04 03:00');                                                -- a crawler
+
+INSERT INTO exposures VALUES
+  (1,  '2026-05-01 09:01', 'https://shop.example/checkout?exp=checkout_v2:A&utm=email', 'Mozilla/5.0 (iPhone)'),
+  (2,  '2026-05-01 09:06', 'https://shop.example/checkout?exp=checkout_v2:B',           'Mozilla/5.0 (Windows NT 10.0)'),
+  (3,  '2026-05-01 10:01', 'https://shop.example/checkout?exp=checkout_v2:A',           'Mozilla/5.0 (Macintosh)'),
+  (4,  '2026-05-01 11:02', 'https://shop.example/checkout?EXP=checkout_v2:b',           'Mozilla/5.0 (Android 14)'),
+  (5,  '2026-05-02 08:01', 'https://shop.example/checkout?exp=checkout_v2:A',           'Mozilla/5.0 (iPhone)'),
+  (6,  '2026-05-02 09:02', 'https://shop.example/checkout?exp=checkout_v2:B',           'Mozilla/5.0 (Windows NT 10.0)'),
+  (7,  '2026-05-02 12:01', 'https://shop.example/checkout?exp=checkout_v2:A',           'Mozilla/5.0 (Macintosh)'),
+  (8,  '2026-05-03 14:01', 'https://shop.example/checkout?exp=checkout_v2:B',           'Mozilla/5.0 (iPhone)'),
+  (10, '2026-05-03 16:00', 'https://shop.example/checkout?exp=checkout_v2:B',           'Mozilla/5.0 (Android 13)'),  -- no assignment row
+  (11, '2026-05-04 03:01', 'https://shop.example/checkout?exp=checkout_v2:A',           'Mozilla/5.0 (compatible; Googlebot/2.1)');
+
+INSERT INTO events VALUES
+  (1, 'page_view', '2026-04-30 18:00'), (1, 'purchase', '2026-04-30 18:10'),   -- before the test
+  (1, 'page_view', '2026-05-01 09:00'), (1, 'page_view', '2026-05-01 09:01'),
+  (2, 'page_view', '2026-05-01 09:05'), (2, 'purchase', '2026-05-01 09:20'),
+  (3, 'page_view', '2026-05-01 10:00'),
+  (4, 'page_view', '2026-05-01 11:00'), (4, 'page_view', '2026-05-03 19:00'), (4, 'purchase', '2026-05-03 19:15'),
+  (5, 'page_view', '2026-05-02 08:00'), (5, 'purchase', '2026-05-02 08:30'),
+  (6, 'page_view', '2026-05-02 09:00'),
+  (7, 'page_view', '2026-05-02 12:00'), (7, 'purchase', '2026-05-03 12:30'),
+  (8, 'page_view', '2026-05-03 14:00'), (8, 'purchase', '2026-05-20 10:00'),   -- 17 days later: outside the window
+  (11, 'page_view', '2026-05-04 03:00');
+```
+
+By hand: valid users are 1, 2, 3, 4, 5, 6 and 8 (7 is in both arms, 9 never saw the page, 10 has no assignment, 11 is a bot). Variant A: users 1, 3, 5, of whom 5 converted (user 1's purchase was before the test). Variant B: users 2, 4, 6, 8, of whom 2 and 4 converted (user 8's purchase is outside the 14-day window).
+
+## Core solution: a CTE pipeline
+
+**Why CTEs.** Each cleaning rule is a separate, named step, which makes the analysis reviewable: anyone can query a single CTE to check what it removed. That matters more in experiments than almost anywhere, because the exclusions decide the result.
+
+```sql
+WITH first_assignment AS (        -- 1. one row per user: their first assignment
+  SELECT DISTINCT ON (user_id) user_id, variant, assigned_at
+  FROM assignments
+  WHERE experiment = 'checkout_v2'
+  ORDER BY user_id, assigned_at
+),
+contaminated AS (                 -- 2. users seen in more than one variant
+  SELECT user_id FROM assignments
+  WHERE experiment = 'checkout_v2'
+  GROUP BY user_id HAVING COUNT(DISTINCT variant) > 1
+),
+exposed AS (                      -- 3. first exposure of real (non-bot) users
+  SELECT user_id, MIN(exposed_at) AS exposed_at
+  FROM exposures
+  WHERE user_agent !~* '(bot|crawler|spider)'
+  GROUP BY user_id
+),
+population AS (                   -- 4. analysable users
+  SELECT f.user_id, f.variant, e.exposed_at
+  FROM first_assignment f
+  JOIN exposed e USING (user_id)
+  WHERE NOT EXISTS (SELECT 1 FROM contaminated c WHERE c.user_id = f.user_id)
+),
+outcomes AS (                     -- 5. converted after exposure, within 14 days
+  SELECT p.*,
+         EXISTS (SELECT 1 FROM events ev
+                 WHERE ev.user_id = p.user_id AND ev.event = 'purchase'
+                   AND ev.event_ts >  p.exposed_at
+                   AND ev.event_ts <= p.exposed_at + INTERVAL '14 days') AS converted
+  FROM population p
+)
+SELECT variant,
+       COUNT(*)                                        AS users,
+       COUNT(*) FILTER (WHERE converted)               AS converters,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE converted) / COUNT(*), 1) AS conversion_pct,
+       string_agg(user_id::text, ',' ORDER BY user_id) AS user_ids
+FROM outcomes
+GROUP BY variant
+ORDER BY variant;
+```
+
+| variant | users | converters | conversion_pct | user_ids |
+|---|---|---|---|---|
+| A | 3 | 1 | 33.3 | 1,3,5 |
+| B | 4 | 2 | 50.0 | 2,4,6,8 |
+
+Each CTE has one job and is named after the rows it holds. In PostgreSQL 12 and later, a CTE referenced once is inlined into the main query, so splitting the logic costs no performance; one referenced several times is computed once. Recursive CTEs aside, a CTE is a readability tool, not a temporary table.
+
+### Significance on a realistic sample
+
+Seven users prove the logic, not the result. On a generated experiment of 20,000 users with a true conversion rate of 10% in A and 11% in B, the same pipeline's final step computes the z-test. The normal distribution's tail probability uses `erf()`, which PostgreSQL 16 provides:
+
+```sql
+CREATE TABLE exp_users AS
+SELECT g AS user_id,
+       CASE WHEN g % 2 = 0 THEN 'A' ELSE 'B' END AS variant,
+       CASE WHEN g % 2 = 0 THEN (hashint4(g) & 1023) < 102     -- about 10%
+            ELSE                  (hashint4(g) & 1023) < 113     -- about 11%
+       END AS converted
+FROM generate_series(1, 20000) AS g;
+
+WITH stats AS (
+  SELECT COUNT(*) FILTER (WHERE variant = 'A')                  AS n_a,
+         COUNT(*) FILTER (WHERE variant = 'A' AND converted)    AS x_a,
+         COUNT(*) FILTER (WHERE variant = 'B')                  AS n_b,
+         COUNT(*) FILTER (WHERE variant = 'B' AND converted)    AS x_b
+  FROM exp_users
+),
+rates AS (
+  SELECT *, x_a::float / n_a AS p_a, x_b::float / n_b AS p_b,
+         (x_a + x_b)::float / (n_a + n_b) AS p_pool
+  FROM stats
+),
+test AS (
+  SELECT *,
+         (p_b - p_a) / sqrt(p_pool * (1 - p_pool) * (1.0 / n_a + 1.0 / n_b)) AS z,
+         sqrt(p_a * (1 - p_a) / n_a + p_b * (1 - p_b) / n_b)                 AS se_diff
+  FROM rates
+)
+SELECT n_a, x_a, ROUND(p_a::numeric * 100, 2) AS rate_a_pct,
+       n_b, x_b, ROUND(p_b::numeric * 100, 2) AS rate_b_pct,
+       ROUND(((p_b - p_a) / p_a * 100)::numeric, 1)  AS lift_pct,
+       ROUND(z::numeric, 3)                          AS z_score,
+       ROUND((1 - erf(abs(z) / sqrt(2)))::numeric, 4) AS p_value_two_sided,
+       ROUND(((p_b - p_a - 1.96 * se_diff) * 100)::numeric, 2) AS ci95_low_pts,
+       ROUND(((p_b - p_a + 1.96 * se_diff) * 100)::numeric, 2) AS ci95_high_pts
+FROM test;
+```
+
+| n_a | x_a | rate_a_pct | n_b | x_b | rate_b_pct | lift_pct | z_score | p_value_two_sided | ci95_low_pts | ci95_high_pts |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 10000 | 957 | 9.57 | 10000 | 1092 | 10.92 | 14.1 | 3.148 | 0.0016 | 0.51 | 2.19 |
+
+The two-sided p-value is `2 × (1 − Φ(|z|))`, which equals `1 − erf(|z| / √2)`. The confidence interval for the difference (in percentage points) uses the unpooled standard error. Interpret the result honestly: if the interval includes 0, the test has not shown a difference at the 5% level, whatever the point estimate of lift.
+
+**Sample ratio mismatch (SRM).** Before reading the result, check that the arms are the designed size. A chi-square test with one degree of freedom on the counts, compared with 3.84 (the 5% critical value), is the usual check:
+
+```sql
+WITH c AS (
+  SELECT COUNT(*) FILTER (WHERE variant = 'A') AS n_a, COUNT(*) FILTER (WHERE variant = 'B') AS n_b
+  FROM exp_users
+)
+SELECT n_a, n_b,
+       ROUND(((n_a - (n_a + n_b) / 2.0) ^ 2 / ((n_a + n_b) / 2.0)
+            + (n_b - (n_a + n_b) / 2.0) ^ 2 / ((n_a + n_b) / 2.0))::numeric, 3) AS chi_square,
+       ((n_a - (n_a + n_b) / 2.0) ^ 2 / ((n_a + n_b) / 2.0)
+      + (n_b - (n_a + n_b) / 2.0) ^ 2 / ((n_a + n_b) / 2.0)) > 3.84 AS srm_detected
+FROM c;
+```
+
+| n_a | n_b | chi_square | srm_detected |
+|---|---|---|---|
+| 10000 | 10000 | 0.000 | f |
+
+## Approach: RIGHT JOIN and FULL OUTER JOIN to reconcile logs
+
+**Why it matters.** Assignment and exposure are logged by different systems, and they disagree: user 9 was assigned but never exposed, user 10 was exposed but has no assignment. If losses differ by variant (for example the new checkout fails to log exposure on one browser), the comparison is biased. A `FULL OUTER JOIN` keeps unmatched rows from both sides, so one query shows every disagreement.
+
+```sql
+WITH a AS (SELECT DISTINCT user_id, variant FROM assignments WHERE experiment = 'checkout_v2'),
+     e AS (SELECT DISTINCT user_id,
+                  upper(substring(page_url FROM '(?i)exp=checkout_v2:([ab])')) AS logged_variant
+           FROM exposures)
+SELECT COALESCE(a.user_id, e.user_id) AS user_id,
+       a.variant                      AS assigned_variant,
+       e.logged_variant               AS exposed_variant,
+       CASE WHEN e.user_id IS NULL THEN 'assigned, never exposed'
+            WHEN a.user_id IS NULL THEN 'exposed, never assigned'
+            WHEN a.variant <> e.logged_variant THEN 'variant mismatch'
+            ELSE 'ok' END              AS status
+FROM a
+FULL OUTER JOIN e ON e.user_id = a.user_id
+WHERE a.user_id IS NULL OR e.user_id IS NULL OR a.variant <> e.logged_variant
+ORDER BY user_id;
+```
+
+| user_id | assigned_variant | exposed_variant | status |
+|---|---|---|---|
+| 7 | B | A | variant mismatch |
+| 9 | A | NULL | assigned, never exposed |
+| 10 | NULL | B | exposed, never assigned |
+
+User 7 shows as a mismatch because they have two assignment rows; the B row does not match the A exposure. The summary by variant is the SRM view of the logs:
+
+```sql
+WITH a AS (SELECT DISTINCT user_id, variant FROM assignments WHERE experiment = 'checkout_v2'),
+     e AS (SELECT DISTINCT user_id FROM exposures)
+SELECT a.variant,
+       COUNT(*)                                  AS assigned,
+       COUNT(e.user_id)                          AS exposed,
+       ROUND(100.0 * COUNT(e.user_id) / COUNT(*), 1) AS exposure_rate_pct
+FROM e
+RIGHT JOIN a ON a.user_id = e.user_id
+GROUP BY a.variant
+ORDER BY a.variant;
+```
+
+| variant | assigned | exposed | exposure_rate_pct |
+|---|---|---|---|
+| A | 6 | 5 | 83.3 |
+| B | 5 | 5 | 100.0 |
+
+`e RIGHT JOIN a` keeps every assignment and fills exposure columns with `NULL` where none exists; it is the same as `a LEFT JOIN e`, written with the preserved table on the right. Most teams standardise on `LEFT JOIN` for readability, but you should read both fluently. Exposure rates that differ markedly between variants are a red flag even when the totals look fine.
+
+## Approach: regex matching to parse variants and filter bots
+
+**Why it matters.** The variant a user actually saw is often only recorded in a URL or a client string, and bot traffic must be excluded by matching user agents. Both need regular expressions, applied carefully because the strings are inconsistent (`EXP=checkout_v2:b` in upper and lower case).
+
+```sql
+SELECT user_id,
+       substring(page_url FROM 'exp=checkout_v2:([AB])')                AS case_sensitive,
+       upper(substring(page_url FROM '(?i)exp=checkout_v2:([ab])'))      AS case_insensitive,
+       (regexp_match(page_url, '[?&]utm=([^&]+)'))[1]                     AS utm,
+       user_agent ~* '(bot|crawler|spider)'                               AS is_bot
+FROM exposures
+ORDER BY user_id;
+```
+
+| user_id | case_sensitive | case_insensitive | utm | is_bot |
+|---|---|---|---|---|
+| 1 | A | A | email | f |
+| 2 | B | B | NULL | f |
+| 3 | A | A | NULL | f |
+| 4 | NULL | B | NULL | f |
+| 5 | A | A | NULL | f |
+| 6 | B | B | NULL | f |
+| 7 | A | A | NULL | f |
+| 8 | B | B | NULL | f |
+| 10 | B | B | NULL | f |
+| 11 | A | A | NULL | t |
+
+- `substring(x FROM pattern)` returns the first capture group. Without `(?i)` (an embedded flag for case-insensitive matching), user 4's `EXP=...:b` is missed.
+- `regexp_match` returns an array of capture groups, so `[1]` takes the first; it returns `NULL` when nothing matches.
+- `~*` is the case-insensitive match operator; `!~*` (used in the core pipeline) is its negation.
+
+**Pitfalls.** Regex bot filters are a blunt instrument: maintain the pattern list, and combine it with behavioural signals (hundreds of page views a minute). Anchor and escape patterns properly; an unescaped `.` matches any character. Apply the same exclusions to both variants, and decide them *before* looking at results, or you risk choosing filters that favour an outcome. Dialects differ: BigQuery uses RE2 (`REGEXP_EXTRACT`), Snowflake has `REGEXP_SUBSTR` and `RLIKE`.
+
+## Approach: sessionization of experiment traffic
+
+**Why it matters.** User-level conversion is the primary metric, but secondary metrics are often per session: "did the new checkout reduce the number of sessions needed to buy?" That requires grouping each user's events into sessions, here with a 30-minute inactivity rule.
+
+```sql
+WITH ordered AS (
+  SELECT e.*,
+         CASE WHEN event_ts - LAG(event_ts) OVER (PARTITION BY user_id ORDER BY event_ts)
+                   <= INTERVAL '30 minutes' THEN 0 ELSE 1 END AS new_session
+  FROM events e
+  WHERE event_ts >= TIMESTAMP '2026-05-01'          -- test period only
+),
+sessions AS (
+  SELECT *, SUM(new_session) OVER (PARTITION BY user_id ORDER BY event_ts
+                                   ROWS UNBOUNDED PRECEDING) AS session_no
+  FROM ordered
+)
+SELECT user_id, session_no,
+       MIN(event_ts) AS started, MAX(event_ts) AS ended,
+       COUNT(*) AS events,
+       bool_or(event = 'purchase') AS has_purchase
+FROM sessions
+WHERE user_id IN (1, 2, 4, 5, 6, 8)
+GROUP BY user_id, session_no
+ORDER BY user_id, session_no;
+```
+
+| user_id | session_no | started | ended | events | has_purchase |
+|---|---|---|---|---|---|
+| 1 | 1 | 2026-05-01 09:00:00 | 2026-05-01 09:01:00 | 2 | f |
+| 2 | 1 | 2026-05-01 09:05:00 | 2026-05-01 09:20:00 | 2 | t |
+| 4 | 1 | 2026-05-01 11:00:00 | 2026-05-01 11:00:00 | 1 | f |
+| 4 | 2 | 2026-05-03 19:00:00 | 2026-05-03 19:15:00 | 2 | t |
+| 5 | 1 | 2026-05-02 08:00:00 | 2026-05-02 08:30:00 | 2 | t |
+| 6 | 1 | 2026-05-02 09:00:00 | 2026-05-02 09:00:00 | 1 | f |
+| 8 | 1 | 2026-05-03 14:00:00 | 2026-05-03 14:00:00 | 1 | f |
+| 8 | 2 | 2026-05-20 10:00:00 | 2026-05-20 10:00:00 | 1 | t |
+
+User 4 needed two sessions to buy; users 2 and 5 bought in their first. Per variant, sessions per converter and session-level conversion:
+
+```sql
+WITH ordered AS (
+  SELECT e.*,
+         CASE WHEN event_ts - LAG(event_ts) OVER (PARTITION BY user_id ORDER BY event_ts)
+                   <= INTERVAL '30 minutes' THEN 0 ELSE 1 END AS new_session
+  FROM events e WHERE event_ts >= TIMESTAMP '2026-05-01'
+),
+sessions AS (
+  SELECT user_id, SUM(new_session) OVER (PARTITION BY user_id ORDER BY event_ts ROWS UNBOUNDED PRECEDING) AS session_no,
+         event
+  FROM ordered
+),
+per_session AS (
+  SELECT user_id, session_no, bool_or(event = 'purchase') AS converted
+  FROM sessions GROUP BY user_id, session_no
+)
+SELECT a.variant,
+       COUNT(*)                                        AS sessions,
+       COUNT(*) FILTER (WHERE s.converted)             AS converting_sessions,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE s.converted) / COUNT(*), 1) AS session_conversion_pct
+FROM per_session s
+JOIN (SELECT DISTINCT ON (user_id) user_id, variant FROM assignments ORDER BY user_id, assigned_at) a USING (user_id)
+WHERE s.user_id IN (1, 2, 3, 4, 5, 6, 8)        -- the analysable population
+GROUP BY a.variant
+ORDER BY a.variant;
+```
+
+| variant | sessions | converting_sessions | session_conversion_pct |
+|---|---|---|---|
+| A | 3 | 1 | 33.3 |
+| B | 6 | 3 | 50.0 |
+
+User 8's purchase on 20 May counts as a converting session here, although it is outside the 14-day window used for the primary metric: secondary metrics must apply the same exposure and window rules, or they disagree with the headline for reasons that have nothing to do with the product.
+
+**Pitfalls.** Sessions are not independent observations (one user contributes several), so a z-test on session counts overstates significance; analyse at the randomisation unit (user) or use methods that account for clustering. Use the same session rule in both arms. Sessions that start before the test and continue into it need a rule (here, events before 1 May are excluded entirely).
+
+## Approach: conditional window frames for cumulative results
+
+**Why it matters.** Teams watch experiments daily. A cumulative conversion curve per variant shows whether the difference is stable or still moving. That needs window aggregates with conditions: cumulative converters (a `FILTER` inside the window) over cumulative users, with frames chosen deliberately.
+
+```sql
+CREATE TABLE exp_daily AS
+SELECT variant, DATE '2026-05-01' + abs(hashint4(user_id + 7)) % 14 AS day,
+       COUNT(*) AS users, COUNT(*) FILTER (WHERE converted) AS converters
+FROM exp_users
+GROUP BY 1, 2;
+
+SELECT variant, day, users, converters,
+       SUM(converters) OVER w_cum                                        AS cum_converters,
+       SUM(users) OVER w_cum                                             AS cum_users,
+       ROUND(100.0 * SUM(converters) OVER w_cum / SUM(users) OVER w_cum, 2) AS cum_rate_pct,
+       ROUND(100.0 * SUM(converters) OVER w_3d / SUM(users) OVER w_3d, 2)   AS rolling_3d_rate_pct
+FROM exp_daily
+WHERE day <= DATE '2026-05-05'
+WINDOW w_cum AS (PARTITION BY variant ORDER BY day ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+       w_3d  AS (PARTITION BY variant ORDER BY day RANGE BETWEEN INTERVAL '2 days' PRECEDING AND CURRENT ROW)
+ORDER BY variant, day;
+```
+
+| variant | day | users | converters | cum_converters | cum_users | cum_rate_pct | rolling_3d_rate_pct |
+|---|---|---|---|---|---|---|---|
+| A | 2026-05-01 | 724 | 55 | 55 | 724 | 7.60 | 7.60 |
+| A | 2026-05-02 | 704 | 63 | 118 | 1428 | 8.26 | 8.26 |
+| A | 2026-05-03 | 707 | 57 | 175 | 2135 | 8.20 | 8.20 |
+| A | 2026-05-04 | 751 | 93 | 268 | 2886 | 9.29 | 9.85 |
+| A | 2026-05-05 | 709 | 55 | 323 | 3595 | 8.98 | 9.46 |
+| B | 2026-05-01 | 721 | 85 | 85 | 721 | 11.79 | 11.79 |
+| B | 2026-05-02 | 695 | 76 | 161 | 1416 | 11.37 | 11.37 |
+| B | 2026-05-03 | 687 | 73 | 234 | 2103 | 11.13 | 11.13 |
+| B | 2026-05-04 | 720 | 89 | 323 | 2823 | 11.44 | 11.32 |
+| B | 2026-05-05 | 744 | 79 | 402 | 3567 | 11.27 | 11.20 |
+
+On day one B leads by more than four points; by day five the cumulative gap has narrowed to about 2.3 points, closer to the overall result. Early daily numbers are noisy, which is why the curve is watched but not acted on. Two frame types are in play. `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` accumulates every earlier row; `RANGE BETWEEN INTERVAL '2 days' PRECEDING AND CURRENT ROW` takes rows whose `day` value is within two days, so a missing day shrinks the window instead of reaching further back, which a `ROWS` frame would do.
+
+A condition can also go inside the window aggregate. This counts, for each day, the number of *earlier* days on which B's daily rate beat A's, excluding the current day from the frame:
+
+```sql
+WITH paired AS (
+  SELECT a.day,
+         a.converters::float / a.users AS rate_a,
+         b.converters::float / b.users AS rate_b
+  FROM exp_daily a JOIN exp_daily b ON b.day = a.day AND b.variant = 'B'
+  WHERE a.variant = 'A'
+)
+SELECT day,
+       ROUND((rate_b - rate_a)::numeric * 100, 2) AS diff_pts,
+       COUNT(*) FILTER (WHERE rate_b > rate_a)
+         OVER (ORDER BY day ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW) AS earlier_days_b_won,
+       COUNT(*) OVER (ORDER BY day ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)               AS earlier_days
+FROM paired
+WHERE day <= DATE '2026-05-07'
+ORDER BY day;
+```
+
+| day | diff_pts | earlier_days_b_won | earlier_days |
+|---|---|---|---|
+| 2026-05-01 | 4.19 | 0 | 0 |
+| 2026-05-02 | 1.99 | 1 | 1 |
+| 2026-05-03 | 2.56 | 2 | 2 |
+| 2026-05-04 | -0.02 | 3 | 3 |
+| 2026-05-05 | 2.86 | 3 | 4 |
+| 2026-05-06 | -2.11 | 4 | 5 |
+| 2026-05-07 | -0.29 | 4 | 6 |
+
+`FILTER (WHERE ...)` restricts which rows the window aggregate counts; `EXCLUDE CURRENT ROW` (also `EXCLUDE GROUP`, `EXCLUDE TIES`) removes rows from the frame without changing its bounds. The two `earlier` columns use different but equivalent ways of leaving today out.
+
+**Pitfalls and the peeking problem.** A cumulative p-value checked every day and acted on the first time it dips below 0.05 has a much higher false-positive rate than 5%. Fix the sample size in advance, or use a sequential testing method designed for continuous monitoring. Cumulative curves are for spotting bugs and novelty effects, not for stopping early.
+
+## Approach: approximate distinct counts for monitoring
+
+**Why it matters.** On billions of events, exact `COUNT(DISTINCT user_id)` per variant per day for a monitoring dashboard is expensive, and distinct counts cannot be summed across days. HyperLogLog-style approximate counts are cheap and mergeable. DuckDB has `approx_count_distinct`:
+
+{/* engine: duckdb */}
+```sql
+CREATE TABLE exp_events AS
+SELECT CASE WHEN hash(i) % 2 = 0 THEN 'A' ELSE 'B' END AS variant,
+       hash(i * 7) % 400000 AS user_id
+FROM range(2000000) t(i);
+
+SELECT variant,
+       COUNT(DISTINCT user_id)        AS exact_users,
+       approx_count_distinct(user_id) AS approx_users,
+       ROUND(100.0 * (approx_count_distinct(user_id) - COUNT(DISTINCT user_id)) / COUNT(DISTINCT user_id), 2) AS error_pct
+FROM exp_events
+GROUP BY variant
+ORDER BY variant;
+```
+
+| variant | exact_users | approx_users | error_pct |
+|---|---|---|---|
+| A | 367315 | 346706 | -5.61 |
+| B | 366936 | 367778 | 0.23 |
+
+**Why not for the test itself.** The z-test treats counts as exact. A 1% error in `n` is small, but errors in numerator and denominator are independent and do not cancel, and an error of a few percent can be larger than the effect you are trying to detect (the lift above is about 14% relative, under 1.5 percentage points). Approximate counts suit dashboards, SRM alerts with generous thresholds, and exploration; the final readout uses exact counts on the analysable population. PostgreSQL itself has no built-in HLL; extensions and most warehouses provide one.
+
+## Approach: deadlocks and locking in the assignment service
+
+**Why it matters.** Assignment is written by an online service, often with a counter table per variant for quotas or monitoring. Two transactions that update the same two counter rows in opposite orders can each hold one row lock and wait for the other: a **deadlock**. PostgreSQL detects it after `deadlock_timeout` and aborts one transaction, which the service must retry.
+
+Two sessions ran this on the same server, one updating A then B, the other B then A, with a one-second pause between the updates (not executed by the verifier, because it needs two concurrent sessions):
+
+{/* noexec */}
+```sql
+-- session 1                                          -- session 2
+BEGIN;                                                BEGIN;
+UPDATE variant_counters SET users = users + 1         UPDATE variant_counters SET users = users + 1
+ WHERE variant = 'A';                                  WHERE variant = 'B';
+SELECT pg_sleep(1);                                   SELECT pg_sleep(1);
+UPDATE variant_counters SET users = users + 1         UPDATE variant_counters SET users = users + 1
+ WHERE variant = 'B';     -- waits for session 2       WHERE variant = 'A';     -- waits for session 1
+COMMIT;
+```
+
+Session 1 committed; session 2 received:
+
+```text
+ERROR:  deadlock detected
+DETAIL:  Process 1257 waits for ShareLock on transaction 5631; blocked by process 1258.
+Process 1258 waits for ShareLock on transaction 5630; blocked by process 1257.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (0,1) in relation "variant_counters"
+```
+
+and its whole transaction was rolled back, so each counter ended at 1, not 2.
+
+**Fixes, in order of preference.**
+
+1. **Lock in a consistent order.** If every transaction touches counters in the same order (for example sorted by variant), a cycle cannot form. Lock the rows up front in that order:
+
+```sql
+CREATE TABLE variant_counters (experiment TEXT, variant TEXT, users INT NOT NULL,
+                               PRIMARY KEY (experiment, variant));
+INSERT INTO variant_counters VALUES ('checkout_v2', 'A', 0), ('checkout_v2', 'B', 0);
+
+BEGIN;
+SELECT variant FROM variant_counters
+WHERE experiment = 'checkout_v2' ORDER BY variant
+FOR UPDATE;                                  -- always A then B
+UPDATE variant_counters SET users = users + 1 WHERE experiment = 'checkout_v2';
+COMMIT;
+
+SELECT variant, users FROM variant_counters ORDER BY variant;
+```
+
+| variant | users |
+|---|---|
+| A | 1 |
+| B | 1 |
+
+2. **Avoid shared hot rows.** A counter row updated by every request serialises the service. Insert one assignment row per user and count them later, or keep several counter shards per variant and sum them.
+3. **Make assignment idempotent.** A unique key on `(experiment, user_id)` with `INSERT ... ON CONFLICT DO NOTHING` prevents both duplicate rows (user 8) and double assignment (user 7), and retries after a deadlock become safe:
+
+```sql
+CREATE TABLE assignments_clean (experiment TEXT, user_id INT, variant TEXT NOT NULL, assigned_at TIMESTAMP NOT NULL,
+                                PRIMARY KEY (experiment, user_id));
+INSERT INTO assignments_clean
+SELECT experiment, user_id, variant, assigned_at FROM assignments
+ORDER BY assigned_at
+ON CONFLICT (experiment, user_id) DO NOTHING;
+
+SELECT user_id, variant, assigned_at FROM assignments_clean WHERE user_id IN (7, 8) ORDER BY user_id;
+```
+
+| user_id | variant | assigned_at |
+|---|---|---|
+| 7 | A | 2026-05-02 12:00:00 |
+| 8 | B | 2026-05-03 14:00:00 |
+
+4. **Keep transactions short** and retry on the deadlock error (SQLSTATE `40P01`) with a small random back-off.
+
+**In interviews.** Define a deadlock (a cycle of transactions each waiting for a lock another holds), say how PostgreSQL resolves it (detects the cycle and aborts one victim), and give consistent lock ordering and idempotent writes as the prevention.
+
+## Interview tips
+
+**How it is asked.** "Compute conversion by variant", "is the result significant?", "some users are in both groups, what do you do?", "the split is 52/48, is that a problem?", or a schema with assignments, exposures and events.
+
+**What a strong answer includes.**
+
+1. The unit of analysis and randomisation (user), and first assignment per user.
+2. Explicit exclusions decided before seeing results: contamination, bots, unexposed users.
+3. Conversions after exposure within a fixed window.
+4. Rates, lift, a z-test or confidence interval, and an SRM check.
+5. Awareness of peeking, multiple comparisons and session-level pseudo-replication.
+
+**Mistakes candidates make.**
+
+- Counting conversions before exposure, or over different windows per variant.
+- Keeping users in both variants, or assigning them to the last variant seen.
+- Treating sessions or events as independent units in the test.
+- Declaring a winner from lift alone without uncertainty.
+- Stopping the test the first day p < 0.05.
+- Ignoring an SRM because "the result looks good".
