@@ -14,8 +14,6 @@ def save(a, name, h):
 def compact(a, text_x, tagline_y):
     c = a.copy(); c[tagline_y:, text_x:, 3] = 0; return trim(c)
 light, dark = load('datadank-logo-light-original.webp'), load('datadank-logo-dark-original.webp')
-save(trim(light), 'datadank-logo-light.webp', 240)
 save(trim(dark), 'datadank-logo-dark.webp', 240)
 save(compact(light, 580, 436), 'datadank-logo-compact-light.webp', 96)
 save(compact(dark, 570, 422), 'datadank-logo-compact-dark.webp', 96)
-save(trim(load('datadank-mark-original.webp')), 'datadank-mark.webp', 256)

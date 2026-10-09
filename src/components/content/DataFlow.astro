@@ -35,10 +35,19 @@ const lines = Array.from({ length: 22 }, (_, i) => {
   </defs>
   <rect width={W} height={H} fill="url(#df-glow)"></rect>
   <g fill="none" stroke="url(#df-stroke)" stroke-width="1.1" stroke-linecap="round">
-    {lines.map((l) => <path d={l.a} opacity={l.op} />)}
+    {lines.map((l) => (
+      <path d={l.a} opacity={l.op} />
+    ))}
     {lines.map((l, i) => i % 2 === 0 && <path d={l.b} opacity={(Number(l.op) * 0.7).toFixed(2)} />)}
   </g>
-  <g class="data-flow__pulses" fill="none" stroke="#ffb27a" stroke-width="1.4" opacity="0.7" stroke-linecap="round">
+  <g
+    class="data-flow__pulses"
+    fill="none"
+    stroke="#ffb27a"
+    stroke-width="1.4"
+    opacity="0.7"
+    stroke-linecap="round"
+  >
     <path d={lines[8].a} pathLength="100"></path>
     <path d={lines[14].a} pathLength="100"></path>
   </g>

@@ -266,8 +266,15 @@
     border-radius: var(--radius-sm);
   }
   .footer-brand__logo img {
-    height: 56px;
+    height: 40px;
     width: auto;
+  }
+  .footer-brand .footer-brand__motto {
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--color-orange);
   }
   .footer-brand p {
     margin: 0;
