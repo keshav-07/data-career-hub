@@ -57,18 +57,20 @@ const articles = defineCollection({
 
 /**
  * Platforms a question can link out to for hands-on practice, with the only hosts their links may use.
- * Preference: LeetCode or DataLemur; LintCode or HackerRank only when the problem is missing or paywalled there.
+ * Preference: LeetCode or DataLemur; GeeksforGeeks, HackerRank or CodeChef only when the problem is missing or
+ * subscription-only there.
  */
 const PRACTICE_HOSTS = {
   LeetCode: ["leetcode.com"],
   DataLemur: ["datalemur.com"],
   HackerRank: ["www.hackerrank.com", "hackerrank.com"],
-  LintCode: ["www.lintcode.com"],
+  GeeksforGeeks: ["www.geeksforgeeks.org"],
+  CodeChef: ["www.codechef.com"],
 } as const;
 const practiceLink = z
   .object({
-    platform: z.enum(["LeetCode", "DataLemur", "HackerRank", "LintCode"]),
-    /** Problem number on the platform, when it has one (LeetCode, LintCode). */
+    platform: z.enum(["LeetCode", "DataLemur", "HackerRank", "GeeksforGeeks", "CodeChef"]),
+    /** Problem number on the platform, when it has one (LeetCode). */
     number: z.number().int().positive().optional(),
     /** The problem's name as the platform shows it. DataDank never copies the problem text itself. */
     title: z.string().min(2).max(120),

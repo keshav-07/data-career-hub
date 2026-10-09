@@ -61,8 +61,8 @@ An interview question may carry **one** `practice` link to the same problem on a
 practice: { "platform": "LeetCode", "number": 1, "title": "Two Sum", "url": "https://leetcode.com/problems/two-sum/" }
 ```
 
-- Prefer LeetCode or DataLemur. Use LintCode or HackerRank only when the problem is missing there or is
-  subscription-only (LeetCode Premium), so every reader can open it.
+- Prefer LeetCode or DataLemur. Use GeeksforGeeks, HackerRank or CodeChef only when the problem is missing there
+  or is subscription-only (LeetCode Premium), so every reader can open it.
 - Add a link only when the platform problem genuinely matches the page (same task and inputs). Case studies and
   conceptual questions usually have none.
 - Verify the URL before adding it, from the platform's own page or a search result that shows that exact URL and
