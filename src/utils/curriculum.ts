@@ -191,6 +191,8 @@ export type PlanDay = {
   weekly?: string;
   monthly?: string;
   outcome?: string;
+  budget?: string;
+  optional?: string;
 };
 
 const PLAN_SKILLS: [string, string][] = [
@@ -204,34 +206,88 @@ const PLAN_SKILLS: [string, string][] = [
   ["System Design", "system-design"],
 ];
 
-/** The 90-day day-by-day plan, with each day's topics linked to their study material. */
+/** The prerequisite-led 90-day plan, with a single primary focus and one reinforcement task per day. */
 export async function planDays(): Promise<PlanDay[]> {
   const lookup = new Map<string, TopicRow>();
-  for (const [, t] of PLAN_SKILLS) {
-    for (const r of await trackerRows(t)) lookup.set(keyOf(t, r.topic), r);
+  for (const [, tracker] of PLAN_SKILLS) {
+    for (const row of await trackerRows(tracker)) lookup.set(keyOf(tracker, row.topic), row);
   }
-  return (plan as Record<string, string | number | null>[]).map((d) => {
+
+  const trackerForLabel: Record<string, string> = {
+    SQL: "sql",
+    DSA: "dsa",
+    PySpark: "pyspark",
+    Snowflake: "snowflake",
+    Kafka: "kafka",
+    Airflow: "airflow",
+    AWS: "aws",
+    "System Design": "system-design",
+    "Data Modeling": "data-modeling",
+  };
+  const hubForLabel: Record<string, string> = {
+    SQL: "/sql/",
+    Python: "/python/",
+    DSA: "/interview/",
+    PySpark: "/pyspark/",
+    Snowflake: "/snowflake/",
+    Kafka: "/kafka/",
+    Airflow: "/airflow/",
+    AWS: "/aws/",
+    "System Design": "/data-engineering/system-design/",
+    "Data Modeling": "/data-warehousing/",
+    "Data Engineering": "/data-engineering/",
+    "Project": "/projects/",
+    "Interview Prep": "/interview/",
+    "Foundations": "/data-engineering/",
+  };
+
+  return (plan as Record<string, unknown>[]).map((d) => {
     const day = Number(d["Day"]);
+    const track = String(d["Primary Track"] ?? "Foundations");
+    const topic = String(d["Primary Focus"] ?? d["Focus Theme"] ?? "");
+    const tracker = trackerForLabel[track];
+    const matched = tracker ? lookup.get(keyOf(tracker, topic)) : undefined;
+    const budgetRaw = (d["Activity Budget"] ?? {}) as Record<string, number>;
+    const budget = [
+      ["Learn", budgetRaw["Learning Min"]],
+      ["Practice", budgetRaw["Practice Min"]],
+      ["Review", budgetRaw["Review Min"]],
+      ["Project", budgetRaw["Project Min"]],
+    ]
+      .filter(([, minutes]) => Number(minutes) > 0)
+      .map(([label, minutes]) => `${label} ${minutes}m`)
+      .join(" · ");
+    const practice = String(d["Practice / Reinforcement"] ?? "");
+    const optional = d["Stretch / Optional"] ? String(d["Stretch / Optional"]) : undefined;
+    const tasks: PlanDay["tasks"] = [
+      {
+        skill: track,
+        tracker: matched ? tracker : undefined,
+        topic,
+        key: matched ? matched.key : `plan:day-${day}:primary`,
+        href: matched?.href ?? hubForLabel[track],
+      },
+    ];
+    if (practice) {
+      tasks.push({
+        skill: "Practice",
+        topic: practice,
+        key: `plan:day-${day}:practice`,
+      });
+    }
     return {
       day,
       week: Math.ceil(day / 7),
-      phase: String(d["Phase"]),
-      theme: String(d["Focus Theme"]),
+      phase: String(d["Phase"] ?? ""),
+      theme: String(d["Focus Theme"] ?? topic),
       hours: Number(d["Planned Hrs"]),
-      tasks: PLAN_SKILLS.map(([skill, tracker]) => {
-        const topic = String(d[skill]);
-        return {
-          skill,
-          tracker,
-          topic,
-          key: keyOf(tracker, topic),
-          href: lookup.get(keyOf(tracker, topic))?.href,
-        };
-      }),
-      mock: String(d["Mock / Apply"]),
-      weekly: (d["Weekly Milestone"] as string) ?? undefined,
-      monthly: (d["Monthly Milestone"] as string) ?? undefined,
-      outcome: (d["Expected Outcome"] as string) ?? undefined,
+      tasks,
+      mock: "Review notes and record one gap.",
+      weekly: d["Weekly Milestone"] ? String(d["Weekly Milestone"]) : undefined,
+      monthly: d["Monthly Milestone"] ? String(d["Monthly Milestone"]) : undefined,
+      outcome: d["Expected Outcome"] ? String(d["Expected Outcome"]) : undefined,
+      budget,
+      optional,
     };
   });
 }
