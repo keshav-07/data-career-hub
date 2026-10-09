@@ -8024,7 +8024,7 @@
     "category": "Binary Search",
     "pattern": "Rotated Arrays and Peaks",
     "difficulty": "Easy",
-    "slug": "rotation",
+    "slug": "find-rotation-count",
     "practice": {
      "platform": "GeeksforGeeks",
      "title": "Find Rotation Count",
