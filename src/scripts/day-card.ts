@@ -80,7 +80,7 @@ export function initDayCard() {
           ? "Catch up"
           : "Coming up";
     // Rebuild the tiles only when the day changes, so a ticked checkbox keeps keyboard focus.
-    const list = $("[data-dc-tasks]");
+    const list = $<HTMLElement>("[data-dc-tasks]");
     if (list.dataset.day !== String(shown)) {
       list.replaceChildren(...day.t.map(tile));
       list.dataset.day = String(shown);
