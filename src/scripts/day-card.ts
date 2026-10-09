@@ -17,9 +17,10 @@ function doneDays(): Record<string, number> {
 }
 
 export function initDayCard() {
-  const card = document.querySelector<HTMLElement>("[data-day-card]");
-  const data = card?.querySelector("[data-dc-data]")?.textContent;
-  if (!card || !data) return;
+  const found = document.querySelector<HTMLElement>("[data-day-card]");
+  const data = found?.querySelector("[data-dc-data]")?.textContent;
+  if (!found || !data) return;
+  const card: HTMLElement = found;
   const days = JSON.parse(data) as Day[];
   const total = days.length;
   const $ = <T extends Element>(sel: string) => card.querySelector<T>(sel)!;
