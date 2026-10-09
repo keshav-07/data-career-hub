@@ -59,6 +59,7 @@ export function initDayCard() {
         const li = document.createElement("li");
         const tile = document.createElement(href ? "a" : "span");
         tile.className = "day-task";
+        tile.title = `${skill}: ${topic}`;
         if (href) (tile as HTMLAnchorElement).href = href;
         const s = document.createElement("span");
         s.className = "day-task__skill";

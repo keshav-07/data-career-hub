@@ -101,12 +101,12 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
             {day1.tasks.map((t) => (
               <li>
                 {t.href ? (
-                  <a class="day-task" href={t.href}>
+                  <a class="day-task" href={t.href} title={`${t.skill}: ${t.topic}`}>
                     <span class="day-task__skill">{t.skill}</span>
                     <span class="day-task__topic">{t.topic}</span>
                   </a>
                 ) : (
-                  <span class="day-task">
+                  <span class="day-task" title={`${t.skill}: ${t.topic}`}>
                     <span class="day-task__skill">{t.skill}</span>
                     <span class="day-task__topic">{t.topic}</span>
                   </span>
