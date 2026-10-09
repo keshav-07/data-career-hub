@@ -204,6 +204,7 @@ const PLAN_SKILLS: [string, string][] = [
   ["Airflow", "airflow"],
   ["AWS", "aws"],
   ["System Design", "system-design"],
+  ["Data Modeling", "data-modeling"],
 ];
 
 /** The prerequisite-led 90-day plan, with a single primary focus and one reinforcement task per day. */
