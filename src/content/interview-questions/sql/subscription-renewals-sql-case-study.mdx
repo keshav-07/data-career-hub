@@ -1,0 +1,544 @@
+---
+seoTitle: "Subscription Renewals SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Subscription Renewals: SQL Case Study with 7 Approaches"
+description: "Compute subscription renewal rates in SQL with grace periods, early and late renewals, cohorts and year-over-year trends, then index, estimate and store the data well."
+technology: ["sql"]
+topic: ["case-study", "subscriptions", "cohorts"]
+difficulty: "Medium"
+questionType: ["coding", "optimization", "scenario"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Renewal rate for a period is the number of billing terms that ended in the period and were followed by a paid next term (paid no later than the grace period after the end date) divided by all terms that ended in the period. Early renewals count, a payment after the grace period is a win-back, not a renewal, and a plan change at renewal still counts as renewed. Group terms by the period their end date falls in, compare the same quarter across years, and break the rate down by signup cohort and renewal number."
+followUps:
+  - "Which terms are in the denominator: those that ended, or those that renewed?"
+  - "A customer pays three weeks late. Renewal or win-back?"
+  - "How do you show first-year versus second-year renewal rates by signup cohort?"
+  - "How do you compare this quarter's renewal rate with the same quarter last year?"
+  - "Why does the planner misestimate a filter on date_trunc(expires_on)?"
+  - "Why are renewal analytics usually run on a columnar warehouse rather than the billing database?"
+prerequisites: ["articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables"]
+related: ["interview-questions:sql/churn-rate-sql-case-study", "interview-questions:sql/inventory-turnover-sql-case-study", "articles:sql/window-functions", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/query-optimization-fundamentals"]
+previous: "interview-questions:sql/a-b-test-results-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine. Statistics examples use tables small enough that ANALYZE reads every row, so estimates are reproducible."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Statistics used by the planner", url: "https://www.postgresql.org/docs/16/planner-stats.html" }
+  - { label: "PostgreSQL 16 documentation: CREATE STATISTICS", url: "https://www.postgresql.org/docs/16/sql-createstatistics.html" }
+  - { label: "PostgreSQL 16 documentation: Indexes", url: "https://www.postgresql.org/docs/16/indexes.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+---
+
+For a subscription business, renewals are where revenue is kept or lost. The renewal rate sounds like a simple ratio, but billing data makes it subtle: customers renew early, pay late, change plan at renewal or come back weeks after lapsing. This case study defines the metric on annual billing terms, builds it with SQL, and works through seven techniques, from cohort tables to how storage format affects the cost of the analysis.
+
+## The business question
+
+**"Of the subscriptions that came up for renewal, what share renewed, and is it improving?"** Finance forecasts recurring revenue from it, customer success targets accounts due for renewal, and pricing teams watch it after price changes.
+
+The definition used here, for annual plans:
+
+- A **term** is one paid billing period `[period_start, period_end)`.
+- A term is **due** in the month or quarter of its `period_end`, once that date has passed the reporting date's grace window.
+- It **renewed** if the same subscription has a next term starting at `period_end` and paid **no later than 7 days after** `period_end` (the grace period). Paying early counts.
+- A next term paid **after** the grace period is a **win-back**: revenue returns, but the renewal failed.
+- A **plan change at renewal** (upgrade or downgrade) counts as renewed; it is reported separately.
+- **Renewal rate** = renewed terms ÷ due terms, by the period of `period_end`.
+- Reporting date: 30 April 2026, so terms ending by 23 April 2026 have a final outcome.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE subscriptions (
+  sub_id      INT PRIMARY KEY,
+  customer_id INT NOT NULL,
+  started_on  DATE NOT NULL
+);
+
+CREATE TABLE terms (
+  sub_id       INT NOT NULL REFERENCES subscriptions,
+  term_no      INT NOT NULL,
+  plan         TEXT NOT NULL,
+  period_start DATE NOT NULL,
+  period_end   DATE NOT NULL,        -- exclusive
+  paid_on      DATE NOT NULL,
+  PRIMARY KEY (sub_id, term_no)
+);
+
+INSERT INTO subscriptions VALUES
+  (1, 101, '2024-01-15'), (2, 102, '2024-02-10'), (3, 103, '2024-03-05'), (8, 108, '2024-01-05'),
+  (10, 110, '2024-03-20'),
+  (4, 104, '2025-01-20'), (5, 105, '2025-02-01'), (6, 106, '2025-02-15'), (7, 107, '2025-03-10'),
+  (9, 109, '2025-03-25');
+
+INSERT INTO terms VALUES
+  (1, 1, 'basic', '2024-01-15', '2025-01-15', '2024-01-15'),
+  (1, 2, 'basic', '2025-01-15', '2026-01-15', '2025-01-15'),
+  (1, 3, 'basic', '2026-01-15', '2027-01-15', '2026-01-20'),   -- paid 5 days late: within grace
+  (2, 1, 'basic', '2024-02-10', '2025-02-10', '2024-02-10'),   -- never renewed
+  (3, 1, 'pro',   '2024-03-05', '2025-03-05', '2024-03-05'),
+  (3, 2, 'pro',   '2025-03-05', '2026-03-05', '2025-03-20'),   -- paid 15 days late: a win-back
+  (8, 1, 'basic', '2024-01-05', '2025-01-05', '2024-01-05'),
+  (8, 2, 'basic', '2025-01-05', '2026-01-05', '2025-01-04'),
+  (10, 1, 'pro',  '2024-03-20', '2025-03-20', '2024-03-20'),
+  (10, 2, 'pro',  '2025-03-20', '2026-03-20', '2025-03-20'),
+  (10, 3, 'pro',  '2026-03-20', '2027-03-20', '2026-03-19'),
+  (4, 1, 'basic', '2025-01-20', '2026-01-20', '2025-01-20'),
+  (4, 2, 'basic', '2026-01-20', '2027-01-20', '2026-01-10'),   -- renewed early
+  (5, 1, 'basic', '2025-02-01', '2026-02-01', '2025-02-01'),
+  (6, 1, 'basic', '2025-02-15', '2026-02-15', '2025-02-15'),
+  (6, 2, 'pro',   '2026-02-15', '2027-02-15', '2026-02-15'),   -- upgraded at renewal
+  (7, 1, 'pro',   '2025-03-10', '2026-03-10', '2025-03-10'),
+  (9, 1, 'basic', '2025-03-25', '2026-03-25', '2025-03-25'),
+  (9, 2, 'basic', '2026-03-25', '2027-03-25', '2026-03-28');
+```
+
+## Core solution
+
+Pair each term with the subscription's next term, classify the outcome, and aggregate by the quarter in which the term ended.
+
+```sql
+CREATE VIEW term_outcomes AS
+SELECT t.sub_id, t.term_no, t.plan, t.period_end,
+       n.plan AS next_plan, n.paid_on AS next_paid_on,
+       CASE WHEN n.sub_id IS NULL                              THEN 'lapsed'
+            WHEN n.paid_on <= t.period_end + 7                 THEN 'renewed'
+            ELSE 'win-back' END                                AS outcome,
+       n.sub_id IS NOT NULL AND n.plan <> t.plan               AS plan_changed
+FROM terms t
+LEFT JOIN terms n
+       ON n.sub_id = t.sub_id
+      AND n.term_no = t.term_no + 1
+      AND n.period_start = t.period_end
+WHERE t.period_end + 7 <= DATE '2026-04-30';               -- outcome is final
+
+SELECT date_trunc('quarter', period_end)::date              AS quarter,
+       COUNT(*)                                             AS due,
+       COUNT(*) FILTER (WHERE outcome = 'renewed')          AS renewed,
+       COUNT(*) FILTER (WHERE outcome = 'win-back')         AS win_backs,
+       COUNT(*) FILTER (WHERE outcome = 'lapsed')           AS lapsed,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'renewed') / COUNT(*), 1) AS renewal_rate_pct
+FROM term_outcomes
+GROUP BY 1
+ORDER BY 1;
+```
+
+| quarter | due | renewed | win_backs | lapsed | renewal_rate_pct |
+|---|---|---|---|---|---|
+| 2025-01-01 | 5 | 3 | 1 | 1 | 60.0 |
+| 2026-01-01 | 9 | 5 | 0 | 4 | 55.6 |
+
+The denominator is every term that came due, whatever happened next; the numerator only those renewed within grace. Subscription 3's late payment appears as a win-back in Q1 2025 rather than inflating the renewal rate, and subscription 1's payment five days late in 2026 counts as renewed. Terms ending after 23 April 2026 are excluded because their grace period has not finished; including them as "not yet renewed" would push the latest quarter down artificially.
+
+## Approach: subqueries in FROM (derived tables)
+
+**Why it matters.** The renewal rate is a ratio of two counts over different row sets (due terms and renewed terms). Writing each as a derived table, a subquery in `FROM` with an alias, makes the two populations explicit and lets them be checked independently. It also expresses "rate by plan" against a list of all plans, so a plan with no renewals still appears.
+
+```sql
+SELECT d.plan, d.due, COALESCE(r.renewed, 0) AS renewed,
+       ROUND(100.0 * COALESCE(r.renewed, 0) / d.due, 1) AS renewal_rate_pct
+FROM (SELECT plan, COUNT(*) AS due
+      FROM term_outcomes
+      GROUP BY plan) AS d
+LEFT JOIN (SELECT plan, COUNT(*) AS renewed
+           FROM term_outcomes
+           WHERE outcome = 'renewed'
+           GROUP BY plan) AS r
+       ON r.plan = d.plan
+ORDER BY d.plan;
+```
+
+| plan | due | renewed | renewal_rate_pct |
+|---|---|---|---|
+| basic | 9 | 6 | 66.7 |
+| pro | 5 | 2 | 40.0 |
+
+A derived table can also prepare a per-row input that the outer query aggregates, for example days between payment and term end, to see how early or late renewals typically arrive:
+
+```sql
+SELECT timing, COUNT(*) AS renewals
+FROM (SELECT CASE WHEN next_paid_on < period_end THEN 'early'
+                  WHEN next_paid_on = period_end THEN 'on the day'
+                  ELSE 'in grace period' END AS timing
+      FROM term_outcomes
+      WHERE outcome = 'renewed') AS r
+GROUP BY timing
+ORDER BY timing;
+```
+
+| timing | renewals |
+|---|---|
+| early | 3 |
+| in grace period | 2 |
+| on the day | 3 |
+
+**Pitfalls.** Every derived table needs an alias in PostgreSQL. A derived table cannot see other tables in the same `FROM` unless it is marked `LATERAL`. When the same derived table is needed twice, a CTE avoids writing it twice; PostgreSQL then computes it once.
+
+## Approach: window function basics with OVER
+
+**Why it matters.** Several renewal questions keep rows and add context: "how many renewals has this subscription had so far?", "what share of all due terms does each quarter represent?", "what is the gap since the previous payment?". A window function computes over a set of related rows defined by `OVER (...)` without collapsing them.
+
+```sql
+SELECT sub_id, term_no, plan, period_end, outcome,
+       COUNT(*) FILTER (WHERE outcome = 'renewed') OVER (PARTITION BY sub_id ORDER BY term_no)       AS renewals_so_far,
+       ROW_NUMBER() OVER (PARTITION BY sub_id ORDER BY term_no)                                       AS due_number,
+       COUNT(*) OVER ()                                                                                AS all_due_terms,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'renewed') OVER () / COUNT(*) OVER (), 1)      AS overall_rate_pct
+FROM term_outcomes
+WHERE sub_id IN (1, 3, 10)
+ORDER BY sub_id, term_no;
+```
+
+| sub_id | term_no | plan | period_end | outcome | renewals_so_far | due_number | all_due_terms | overall_rate_pct |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | basic | 2025-01-15 | renewed | 1 | 1 | 6 | 66.7 |
+| 1 | 2 | basic | 2026-01-15 | renewed | 2 | 2 | 6 | 66.7 |
+| 3 | 1 | pro | 2025-03-05 | win-back | 0 | 1 | 6 | 66.7 |
+| 3 | 2 | pro | 2026-03-05 | lapsed | 0 | 2 | 6 | 66.7 |
+| 10 | 1 | pro | 2025-03-20 | renewed | 1 | 1 | 6 | 66.7 |
+| 10 | 2 | pro | 2026-03-20 | renewed | 2 | 2 | 6 | 66.7 |
+
+`OVER ()` covers the whole result, so the overall rate here is computed over the three subscriptions shown (window functions run after `WHERE`). `PARTITION BY sub_id ORDER BY term_no` restarts per subscription and accumulates in term order. The difference from `GROUP BY` is that every term row is still there, next to its subscription's running count.
+
+A common follow-up is the payment gap between consecutive terms, with `LAG`:
+
+```sql
+SELECT sub_id, term_no, paid_on,
+       LAG(paid_on) OVER (PARTITION BY sub_id ORDER BY term_no) AS previous_paid_on,
+       paid_on - LAG(paid_on) OVER (PARTITION BY sub_id ORDER BY term_no) AS days_between_payments
+FROM terms
+WHERE sub_id IN (1, 3, 4)
+ORDER BY sub_id, term_no;
+```
+
+| sub_id | term_no | paid_on | previous_paid_on | days_between_payments |
+|---|---|---|---|---|
+| 1 | 1 | 2024-01-15 | NULL | NULL |
+| 1 | 2 | 2025-01-15 | 2024-01-15 | 366 |
+| 1 | 3 | 2026-01-20 | 2025-01-15 | 370 |
+| 3 | 1 | 2024-03-05 | NULL | NULL |
+| 3 | 2 | 2025-03-20 | 2024-03-05 | 380 |
+| 4 | 1 | 2025-01-20 | NULL | NULL |
+| 4 | 2 | 2026-01-10 | 2025-01-20 | 355 |
+
+**Pitfalls.** Window functions cannot be used in `WHERE`; filter in an outer query. Without `ORDER BY` inside `OVER`, an aggregate covers the whole partition; with it, the default frame runs to the current row, which changes the meaning.
+
+## Approach: cohort analysis of renewal curves
+
+**Why it matters.** First renewals are usually the hardest: customers who renew once tend to stay. A cohort table groups subscriptions by signup year and shows, for each renewal number, what share of the cohort was still renewing. It separates "our renewal rate fell" into "new customers renew less" versus "established customers are leaving".
+
+```sql
+WITH cohort AS (
+  SELECT s.sub_id, EXTRACT(YEAR FROM s.started_on)::int AS cohort_year
+  FROM subscriptions s
+),
+by_renewal AS (
+  SELECT c.cohort_year, o.term_no AS renewal_number, o.outcome
+  FROM term_outcomes o JOIN cohort c USING (sub_id)
+)
+SELECT cohort_year,
+       (SELECT COUNT(*) FROM cohort c2 WHERE c2.cohort_year = b.cohort_year) AS cohort_size,
+       renewal_number,
+       COUNT(*)                                       AS due,
+       COUNT(*) FILTER (WHERE outcome = 'renewed')    AS renewed,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE outcome = 'renewed') / COUNT(*), 1) AS renewal_rate_pct
+FROM by_renewal b
+GROUP BY cohort_year, renewal_number
+ORDER BY cohort_year, renewal_number;
+```
+
+| cohort_year | cohort_size | renewal_number | due | renewed | renewal_rate_pct |
+|---|---|---|---|---|---|
+| 2024 | 5 | 1 | 5 | 3 | 60.0 |
+| 2024 | 5 | 2 | 4 | 2 | 50.0 |
+| 2025 | 5 | 1 | 5 | 3 | 60.0 |
+
+The 2024 cohort renewed 3 of 5 at the first renewal; at the second renewal, two of the four still due renewed (subscription 3 is due again because it was won back). The 2025 cohort's first renewal rate is the same 60%, so in this sample the drop in the latest quarter is not a new-customer problem. The usual presentation is a triangle: cohorts as rows, renewal numbers as columns, with later cells empty until enough time has passed:
+
+```sql
+WITH cohort AS (SELECT sub_id, EXTRACT(YEAR FROM started_on)::int AS cohort_year FROM subscriptions)
+SELECT c.cohort_year,
+       COUNT(DISTINCT c.sub_id) AS subscriptions,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE o.term_no = 1 AND o.outcome = 'renewed')
+             / NULLIF(COUNT(*) FILTER (WHERE o.term_no = 1), 0), 1) AS first_renewal_pct,
+       ROUND(100.0 * COUNT(*) FILTER (WHERE o.term_no = 2 AND o.outcome = 'renewed')
+             / NULLIF(COUNT(*) FILTER (WHERE o.term_no = 2), 0), 1) AS second_renewal_pct
+FROM cohort c
+LEFT JOIN term_outcomes o USING (sub_id)
+GROUP BY c.cohort_year
+ORDER BY c.cohort_year;
+```
+
+| cohort_year | subscriptions | first_renewal_pct | second_renewal_pct |
+|---|---|---|---|
+| 2024 | 5 | 60.0 | 50.0 |
+| 2025 | 5 | 60.0 | NULL |
+
+The 2025 cohort's second-renewal cell is `NULL`: none of its terms have reached a second renewal yet. That is "not yet observable", not 0%.
+
+**Pitfalls.** Define the cohort by a fixed event (first subscription start) and keep it fixed. Be explicit about whether win-backs re-enter the denominator at the next renewal (here they do, because a won-back subscription has a term that comes due again). Small cohorts give noisy percentages; show counts beside rates.
+
+## Approach: year-over-year growth in renewal rate
+
+**Why it matters.** Renewals are seasonal (many annual plans start in January), so quarters are compared with the same quarter last year. For a rate, report the change in percentage points, and the change in the number of renewals, because a rate can fall while renewals grow.
+
+```sql
+WITH quarterly AS (
+  SELECT EXTRACT(YEAR FROM period_end)::int     AS yr,
+         EXTRACT(QUARTER FROM period_end)::int  AS qtr,
+         COUNT(*)                               AS due,
+         COUNT(*) FILTER (WHERE outcome = 'renewed') AS renewed
+  FROM term_outcomes
+  GROUP BY 1, 2
+)
+SELECT cur.yr, cur.qtr,
+       cur.due, cur.renewed,
+       ROUND(100.0 * cur.renewed / cur.due, 1)                         AS rate_pct,
+       ROUND(100.0 * prev.renewed / prev.due, 1)                       AS rate_last_year_pct,
+       ROUND(100.0 * cur.renewed / cur.due - 100.0 * prev.renewed / prev.due, 1) AS change_pts,
+       ROUND(100.0 * (cur.renewed - prev.renewed) / prev.renewed, 1)  AS renewals_yoy_pct
+FROM quarterly cur
+JOIN quarterly prev ON prev.qtr = cur.qtr AND prev.yr = cur.yr - 1
+ORDER BY cur.yr, cur.qtr;
+```
+
+| yr | qtr | due | renewed | rate_pct | rate_last_year_pct | change_pts | renewals_yoy_pct |
+|---|---|---|---|---|---|---|---|
+| 2026 | 1 | 9 | 5 | 55.6 | 60.0 | -4.4 | 66.7 |
+
+The rate fell by 4.4 points while the number of renewals grew by two thirds, because nearly twice as many terms came due. Both statements are true; leading with only one of them misleads. The self-join on `yr - 1` aligns quarters even if some are missing; `LAG(x, 4)` over a contiguous quarterly series is the window alternative.
+
+**Pitfalls.** Use the same definition (grace period, win-back treatment) for both years, which matters after a policy change. Small denominators make percentage changes unstable. If the latest quarter is incomplete, compare like-for-like dates.
+
+## Approach: index selectivity and cardinality for renewal queues
+
+**Why it matters.** Customer success runs "subscriptions ending in the next 30 days that have not been paid" all day. Whether an index helps depends on how many rows a predicate matches (selectivity), which depends on each column's distinct values (cardinality) and their distribution.
+
+A synthetic billing table of 30,000 subscriptions, small enough that `ANALYZE` reads every row:
+
+```sql
+CREATE TABLE subs_big AS
+SELECT g AS sub_id,
+       CASE WHEN g % 100 = 0 THEN 'past_due'
+            WHEN g % 10 = 0  THEN 'cancelled'
+            ELSE 'active' END                         AS status,
+       (ARRAY['basic','pro','team'])[g % 3 + 1]       AS plan,
+       DATE '2026-01-01' + (g % 730)                  AS expires_on,
+       g % 5000 + 1                                   AS account_manager_id
+FROM generate_series(1, 30000) AS g;
+CREATE INDEX subs_big_status  ON subs_big (status);
+CREATE INDEX subs_big_expires ON subs_big (expires_on);
+CREATE INDEX subs_big_manager ON subs_big (account_manager_id);
+VACUUM ANALYZE subs_big;
+
+SELECT attname, n_distinct,
+       array_to_string((most_common_vals::text::text[])[1:3], ',')  AS top_values,
+       array_to_string((most_common_freqs)[1:3]::text[], ',')       AS top_freqs
+FROM pg_stats
+WHERE tablename = 'subs_big' AND attname IN ('status', 'plan', 'expires_on', 'account_manager_id')
+ORDER BY attname;
+```
+
+| attname | n_distinct | top_values | top_freqs |
+|---|---|---|---|
+| account_manager_id | -0.16666667 | 1,2,3 | 0.0002,0.0002,0.0002 |
+| expires_on | 730 | 2026-01-02,2026-01-03,2026-01-04 | 0.0014,0.0014,0.0014 |
+| plan | 3 | basic,pro,team | 0.33333334,0.33333334,0.33333334 |
+| status | 3 | active,cancelled,past_due | 0.9,0.09,0.01 |
+
+`status` has three values but very uneven frequencies: `past_due` is 1% of rows. Low cardinality alone does not make an index useless; what matters is the selectivity of the value you filter on:
+
+```sql
+EXPLAIN SELECT COUNT(*) FROM subs_big WHERE status = 'past_due';
+```
+
+```text
+Aggregate  (cost=10.29..10.30 rows=1 width=8)
+  ->  Index Only Scan using subs_big_status on subs_big  (cost=0.29..9.54 rows=300 width=0)
+        Index Cond: (status = 'past_due'::text)
+```
+
+```sql
+EXPLAIN SELECT COUNT(*) FROM subs_big WHERE status = 'active';
+```
+
+```text
+Aggregate  (cost=646.50..646.51 rows=1 width=8)
+  ->  Seq Scan on subs_big  (cost=0.00..579.00 rows=27000 width=0)
+        Filter: (status = 'active'::text)
+```
+
+The 30-day renewal window on `expires_on` (730 distinct dates) matches about 4% of rows and uses the index; one account manager's book (5,000 distinct ids) matches 6 rows:
+
+```sql
+EXPLAIN SELECT COUNT(*) FROM subs_big
+WHERE expires_on >= DATE '2026-05-01' AND expires_on < DATE '2026-05-31';
+```
+
+```text
+Aggregate  (cost=35.69..35.70 rows=1 width=8)
+  ->  Index Only Scan using subs_big_expires on subs_big  (cost=0.29..32.65 rows=1218 width=0)
+        Index Cond: ((expires_on >= '2026-05-01'::date) AND (expires_on < '2026-05-31'::date))
+```
+
+```sql
+EXPLAIN SELECT sub_id, expires_on FROM subs_big WHERE account_manager_id = 42;
+```
+
+```text
+Bitmap Heap Scan on subs_big  (cost=4.33..25.32 rows=6 width=8)
+  Recheck Cond: (account_manager_id = 42)
+  ->  Bitmap Index Scan on subs_big_manager  (cost=0.00..4.33 rows=6 width=0)
+        Index Cond: (account_manager_id = 42)
+```
+
+**Design lessons.** Index the selective columns the queue filters on. For a hot, rare status, a **partial index** such as `CREATE INDEX ... ON subs_big (expires_on) WHERE status = 'past_due'` holds only the 1% of rows that matter and also orders them by expiry. For a composite index, put the equality column (`account_manager_id`) before the range column (`expires_on`). An index on a column where every common value matches a large share of rows (such as `plan` here, three evenly spread values) is rarely used for filtering.
+
+## Approach: cardinality estimation with expressions
+
+**Why it matters.** Analysts often write `WHERE date_trunc('month', expires_on) = '2026-05-01'`. PostgreSQL has statistics on `expires_on`, but none on the expression `date_trunc('month', expires_on)`, so it falls back to a default selectivity guess. The estimate can be far off, and in a larger query a wrong estimate leads to a wrong join order or join method.
+
+```sql
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM subs_big
+WHERE date_trunc('month', expires_on) = TIMESTAMP '2026-05-01';
+```
+
+```text
+Aggregate  (cost=729.38..729.38 rows=1 width=8) (actual rows=1 loops=1)
+  ->  Seq Scan on subs_big  (cost=0.00..729.00 rows=150 width=0) (actual rows=1271 loops=1)
+        Filter: (date_trunc('month'::text, (expires_on)::timestamp with time zone) = '2026-05-01 00:00:00'::timestamp without time zone)
+        Rows Removed by Filter: 28729
+```
+
+Compare `rows=` in the estimate with `actual rows`. Two fixes, in order of preference:
+
+1. **Rewrite as a range** on the raw column, which uses the real statistics (and the index), as in the previous section.
+2. **Give the planner statistics on the expression** when the expression must stay (a view or a BI tool generates it). PostgreSQL 14 and later accept expressions in `CREATE STATISTICS`; an expression index also gets its own statistics when analysed.
+
+```sql
+CREATE STATISTICS subs_big_expiry_month ON (date_trunc('month', expires_on)) FROM subs_big;
+ANALYZE subs_big;
+
+EXPLAIN (ANALYZE, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM subs_big
+WHERE date_trunc('month', expires_on) = TIMESTAMP '2026-05-01';
+```
+
+```text
+Aggregate  (cost=732.18..732.19 rows=1 width=8) (actual rows=1 loops=1)
+  ->  Seq Scan on subs_big  (cost=0.00..729.00 rows=1271 width=0) (actual rows=1271 loops=1)
+        Filter: (date_trunc('month'::text, (expires_on)::timestamp with time zone) = '2026-05-01 00:00:00'::timestamp without time zone)
+        Rows Removed by Filter: 28729
+```
+
+The estimate now matches the actual count, because `ANALYZE` collected the distribution of the expression. The plan is still a sequential scan (there is no index on the expression), but the row estimate feeding any join above it is right.
+
+**Where estimates go wrong, and what to check.**
+
+| Situation | Why | Check or fix |
+|---|---|---|
+| Function or cast on a column | No statistics on the expression | Rewrite as a range; expression statistics or index |
+| Correlated columns (plan and price) | Selectivities multiplied as if independent | `CREATE STATISTICS (dependencies, mcv)` |
+| Fresh data not yet analysed | Statistics describe yesterday's table | `ANALYZE` after large loads |
+| Joins on skewed keys | Average fan-out assumed | Most-common values; higher statistics target |
+| Parameters in prepared statements | Generic plan uses average selectivity | Check plans with real parameter values |
+
+## Approach: columnar vs row storage for renewal analytics
+
+**Why it matters.** The billing database stores each subscription as a row with many columns, which suits the application: read or update one subscription at a time. Renewal analytics does the opposite: read two or three columns of every row. In a **row store** (PostgreSQL's heap, MySQL InnoDB), reading one column still reads whole pages of full rows. A **column store** (Parquet files, Snowflake, BigQuery, Redshift, DuckDB, ClickHouse) keeps each column separately, compressed, so a query reads only the columns it names.
+
+PostgreSQL can show the cost of row storage directly. Build a wide subscriptions table with 15 descriptive text columns, then read one numeric column:
+
+```sql
+CREATE TABLE subs_wide AS
+SELECT g AS sub_id, (g % 400) + 9.99 AS price, DATE '2026-01-01' + (g % 365) AS expires_on,
+       repeat('address line ' || g, 2) AS c1,  repeat('notes ' || g, 3) AS c2,  md5(g::text) AS c3,
+       md5((g * 3)::text) AS c4,  md5((g * 5)::text) AS c5,  md5((g * 7)::text) AS c6,
+       md5((g * 11)::text) AS c7, md5((g * 13)::text) AS c8, md5((g * 17)::text) AS c9,
+       md5((g * 19)::text) AS c10, md5((g * 23)::text) AS c11, md5((g * 29)::text) AS c12,
+       md5((g * 31)::text) AS c13, md5((g * 37)::text) AS c14, md5((g * 41)::text) AS c15
+FROM generate_series(1, 100000) AS g;
+
+CREATE TABLE subs_price_column AS SELECT sub_id, price, expires_on FROM subs_wide;   -- a "column file"
+VACUUM ANALYZE subs_wide;
+VACUUM ANALYZE subs_price_column;
+
+SELECT pg_size_pretty(pg_relation_size('subs_wide'))         AS wide_table,
+       pg_size_pretty(pg_relation_size('subs_price_column')) AS narrow_table;
+```
+
+| wide_table | narrow_table |
+|---|---|
+| 56 MB | 4608 kB |
+
+The same aggregate reads every page of the wide table, but far fewer pages of the narrow one:
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT date_trunc('month', expires_on) AS month, SUM(price) FROM subs_wide GROUP BY 1;
+```
+
+```text
+HashAggregate (actual rows=12 loops=1)
+  Group Key: date_trunc('month'::text, (expires_on)::timestamp with time zone)
+  Batches: 1  Memory Usage: 37kB
+  Buffers: shared hit=2112 read=4992
+  ->  Seq Scan on subs_wide (actual rows=100000 loops=1)
+        Buffers: shared hit=2112 read=4992
+Planning:
+  Buffers: shared hit=44
+```
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT date_trunc('month', expires_on) AS month, SUM(price) FROM subs_price_column GROUP BY 1;
+```
+
+```text
+HashAggregate (actual rows=12 loops=1)
+  Group Key: date_trunc('month'::text, (expires_on)::timestamp with time zone)
+  Batches: 1  Memory Usage: 37kB
+  Buffers: shared hit=576
+  ->  Seq Scan on subs_price_column (actual rows=100000 loops=1)
+        Buffers: shared hit=576
+Planning:
+  Buffers: shared hit=44
+```
+
+Compare the `Buffers` lines (each buffer is an 8 kB page). The wide table needs 7,104 pages for a query that uses two of its columns; the narrow copy needs 576, about a twelfth. A real column store goes further than this narrow table: each column is compressed on its own (sorted dates and repeated plan names compress very well), and per-block minimum and maximum values let the engine skip blocks that cannot match a filter.
+
+| | Row store (OLTP database) | Column store (warehouse, Parquet) |
+|---|---|---|
+| Best at | Reading and updating single records | Scanning a few columns of many rows |
+| Reads for `SUM(price)` | Every page of every column | Only the `price` (and filter) columns |
+| Compression | Modest | High, per column |
+| Single-row updates | Cheap, in place | Expensive (files are rewritten or deltas merged) |
+| Renewal analytics | Slows the billing database | The natural home |
+
+**In practice.** Keep the billing system on a row store, replicate or export subscriptions and terms to a columnar warehouse or lakehouse, and run renewal reporting there. In a column store, `SELECT *` is the expensive habit to drop: you pay for every column you read.
+
+## Interview tips
+
+**How it is asked.** "Calculate the renewal rate for annual subscriptions last quarter", "renewal rate by plan", "first-year versus later renewal rates", "compare with last year", or "a customer paid late; what counts?".
+
+**What a strong answer includes.**
+
+1. A precise denominator (terms due in the period) and numerator (renewed within grace).
+2. Treatment of early, late, win-back and plan-change cases.
+3. Exclusion of terms whose outcome is not yet known.
+4. Cohort and renewal-number breakdowns, with "not yet observable" kept distinct from zero.
+5. Performance and architecture sense: selective indexes for operational queues, analytics on columnar storage.
+
+**Mistakes candidates make.**
+
+- Using all active subscriptions as the denominator instead of those that came due.
+- Counting late payments as renewals, or counting terms whose grace period has not ended as lapsed.
+- Treating an upgrade at renewal as churn plus a new subscription.
+- Comparing a quarter with the previous quarter for a seasonal business.
+- Reporting only the rate, or only the count, of renewals.
+- Assuming an index on a low-cardinality column never helps, or always helps.
