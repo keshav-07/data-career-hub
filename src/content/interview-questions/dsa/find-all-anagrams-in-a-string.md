@@ -16,6 +16,8 @@ followUps: ["How does a matches counter avoid comparing all 26 counts at every s
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window", "interview-questions:dsa/permutation-in-string"]
 practice: {"platform": "LeetCode", "number": 438, "title": "Find All Anagrams in a String", "url": "https://leetcode.com/problems/find-all-anagrams-in-a-string/"}
+previous: "interview-questions:dsa/max-consecutive-ones-iii"
+next: "interview-questions:dsa/minimum-window-substring"
 ---
 
 ## Problem

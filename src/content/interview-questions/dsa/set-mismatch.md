@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing"]
 practice: {"platform": "LeetCode", "number": 645, "title": "Set Mismatch", "url": "https://leetcode.com/problems/set-mismatch/"}
 previous: "interview-questions:dsa/find-all-numbers-disappeared-in-an-array"
-next: "interview-questions:dsa/contains-duplicate"
+next: "interview-questions:dsa/find-all-duplicates-in-an-array"
 ---
 
 ## Problem

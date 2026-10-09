@@ -16,6 +16,8 @@ followUps: ["How would you rotate left by k instead of right?", "How would you r
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/remove-nth-node-from-end-of-list"]
 practice: {"platform": "LeetCode", "number": 61, "title": "Rotate List", "url": "https://leetcode.com/problems/rotate-list/"}
+previous: "interview-questions:dsa/swap-nodes-in-pairs"
+next: "interview-questions:dsa/reverse-nodes-in-k-group"
 ---
 
 ## Problem

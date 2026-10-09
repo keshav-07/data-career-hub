@@ -7021,14 +7021,8 @@
     "category": "Arrays",
     "pattern": "Prefix Sum",
     "difficulty": "Hard",
-    "slug": "shortest-subarray-with-sum-at-least-k",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Shortest Subarray with Sum at Least K",
-     "url": "https://leetcode.com/problems/shortest-subarray-with-sum-at-least-k/",
-     "number": 862
-    },
-    "lesson": "articles:dsa/arrays-and-hashing"
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/shortest-subarray-with-sum-at-least-k"
    },
    {
     "topic": "Maximum Subarray",
@@ -7129,14 +7123,8 @@
     "category": "Arrays",
     "pattern": "Cyclic Sort",
     "difficulty": "Medium",
-    "slug": "find-all-duplicates-in-an-array",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Find All Duplicates in an Array",
-     "url": "https://leetcode.com/problems/find-all-duplicates-in-an-array/",
-     "number": 442
-    },
-    "lesson": "articles:dsa/arrays-and-hashing"
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/find-all-duplicates-in-an-array"
    },
    {
     "topic": "First Missing Positive",
@@ -7324,14 +7312,8 @@
     "category": "Bit Manipulation",
     "pattern": "Bitwise XOR and Bits",
     "difficulty": "Medium",
-    "slug": "single-number-iii",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Single Number III",
-     "url": "https://leetcode.com/problems/single-number-iii/",
-     "number": 260
-    },
-    "lesson": "articles:dsa/arrays-and-hashing"
+    "lesson": "articles:dsa/arrays-and-hashing",
+    "question": "interview-questions:dsa/single-number-iii"
    },
    {
     "topic": "Valid Palindrome II",
@@ -7603,14 +7585,8 @@
     "category": "Sliding Window",
     "pattern": "Sliding Window",
     "difficulty": "Medium",
-    "slug": "find-all-anagrams-in-a-string",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Find All Anagrams in a String",
-     "url": "https://leetcode.com/problems/find-all-anagrams-in-a-string/",
-     "number": 438
-    },
-    "lesson": "articles:dsa/sliding-window"
+    "lesson": "articles:dsa/sliding-window",
+    "question": "interview-questions:dsa/find-all-anagrams-in-a-string"
    },
    {
     "topic": "Minimum Window Substring",
@@ -7635,14 +7611,8 @@
     "category": "Sliding Window",
     "pattern": "Sliding Window",
     "difficulty": "Hard",
-    "slug": "substring-with-concatenation-of-all-words",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Substring with Concatenation of All Words",
-     "url": "https://leetcode.com/problems/substring-with-concatenation-of-all-words/",
-     "number": 30
-    },
-    "lesson": "articles:dsa/sliding-window"
+    "lesson": "articles:dsa/sliding-window",
+    "question": "interview-questions:dsa/substring-with-concatenation-of-all-words"
    },
    {
     "topic": "Valid Parentheses",
@@ -8065,28 +8035,16 @@
     "category": "Linked List",
     "pattern": "In-place Reversal",
     "difficulty": "Medium",
-    "slug": "swap-nodes-in-pairs",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Swap Nodes in Pairs",
-     "url": "https://leetcode.com/problems/swap-nodes-in-pairs/",
-     "number": 24
-    },
-    "lesson": "articles:dsa/linked-lists"
+    "lesson": "articles:dsa/linked-lists",
+    "question": "interview-questions:dsa/swap-nodes-in-pairs"
    },
    {
     "topic": "Rotate List",
     "category": "Linked List",
     "pattern": "In-place Reversal",
     "difficulty": "Medium",
-    "slug": "rotate-list",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Rotate List",
-     "url": "https://leetcode.com/problems/rotate-list/",
-     "number": 61
-    },
-    "lesson": "articles:dsa/linked-lists"
+    "lesson": "articles:dsa/linked-lists",
+    "question": "interview-questions:dsa/rotate-list"
    },
    {
     "topic": "Reverse Nodes in k-Group",
@@ -8402,14 +8360,8 @@
     "category": "Heap",
     "pattern": "Top K Elements",
     "difficulty": "Hard",
-    "slug": "maximum-frequency-stack",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Maximum Frequency Stack",
-     "url": "https://leetcode.com/problems/maximum-frequency-stack/",
-     "number": 895
-    },
-    "lesson": "articles:dsa/heaps-priority-queues"
+    "lesson": "articles:dsa/heaps-priority-queues",
+    "question": "interview-questions:dsa/maximum-frequency-stack"
    },
    {
     "topic": "Maximum Sum Combination",
@@ -8631,14 +8583,8 @@
     "category": "Greedy",
     "pattern": "Intervals",
     "difficulty": "Medium",
-    "slug": "my-calendar-i",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "My Calendar I",
-     "url": "https://leetcode.com/problems/my-calendar-i/",
-     "number": 729
-    },
-    "lesson": "articles:dsa/greedy-and-intervals"
+    "lesson": "articles:dsa/greedy-and-intervals",
+    "question": "interview-questions:dsa/my-calendar-i"
    },
    {
     "topic": "Generate Parentheses",
@@ -8743,14 +8689,8 @@
     "category": "Backtracking",
     "pattern": "Combinations and Search",
     "difficulty": "Hard",
-    "slug": "sudoku-solver",
-    "practice": {
-     "platform": "LeetCode",
-     "title": "Sudoku Solver",
-     "url": "https://leetcode.com/problems/sudoku-solver/",
-     "number": 37
-    },
-    "lesson": "articles:dsa/backtracking"
+    "lesson": "articles:dsa/backtracking",
+    "question": "interview-questions:dsa/sudoku-solver"
    },
    {
     "topic": "Find if Path Exists in Graph",
@@ -9115,13 +9055,8 @@
     "category": "Dynamic Programming",
     "pattern": "Knapsack",
     "difficulty": "Medium",
-    "slug": "perfect-sum-problem",
-    "practice": {
-     "platform": "GeeksforGeeks",
-     "title": "Count Subsets with Sum",
-     "url": "https://www.geeksforgeeks.org/problems/perfect-sum-problem5633/1"
-    },
-    "lesson": "articles:dsa/dynamic-programming"
+    "lesson": "articles:dsa/dynamic-programming",
+    "question": "interview-questions:dsa/perfect-sum-problem"
    },
    {
     "topic": "Partition Into 2 Subsets with Min Sum Diff",

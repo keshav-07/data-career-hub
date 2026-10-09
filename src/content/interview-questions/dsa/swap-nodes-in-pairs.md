@@ -16,6 +16,8 @@ followUps: ["How would you generalise this to reversing every group of k nodes?"
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/reverse-nodes-in-k-group", "interview-questions:dsa/reverse-linked-list-ii"]
 practice: {"platform": "LeetCode", "number": 24, "title": "Swap Nodes in Pairs", "url": "https://leetcode.com/problems/swap-nodes-in-pairs/"}
+previous: "interview-questions:dsa/reverse-linked-list-ii"
+next: "interview-questions:dsa/rotate-list"
 ---
 
 ## Problem

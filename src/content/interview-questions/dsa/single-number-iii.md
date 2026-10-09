@@ -16,6 +16,8 @@ followUps: ["Why is x & -x the lowest set bit?", "How would you find the single 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/single-number"]
 practice: {"platform": "LeetCode", "number": 260, "title": "Single Number III", "url": "https://leetcode.com/problems/single-number-iii/"}
+previous: "interview-questions:dsa/sum-of-two-integers"
+next: "interview-questions:dsa/valid-palindrome-ii"
 ---
 
 ## Problem

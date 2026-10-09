@@ -16,6 +16,8 @@ followUps: ["How would you allow double bookings but reject triple bookings (My 
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/attend-all-meetings", "interview-questions:dsa/insert-interval", "articles:dsa/greedy-and-intervals"]
 practice: {"platform": "LeetCode", "number": 729, "title": "My Calendar I", "url": "https://leetcode.com/problems/my-calendar-i/"}
+previous: "interview-questions:dsa/attend-all-meetings-ii"
+next: "interview-questions:dsa/generate-parentheses"
 ---
 
 ## Problem

@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/task-scheduler", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 767, "title": "Reorganize String", "url": "https://leetcode.com/problems/reorganize-string/"}
 previous: "interview-questions:dsa/find-k-closest-elements"
-next: "interview-questions:dsa/maximum-sum-combination"
+next: "interview-questions:dsa/maximum-frequency-stack"
 ---
 
 ## Problem

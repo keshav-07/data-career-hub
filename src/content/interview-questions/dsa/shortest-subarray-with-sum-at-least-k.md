@@ -16,6 +16,8 @@ followUps: ["Why is it safe to pop the front after recording an answer?", "How w
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/sliding-window-maximum"]
 practice: {"platform": "LeetCode", "number": 862, "title": "Shortest Subarray with Sum at Least K", "url": "https://leetcode.com/problems/shortest-subarray-with-sum-at-least-k/"}
+previous: "interview-questions:dsa/contiguous-array"
+next: "interview-questions:dsa/maximum-subarray"
 ---
 
 ## Problem

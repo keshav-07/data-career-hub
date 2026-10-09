@@ -16,6 +16,8 @@ followUps: ["Why does processing each of the w offsets separately cover every po
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window", "interview-questions:dsa/find-all-anagrams-in-a-string"]
 practice: {"platform": "LeetCode", "number": 30, "title": "Substring with Concatenation of All Words", "url": "https://leetcode.com/problems/substring-with-concatenation-of-all-words/"}
+previous: "interview-questions:dsa/sliding-window-maximum"
+next: "interview-questions:dsa/valid-parentheses"
 ---
 
 ## Problem

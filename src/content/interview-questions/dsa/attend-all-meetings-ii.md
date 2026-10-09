@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/attend-all-meetings", "interview-questions:dsa/merge-intervals", "articles:dsa/greedy-and-intervals"]
 practice: {"platform": "GeeksforGeeks", "title": "Meeting Rooms II", "url": "https://www.geeksforgeeks.org/problems/attend-all-meetings-ii/1"}
 previous: "interview-questions:dsa/interval-list-intersections"
-next: "interview-questions:dsa/generate-parentheses"
+next: "interview-questions:dsa/my-calendar-i"
 ---
 
 ## Problem

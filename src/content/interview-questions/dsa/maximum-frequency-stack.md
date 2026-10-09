@@ -16,6 +16,8 @@ followUps: ["Why does a value appear in several frequency stacks, and why is tha
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["interview-questions:dsa/min-stack", "interview-questions:dsa/lru-cache", "articles:dsa/heaps-priority-queues"]
 practice: {"platform": "LeetCode", "number": 895, "title": "Maximum Frequency Stack", "url": "https://leetcode.com/problems/maximum-frequency-stack/"}
+previous: "interview-questions:dsa/reorganize-string"
+next: "interview-questions:dsa/maximum-sum-combination"
 ---
 
 ## Problem

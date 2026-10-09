@@ -16,6 +16,8 @@ followUps: ["Why does choosing the cell with the fewest candidates help so much?
 versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/backtracking"]
 practice: {"platform": "LeetCode", "number": 37, "title": "Sudoku Solver", "url": "https://leetcode.com/problems/sudoku-solver/"}
+previous: "interview-questions:dsa/n-queens"
+next: "interview-questions:dsa/find-if-path-exists-in-graph"
 ---
 
 ## Problem

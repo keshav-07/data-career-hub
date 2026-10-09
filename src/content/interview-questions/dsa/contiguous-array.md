@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/arrays-and-hashing", "interview-questions:dsa/subarray-sum-equals-k"]
 practice: {"platform": "LeetCode", "number": 525, "title": "Contiguous Array", "url": "https://leetcode.com/problems/contiguous-array/"}
 previous: "interview-questions:dsa/subarray-sums-divisible-by-k"
-next: "interview-questions:dsa/maximum-subarray"
+next: "interview-questions:dsa/shortest-subarray-with-sum-at-least-k"
 ---
 
 ## Problem

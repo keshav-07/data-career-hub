@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/linked-lists", "interview-questions:dsa/reverse-linked-list", "interview-questions:dsa/reverse-nodes-in-k-group"]
 practice: {"platform": "LeetCode", "number": 92, "title": "Reverse Linked List II", "url": "https://leetcode.com/problems/reverse-linked-list-ii/"}
 previous: "interview-questions:dsa/reverse-linked-list"
-next: "interview-questions:dsa/reverse-nodes-in-k-group"
+next: "interview-questions:dsa/swap-nodes-in-pairs"
 ---
 
 ## Problem

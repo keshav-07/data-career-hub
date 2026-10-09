@@ -17,7 +17,7 @@ versionContext: "Python 3 solutions verified with assert-based tests"
 related: ["articles:dsa/sliding-window"]
 practice: {"platform": "LeetCode", "number": 1004, "title": "Max Consecutive Ones III", "url": "https://leetcode.com/problems/max-consecutive-ones-iii/"}
 previous: "interview-questions:dsa/fruit-into-baskets"
-next: "interview-questions:dsa/minimum-window-substring"
+next: "interview-questions:dsa/find-all-anagrams-in-a-string"
 ---
 
 ## Problem
