@@ -9,6 +9,8 @@ interface Props {
 const { questions, topics, caption } = Astro.props;
 const types = [...new Set(questions.flatMap((q) => q.entry.data.questionType))].sort();
 const topicIds = topics ? [...new Set(questions.map((q) => q.id.split("/")[0]))] : [];
+// External practice column, only when at least one question in the list has a practice link.
+const hasPractice = questions.some((q) => q.entry.data.practice);
 const levels = ["Easy", "Medium", "Hard"].filter((l) =>
   questions.some((q) => q.entry.data.difficulty === l),
 );
@@ -84,10 +86,17 @@ const levels = ["Easy", "Medium", "Hard"].filter((l) =>
               Topic
             </th>
           )}
-          <th scope="col">Difficulty</th>
+          <th scope="col" class="q-diff">
+            Difficulty
+          </th>
           <th scope="col" class="q-type">
             Type
           </th>
+          {hasPractice && (
+            <th scope="col" class="q-practice">
+              Practise
+            </th>
+          )}
           <th scope="col" class="q-done">
             Done
           </th>
@@ -109,14 +118,41 @@ const levels = ["Easy", "Medium", "Hard"].filter((l) =>
                 <a href={q.url} data-progress-url={q.url}>
                   {q.title}
                 </a>
+                <span
+                  class={`diff diff--${q.entry.data.difficulty.toLowerCase()} q-diff-inline`}
+                  aria-hidden="true"
+                >
+                  {q.entry.data.difficulty}
+                </span>
               </td>
               {topics && <td class="q-topic">{topics[topic] ?? topic}</td>}
-              <td>
+              <td class="q-diff">
                 <span class={`diff diff--${q.entry.data.difficulty.toLowerCase()}`}>
                   {q.entry.data.difficulty}
                 </span>
               </td>
               <td class="q-type">{q.entry.data.questionType.join(", ")}</td>
+              {hasPractice && (
+                <td class="q-practice">
+                  {q.entry.data.practice ? (
+                    <a
+                      class="practice-row__ext"
+                      href={q.entry.data.practice.url}
+                      target="_blank"
+                      rel="noopener external"
+                      title={`${q.entry.data.practice.platform}${q.entry.data.practice.number ? ` ${q.entry.data.practice.number}` : ""}: ${q.entry.data.practice.title}`}
+                    >
+                      {q.entry.data.practice.platform}
+                      <span aria-hidden="true"> ↗</span>
+                      <span class="visually-hidden"> (opens in a new tab)</span>
+                    </a>
+                  ) : (
+                    <span class="muted" aria-label="No external practice link">
+                      —
+                    </span>
+                  )}
+                </td>
+              )}
               <td class="q-done">
                 <input
                   type="checkbox"

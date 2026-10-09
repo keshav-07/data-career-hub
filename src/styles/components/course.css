@@ -1214,6 +1214,17 @@
     width: 4.5rem;
     text-align: center;
   }
+  /* Difficulty moves under the title on small screens so the practice link and tick stay in view. */
+  .q-table .q-diff-inline {
+    display: none;
+  }
+  .q-table .q-practice {
+    position: relative; /* keeps the visually hidden "(opens in a new tab)" inside the scroll region */
+    width: 9.5rem;
+  }
+  .q-table .q-practice .practice-row__ext {
+    display: inline-block;
+  }
   .q-table input[type="checkbox"] {
     width: 22px;
     height: 22px;
@@ -1243,6 +1254,36 @@
     .q-table .q-topic,
     .q-table .q-num {
       display: none;
+    }
+    .q-table .q-diff {
+      display: none;
+    }
+    .q-table .q-diff-inline {
+      display: inline-flex;
+      margin-top: 6px;
+    }
+    .q-table .q-title a {
+      display: block;
+    }
+    .q-table .q-practice {
+      width: auto;
+    }
+    .q-table .q-practice .practice-row__ext {
+      min-width: 0;
+      padding: 4px 7px;
+      font-size: var(--fs-xs);
+    }
+    .q-table .diff {
+      padding-inline: 7px;
+    }
+    .q-table td.q-practice,
+    .q-table th.q-practice,
+    .q-table td.q-done,
+    .q-table th.q-done {
+      padding-inline: 6px;
+    }
+    .q-table .q-done {
+      width: 2.75rem;
     }
     .q-table th,
     .q-table td {
