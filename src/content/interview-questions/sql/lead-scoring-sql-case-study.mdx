@@ -1,0 +1,426 @@
+---
+seoTitle: "Lead Scoring SQL Case Study"
+publishedDate: "2026-10-05"
+updatedDate: "2026-10-05"
+reviewedDate: "2026-10-05"
+title: "Lead Scoring: SQL Case Study with 7 Approaches"
+description: "Build a rule-based lead score in SQL with points, recency decay and behaviour bonuses, then track qualified leads, engagement retention, indexes and concurrent updates."
+technology: ["sql"]
+topic: ["case-study", "marketing-analytics", "ctes"]
+difficulty: "Medium"
+questionType: ["coding", "scenario", "optimization"]
+estimatedMinutes: 30
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Assign points to each lead activity, halve the points of activities older than 30 days at the scoring date, add a bonus for high-intent sequences such as a pricing-page visit followed by a demo request within 7 days, and sum per lead with a floor of zero. Leads at or above the threshold (here 40) are marketing-qualified. Build it as chained CTEs, one rule per step, compute scores as of a date so that week-over-week changes can be compared with EXCEPT and INTERSECT, and update stored scores atomically."
+followUps:
+  - "How do you make old activity count less than recent activity?"
+  - "How do you give a bonus for a pricing visit followed by a demo request within a week?"
+  - "Which leads became qualified this week, and which dropped out?"
+  - "How would you compute a lead's decayed score for every day of the month?"
+  - "Two jobs update the same lead's score at once. What can go wrong?"
+  - "How do you check whether higher-scoring leads stay engaged longer?"
+prerequisites: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/aggregations-group-by-having"]
+related: ["interview-questions:sql/a-b-test-results-sql-case-study", "interview-questions:sql/conversion-funnel-sql-case-study", "articles:sql/ctes-subqueries-temp-tables", "articles:sql/joins", "articles:sql/aggregations-group-by-having"]
+previous: "interview-questions:sql/refund-analysis-sql-case-study"
+versionContext: "All queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from the engine. The two-session isolation outputs were produced by concurrent psql sessions on the same server and are shown as text."
+sources:
+  - { label: "PostgreSQL 16 documentation: WITH queries (chained and recursive CTEs)", url: "https://www.postgresql.org/docs/16/queries-with.html" }
+  - { label: "PostgreSQL 16 documentation: Combining queries (UNION, INTERSECT, EXCEPT)", url: "https://www.postgresql.org/docs/16//queries-union.html" }
+  - { label: "PostgreSQL 16 documentation: Transaction isolation", url: "https://www.postgresql.org/docs/16/transaction-iso.html" }
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: Indexes", url: "https://www.postgresql.org/docs/16/indexes.html" }
+---
+
+Lead scoring ranks prospects by how likely they are to buy, so sales spends time on the right people. Many companies start with a rule-based score built in SQL from marketing activity before moving to a model, and the data engineering problems are the same either way: point rules, recency, sequences of behaviour, scores as of a date, and safe updates. This case study builds a rule-based score and covers seven techniques around it.
+
+## The business question
+
+**"Which leads should sales call this week?"** Marketing defines a **marketing-qualified lead (MQL)** as one whose score reaches a threshold; sales operations track how many MQLs are created each week and whether they convert. The rules used here:
+
+| Activity | Points |
+|---|---|
+| `email_open` | 1 |
+| `webinar` | 5 |
+| `pricing_view` | 10 |
+| `demo_request` | 30 |
+| `unsubscribe` | −20 |
+
+- **Recency**: activities more than 30 days before the scoring date count for half.
+- **Sequence bonus**: a `pricing_view` followed by a `demo_request` within 7 days adds 15 points (halved too if the demo request is older than 30 days).
+- **Floor**: scores below 0 are reported as 0.
+- **MQL**: score ≥ 40 on the scoring date. Scores are computed **as of a date**, using only activity up to that date, so last week's list can be reproduced exactly.
+- **Duplicates**: the same activity logged twice at the same time counts once.
+
+## Schema and sample data
+
+```sql
+CREATE TABLE leads (
+  lead_id    INT PRIMARY KEY,
+  email      TEXT NOT NULL,
+  company    TEXT NOT NULL,
+  industry   TEXT NOT NULL,
+  region     TEXT NOT NULL,
+  source     TEXT NOT NULL
+);
+
+CREATE TABLE activities (lead_id INT NOT NULL REFERENCES leads, activity TEXT NOT NULL, ts TIMESTAMP NOT NULL);
+
+INSERT INTO leads VALUES
+  (1, 'ana@acme.example',     'Acme',     'saas',    'EMEA', 'webinar'),
+  (2, 'bo@globex.example',    'Globex',   'retail',  'NA',   'paid_search'),
+  (3, 'cy@initech.example',   'Initech',  'fintech', 'NA',   'organic'),
+  (4, 'di@acme.example',      'Acme',     'saas',    'EMEA', 'referral'),
+  (5, 'ed@umbrella.example',  'Umbrella', 'health',  'APAC', 'paid_social'),
+  (6, 'fa@hooli.example',     'Hooli',    'saas',    'NA',   'organic'),
+  (7, 'gil@initech.example',  'Initech',  'fintech', 'NA',   'paid_search');
+
+INSERT INTO activities VALUES
+  (1, 'email_open',   '2026-05-02 09:00'), (1, 'email_open', '2026-05-09 09:00'), (1, 'email_open', '2026-05-16 09:00'),
+  (1, 'webinar',      '2026-06-10 16:00'), (1, 'pricing_view', '2026-06-20 11:00'), (1, 'demo_request', '2026-06-22 10:00'),
+  (2, 'pricing_view', '2026-05-10 14:00'), (2, 'demo_request', '2026-05-12 15:00'),
+  (3, 'webinar',      '2026-06-01 16:00'), (3, 'webinar', '2026-06-15 16:00'), (3, 'pricing_view', '2026-06-25 12:00'),
+  (4, 'pricing_view', '2026-06-27 10:00'), (4, 'demo_request', '2026-06-28 09:00'),
+  (5, 'email_open',   '2026-06-03 08:00'), (5, 'email_open', '2026-06-10 08:00'), (5, 'email_open', '2026-06-17 08:00'),
+  (5, 'unsubscribe',  '2026-06-29 08:00'),
+  (6, 'pricing_view', '2026-06-02 13:00'), (6, 'demo_request', '2026-06-05 11:00'), (6, 'webinar', '2026-06-06 16:00'),
+  (6, 'webinar',      '2026-06-06 16:00'),                                              -- logged twice
+  (7, 'pricing_view', '2026-05-27 10:00'), (7, 'demo_request', '2026-05-28 10:00');
+```
+
+## Core solution: multiple chained CTEs
+
+**Why chained CTEs.** A scoring model is a sequence of business rules, and each rule changes when marketing asks. Writing one CTE per rule, each reading the previous one, keeps every rule visible and testable on its own, and makes the "as of" date a single parameter at the top.
+
+```sql
+CREATE VIEW lead_scores_asof AS
+WITH params AS (
+  SELECT d::date AS as_of FROM (VALUES (DATE '2026-06-23'), (DATE '2026-06-30')) AS v(d)
+),
+deduped AS (                                    -- 1. drop exact duplicate events
+  SELECT DISTINCT lead_id, activity, ts FROM activities
+),
+eligible AS (                                   -- 2. only activity up to the scoring date
+  SELECT p.as_of, d.* FROM params p JOIN deduped d ON d.ts < p.as_of + 1
+),
+points AS (                                     -- 3. base points with 30-day decay
+  SELECT as_of, lead_id, activity, ts,
+         CASE activity WHEN 'email_open' THEN 1 WHEN 'webinar' THEN 5 WHEN 'pricing_view' THEN 10
+                       WHEN 'demo_request' THEN 30 WHEN 'unsubscribe' THEN -20 ELSE 0 END
+         * CASE WHEN ts < as_of - 30 THEN 0.5 ELSE 1 END AS pts
+  FROM eligible
+),
+bonus AS (                                      -- 4. pricing view then demo within 7 days
+  SELECT DISTINCT ON (d.as_of, d.lead_id) d.as_of, d.lead_id,
+         15 * CASE WHEN d.ts < d.as_of - 30 THEN 0.5 ELSE 1 END AS pts
+  FROM eligible d
+  JOIN eligible p ON p.as_of = d.as_of AND p.lead_id = d.lead_id
+                 AND p.activity = 'pricing_view' AND d.activity = 'demo_request'
+                 AND d.ts > p.ts AND d.ts <= p.ts + INTERVAL '7 days'
+  ORDER BY d.as_of, d.lead_id, d.ts DESC
+),
+scored AS (                                     -- 5. sum, floor at zero
+  SELECT p.as_of, l.lead_id,
+         GREATEST(COALESCE((SELECT SUM(pts) FROM points x WHERE x.as_of = p.as_of AND x.lead_id = l.lead_id), 0)
+                + COALESCE((SELECT SUM(pts) FROM bonus  b WHERE b.as_of = p.as_of AND b.lead_id = l.lead_id), 0), 0) AS score
+  FROM params p CROSS JOIN leads l
+)
+SELECT as_of, lead_id, score, score >= 40 AS is_mql FROM scored;     -- 6. qualify
+
+SELECT s.lead_id, l.email, s.score, s.is_mql
+FROM lead_scores_asof s JOIN leads l USING (lead_id)
+WHERE s.as_of = DATE '2026-06-30'
+ORDER BY s.score DESC, s.lead_id;
+```
+
+| lead_id | email | score | is_mql |
+|---|---|---|---|
+| 1 | ana@acme.example | 61.5 | t |
+| 6 | fa@hooli.example | 60 | t |
+| 4 | di@acme.example | 55 | t |
+| 2 | bo@globex.example | 27.5 | f |
+| 7 | gil@initech.example | 27.5 | f |
+| 3 | cy@initech.example | 20 | f |
+| 5 | ed@umbrella.example | 0 | f |
+
+Each step can be inspected by selecting from it, which is how you answer "why does lead 2 only have 27.5 points?": its pricing view and demo request are more than 30 days old, so all three items (10, 30 and the 15 bonus) are halved. Lead 5's opens are wiped out by the unsubscribe and floored at zero. Lead 6's duplicate webinar counts once because of the `deduped` step.
+
+**Pitfalls.** Keep every CTE at an explicit grain (here `as_of`, `lead_id`, plus the activity where relevant), and carry the scoring date through every step, or one step silently uses today's date while another uses the parameter. In PostgreSQL 12 and later, CTEs referenced once are inlined and those referenced several times are computed once; if a heavy CTE is reused, check that it is not recomputed, and force `MATERIALIZED` when you need it to be.
+
+## Approach: self-join patterns for behaviour sequences
+
+**Why it matters.** "A pricing visit followed by a demo request within seven days" relates two rows of the same table: a classic self-join, with the same table under two aliases and conditions between them. The bonus CTE above uses it; here it is on its own:
+
+```sql
+SELECT p.lead_id, p.ts AS pricing_view_at, d.ts AS demo_request_at,
+       d.ts - p.ts AS gap
+FROM activities p
+JOIN activities d
+  ON d.lead_id = p.lead_id
+ AND p.activity = 'pricing_view'
+ AND d.activity = 'demo_request'
+ AND d.ts >  p.ts
+ AND d.ts <= p.ts + INTERVAL '7 days'
+ORDER BY p.lead_id;
+```
+
+| lead_id | pricing_view_at | demo_request_at | gap |
+|---|---|---|---|
+| 1 | 2026-06-20 11:00:00 | 2026-06-22 10:00:00 | 1 day 23:00:00 |
+| 2 | 2026-05-10 14:00:00 | 2026-05-12 15:00:00 | 2 days 01:00:00 |
+| 4 | 2026-06-27 10:00:00 | 2026-06-28 09:00:00 | 23:00:00 |
+| 6 | 2026-06-02 13:00:00 | 2026-06-05 11:00:00 | 2 days 22:00:00 |
+| 7 | 2026-05-27 10:00:00 | 2026-05-28 10:00:00 | 1 day |
+
+Every row is one qualifying pair. A lead with two pricing views before one demo request would produce two pairs, which is why the bonus CTE keeps one row per lead with `DISTINCT ON`. Self-joins also find **duplicate leads**: different lead records with the same normalised email, or several people at one company for account-based scoring:
+
+```sql
+SELECT a.company, a.lead_id AS lead_a, b.lead_id AS lead_b
+FROM leads a
+JOIN leads b ON b.company = a.company AND a.lead_id < b.lead_id
+ORDER BY a.company, a.lead_id;
+```
+
+| company | lead_a | lead_b |
+|---|---|---|
+| Acme | 1 | 4 |
+| Initech | 3 | 7 |
+
+`a.lead_id < b.lead_id` returns each pair once and excludes a lead paired with itself. Account-level scoring then sums the people at each company: Acme's two leads together are well above the threshold even though one of them alone is not.
+
+**Pitfalls.** Self-joins grow quadratically with rows per key: two thousand activities for one lead mean millions of candidate pairs. Restrict both sides by type and time first, or use window functions (`LEAD(activity) OVER (PARTITION BY lead_id ORDER BY ts)`) when the rule is about the *next* event rather than any event within a window.
+
+## Approach: EXCEPT and INTERSECT to track MQL changes
+
+**Why it matters.** Sales leadership asks every Monday: which leads became qualified this week, which are still qualified, and which dropped out? Each week's MQLs are a set, and set operations answer these directly.
+
+```sql
+SELECT 'new this week' AS change, lead_id FROM (
+  SELECT lead_id FROM lead_scores_asof WHERE as_of = DATE '2026-06-30' AND is_mql
+  EXCEPT
+  SELECT lead_id FROM lead_scores_asof WHERE as_of = DATE '2026-06-23' AND is_mql) n
+UNION ALL
+SELECT 'still qualified', lead_id FROM (
+  SELECT lead_id FROM lead_scores_asof WHERE as_of = DATE '2026-06-30' AND is_mql
+  INTERSECT
+  SELECT lead_id FROM lead_scores_asof WHERE as_of = DATE '2026-06-23' AND is_mql) s
+UNION ALL
+SELECT 'dropped out', lead_id FROM (
+  SELECT lead_id FROM lead_scores_asof WHERE as_of = DATE '2026-06-23' AND is_mql
+  EXCEPT
+  SELECT lead_id FROM lead_scores_asof WHERE as_of = DATE '2026-06-30' AND is_mql) d
+ORDER BY change, lead_id;
+```
+
+| change | lead_id |
+|---|---|
+| dropped out | 7 |
+| new this week | 4 |
+| still qualified | 1 |
+| still qualified | 6 |
+
+Lead 4 qualified this week with a pricing view and demo request. Lead 7 was qualified last week and decayed out: its activity passed the 30-day mark, which is the decay rule working as intended (and a prompt for sales to follow up before the lead goes cold). The scores behind it:
+
+```sql
+SELECT lead_id,
+       MAX(score) FILTER (WHERE as_of = DATE '2026-06-23') AS score_jun_23,
+       MAX(score) FILTER (WHERE as_of = DATE '2026-06-30') AS score_jun_30
+FROM lead_scores_asof
+WHERE lead_id IN (1, 4, 6, 7)
+GROUP BY lead_id ORDER BY lead_id;
+```
+
+| lead_id | score_jun_23 | score_jun_30 |
+|---|---|---|
+| 1 | 61.5 | 61.5 |
+| 4 | 0 | 55 |
+| 6 | 60 | 60 |
+| 7 | 55 | 27.5 |
+
+Set operations are equally useful for comparing two scoring models on the same date ("which leads does model v2 qualify that v1 does not?"). **Pitfalls.** `EXCEPT` and `INTERSECT` remove duplicates; the `ALL` variants keep them. Both inputs need the same columns in the same order with compatible types. `NULL`s compare as equal in set operations, unlike in joins. Precedence: `INTERSECT` binds tighter than `UNION` and `EXCEPT`, so use parentheses or subqueries, as above.
+
+## Approach: recursive CTEs for a daily decayed score
+
+**Why it matters.** The 30-day half-life rule is a step function. Some teams prefer smooth decay: every day, yesterday's score is multiplied by a factor (here 0.97, a half-life of about 23 days) and today's points are added. Each day depends on the previous day's result, which is exactly what a recursive CTE computes.
+
+```sql
+WITH RECURSIVE daily_points AS (
+  SELECT ts::date AS day,
+         SUM(CASE activity WHEN 'email_open' THEN 1 WHEN 'webinar' THEN 5 WHEN 'pricing_view' THEN 10
+                           WHEN 'demo_request' THEN 30 WHEN 'unsubscribe' THEN -20 ELSE 0 END) AS pts
+  FROM (SELECT DISTINCT lead_id, activity, ts FROM activities WHERE lead_id = 1) a
+  GROUP BY 1
+),
+series AS (
+  SELECT DATE '2026-05-01' AS day, 0::numeric AS score
+  UNION ALL
+  SELECT s.day + 1,
+         ROUND(s.score * 0.97 + COALESCE((SELECT pts FROM daily_points p WHERE p.day = s.day + 1), 0), 2)
+  FROM series s
+  WHERE s.day < DATE '2026-06-30'
+)
+SELECT day, score
+FROM series
+WHERE day IN (DATE '2026-05-02', DATE '2026-05-16', DATE '2026-06-09', DATE '2026-06-10',
+              DATE '2026-06-20', DATE '2026-06-22', DATE '2026-06-30')
+ORDER BY day;
+```
+
+| day | score |
+|---|---|
+| 2026-05-02 | 1.00 |
+| 2026-05-16 | 2.46 |
+| 2026-06-09 | 1.18 |
+| 2026-06-10 | 6.14 |
+| 2026-06-20 | 14.54 |
+| 2026-06-22 | 43.68 |
+| 2026-06-30 | 34.23 |
+
+The anchor member sets the starting point (score 0 on 1 May), and the recursive member produces the next day from the previous one until the stop condition. The May email opens have almost disappeared by early June, and the score peaks the day of the demo request, then decays. A closed-form alternative exists for pure exponential decay (`SUM(points × 0.97 ^ (as_of − day))`), and it is cheaper; recursion becomes necessary when each step depends on the previous result in a non-additive way, such as a floor at zero applied every day or a cap.
+
+**Pitfalls.** Always include a stop condition in the recursive member. Recursion runs one level at a time, so a 365-day series is 365 iterations per lead; for many leads, recurse over days once and join all leads into each step, or use the closed form. PostgreSQL requires the recursive reference to appear once, not inside an aggregate or a subquery in the recursive member's `FROM`; the correlated scalar subquery in the `SELECT` list above is allowed because it reads `daily_points`, not `series`.
+
+## Approach: retention analysis of lead engagement
+
+**Why it matters.** A good score should predict continued engagement. A retention view shows, for leads grouped by when they first engaged, what share were still active in later weeks, and whether qualified leads stay engaged more than the rest.
+
+```sql
+WITH firsts AS (
+  SELECT lead_id, MIN(ts)::date AS first_day FROM activities GROUP BY lead_id
+),
+weeks AS (
+  SELECT DISTINCT a.lead_id, (a.ts::date - f.first_day) / 7 AS week_number
+  FROM activities a JOIN firsts f USING (lead_id)
+),
+segment AS (
+  SELECT lead_id, CASE WHEN is_mql THEN 'MQL on 30 June' ELSE 'not MQL' END AS segment
+  FROM lead_scores_asof WHERE as_of = DATE '2026-06-30'
+)
+SELECT s.segment,
+       COUNT(DISTINCT s.lead_id)                                      AS leads,
+       COUNT(DISTINCT w.lead_id) FILTER (WHERE w.week_number = 0)     AS week_0,
+       COUNT(DISTINCT w.lead_id) FILTER (WHERE w.week_number BETWEEN 1 AND 2) AS weeks_1_2,
+       COUNT(DISTINCT w.lead_id) FILTER (WHERE w.week_number >= 3)    AS week_3_plus
+FROM segment s
+LEFT JOIN weeks w USING (lead_id)
+GROUP BY s.segment
+ORDER BY s.segment;
+```
+
+| segment | leads | week_0 | weeks_1_2 | week_3_plus |
+|---|---|---|---|---|
+| MQL on 30 June | 3 | 3 | 1 | 1 |
+| not MQL | 4 | 4 | 2 | 2 |
+
+Weeks are counted from each lead's own first activity, so leads that started at different times are aligned. Only one of the three MQLs (lead 1) was active three or more weeks after first engaging, against two of the four other leads. On seven leads that means nothing, and two of the MQLs started engaging less than a month ago, so they could not have reached week 3 yet. With real volumes and mature cohorts, this table is the evidence that justifies the threshold, or shows that it needs moving.
+
+**Pitfalls.** Leads that started recently cannot have week-3 activity yet; restrict to cohorts old enough or show "not yet observable" separately. Engagement retention measures activity, not revenue; the stronger validation is MQL-to-opportunity conversion once sales outcomes are joined in.
+
+## Approach: bitmap indexing for lead list filters
+
+**Why it matters.** Marketing users build lists with combinations of low-cardinality attributes: industry is SaaS **or** fintech, region is NA, source is not paid. No single attribute is selective, but combinations are. **Bitmap indexes** (one bitmap per distinct value, combined with bitwise `AND`/`OR`) exist in some warehouses and in Oracle for exactly this. PostgreSQL builds bitmaps on the fly from ordinary B-tree indexes and combines them with `BitmapOr` and `BitmapAnd`.
+
+```sql
+CREATE TABLE leads_big AS
+SELECT g AS lead_id,
+       'ind_' || ((g / 3) % 25)    AS industry,     -- 25 values
+       'reg_' || ((g / 7) % 10)    AS region,       -- 10 values
+       'src_' || ((g / 11) % 8)    AS source        -- 8 values
+FROM generate_series(1, 400000) AS g;
+CREATE INDEX leads_big_industry ON leads_big (industry);
+CREATE INDEX leads_big_region   ON leads_big (region);
+VACUUM ANALYZE leads_big;
+
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT COUNT(*) FROM leads_big
+WHERE (industry = 'ind_3' OR industry = 'ind_4') AND region = 'reg_2';
+```
+
+```text
+Aggregate (actual rows=1 loops=1)
+  ->  Bitmap Heap Scan on leads_big (actual rows=3429 loops=1)
+        Recheck Cond: ((industry = 'ind_3'::text) OR (industry = 'ind_4'::text))
+        Filter: (region = 'reg_2'::text)
+        Rows Removed by Filter: 28575
+        Heap Blocks: exact=2548
+        ->  BitmapOr (actual rows=0 loops=1)
+              ->  Bitmap Index Scan on leads_big_industry (actual rows=16002 loops=1)
+                    Index Cond: (industry = 'ind_3'::text)
+              ->  Bitmap Index Scan on leads_big_industry (actual rows=16002 loops=1)
+                    Index Cond: (industry = 'ind_4'::text)
+```
+
+Read it from the bottom: two index scans produce bitmaps for the two industries, `BitmapOr` unions them, and the heap is visited only for the pages in the combined bitmap. The region condition is applied as a filter on the fetched rows: the planner judged a third bitmap for a 10% region not worth building here. When two conditions are both selective, it combines their bitmaps with `BitmapAnd` instead (the fraud case study shows that plan).
+
+**Trade-offs.** True bitmap indexes are compact for low-cardinality columns and make `AND`/`OR` combinations very cheap, which suits read-mostly analytical tables. They are a poor fit for frequently updated tables because changing one row can lock a large part of a bitmap. Columnar warehouses get a similar benefit from compression and per-block min/max metadata. In PostgreSQL, a few B-tree indexes on commonly filtered attributes, plus bitmap scans, cover most list-building queries; for the most common fixed combination, a composite or partial index is better still.
+
+## Approach: isolation levels when scores are updated concurrently
+
+**Why it matters.** Scores are often stored in a table and updated by several processes: a nightly batch, a real-time job adding points when a demo is requested, and sales reps adjusting manually. A **read-modify-write** (read the score, add points in the application, write it back) under the default `READ COMMITTED` isolation can lose updates.
+
+Two sessions ran this against a score of 50 at the same time: session A adds 10, session B adds 30, each reading first and writing `50 + n` (not executed by the verifier, because it needs two concurrent sessions):
+
+{/* noexec */}
+```sql
+-- each session
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT score FROM lead_scores WHERE lead_id = 1;          -- both read 50
+UPDATE lead_scores SET score = 50 + 10 WHERE lead_id = 1;  -- session B: 50 + 30
+COMMIT;
+```
+
+Both committed, and the final score was 80: session A's 10 points were lost. Under `READ COMMITTED`, B's `UPDATE` waited for A's commit and then overwrote the row with a value computed from a stale read. Repeating the test with `BEGIN ISOLATION LEVEL REPEATABLE READ`, session A committed and session B got:
+
+```text
+ERROR:  could not serialize access due to concurrent update
+```
+
+and its transaction rolled back, leaving 60. `REPEATABLE READ` refuses to overwrite a row changed since the transaction's snapshot, so the application must retry B, which then reads 60 and writes 90.
+
+**The fixes, best first.**
+
+1. **Let the database do the arithmetic.** An atomic `UPDATE ... SET score = score + 10` reads and writes the current value under the row lock, so concurrent increments never lose updates, even at `READ COMMITTED`:
+
+```sql
+CREATE TABLE lead_scores (lead_id INT PRIMARY KEY, score NUMERIC NOT NULL);
+INSERT INTO lead_scores VALUES (1, 50);
+UPDATE lead_scores SET score = score + 10 WHERE lead_id = 1;
+UPDATE lead_scores SET score = score + 30 WHERE lead_id = 1;
+SELECT lead_id, score FROM lead_scores;
+```
+
+| lead_id | score |
+|---|---|
+| 1 | 90 |
+
+2. **Lock the row you are about to change** with `SELECT ... FOR UPDATE` when the new value needs application logic; concurrent writers then queue instead of overwriting.
+3. **Use `REPEATABLE READ` or `SERIALIZABLE` with retries** for multi-row logic that must be consistent; both raise serialization errors (SQLSTATE `40001`) that the job must catch and retry.
+4. **Prefer recomputation over increments for batch scoring.** The as-of view above rebuilds every score from activities, so a rerun is idempotent and cannot double count; increments are for real-time adjustments only.
+
+| Level in PostgreSQL | Read-modify-write behaviour |
+|---|---|
+| `READ COMMITTED` (default) | Lost updates possible with read-then-write; atomic `SET x = x + n` is safe |
+| `REPEATABLE READ` | Concurrent update of the same row raises a serialization error; retry needed |
+| `SERIALIZABLE` | Also detects read/write dependency cycles across rows; retry needed |
+
+## Interview tips
+
+**How it is asked.** "Build a lead score from these activities", "add decay so old activity counts less", "give a bonus for a pricing visit followed by a demo", "which leads are new MQLs this week", or "two systems update scores and numbers go missing".
+
+**What a strong answer includes.**
+
+1. Rules written as explicit, ordered steps (chained CTEs), with deduplication first.
+2. A scoring date parameter, so past lists can be reproduced.
+3. Correct sequence logic with self-joins or window functions, one bonus per lead.
+4. Set operations for week-over-week changes.
+5. Safe concurrent updates: atomic increments, row locks or retries, and idempotent batch recomputation.
+
+**Mistakes candidates make.**
+
+- Scoring with today's date inside the logic, so last week's MQL list cannot be reproduced.
+- Counting duplicate activity rows.
+- Self-joins that give one bonus per pair instead of per lead.
+- Forgetting negative events (unsubscribes) or letting scores go negative.
+- Read-modify-write updates under `READ COMMITTED`.
+- Treating an untested threshold as truth instead of validating it against conversions.
