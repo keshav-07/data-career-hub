@@ -2,7 +2,8 @@
   /*
    * DataDank brand (orange and black). Brand constants live in tokens.css (--color-*); these semantic tokens map
    * them to light and dark surfaces. Orange used as text is darkened in light mode (#b34700) so small text
-   * passes WCAG AA; primary buttons carry ink text on orange because white on #ff6a00 is only 2.9:1.
+   * passes WCAG AA; primary buttons use a burnt-orange gradient (#cc4a0b to #a8370a) so white text passes AA (white on #ff6a00 is
+   * only 2.9:1). Links are ink or cream with an orange underline, and turn orange on hover.
    */
   :root,
   :root[data-theme="light"] {
@@ -20,10 +21,13 @@
     --c-accent-hover: #8f3900;
     --c-accent-soft: #fff0e5;
     --c-on-accent: #ffffff;
-    --c-primary: #ff6a00;
-    --c-primary-hover: #e65100;
-    --c-primary-edge: #e65100;
-    --c-on-primary: #1a1a1a;
+    --c-primary: #cc4a0b;
+    --c-primary-2: #a8370a;
+    --c-primary-hover: #b83d08;
+    --c-primary-edge: #a8370a;
+    --c-on-primary: #ffffff;
+    --c-link: #1a1a1a;
+    --c-link-line: #ff6a00;
     --c-brand: #ff6a00;
     --c-success: #22693f;
     --c-warning: #a24a0b;
@@ -48,10 +52,13 @@
     --c-accent-hover: #ffa366;
     --c-accent-soft: #2b1a0e;
     --c-on-accent: #1a1a1a;
-    --c-primary: #ff6a00;
-    --c-primary-hover: #ff8533;
-    --c-primary-edge: #ff6a00;
-    --c-on-primary: #1a1a1a;
+    --c-primary: #cc4a0b;
+    --c-primary-2: #a8370a;
+    --c-primary-hover: #b83d08;
+    --c-primary-edge: #cc4a0b;
+    --c-on-primary: #ffffff;
+    --c-link: #f8f5ef;
+    --c-link-line: #ff6a00;
     --c-brand: #ff6a00;
     --c-success: #5fc58a;
     --c-warning: #f2a54a;
@@ -79,10 +86,13 @@
       --c-accent-hover: #ffa366;
       --c-accent-soft: #2b1a0e;
       --c-on-accent: #1a1a1a;
-      --c-primary: #ff6a00;
-      --c-primary-hover: #ff8533;
-      --c-primary-edge: #ff6a00;
-      --c-on-primary: #1a1a1a;
+      --c-primary: #cc4a0b;
+      --c-primary-2: #a8370a;
+      --c-primary-hover: #b83d08;
+      --c-primary-edge: #cc4a0b;
+      --c-on-primary: #ffffff;
+      --c-link: #f8f5ef;
+      --c-link-line: #ff6a00;
       --c-brand: #ff6a00;
       --c-success: #5fc58a;
       --c-warning: #f2a54a;

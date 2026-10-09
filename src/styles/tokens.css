@@ -11,6 +11,8 @@
     --color-muted: #a8a29e;
     --color-white: #ffffff;
     --gradient-primary: linear-gradient(135deg, #ff6a00 0%, #e65100 100%);
+    /* Button fill: the brand gradient deepened so white text passes WCAG AA. */
+    --gradient-button: linear-gradient(135deg, var(--c-primary) 0%, var(--c-primary-2) 100%);
 
     /* Typography */
     --font-sans:

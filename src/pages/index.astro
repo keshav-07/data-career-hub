@@ -77,11 +77,14 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
             </div>
           </dl>
         </div>
-        <aside class="day-card" aria-labelledby="day1-h">
+        <aside class="day-card" aria-labelledby="day-card-h" data-day-card data-pl-day-card>
           <div class="day-card__head">
             <div>
-              <p class="day-card__eyebrow">Day 1 · {day1.theme}</p>
-              <h2 id="day1-h" class="day-card__title">
+              <p class="day-card__eyebrow">
+                <span data-dc-status>Day 1 of {days.length}</span> ·
+                <span data-dc-theme>{day1.theme}</span>
+              </p>
+              <h2 id="day-card-h" class="day-card__title" data-dc-title>
                 Your first day
               </h2>
             </div>
@@ -92,7 +95,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
               hours={planHours}
             />
           </div>
-          <ul class="day-card__tasks" role="list">
+          <ul class="day-card__tasks" role="list" data-dc-tasks>
             {day1.tasks.map((t) => (
               <li>
                 <span>{t.skill}</span>
@@ -100,9 +103,35 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
               </li>
             ))}
           </ul>
-          <p class="day-card__foot">
+          <p class="day-card__foot" data-dc-foot>
             {day1.hours} hours · plus: {day1.mock.toLowerCase()}
           </p>
+          <div class="day-card__controls js-only">
+            <button type="button" class="day-card__nav" data-dc-prev aria-label="Previous day">
+              <span aria-hidden="true">‹</span>
+            </button>
+            <label class="day-card__done">
+              <input type="checkbox" data-pl-day="1" data-hours={day1.hours} data-dc-check />
+              <span data-dc-check-label>Mark Day 1 complete</span>
+            </label>
+            <button type="button" class="day-card__nav" data-dc-next aria-label="Next day">
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+          <p class="visually-hidden" aria-live="polite" data-dc-live></p>
+          <script
+            type="application/json"
+            data-dc-data
+            set:html={JSON.stringify(
+              days.map((d) => ({
+                d: d.day,
+                th: d.theme,
+                h: d.hours,
+                m: d.mock,
+                t: d.tasks.map((t) => [t.skill, t.topic, t.href ?? ""]),
+              })),
+            ).replace(/</g, "\\u003c")}
+          />
         </aside>
       </div>
     </div>
@@ -367,29 +396,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
 
 <script>
   import { initPlanner } from "../scripts/planner";
+  import { initDayCard } from "../scripts/day-card";
   initPlanner();
-  // Point the main button at the first day not yet ticked in the 90-day plan.
-  try {
-    const st = JSON.parse(localStorage.getItem("dch-planner-v1") ?? "null") as {
-      days?: Record<string, number>;
-    } | null;
-    const done = st?.days ?? {};
-    if (Object.keys(done).length) {
-      let next = 1;
-      while (next <= 90 && done[String(next)] !== undefined) next++;
-      const cta = document.querySelector<HTMLAnchorElement>("[data-plan-cta]");
-      const label = cta?.querySelector("[data-plan-cta-label]");
-      if (cta && label) {
-        if (next > 90) {
-          label.textContent = "Review your plan";
-          cta.href = "/planner/90-day-plan/";
-        } else {
-          label.textContent = `Continue Day ${next}`;
-          cta.href = `/planner/90-day-plan/#day-${next}`;
-        }
-      }
-    }
-  } catch {
-    /* storage unavailable: keep "Start Day 1" */
-  }
+  initDayCard();
 </script>

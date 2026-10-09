@@ -16,7 +16,8 @@
     text-decoration: none;
     transition:
       background var(--dur-fast),
-      border-color var(--dur-fast);
+      border-color var(--dur-fast),
+      box-shadow var(--dur-fast);
   }
   .btn--sm {
     min-height: 36px;
@@ -28,23 +29,31 @@
     padding: 0 var(--sp-6);
     font-size: var(--fs-lg);
   }
-  /* Ink text on orange: white on #ff6a00 is 2.9:1, below WCAG AA for button-sized text. */
+  /* Burnt-orange gradient with white text (AA); a fine top highlight and a soft warm shadow. */
   .btn--primary {
-    background: var(--gradient-primary);
+    background: var(--gradient-button);
     color: var(--c-on-primary);
     border-color: var(--c-primary-edge);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 8px 20px -12px rgba(168, 55, 10, 0.7);
+    letter-spacing: 0.01em;
   }
   .btn--primary:hover {
     background: var(--c-primary-hover);
     color: var(--c-on-primary);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 10px 24px -12px rgba(168, 55, 10, 0.85);
   }
   .btn--secondary {
-    background: var(--c-surface);
+    background: transparent;
     color: var(--c-text);
     border-color: var(--c-border-strong);
   }
   .btn--secondary:hover {
-    background: var(--c-surface-2);
+    background: var(--c-surface);
+    border-color: var(--c-text);
     color: var(--c-text);
   }
   .btn--quiet {
