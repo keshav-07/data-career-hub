@@ -1,6 +1,5 @@
 ---
 import { plural } from "../../utils/dates";
-import { render } from "astro:content";
 import { getItems, getHub, type ItemOf } from "../../utils/content";
 import { getCourse } from "../../utils/navigation";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -22,7 +21,6 @@ const tech = Astro.params.tech!;
 const course = (await getCourse(tech))!;
 const hub = course.hub;
 const d = hub.entry.data;
-const { Content } = await render(hub.entry);
 const crumbs = await breadcrumbsFor(hub);
 const related = (await Promise.all(d.relatedTechnologies.map((t) => getHub(t)))).filter(
   (x): x is ItemOf<"technologies"> => !!x,
@@ -197,25 +195,6 @@ const tabs = [
           )}
         </div>
       </div>
-      <div class="two-col two-col--aside">
-        <div>
-          <h2 class="tab-panel__title">About this course</h2>
-          <div class="prose">
-            <Content />
-          </div>
-        </div>
-        <aside aria-labelledby="facts-h">
-          <h2 id="facts-h" class="tile__eyebrow" style="margin-bottom: var(--sp-3)">
-            Key facts
-          </h2>
-          <ul class="checklist">
-            {d.keyFacts.map((f) => (
-              <li>{f}</li>
-            ))}
-          </ul>
-          <AdSlot placement="rail" />
-        </aside>
-      </div>
       {course.modules.length > 0 && (
         <>
           <h2 class="group-title" style="margin-top: var(--sp-12)">
@@ -265,6 +244,7 @@ const tabs = [
           />
         </li>
       </ul>
+      <AdSlot placement="inline" />
     </section>
 
     <section id="lessons" class="tab-panel" role="tabpanel" aria-labelledby="tab-lessons">
