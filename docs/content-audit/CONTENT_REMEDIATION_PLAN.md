@@ -2,6 +2,8 @@
 
 > This is a tracked plan based on the initial audit report. Tasks are not complete until the validation evidence is recorded. Do not modify or publish content in bulk without reviewing the affected material.
 
+> **Implementation update:** A first remediation pass is on branch `audit/remediation-oct-2026`. The planner, homepage copy, canonical-origin guard, and automated planner checks have been changed, but task checkboxes remain open until the full validation workflow passes. See [`IMPLEMENTATION_LOG.md`](./IMPLEMENTATION_LOG.md).
+
 ## Non-negotiable constraints
 - Preserve Astro, existing URL conventions, visual design, content schemas, and working functionality unless evidence justifies a change.
 - Do not invent technical sources or claim plagiarism detection without evidence.
