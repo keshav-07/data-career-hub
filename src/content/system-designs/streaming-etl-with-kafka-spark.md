@@ -71,6 +71,7 @@ sources:
   - { label: "Apache Spark: Structured Streaming programming guide", url: "https://spark.apache.org/docs/4.0.0/streaming/apis-on-dataframes-and-datasets.html" }
   - { label: "Delta Lake: table streaming reads and writes", url: "https://docs.delta.io/delta-streaming/" }
   - { label: "Apache Kafka 4.0.0 release announcement", url: "https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/" }
+previous: "system-designs:data-mesh-architecture"
 ---
 
 ## Approach

@@ -73,6 +73,8 @@ sources:
   - { label: "Snowflake documentation: resource monitors", url: "https://docs.snowflake.com/en/user-guide/resource-monitors" }
   - { label: "Snowflake documentation: understanding compute cost", url: "https://docs.snowflake.com/en/user-guide/cost-understanding-compute" }
   - { label: "dbt documentation: data tests", url: "https://docs.getdbt.com/docs/build/data-tests" }
+previous: "system-designs:unified-batch-streaming-lambda-kappa"
+next: "system-designs:churn-prediction-data-pipeline"
 ---
 
 ## Approach

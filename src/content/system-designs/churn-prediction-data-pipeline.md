@@ -66,7 +66,7 @@ versionContext: "The point-in-time feature and label SQL was run on PostgreSQL 1
 sources:
   - { label: "Delta Lake: table batch reads and writes (time travel)", url: "https://docs.delta.io/latest/delta-batch.html" }
   - { label: "PostgreSQL 16: SELECT", url: "https://www.postgresql.org/docs/16/sql-select.html" }
-previous: "system-designs:unified-batch-streaming-lambda-kappa"
+previous: "system-designs:cloud-data-warehouse-platform"
 next: "system-designs:real-time-leaderboard"
 ---
 

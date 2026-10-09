@@ -77,6 +77,7 @@ sources:
   - { label: "dbt documentation: model contracts", url: "https://docs.getdbt.com/reference/resource-configs/contract" }
   - { label: "OpenLineage: object model", url: "https://openlineage.io/docs/spec/object-model/" }
   - { label: "Confluent Schema Registry: schema evolution and compatibility", url: "https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html" }
+next: "system-designs:streaming-etl-with-kafka-spark"
 ---
 
 ## Approach

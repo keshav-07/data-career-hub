@@ -71,7 +71,7 @@ sources:
   - { label: "Delta Lake: table streaming reads and writes", url: "https://docs.delta.io/delta-streaming/" }
   - { label: "Apache Kafka documentation: design", url: "https://kafka.apache.org/documentation/#design" }
 previous: "system-designs:e-commerce-inventory-sync-system"
-next: "system-designs:churn-prediction-data-pipeline"
+next: "system-designs:cloud-data-warehouse-platform"
 ---
 
 ## Approach
