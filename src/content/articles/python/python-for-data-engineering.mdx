@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Python for Data Engineering"
 seoTitle: "Python for Data Engineering: Complete Guide"
 description: "Python for Data Engineering: structuring pipeline code, data structures, generators and batching, error handling, idempotent loads, testing and orchestration."
@@ -11,60 +11,152 @@ topic: ["fundamentals"]
 difficulty: "Beginner"
 pillar: true
 featured: false
-related: ["articles:python/functions-modules-reusable-code", "articles:python/iterators-generators", "articles:python/idempotent-csv-loader", "cheat-sheets:python-for-data-engineers"]
+learningObjectives:
+  - "Know which Python skills a Data Engineer uses daily and in what order to learn them"
+  - "See how the pieces combine in one small, runnable ingestion job"
+  - "Use the checkpoints to decide when you are ready for the next lesson"
+related: ["articles:python/functions-modules-reusable-code", "articles:python/iterators-generators", "articles:python/idempotent-csv-loader", "cheat-sheets:python-for-data-engineers", "articles:python/file-io-csv-json", "articles:python/error-handling-logging", "articles:python/working-with-apis", "articles:python/pandas-for-data-engineers", "articles:python/testing-with-pytest"]
+next: "articles:python/functions-modules-reusable-code"
 sources: [{"label": "Python documentation", "url": "https://docs.python.org/3/"}]
-versionContext: "Examples in the linked guides run on Python 3.12"
+versionContext: "The example on this page and those in the linked guides run on Python 3.11"
 ---
 
-Data Engineers use Python less for algorithms and more for **reliable plumbing**: reading from sources, validating, transforming, loading, and calling tools such as Spark and orchestrators. This guide covers the skills in the order they pay off.
+Data Engineers use Python less for algorithms and more for **reliable plumbing**: reading from sources, validating, transforming, loading, and calling tools such as Spark, warehouses and orchestrators. This guide covers the skills in the order they pay off, then shows them working together in one small job.
 
 ## 1. Structure code for reuse and testing
 
-Keep transformations as pure functions, push file and database access to the edges, pass configuration in instead of reading globals, and give each job a thin entry point. That structure is what makes pipeline code testable and reusable.
+Keep transformations as pure functions, push file, network and database access to the edges, pass configuration and dependencies in, add type hints at module boundaries, and give each job a thin entry point.
 
-Read: [Functions, modules and reusable pipeline code](/python/functions-modules-reusable-code/)
+Read: [Functions, modules and reusable pipeline code](/python/functions-modules-reusable-code/) · Practise: [Mutable default arguments](/interview/python/mutable-default-arguments/)
 
 ## 2. Choose the right data structure
 
 Sets for membership and deduplication, dicts for lookup, grouping and counting, deques for queues and sliding windows, tuples for fixed records and composite keys. These choices turn quadratic loops into linear ones.
 
-Read: [Python data structures for interviews](/python/data-structures-for-interviews/) · Practise: [List vs tuple vs set](/interview/python/list-tuple-set/), [Shallow vs deep copy](/interview/python/shallow-vs-deep-copy/)
+Read: [Python data structures for interviews](/python/data-structures-for-interviews/) · Practise: [List vs tuple vs set](/interview/python/list-tuple-set/), [dict and set complexity](/interview/python/dict-set-complexity/), [Shallow vs deep copy](/interview/python/shallow-vs-deep-copy/)
 
-## 3. Stream data with iterators and generators
+## 3. Read and write files safely
 
-Generators produce one item at a time, so you can process files, cursors and paginated APIs of any size with flat memory. Chain them into pipelines and write in batches.
+Set encodings, let the csv module handle quoting, serialise dates and Decimals explicitly, stream JSON Lines and gzip, and write outputs atomically.
 
-Read: [Iterators and generators](/python/iterators-generators/) · Practise: [Generators for large datasets](/interview/python/generators-large-datasets/)
+Read: [File I/O: CSV, JSON, JSON Lines and gzip](/python/file-io-csv-json/)
 
-## 4. Handle errors like production code
+## 4. Stream data with iterators and generators
 
-Classify failures: retry transient ones with backoff, quarantine and count bad records, fail fast on systemic errors. Catch specific exceptions, log with context and never swallow errors.
+Generators produce one item at a time, so you can process files, cursors and paginated APIs of any size with flat memory. Chain them and write in batches.
 
-Practise: [Exceptions in production pipelines](/interview/python/exceptions-in-pipelines/) · Read: [Reliability and retry design](/etl-elt/pipeline-reliability-and-retries/)
+Read: [Iterators and generators](/python/iterators-generators/) · Practise: [Generators for large datasets](/interview/python/generators-large-datasets/), [A 50 GB CSV with 8 GB of RAM](/interview/python/process-large-csv-limited-memory/)
 
-## 5. Make loads idempotent
+## 5. Handle errors and log like production code
 
-A load that can run twice without changing the result is safe to retry and backfill. Use a natural key, an upsert and a single transaction, and prove it with a run-twice test.
+Classify failures: retry transient ones, quarantine and count bad records, fail fast on systemic errors. Catch specific exceptions, chain causes, log with run context and make failures visible to the scheduler.
+
+Read: [Error handling and logging](/python/error-handling-logging/) · Practise: [Exceptions in production pipelines](/interview/python/exceptions-in-pipelines/)
+
+## 6. Ingest from APIs
+
+Sessions with timeouts, pagination as a generator, retries with backoff that honour `Retry-After`, rate limiting, incremental pulls and raw landing.
+
+Read: [Working with APIs](/python/working-with-apis/) · Practise: [Retries with backoff](/interview/python/api-retries-backoff/)
+
+## 7. Use pandas where it fits
+
+Explicit dtypes, keyed deduplication, validated joins and Parquet output, and knowing when DuckDB, Polars, Spark or warehouse SQL is the better tool.
+
+Read: [pandas for Data Engineers](/python/pandas-for-data-engineers/) · Practise: [When not to use pandas](/interview/python/when-not-to-use-pandas/)
+
+## 8. Test what matters
+
+Parametrised tests for edge cases, fixtures and `tmp_path`, monkeypatched network calls, and a run-twice idempotency test for every loader.
+
+Read: [Testing with pytest](/python/testing-with-pytest/) · Then: [Testing data pipelines and CI/CD](/etl-elt/testing-data-pipelines-cicd/)
+
+## 9. Make loads idempotent
+
+A load that can run twice without changing the result is safe to retry and backfill: a natural key, an upsert and a single transaction, proved with a test.
 
 Build: [Idempotent CSV loader tutorial](/python/idempotent-csv-loader/) · Read: [Idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/)
 
-## 6. Test what matters
-
-Unit-test transformation functions with small inputs, test idempotency by running a step twice, and test edge cases: empty files, duplicates, malformed rows, time zones.
-
-## 7. Work with the rest of the stack
+## 10. Work with the rest of the stack
 
 - **PySpark** for data too large for one machine: [PySpark fundamentals](/pyspark/pyspark-fundamentals/).
 - **Airflow** to schedule and retry Python tasks: [Airflow DAGs and retries](/airflow/dags-scheduling-retries/).
 
+## The pieces together
+
+A compact ingestion job uses most of the skills above: a generator over input lines, typed parsing with specific exceptions, counted rejects, batched idempotent writes in a transaction, and a logged summary with run context.
+
+```python
+import io
+import json
+import logging
+import sqlite3
+import sys
+from itertools import islice
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(levelname)s %(message)s", force=True)
+log = logging.getLogger("events")
+
+def read_events(lines):
+    for line_no, line in enumerate(lines, start=1):
+        try:
+            e = json.loads(line)
+            yield (str(e["event_id"]), e["user"], int(e["amount_cents"]))
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+            log.warning("line %d rejected: %s", line_no, type(exc).__name__)
+
+def batches(it, size):
+    it = iter(it)
+    while chunk := list(islice(it, size)):
+        yield chunk
+
+def run(conn, lines, run_id, batch_size=2):
+    loaded = 0
+    with conn:                                               # all batches commit together, or none
+        for chunk in batches(read_events(lines), batch_size):
+            conn.executemany("INSERT INTO events VALUES (?, ?, ?) "
+                             "ON CONFLICT(event_id) DO UPDATE SET user = excluded.user, "
+                             "amount_cents = excluded.amount_cents", chunk)
+            loaded += len(chunk)
+    log.info("run=%s loaded=%d", run_id, loaded)
+
+source = ('{"event_id": 1, "user": "asha", "amount_cents": 1999}\n'
+          '{"event_id": 2, "user": "ben", "amount_cents": "abc"}\n'
+          '{"event_id": 3, "user": "chen", "amount_cents": 500}\n'
+          'not json\n'
+          '{"event_id": 1, "user": "asha", "amount_cents": 1999}\n')
+
+conn = sqlite3.connect(":memory:")
+conn.execute("CREATE TABLE events (event_id TEXT PRIMARY KEY, user TEXT, amount_cents INTEGER)")
+run(conn, io.StringIO(source), "events__2026-10-05")
+run(conn, io.StringIO(source), "events__2026-10-05")        # a retry: same final state
+print(conn.execute("SELECT count(*), sum(amount_cents) FROM events").fetchone())
+```
+
+```text
+WARNING line 2 rejected: ValueError
+WARNING line 4 rejected: JSONDecodeError
+INFO run=events__2026-10-05 loaded=3
+WARNING line 2 rejected: ValueError
+WARNING line 4 rejected: JSONDecodeError
+INFO run=events__2026-10-05 loaded=3
+(2, 2499)
+```
+
+The duplicate event 1 and the retry both collapse into the same two rows, and both bad lines are reported with their line numbers instead of disappearing.
+
 ## Learning order and checkpoints
 
-| Step | You are ready to move on when you can… |
+| Step | You are ready to move on when you can... |
 |------|-----------------------------------------|
-| Structure | Test a transformation without touching files or databases |
-| Data structures | Pick a structure and state its time complexity |
+| Structure | Test a transformation without touching files, databases or the clock |
+| Data structures | Pick a structure and state its average and worst-case cost |
+| Files | Read a CSV with quoted newlines and a BOM correctly, and write a file atomically |
 | Generators | Process a file larger than memory |
-| Errors | Explain which failures you retry and which you fail on |
+| Errors and logging | Explain which failures you retry, which you quarantine and which fail the run |
+| APIs | Pull a paginated API with retries that honour `Retry-After` |
+| pandas | Join with `validate=` and say when you would use DuckDB or Spark instead |
+| Testing | Write a parametrised test and a run-twice idempotency test |
 | Idempotency | Show a test that proves a rerun changes nothing |
 
 Revise with the [Python cheat sheet](/resources/cheat-sheets/python-for-data-engineers/).
