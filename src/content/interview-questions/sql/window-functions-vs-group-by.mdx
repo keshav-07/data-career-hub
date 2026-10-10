@@ -15,7 +15,7 @@ interviewRelevance: "High"
 shortAnswer: "GROUP BY collapses each group into a single output row, so you lose the detail rows. A window function computes a value over a set of related rows but keeps every input row, adding the result as a new column. Use GROUP BY to summarise and window functions when you need both the row and its group-level context, such as a rank, a share of the group total or a running total. Window functions run after WHERE, GROUP BY and HAVING, so they can even be applied to aggregated results."
 followUps: ["How would you return the highest-paid employee in each department?", "What is the difference between RANK and DENSE_RANK?", "Why can you not use a window function in a WHERE clause?", "Can you use a window function and GROUP BY in the same query?"]
 prerequisites: ["articles:sql/aggregations-group-by-having"]
-related: ["articles:sql/window-functions", "articles:pyspark/window-functions", "interview-questions:sql/top-n-per-group-department-salaries"]
+related: ["articles:sql/window-functions", "articles:sql/window-frames-running-totals", "articles:pyspark/window-functions", "interview-questions:sql/top-n-per-group-department-salaries"]
 versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
 sources:
   - { label: "PostgreSQL 16 documentation: Window functions tutorial", url: "https://www.postgresql.org/docs/16/tutorial-window.html" }
