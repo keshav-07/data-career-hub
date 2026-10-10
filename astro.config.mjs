@@ -12,7 +12,9 @@ const site = process.env.SITE_URL ?? "https://datadank.com";
 // (hubs and other generated pages get none rather than a made-up date).
 const CONTENT = "src/content";
 const walk = (d) =>
-  readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
+  readdirSync(d).flatMap((f) =>
+    statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)],
+  );
 const PREFIX = {
   articles: (id) => `/${id}/`,
   "interview-questions": (id) => `/interview/${id}/`,
@@ -21,7 +23,9 @@ const PREFIX = {
   projects: (id) => `/projects/${id}/`,
   "cheat-sheets": (id) => `/resources/cheat-sheets/${id}/`,
   roadmaps: (id, fm) =>
-    /^roadmapType:\s*"?data-engineer"?\s*$/m.test(fm) ? "/data-engineering/roadmap/" : `/roadmaps/${id}/`,
+    /^roadmapType:\s*"?data-engineer"?\s*$/m.test(fm)
+      ? "/data-engineering/roadmap/"
+      : `/roadmaps/${id}/`,
 };
 const lastmod = new Map();
 for (const file of walk(CONTENT).filter((f) => /\.mdx?$/.test(f))) {
@@ -37,6 +41,23 @@ export default defineConfig({
   site,
   trailingSlash: "always",
   build: { format: "directory" },
+  vite: {
+    plugins: [
+      {
+        // Astro's temporary sync environment disables dependency discovery, leaving this CJS package unbundled.
+        name: "datadank-optimize-picomatch-for-sync",
+        config() {
+          return {
+            environments: {
+              astro: {
+                optimizeDeps: { include: ["picomatch"] },
+              },
+            },
+          };
+        },
+      },
+    ],
+  },
   integrations: [
     mdx(),
     sitemap({

@@ -22,6 +22,7 @@ const htmlFiles = walk(DIST).filter((f) => f.endsWith(".html"));
 const urlOf = (file) =>
   "/" +
   relative(DIST, file)
+    .replaceAll("\\", "/")
     .replace(/index\.html$/, "")
     .replace(/\.html$/, "/");
 const pages = htmlFiles.map((f) => ({ file: f, url: urlOf(f), html: readFileSync(f, "utf8") }));
@@ -168,7 +169,8 @@ for (const u of inSitemap)
 // Every absolute URL the build emits about itself must use the production origin, never a placeholder or a
 // preview host (a wrong origin tells Google the preferred URL is somewhere else).
 const ORIGIN = new URL(process.env.SITE_URL ?? "https://datadank.com").origin;
-const BAD_HOST = /https?:\/\/(?:[\w-]+\.)*(?:datadank\.example|pages\.dev|workers\.dev|localhost)\b/;
+const BAD_HOST =
+  /https?:\/\/(?:[\w-]+\.)*(?:datadank\.example|pages\.dev|workers\.dev|localhost)\b/;
 for (const p of pages) {
   const selfUrls = [
     p.html.match(/<link rel="canonical" href="([^"]*)"/)?.[1],
