@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["binary-search-trees", "trees"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "State the BST invariant precisely and explain why in-order traversal is sorted"
   - "Validate a BST with value bounds rather than parent comparisons"
@@ -82,11 +82,12 @@ def search_bst(root, val):
     return node
 
 
-t = bst_from([4, 2, 7, 1, 3])
-assert inorder(t) == [1, 2, 3, 4, 7]           # in-order of a BST is sorted
-assert search_bst(t, 2).val == 2 and search_bst(t, 5) is None
-t = insert_into_bst(t, 5)
-assert inorder(t) == [1, 2, 3, 4, 5, 7]
+t = bst_from([40, 20, 60, 10, 30])
+assert inorder(t) == [10, 20, 30, 40, 60]      # in-order of a BST is sorted
+assert search_bst(t, 20).val == 20 and search_bst(t, 50) is None
+t = insert_into_bst(t, 50)
+assert inorder(t) == [10, 20, 30, 40, 50, 60]
+assert inorder(insert_into_bst(None, 7)) == [7]   # empty tree
 ```
 
 **The invariant** applies to whole subtrees, not just children: every value in the left subtree of a node is less than the node, and every value in the right subtree is greater. Interview problems usually assume distinct values; if duplicates are allowed, agree which side they go to.
@@ -156,8 +157,8 @@ def kth_smallest(root, k):
     raise ValueError("k is larger than the number of nodes")
 
 
-t = bst_from([5, 3, 6, 2, 4, 1])
-assert [kth_smallest(t, k) for k in range(1, 7)] == [1, 2, 3, 4, 5, 6]
+t = bst_from([50, 30, 70, 20, 40, 10])
+assert [kth_smallest(t, k) for k in range(1, 7)] == [10, 20, 30, 40, 50, 70]
 ```
 
 This runs in O(h + k) because it stops as soon as it reaches the k-th node. If the tree changes often and k-th queries are frequent, store subtree sizes in each node so you can steer directly to the answer in O(h).
@@ -177,10 +178,10 @@ def lca_bst(root, p, q):
     return None
 
 
-t = bst_from([6, 2, 8, 0, 4, 7, 9, 3, 5])
-assert lca_bst(t, 2, 8).val == 6
-assert lca_bst(t, 2, 4).val == 2
-assert lca_bst(t, 3, 5).val == 4
+t = bst_from([30, 15, 45, 10, 20, 40, 50, 18, 25])
+assert lca_bst(t, 15, 45).val == 30
+assert lca_bst(t, 15, 20).val == 15            # one target is the ancestor
+assert lca_bst(t, 18, 25).val == 20
 ```
 
 Unlike the general binary tree version, this one never needs to explore both sides: O(h) time and O(1) space.
@@ -210,15 +211,15 @@ def delete_node(root, key):
     return root
 
 
-t = bst_from([5, 3, 6, 2, 4, 7])
-t = delete_node(t, 3)                     # two children
-assert inorder(t) == [2, 4, 5, 6, 7] and is_valid_bst(t)
-t = delete_node(t, 7)                     # leaf
-t = delete_node(t, 6)                     # now a leaf too
-assert inorder(t) == [2, 4, 5] and is_valid_bst(t)
-t = delete_node(t, 5)                     # the root
-assert inorder(t) == [2, 4] and is_valid_bst(t)
-assert inorder(delete_node(t, 42)) == [2, 4]   # missing key: unchanged
+t = bst_from([30, 20, 40, 10, 25, 50])
+t = delete_node(t, 20)                    # two children
+assert inorder(t) == [10, 25, 30, 40, 50] and is_valid_bst(t)
+t = delete_node(t, 50)                    # leaf
+t = delete_node(t, 40)                    # now a leaf too
+assert inorder(t) == [10, 25, 30] and is_valid_bst(t)
+t = delete_node(t, 30)                    # the root
+assert inorder(t) == [10, 25] and is_valid_bst(t)
+assert inorder(delete_node(t, 99)) == [10, 25]   # missing key: unchanged
 ```
 
 Returning the (possibly new) subtree root from each call is what lets the parent reattach it; forgetting to assign `root.left = ...` is the most common bug.
@@ -304,8 +305,9 @@ def range_sum_bst(root, low, high):
 
 assert count_between(event_times, 1000, 1005) == 3
 assert count_between(event_times, 1300, 1400) == 0
-t = bst_from([10, 5, 15, 3, 7, 18])
-assert range_sum_bst(t, 7, 15) == 32
+t = bst_from([20, 10, 30, 5, 15, 35])
+assert range_sum_bst(t, 10, 30) == 75         # 10 + 15 + 20 + 30
+assert range_sum_bst(None, 0, 100) == 0
 print(count_between(event_times, 1000, 1005), range_sum_bst(t, 7, 15))
 ```
 
