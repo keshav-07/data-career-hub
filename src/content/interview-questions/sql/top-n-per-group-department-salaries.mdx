@@ -1,0 +1,192 @@
+---
+seoTitle: "Top N per Group in SQL: Top 3 Salaries per Dept"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Return the top three salaries in each department, including ties."
+description: "Interview answer: top-N per group with DENSE_RANK, RANK or ROW_NUMBER depending on the tie rule, plus LATERAL, correlated-count and QUALIFY forms and the index that makes it fast."
+technology: ["sql"]
+topic: ["window-functions", "ranking", "top-n"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Compute DENSE_RANK() OVER (PARTITION BY dept_id ORDER BY salary DESC) in a CTE and keep rank <= 3 in the outer query, because window results cannot be filtered in WHERE. DENSE_RANK keeps everyone who earns one of the three highest distinct salaries; RANK keeps the first three positions with ties (and can return fewer distinct salaries); ROW_NUMBER returns exactly three people and needs a tiebreaker. Confirm which rule the business wants before writing the query."
+followUps: ["What changes if the requirement is exactly three employees per department?", "How would you write this in Snowflake or BigQuery without a CTE?", "Which index makes the per-department lookup cheap in PostgreSQL?", "How do you include departments that have no employees?"]
+prerequisites: ["articles:sql/window-functions"]
+related: ["interview-questions:sql/second-highest-salary", "articles:sql/top-n-deduplication-scd-queries", "articles:sql/semi-anti-lateral-joins", "interview-questions:sql/top-selling-products-sql-case-study"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql. The QUALIFY snippet runs on DuckDB 1.5."
+practice: {"platform": "LeetCode", "number": 185, "title": "Department Top Three Salaries", "url": "https://leetcode.com/problems/department-top-three-salaries/"}
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: LATERAL subqueries", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html#QUERIES-LATERAL" }
+  - { label: "DuckDB documentation: QUALIFY clause", url: "https://duckdb.org/docs/stable/sql/query_syntax/qualify" }
+---
+
+## Sample data
+
+Engineering has a tie at second place; sales has only two people, both on the same salary; HR has nobody yet.
+
+```sql
+CREATE TABLE departments (dept_id INT PRIMARY KEY, dept_name TEXT NOT NULL);
+CREATE TABLE employees (
+  emp_id  INT PRIMARY KEY,
+  name    TEXT NOT NULL,
+  dept_id INT NOT NULL REFERENCES departments,
+  salary  INT NOT NULL
+);
+INSERT INTO departments VALUES (1, 'eng'), (2, 'sales'), (3, 'hr');
+INSERT INTO employees VALUES
+  (1, 'Ana', 1, 120), (2, 'Bo', 1, 110), (3, 'Cy', 1, 110),
+  (4, 'Di',  1, 100), (5, 'Ed', 1,  90),
+  (6, 'Fi',  2,  80), (7, 'Gu', 2,  80);
+```
+
+## Detailed explanation
+
+Window functions are evaluated after `WHERE`, so rank in a CTE and filter outside it:
+
+```sql
+WITH ranked AS (
+  SELECT d.dept_name, e.name, e.salary,
+         DENSE_RANK() OVER (PARTITION BY e.dept_id ORDER BY e.salary DESC) AS rnk
+  FROM employees e
+  JOIN departments d USING (dept_id)
+)
+SELECT dept_name, name, salary, rnk
+FROM ranked
+WHERE rnk <= 3
+ORDER BY dept_name, salary DESC, name;
+```
+
+| dept_name | name | salary | rnk |
+|---|---|---|---|
+| eng | Ana | 120 | 1 |
+| eng | Bo | 110 | 2 |
+| eng | Cy | 110 | 2 |
+| eng | Di | 100 | 3 |
+| sales | Fi | 80 | 1 |
+| sales | Gu | 80 | 1 |
+
+Engineering returns **four** people, because three distinct salaries (120, 110, 100) are held by four employees. That is the usual meaning of "top three salaries". Ed (90) is the fourth distinct salary and is excluded.
+
+## The tie rule decides the function
+
+The same filter `<= 3` gives three different answers for engineering:
+
+```sql
+SELECT name, salary,
+       ROW_NUMBER() OVER w AS row_num,
+       RANK()       OVER w AS rnk,
+       DENSE_RANK() OVER w AS dense_rnk
+FROM employees
+WHERE dept_id = 1
+WINDOW w AS (ORDER BY salary DESC, emp_id)
+ORDER BY salary DESC, emp_id;
+```
+
+| name | salary | row_num | rnk | dense_rnk |
+|---|---|---|---|---|
+| Ana | 120 | 1 | 1 | 1 |
+| Bo | 110 | 2 | 2 | 2 |
+| Cy | 110 | 3 | 3 | 3 |
+| Di | 100 | 4 | 4 | 4 |
+| Ed | 90 | 5 | 5 | 5 |
+
+That output is a trap worth knowing: with `emp_id` inside the window's `ORDER BY`, no two rows are peers, so `RANK` and `DENSE_RANK` behave exactly like `ROW_NUMBER`. Ties only exist for the columns in the window's `ORDER BY`. Rank on salary alone:
+
+```sql
+SELECT name, salary,
+       ROW_NUMBER() OVER (ORDER BY salary DESC, emp_id) AS row_num,
+       RANK()       OVER (ORDER BY salary DESC)         AS rnk,
+       DENSE_RANK() OVER (ORDER BY salary DESC)         AS dense_rnk
+FROM employees
+WHERE dept_id = 1
+ORDER BY salary DESC, emp_id;
+```
+
+| name | salary | row_num | rnk | dense_rnk |
+|---|---|---|---|---|
+| Ana | 120 | 1 | 1 | 1 |
+| Bo | 110 | 2 | 2 | 2 |
+| Cy | 110 | 3 | 2 | 2 |
+| Di | 100 | 4 | 4 | 3 |
+| Ed | 90 | 5 | 5 | 4 |
+
+| Requirement | Function | Engineering result for `<= 3` |
+|---|---|---|
+| Everyone on one of the three highest distinct salaries | `DENSE_RANK` | Ana, Bo, Cy, Di |
+| The top three positions, ties share a position (sports ranking) | `RANK` | Ana, Bo, Cy |
+| Exactly three people, ties broken by a rule | `ROW_NUMBER` with a tiebreaker | Ana, Bo, Cy |
+
+`RANK` and `ROW_NUMBER` agree here only by coincidence; add a fourth person on 110 and `RANK` returns four rows while `ROW_NUMBER` still returns three.
+
+## Alternative: LATERAL with LIMIT
+
+For each department, fetch its three highest distinct salaries, then the employees on them. With an index on `(dept_id, salary DESC)` each department costs one short index read, which beats sorting the whole table when departments are large and N is small:
+
+```sql
+CREATE INDEX employees_dept_salary ON employees (dept_id, salary DESC);
+
+SELECT d.dept_name, e.name, e.salary
+FROM departments d
+CROSS JOIN LATERAL (
+  SELECT DISTINCT salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+  ORDER BY salary DESC
+  LIMIT 3
+) AS top_salaries
+JOIN employees e ON e.dept_id = d.dept_id AND e.salary = top_salaries.salary
+ORDER BY d.dept_name, e.salary DESC, e.name;
+```
+
+It returns the same six rows as the `DENSE_RANK` query. HR has no row, because the lateral subquery returns nothing for it. To list empty departments, use `LEFT JOIN LATERAL (...) ON true` and a `LEFT JOIN` to employees.
+
+## Alternative: correlated count
+
+Before window functions, the portable form counted how many distinct salaries in the same department are higher:
+
+```sql
+SELECT e.dept_id, e.name, e.salary
+FROM employees e
+WHERE (
+  SELECT COUNT(DISTINCT e2.salary)
+  FROM employees e2
+  WHERE e2.dept_id = e.dept_id AND e2.salary > e.salary
+) < 3
+ORDER BY e.dept_id, e.salary DESC, e.name;
+```
+
+It is correct (fewer than three higher distinct salaries means you are in the top three), but it runs a subquery per employee and is roughly quadratic within each department. Mention it as the fallback, not the first answer.
+
+## QUALIFY in warehouses
+
+Snowflake, BigQuery, Databricks and DuckDB filter window results directly:
+
+<!-- engine: duckdb -->
+```sql
+CREATE TABLE emp AS SELECT * FROM (VALUES
+  ('eng', 'Ana', 120), ('eng', 'Bo', 110), ('eng', 'Cy', 110),
+  ('eng', 'Di', 100), ('eng', 'Ed', 90)) AS t(dept, name, salary);
+
+SELECT dept, name, salary
+FROM emp
+QUALIFY DENSE_RANK() OVER (PARTITION BY dept ORDER BY salary DESC) <= 3
+ORDER BY salary DESC, name;
+```
+
+## Edge cases to state
+
+- **NULL salaries.** PostgreSQL sorts `NULL` first under `DESC`, so a `NULL` would take rank 1. Filter `salary IS NOT NULL` or write `ORDER BY salary DESC NULLS LAST`.
+- **Departments with fewer than N employees** return what they have (sales returns two).
+- **Departments with no employees** vanish from an inner join; start from `departments` with a `LEFT JOIN` if they must appear.
+- **Deterministic output.** With `ROW_NUMBER`, always add a unique tiebreaker such as `emp_id`, or the chosen three can change between runs.
+
+## Common mistakes
+
+1. Filtering `WHERE DENSE_RANK() OVER (...) <= 3`: window functions are not allowed in `WHERE`.
+2. Using `LIMIT 3` on the whole query, which returns three rows in total, not per department.
+3. Putting a tiebreaker inside the window used for `RANK`/`DENSE_RANK`, which silently removes the ties you meant to keep.
+4. Not asking which tie rule is wanted.

@@ -6,8 +6,8 @@ technology: ["sql"]
 topic: ["pivot", "unpivot", "grouping-sets", "reporting"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Pivot rows into columns with conditional aggregation and with the PIVOT operator"
   - "Unpivot wide tables into long form with UNPIVOT or a LATERAL VALUES list"
@@ -422,10 +422,10 @@ ORDER BY GROUPING(region), region, GROUPING(channel), channel;
 
 | Engine | `GROUPING SETS` | `ROLLUP` | `CUBE` |
 |---|---|---|---|
-| PostgreSQL, SQL Server, Oracle, Snowflake, DuckDB, Databricks | Yes | Yes | Yes |
+| PostgreSQL, SQL Server, Oracle, Snowflake, BigQuery, DuckDB, Databricks | Yes | Yes | Yes |
 | MySQL 8 | No | `WITH ROLLUP` or `ROLLUP (...)`, with `GROUPING()` | No |
 
-MySQL documents `CUBE` and `GROUPING SETS` only for its HeatWave engine; in standard MySQL emulate them with `UNION ALL` of separate `GROUP BY` queries. Check BigQuery's current documentation before relying on these clauses there.
+MySQL documents `CUBE` and `GROUPING SETS` only for its HeatWave engine; in standard MySQL emulate them with `UNION ALL` of separate `GROUP BY` queries.
 
 ### Pitfalls
 

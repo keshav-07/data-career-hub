@@ -1,0 +1,132 @@
+---
+seoTitle: "Join Fan-Out: Why SQL Totals Double After a Join"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Revenue doubled after you joined a second table. What happened and how do you fix it?"
+description: "Interview answer: joining two one-to-many children multiplies rows, so SUMs inflate. Aggregate each child to the parent's grain before joining, and test key uniqueness."
+technology: ["sql"]
+topic: ["joins", "aggregation", "data-quality"]
+difficulty: "Medium"
+questionType: ["debugging", "coding"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "The join fanned out: each order matched several items and several payments, so the join produced items x payments rows per order and every SUM counted values multiple times. Fix it by aggregating each child table to the order grain in its own CTE, then joining the one-row-per-order results. Detect it by comparing row counts before and after the join and by checking that the key you join on is unique on the side you expect. DISTINCT inside SUM is not a fix: it also drops legitimate equal values."
+followUps: ["Why is SUM(DISTINCT amount) the wrong fix?", "How would you write a test that catches fan-out in a dbt model?", "How does fan-out show up in a Spark job?", "When is a many-to-many join actually correct?"]
+prerequisites: ["articles:sql/joins", "articles:sql/aggregations-group-by-having"]
+related: ["articles:sql/joins", "interview-questions:sql/inner-vs-left-join", "interview-questions:sql/monthly-revenue-sql-case-study", "interview-questions:data-engineering/data-quality-checks"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
+sources:
+  - { label: "PostgreSQL 16 documentation: Joined tables", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html#QUERIES-JOIN" }
+---
+
+## Sample data
+
+Order 1 has two items and was paid in two parts (gift card plus card). Order 2 has one item and one payment.
+
+```sql
+CREATE TABLE orders (order_id INT PRIMARY KEY, shipping_fee NUMERIC(10, 2) NOT NULL);
+CREATE TABLE order_items (order_id INT NOT NULL, sku TEXT NOT NULL, price NUMERIC(10, 2) NOT NULL);
+CREATE TABLE payments (order_id INT NOT NULL, method TEXT NOT NULL, amount NUMERIC(10, 2) NOT NULL);
+INSERT INTO orders VALUES (1, 5.00), (2, 0.00);
+INSERT INTO order_items VALUES (1, 'mug', 10.00), (1, 'tea', 20.00), (2, 'pot', 30.00);
+INSERT INTO payments VALUES (1, 'gift_card', 20.00), (1, 'card', 15.00), (2, 'card', 30.00);
+```
+
+True figures: order 1 has 30.00 of items, 5.00 shipping and 35.00 paid; order 2 has 30.00 of items and 30.00 paid.
+
+## The broken query
+
+```sql
+SELECT o.order_id,
+       COUNT(*)            AS joined_rows,
+       SUM(i.price)        AS items_total,
+       SUM(p.amount)       AS paid_total,
+       SUM(o.shipping_fee) AS shipping
+FROM orders o
+JOIN order_items i ON i.order_id = o.order_id
+JOIN payments    p ON p.order_id = o.order_id
+GROUP BY o.order_id
+ORDER BY o.order_id;
+```
+
+| order_id | joined_rows | items_total | paid_total | shipping |
+|---|---|---|---|---|
+| 1 | 4 | 60.00 | 70.00 | 20.00 |
+| 2 | 1 | 30.00 | 30.00 | 0.00 |
+
+Order 1 joins to 2 items, and **each** of those rows joins to 2 payments: 2 x 2 = 4 rows. Items are counted twice, payments twice and the order-level shipping fee four times. Order 2 looks right only because it has one of each, which is why fan-out bugs survive small tests.
+
+## The fix: aggregate to the parent's grain, then join
+
+```sql
+WITH items AS (
+  SELECT order_id, SUM(price) AS items_total, COUNT(*) AS item_count
+  FROM order_items GROUP BY order_id
+),
+paid AS (
+  SELECT order_id, SUM(amount) AS paid_total
+  FROM payments GROUP BY order_id
+)
+SELECT o.order_id, i.item_count, i.items_total, p.paid_total, o.shipping_fee,
+       p.paid_total - (i.items_total + o.shipping_fee) AS balance
+FROM orders o
+LEFT JOIN items i ON i.order_id = o.order_id
+LEFT JOIN paid  p ON p.order_id = o.order_id
+ORDER BY o.order_id;
+```
+
+| order_id | item_count | items_total | paid_total | shipping_fee | balance |
+|---|---|---|---|---|---|
+| 1 | 2 | 30.00 | 35.00 | 5.00 | 0.00 |
+| 2 | 1 | 30.00 | 30.00 | 0.00 | 0.00 |
+
+Each CTE returns **one row per order**, so the joins are one-to-one and nothing multiplies. The `LEFT JOIN`s keep orders that have no payment yet (their `paid_total` is `NULL`, which a reconciliation should flag rather than hide).
+
+## Why SUM(DISTINCT ...) is not a fix
+
+```sql
+SELECT o.order_id, SUM(DISTINCT p.amount) AS paid_distinct
+FROM orders o
+JOIN order_items i ON i.order_id = o.order_id
+JOIN payments    p ON p.order_id = o.order_id
+GROUP BY o.order_id
+ORDER BY o.order_id;
+```
+
+| order_id | paid_distinct |
+|---|---|
+| 1 | 35.00 |
+| 2 | 30.00 |
+
+It happens to give 35.00 here, but only because the two payments differ. Two payments of 20.00 each would sum to 20.00. `DISTINCT` removes equal **values**, not duplicated **rows**; the only correct fix is to stop the rows multiplying.
+
+## Detecting fan-out
+
+```sql
+-- 1. Is the join key unique where you assume it is? (should return nothing for a one-to-one join)
+SELECT order_id, COUNT(*) AS payments_per_order
+FROM payments GROUP BY order_id HAVING COUNT(*) > 1;
+
+-- 2. Did the join change the row count of the driving table?
+SELECT (SELECT COUNT(*) FROM order_items) AS item_rows,
+       (SELECT COUNT(*) FROM order_items i JOIN payments p USING (order_id)) AS after_join;
+```
+
+| item_rows | after_join |
+|---|---|
+| 3 | 5 |
+
+The first query returns order 1 with 2 payments, so payments is not unique per order. The second shows that joining items to payments turned 3 rows into 5. In dbt, a `unique` test on the model's grain column catches this before it reaches a dashboard; in Spark, a join whose output row count is far above both inputs in the stage metrics is the same symptom at scale.
+
+## When many-to-many is correct
+
+Sometimes you want every combination, for example "every item paired with every payment method used on that order" for an allocation model. Then the multiplication is the point, and amounts must be **allocated** (for example, item price times the payment's share of the order total) rather than summed raw.
+
+## Common mistakes
+
+1. Joining two one-to-many children of the same parent in one step and summing.
+2. Summing a parent-level column (shipping, order total) after joining to child rows.
+3. Patching with `DISTINCT` or `SUM(DISTINCT ...)`.
+4. Testing only on data where every parent has one child.

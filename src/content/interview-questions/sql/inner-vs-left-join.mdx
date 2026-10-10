@@ -1,50 +1,149 @@
 ---
 seoTitle: "INNER JOIN vs LEFT JOIN: SQL Interview Answer"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Explain INNER JOIN vs LEFT JOIN with a practical example."
-description: "Interview answer: INNER JOIN keeps only matching rows, LEFT JOIN keeps every left-side row with NULLs where nothing matches, which changes counts and totals."
+description: "Interview answer: INNER JOIN keeps only matching rows, LEFT JOIN keeps every left-side row with NULLs where nothing matches, which changes counts, totals and filters."
 inventoryId: "INT-01"
 technology: ["sql"]
 topic: ["joins"]
 difficulty: "Easy"
 questionType: ["conceptual", "coding"]
-estimatedMinutes: 5
+estimatedMinutes: 6
 interviewRelevance: "High"
-shortAnswer: "An INNER JOIN returns only rows that have a match in both tables. A LEFT JOIN returns every row from the left table, and fills the right table's columns with NULL where there is no match. So a customer with no orders disappears from an inner join but appears with NULLs in a left join, which changes counts and totals."
-followUps: ["Why does putting a condition on the right table in WHERE turn a LEFT JOIN into an INNER JOIN?", "How do you count orders per customer including customers with none?", "When would you use a FULL OUTER JOIN?"]
-related: ["articles:sql/joins", "articles:sql/aggregations-group-by-having"]
-versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there)"
+shortAnswer: "An INNER JOIN returns only rows that have a match in both tables. A LEFT JOIN returns every row from the left table, and fills the right table's columns with NULL where there is no match. So a customer with no orders disappears from an inner join but appears with NULLs in a left join, which changes counts and totals. Either join repeats a left row once per matching right row, and a WHERE filter on the right table quietly turns a LEFT JOIN back into an inner join."
+followUps: ["Why does putting a condition on the right table in WHERE turn a LEFT JOIN into an INNER JOIN?", "How do you count orders per customer including customers with none?", "When would you use a FULL OUTER JOIN?", "How do you find customers with no orders at all?"]
+prerequisites: ["articles:sql/sql-fundamentals"]
+related: ["articles:sql/joins", "articles:sql/aggregations-group-by-having", "interview-questions:sql/customers-without-orders-anti-join", "interview-questions:sql/join-fan-out-double-counting"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
+sources:
+  - { label: "PostgreSQL 16 documentation: Joined tables", url: "https://www.postgresql.org/docs/16/queries-table-expressions.html#QUERIES-JOIN" }
 ---
 
 ## Detailed explanation
 
-Choose the join by asking: **which rows must I not lose?** If every customer must appear in a report, the customer table is the left side of a `LEFT JOIN`.
+Choose the join by asking: **which rows must I not lose?** If every customer must appear in a report, the customer table is the left side of a `LEFT JOIN`. If only customers who actually ordered matter, an `INNER JOIN` says so explicitly.
 
-## Example
+## Sample data
 
-Customers Asha (2 orders), Ben (1 order) and Chen (no orders):
+Asha has two orders (one cancelled), Ben has one, Chen has none.
+
+```sql
+CREATE TABLE customers (customer_id INT PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE orders (
+  order_id    INT PRIMARY KEY,
+  customer_id INT NOT NULL REFERENCES customers,
+  status      TEXT NOT NULL,
+  amount      NUMERIC(10, 2) NOT NULL
+);
+INSERT INTO customers VALUES (1, 'Asha'), (2, 'Ben'), (3, 'Chen');
+INSERT INTO orders VALUES
+  (101, 1, 'delivered', 100.00),
+  (102, 1, 'cancelled',  20.00),
+  (103, 2, 'delivered',  20.00);
+```
+
+## Both joins side by side
+
+```sql
+SELECT c.name, o.order_id, o.amount
+FROM customers c
+INNER JOIN orders o ON o.customer_id = c.customer_id
+ORDER BY c.name, o.order_id;
+```
+
+| name | order_id | amount |
+|---|---|---|
+| Asha | 101 | 100.00 |
+| Asha | 102 | 20.00 |
+| Ben | 103 | 20.00 |
+
+```sql
+SELECT c.name, o.order_id, o.amount
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id
+ORDER BY c.name, o.order_id;
+```
+
+| name | order_id | amount |
+|---|---|---|
+| Asha | 101 | 100.00 |
+| Asha | 102 | 20.00 |
+| Ben | 103 | 20.00 |
+| Chen | NULL | NULL |
+
+Asha appears twice in both results: a join repeats the left row once per match. Only the left join keeps Chen.
+
+## Counting per customer, including zero
 
 ```sql
 SELECT c.name,
-       COUNT(o.order_id)         AS orders,
+       COUNT(o.order_id)          AS orders,
+       COUNT(*)                   AS wrong_count,
        COALESCE(SUM(o.amount), 0) AS revenue
 FROM customers c
 LEFT JOIN orders o ON o.customer_id = c.customer_id
-GROUP BY c.name;
+GROUP BY c.customer_id, c.name
+ORDER BY c.name;
 ```
 
-| name | orders | revenue |
-|------|--------|---------|
-| Asha | 2 | 120 |
-| Ben | 1 | 20 |
-| Chen | 0 | 0 |
+| name | orders | wrong_count | revenue |
+|---|---|---|---|
+| Asha | 2 | 2 | 120.00 |
+| Ben | 1 | 1 | 20.00 |
+| Chen | 0 | 1 | 0 |
 
-With `INNER JOIN`, Chen would be missing entirely.
+`COUNT(*)` counts Chen's padded row as one order; `COUNT(o.order_id)` ignores the `NULL`. `SUM` over no values is `NULL`, hence the `COALESCE`.
+
+## The WHERE trap
+
+Count only delivered orders, still listing every customer:
+
+```sql
+-- Wrong: the filter runs after the join and removes Chen's NULL row
+SELECT c.name, COUNT(o.order_id) AS delivered
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id
+WHERE o.status = 'delivered'
+GROUP BY c.name
+ORDER BY c.name;
+```
+
+| name | delivered |
+|---|---|
+| Asha | 1 |
+| Ben | 1 |
+
+```sql
+-- Right: the condition is part of the match
+SELECT c.name, COUNT(o.order_id) AS delivered
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'delivered'
+GROUP BY c.name
+ORDER BY c.name;
+```
+
+| name | delivered |
+|---|---|
+| Asha | 1 |
+| Ben | 1 |
+| Chen | 0 |
+
+Chen is back with 0. In the wrong version, `o.status = 'delivered'` is `NULL` (unknown) for Chen's padded row, so `WHERE` drops him. A condition on the **right** table belongs in `ON`; a condition on the **left** table belongs in `WHERE`.
+
+## When to use which
+
+| Question | Join |
+|---|---|
+| Orders with their customer details | `INNER` (every order has a customer) |
+| Every customer, with order stats if any | `LEFT` from customers |
+| Customers with no orders | `LEFT ... WHERE o.order_id IS NULL`, or `NOT EXISTS` |
+| Reconcile two systems, show both sides' gaps | `FULL OUTER` |
 
 ## Common mistakes
 
-1. **`COUNT(*)` instead of `COUNT(o.order_id)`.** `COUNT(*)` counts Chen's unmatched row as 1 order.
-2. **Filtering the right table in `WHERE`.** `WHERE o.amount > 0` removes rows where `o.amount` is `NULL`, which drops Chen and silently turns the query into an inner join. Move the condition into `ON`.
-3. **Assuming a left join cannot add rows.** If the right side has several matches, the left row is repeated once per match.
+1. **`COUNT(*)` instead of `COUNT(right_key)`** after a left join.
+2. **Filtering the right table in `WHERE`**, which turns the left join into an inner join.
+3. **Assuming a left join cannot add rows.** If the right side has several matches, the left row is repeated once per match, and sums over left-table columns are inflated.
+4. **Chaining an inner join after a left join** (`customers LEFT JOIN orders INNER JOIN payments`), which drops the customers the left join kept, for the same reason as the `WHERE` trap.

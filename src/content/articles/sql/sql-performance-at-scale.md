@@ -6,8 +6,8 @@ technology: ["sql"]
 topic: ["performance", "window-functions", "data-skew", "hyperloglog"]
 difficulty: "Advanced"
 publishedDate: "2026-10-06"
-updatedDate: "2026-10-06"
-reviewedDate: "2026-10-06"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain what a window function costs (sorting and buffering per partition) and reduce that cost"
   - "Rewrite top-N-per-group queries so the engine can stop early"
@@ -207,15 +207,15 @@ SELECT seller_id, count(*) AS orders,
        round(100.0 * count(*) / sum(count(*)) OVER (), 1) AS pct
 FROM orders
 GROUP BY seller_id
-ORDER BY orders DESC
+ORDER BY orders DESC, seller_id
 LIMIT 3;
 ```
 
 | seller_id | orders | pct |
 |---|---|---|
 | 1 | 100000 | 33.3 |
-| 87 | 301 | 0.1 |
-| 184 | 301 | 0.1 |
+| 3 | 301 | 0.1 |
+| 4 | 301 | 0.1 |
 
 A query like this (top keys and their share) is the first diagnostic. In Spark or a warehouse profile, the symptom is one task or worker that runs far longer and processes far more rows than the median.
 

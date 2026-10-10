@@ -6,8 +6,8 @@ technology: ["sql"]
 topic: ["window-functions", "window-frames", "running-totals", "percentiles"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Write running totals and explain the default frame and the ROWS versus RANGE difference"
   - "Compute moving averages over a fixed number of rows or a time range"
@@ -24,7 +24,7 @@ sources:
   - { label: "PostgreSQL documentation: Ordered-set aggregate functions (PERCENTILE_CONT)", url: "https://www.postgresql.org/docs/16/functions-aggregate.html" }
   - { label: "BigQuery documentation: Navigation functions (PERCENTILE_CONT)", url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/navigation_functions" }
   - { label: "Snowflake documentation: Window function syntax and usage", url: "https://docs.snowflake.com/en/sql-reference/functions-window-syntax" }
-versionContext: "Examples run on PostgreSQL 16; the MEDIAN and QUALIFY-free percentile example runs on DuckDB 1.5. SQL Server, Snowflake and BigQuery syntax is shown for comparison and was not executed."
+versionContext: "Examples run on PostgreSQL 16; the MEDIAN and QUALIFY-free percentile example runs on DuckDB 1.5. the Spark SQL interval-frame note was checked on PySpark 4.2. SQL Server, Snowflake and BigQuery syntax is shown for comparison and was not executed."
 ---
 
 The [previous lesson](/sql/window-functions/) covered ranking and offset functions, which ignore the window frame. Aggregate window functions (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`) and value functions like `LAST_VALUE` depend on the **frame**: the subset of the partition, relative to the current row, that feeds the calculation. Frames are how SQL computes running totals, moving averages and year-to-date figures. This lesson covers frames properly, then the distribution functions used for shares, percentiles and medians.
@@ -188,7 +188,7 @@ LIMIT 4;
 | PostgreSQL 11+, MySQL 8, DuckDB, Oracle | Yes | Yes |
 | SQL Server | Yes | No: `RANGE` accepts only `UNBOUNDED` and `CURRENT ROW` |
 | BigQuery | Yes | Numeric offsets only: order by a number such as `UNIX_DATE(sale_date)` |
-| Spark SQL | Yes | Numeric offsets; order by a numeric form of the date |
+| Spark SQL | Yes | Yes in SQL when ordering by a date or timestamp (`RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`); the DataFrame `rangeBetween` API takes numeric offsets only |
 
 For Snowflake, check the current window frame documentation for which `RANGE` offsets your account supports; the `ROWS` form works everywhere.
 
