@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["graphs", "bfs", "dfs", "topological-sort", "union-find", "shortest-paths"]
 difficulty: "Advanced"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Represent graphs as adjacency lists and grids, and traverse them with DFS and BFS"
   - "Order tasks with topological sort and detect cycles in dependency graphs"
@@ -116,10 +116,10 @@ def max_area_of_island(grid):
     return best
 
 
-g = [list("11000"), list("11000"), list("00100"), list("00011")]
-assert num_islands(g) == 3
+g = [list("10011"), list("10001"), list("00100"), list("11001")]
+assert num_islands(g) == 5
 assert num_islands([list("0")]) == 0
-assert max_area_of_island([[0, 0, 1, 0], [1, 1, 1, 0], [0, 0, 0, 1]]) == 4
+assert max_area_of_island([[1, 1, 0, 1], [0, 1, 0, 1], [1, 0, 1, 1]]) == 4
 assert max_area_of_island([[0, 0]]) == 0
 ```
 
@@ -164,11 +164,11 @@ def surrounded_regions(board):
             board[r][c] = "O" if board[r][c] == "S" else "X"
 
 
-heights = [[1, 2, 2, 3, 5], [3, 2, 3, 4, 4], [2, 4, 5, 3, 1], [6, 7, 1, 4, 5], [5, 1, 1, 2, 4]]
-assert pacific_atlantic(heights) == [[0, 4], [1, 3], [1, 4], [2, 2], [3, 0], [3, 1], [4, 0]]
-b = [list("XXXX"), list("XOOX"), list("XXOX"), list("XOXX")]
+heights = [[1, 2, 3], [8, 9, 4], [7, 6, 5]]
+assert pacific_atlantic(heights) == [[0, 2], [1, 0], [1, 1], [1, 2], [2, 0], [2, 1], [2, 2]]
+b = [list("XXXXX"), list("XOOXX"), list("XXOXO"), list("XXXXO")]
 surrounded_regions(b)
-assert b == [list("XXXX"), list("XXXX"), list("XXXX"), list("XOXX")]
+assert b == [list("XXXXX"), list("XXXXX"), list("XXXXO"), list("XXXXO")]   # border group survives
 ```
 
 ### Multi-source BFS: rotting oranges
@@ -202,9 +202,9 @@ def oranges_rotting(grid):
     return -1 if fresh else minutes
 
 
-assert oranges_rotting([[2, 1, 1], [1, 1, 0], [0, 1, 1]]) == 4
-assert oranges_rotting([[2, 1, 1], [0, 1, 1], [1, 0, 1]]) == -1
-assert oranges_rotting([[0, 2]]) == 0
+assert oranges_rotting([[2, 1, 0], [1, 1, 1], [0, 0, 1]]) == 4
+assert oranges_rotting([[2, 0, 1], [1, 1, 0]]) == -1        # the top-right orange is cut off
+assert oranges_rotting([[2, 2]]) == 0                       # nothing fresh
 ```
 
 ## General graph traversal
@@ -238,10 +238,10 @@ def clone_graph(node):
     return copies[node]
 
 
-a, b, c, d = Node(1), Node(2), Node(3), Node(4)
-a.neighbors, b.neighbors, c.neighbors, d.neighbors = [b, d], [a, c], [b, d], [a, c]
+a, b, c = Node(5), Node(6), Node(7)
+a.neighbors, b.neighbors, c.neighbors = [b, c], [a, c], [a, b]      # a triangle
 copy = clone_graph(a)
-assert copy is not a and [n.val for n in copy.neighbors] == [2, 4]
+assert copy is not a and [n.val for n in copy.neighbors] == [6, 7]
 assert copy.neighbors[0].neighbors[0] is copy               # cycle preserved, no originals reused
 assert clone_graph(None) is None
 ```
@@ -258,7 +258,7 @@ def ladder_length(begin, end, word_list):
     words = set(word_list)
     if end not in words:
         return 0
-    buckets = defaultdict(list)                       # "h*t" -> ["hot", "hit", ...]
+    buckets = defaultdict(list)                       # "c*ld" -> ["cold", ...]
     for w in words | {begin}:
         for i in range(len(w)):
             buckets[w[:i] + "*" + w[i + 1:]].append(w)
@@ -278,8 +278,8 @@ def ladder_length(begin, end, word_list):
     return 0
 
 
-assert ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log", "cog"]) == 5
-assert ladder_length("hit", "cog", ["hot", "dot", "dog", "lot", "log"]) == 0
+assert ladder_length("cold", "warm", ["cord", "card", "ward", "warm", "worm", "word"]) == 5
+assert ladder_length("cold", "warm", ["cord", "card", "ward", "worm", "word"]) == 0   # end word missing
 ```
 
 ## Topological sort: ordering dependencies
@@ -315,11 +315,12 @@ def can_finish(num_courses, prerequisites):
     return len(find_order(num_courses, prerequisites)) == num_courses
 
 
-assert can_finish(2, [[1, 0]]) is True
-assert can_finish(2, [[1, 0], [0, 1]]) is False
-order = find_order(4, [[1, 0], [2, 0], [3, 1], [3, 2]])
+assert can_finish(3, [[1, 0], [2, 1]]) is True
+assert can_finish(3, [[1, 0], [2, 1], [0, 2]]) is False      # 0 -> 1 -> 2 -> 0
+prereqs = [[2, 0], [2, 1], [3, 2], [4, 3], [4, 0]]
+order = find_order(5, prereqs)
 pos = {c: i for i, c in enumerate(order)}
-assert all(pos[req] < pos[c] for c, req in [[1, 0], [2, 0], [3, 1], [3, 2]])
+assert len(order) == 5 and all(pos[req] < pos[c] for c, req in prereqs)
 assert find_order(1, []) == [0]
 ```
 
@@ -359,10 +360,10 @@ def alien_order(words):
     return "".join(order) if len(order) == len(letters) else ""
 
 
-assert alien_order(["wrt", "wrf", "er", "ett", "rftt"]) == "wertf"
-assert alien_order(["z", "x"]) == "zx"
-assert alien_order(["z", "x", "z"]) == ""        # cycle
-assert alien_order(["abc", "ab"]) == ""
+assert alien_order(["bca", "bcd", "ad", "ac"]) == "badc"   # a < d, b < a, d < c
+assert alien_order(["q", "p"]) == "qp"
+assert alien_order(["q", "p", "q"]) == ""        # cycle
+assert alien_order(["mno", "mn"]) == ""          # a longer word before its own prefix
 ```
 
 Only the **first** difference between two adjacent words carries information; later letters are not ordered by it.
@@ -418,13 +419,13 @@ def find_redundant_connection(edges):
     return []
 
 
-assert count_components(5, [[0, 1], [1, 2], [3, 4]]) == 2
+assert count_components(6, [[0, 1], [2, 3], [3, 4]]) == 3     # {0, 1}, {2, 3, 4}, {5}
 assert count_components(3, []) == 3
-assert valid_tree(5, [[0, 1], [0, 2], [0, 3], [1, 4]]) is True
-assert valid_tree(5, [[0, 1], [1, 2], [2, 3], [1, 3], [1, 4]]) is False
-assert valid_tree(4, [[0, 1], [2, 3], [1, 0]]) is False
-assert find_redundant_connection([[1, 2], [1, 3], [2, 3]]) == [2, 3]
-assert find_redundant_connection([[1, 2], [2, 3], [3, 4], [1, 4], [1, 5]]) == [1, 4]
+assert valid_tree(4, [[0, 1], [1, 2], [1, 3]]) is True
+assert valid_tree(4, [[0, 1], [1, 2], [2, 0], [2, 3]]) is False   # cycle 0-1-2
+assert valid_tree(4, [[0, 1], [2, 3], [1, 0]]) is False           # repeated edge, 3 not linked
+assert find_redundant_connection([[1, 2], [2, 3], [3, 1]]) == [3, 1]
+assert find_redundant_connection([[1, 2], [2, 3], [3, 4], [2, 4], [4, 5]]) == [2, 4]
 ```
 
 ## Weighted shortest paths and spanning trees
@@ -471,11 +472,10 @@ def swim_in_water(grid):
     return -1
 
 
-assert network_delay_time([[2, 1, 1], [2, 3, 1], [3, 4, 1]], 4, 2) == 2
-assert network_delay_time([[1, 2, 1]], 2, 2) == -1
-assert swim_in_water([[0, 2], [1, 3]]) == 3
-assert swim_in_water([[0, 1, 2, 3, 4], [24, 23, 22, 21, 5], [12, 13, 14, 15, 16],
-                      [11, 17, 18, 19, 20], [10, 9, 8, 7, 6]]) == 16
+assert network_delay_time([[1, 2, 4], [1, 3, 1], [3, 2, 2], [2, 4, 1]], 4, 1) == 4   # 1 -> 3 -> 2 -> 4
+assert network_delay_time([[2, 1, 3]], 2, 1) == -1                                   # node 2 unreachable
+assert swim_in_water([[0, 3], [2, 1]]) == 2
+assert swim_in_water([[0, 5, 4], [1, 8, 7], [2, 3, 6]]) == 6
 ```
 
 Dijkstra is wrong with negative edge weights, because a node's distance could still decrease after it is finalised.
@@ -497,10 +497,10 @@ def find_cheapest_price(n, flights, src, dst, k):
     return -1 if cost[dst] == INF else cost[dst]
 
 
-flights = [[0, 1, 100], [1, 2, 100], [2, 0, 100], [1, 3, 600], [2, 3, 200]]
-assert find_cheapest_price(4, flights, 0, 3, 1) == 700
-assert find_cheapest_price(3, [[0, 1, 100], [1, 2, 100], [0, 2, 500]], 0, 2, 1) == 200
-assert find_cheapest_price(3, [[0, 1, 100], [1, 2, 100], [0, 2, 500]], 0, 2, 0) == 500
+flights = [[0, 1, 50], [1, 3, 50], [0, 2, 20], [2, 1, 10], [2, 3, 200]]
+assert find_cheapest_price(4, flights, 0, 3, 1) == 100     # 0 -> 1 -> 3
+assert find_cheapest_price(4, flights, 0, 3, 2) == 80      # 0 -> 2 -> 1 -> 3 needs two stops
+assert find_cheapest_price(4, flights, 0, 3, 0) == -1      # no direct flight
 ```
 
 Plain Dijkstra fails here because the cheapest path to an intermediate city might use too many stops; the round limit tracks the edge count explicitly.
@@ -535,8 +535,8 @@ def min_cost_connect_points(points):
     return total
 
 
-assert min_cost_connect_points([[0, 0], [2, 2], [3, 10], [5, 2], [7, 0]]) == 20
-assert min_cost_connect_points([[3, 12], [-2, 5], [-4, 1]]) == 18
+assert min_cost_connect_points([[0, 0], [1, 1], [4, 0]]) == 6
+assert min_cost_connect_points([[0, 0], [0, 5], [5, 5], [5, 0]]) == 15   # three sides of the square
 assert min_cost_connect_points([[0, 0]]) == 0
 ```
 
@@ -562,14 +562,13 @@ def find_itinerary(tickets):
     return route[::-1]
 
 
-assert find_itinerary([["MUC", "LHR"], ["JFK", "MUC"], ["SFO", "SJC"], ["LHR", "SFO"]]) == \
-    ["JFK", "MUC", "LHR", "SFO", "SJC"]
-assert find_itinerary([["JFK", "SFO"], ["JFK", "ATL"], ["SFO", "ATL"], ["ATL", "JFK"], ["ATL", "SFO"]]) == \
-    ["JFK", "ATL", "JFK", "SFO", "ATL", "SFO"]
-assert find_itinerary([["JFK", "KUL"], ["JFK", "NRT"], ["NRT", "JFK"]]) == ["JFK", "NRT", "JFK", "KUL"]
+assert find_itinerary([["DEN", "SEA"], ["JFK", "ORD"], ["ORD", "DEN"]]) == ["JFK", "ORD", "DEN", "SEA"]
+assert find_itinerary([["JFK", "SEA"], ["SEA", "DEN"], ["DEN", "JFK"], ["JFK", "DEN"], ["DEN", "SEA"]]) == \
+    ["JFK", "DEN", "JFK", "SEA", "DEN", "SEA"]
+assert find_itinerary([["JFK", "BOS"], ["BOS", "JFK"], ["JFK", "AUS"]]) == ["JFK", "BOS", "JFK", "AUS"]
 ```
 
-The last test shows why greedy "always take the smallest" fails without the post-order trick: going to KUL first strands the other tickets.
+The last test shows why greedy "always take the smallest" fails without the post-order trick: going to AUS first (it is alphabetically smaller) strands the other tickets.
 
 ## Complexity
 
