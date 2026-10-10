@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "ETL vs ELT: Choosing the Right Approach"
 description: "ETL transforms data before loading it, ELT loads raw data first and transforms inside the warehouse. Learn the factors that decide which one fits your pipeline."
 inventoryId: "TECH-23"
@@ -9,12 +9,20 @@ technology: ["etl-elt", "data-warehousing"]
 topic: ["pipelines", "architecture"]
 difficulty: "Beginner"
 featured: false
-prerequisites: ["articles:data-warehousing/star-schema"]
-related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "articles:airflow/dags-scheduling-retries"]
-previous: "articles:data-warehousing/star-schema"
-next: "articles:kafka/topics-partitions-consumer-groups"
-sources: [{"label": "dbt documentation: What is dbt?", "url": "https://docs.getdbt.com/docs/introduction"}]
-versionContext: "Conceptual; applies to cloud warehouses and lakehouses"
+learningObjectives:
+  - "Define ETL and ELT by where and when transformation runs"
+  - "Build a small ELT flow in SQL: raw landing table, typed staging, modelled mart"
+  - "Pseudonymise personal data before load when policy requires an ETL step"
+  - "Choose ETL, ELT or a hybrid from compliance, compute, reprocessing and team factors"
+prerequisites: ["articles:etl-elt/modern-data-pipelines"]
+related: ["interview-questions:data-engineering/etl-vs-elt-factors", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:airflow/dags-scheduling-retries", "articles:data-warehousing/star-schema", "system-designs:elt-pipeline-with-dbt", "interview-questions:data-engineering/handle-pii-in-pipelines"]
+previous: "articles:etl-elt/modern-data-pipelines"
+next: "articles:etl-elt/batch-vs-streaming"
+sources:
+  - { label: "dbt documentation: What is dbt?", url: "https://docs.getdbt.com/docs/introduction" }
+  - { label: "PostgreSQL documentation: JSON functions and operators", url: "https://www.postgresql.org/docs/current/functions-json.html" }
+  - { label: "Python documentation: hmac", url: "https://docs.python.org/3/library/hmac.html" }
+versionContext: "SQL runs on PostgreSQL 16.14 and Python on Python 3.11 (standard library). The concepts apply to cloud warehouses and lakehouses."
 ---
 
 **ETL** (extract, transform, load) and **ELT** (extract, load, transform) differ in one thing: **where and when the transformation happens**.
@@ -34,31 +42,14 @@ Cloud warehouses and lakehouses separate cheap storage from scalable compute. Lo
 - transformations are plain SQL that analysts can read and review;
 - the warehouse's own engine does the heavy lifting in parallel.
 
-Tools such as dbt are built around this pattern: they manage SQL transformations that run inside the warehouse.
+Tools such as dbt are built around this pattern: they manage SQL transformations that run inside the warehouse, in dependency order, with tests.
 
 ## When ETL is still the better fit
 
-- **Data must be changed before it lands**, for example removing or masking personal data so it is never stored raw in the target.
-- **The source or target is not SQL-friendly**, such as parsing binary or semi-structured files, or heavy non-SQL processing.
+- **Data must be changed before it lands**, for example removing or pseudonymising personal data so it is never stored raw in the target.
+- **The source or target is not SQL-friendly**, such as parsing binary or deeply nested files, or heavy non-SQL processing (images, ML feature extraction).
 - **Volume must be reduced early** to cut storage or network costs, for example filtering or aggregating high-volume events before loading.
 - **The target cannot do the compute**, such as a small operational database.
-
-## How to decide
-
-Ask these questions in order:
-
-1. **Do compliance or privacy rules require transformation before storage?** If yes, transform (at least partly) before load.
-2. **Where is compute cheapest and most scalable?** If the warehouse scales well, push SQL transformations there.
-3. **Do you need to reprocess history?** Keeping raw data (ELT) makes backfills far easier.
-4. **Who maintains the transformations?** SQL-first teams favour ELT; teams with strong software-engineering practice may accept code-based ETL.
-
-Many real pipelines are a mix: light, mandatory cleaning and masking on the way in, then SQL modelling after load.
-
-<Callout tone="info" title="Both need the same discipline">
-
-Whichever order you choose, the pipeline should be **idempotent** (safe to re-run), validated with data-quality checks, and observable. Those qualities matter more than the acronym.
-
-</Callout>
 
 ## A simple ELT flow
 
@@ -69,22 +60,133 @@ Source system ──extract/load──▶ raw.orders      (as received)
                               staging.orders     (typed, deduplicated)
                                     │ SQL
                                     ▼
-                         marts.fact_order_line   (modelled for analytics)
+                         marts.fct_daily_sales   (modelled for analytics)
 ```
 
-Each arrow is a rerunnable step. If a rule changes, you rebuild from the raw table, not from the source.
+Each arrow is a rerunnable step. If a rule changes, you rebuild from the raw table, not from the source. Here is the same flow in PostgreSQL. The loader does no transformation at all: it stores each source record as JSON with load metadata.
+
+```sql
+CREATE SCHEMA raw;
+CREATE SCHEMA staging;
+CREATE SCHEMA marts;
+
+CREATE TABLE raw.orders (
+    payload    jsonb NOT NULL,
+    _source    text NOT NULL,
+    _loaded_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO raw.orders (payload, _source) VALUES
+  ('{"id": "1", "customer": "asha", "total": "50.00", "ts": "2026-10-05T09:00:00Z", "status": "PAID"}', 'shop_api'),
+  ('{"id": "2", "customer": "ben",  "total": "20.00", "ts": "2026-10-05T10:00:00Z", "status": "paid"}', 'shop_api'),
+  ('{"id": "2", "customer": "ben",  "total": "22.00", "ts": "2026-10-05T10:05:00Z", "status": "paid"}', 'shop_api'),
+  ('{"id": "3", "customer": "chen", "total": "75.00", "ts": "2026-10-06T08:00:00Z", "status": "cancelled", "coupon": "AUTUMN"}', 'shop_api');
+```
+
+The transformations are SQL inside the database. Staging types the fields, normalises values and keeps the latest version of each order; the mart is shaped for the question analysts ask.
+
+```sql
+CREATE VIEW staging.orders AS
+SELECT DISTINCT ON (order_id) *
+FROM (
+    SELECT (payload->>'id')::bigint           AS order_id,
+           payload->>'customer'               AS customer,
+           (payload->>'total')::numeric(10,2) AS amount,
+           (payload->>'ts')::timestamptz      AS ordered_at,
+           lower(payload->>'status')          AS status
+    FROM raw.orders
+) AS typed
+ORDER BY order_id, ordered_at DESC;
+
+CREATE VIEW marts.fct_daily_sales AS
+SELECT (ordered_at AT TIME ZONE 'UTC')::date AS order_date,
+       count(*)    AS orders,
+       sum(amount) AS revenue
+FROM staging.orders
+WHERE status = 'paid'
+GROUP BY 1;
+
+SELECT * FROM marts.fct_daily_sales ORDER BY order_date;
+```
+
+```text
+ order_date | orders | revenue
+------------+--------+---------
+ 2026-10-05 |      2 |   72.00
+```
+
+Two things show why teams like ELT. The extra `coupon` field on order 3 landed without anyone changing the loader; it is in `raw.orders` the day someone wants it. And when the business decides that cancelled orders should be counted separately, you change a view and every historical day is recomputed from raw, with no re-extraction from the source. In production the models would usually be materialised as tables (typically by dbt) rather than views, but the principle is the same.
+
+## When the transformation must happen first
+
+If policy says customer identifiers must never be stored in clear text in the analytics platform, the raw layer above is not allowed. Some transformation must run **before** the load; that part of the pipeline is ETL. A common technique is keyed pseudonymisation: replace the identifier with an HMAC computed with a secret key held outside the warehouse. The same input always maps to the same token, so joins and distinct counts still work, but the warehouse cannot reverse it.
+
+```python
+import hashlib
+import hmac
+import json
+
+SECRET_KEY = b"load-from-a-secret-manager-not-from-code"
+
+def pseudonymise(value: str) -> str:
+    return hmac.new(SECRET_KEY, value.strip().lower().encode(), hashlib.sha256).hexdigest()[:16]
+
+def transform_before_load(record: dict) -> dict:
+    out = dict(record)
+    out["customer"] = pseudonymise(record["customer"])
+    out.pop("email", None)              # not needed downstream: drop it entirely
+    return out
+
+source = [{"id": "1", "customer": "asha", "email": "asha@example.com", "total": "50.00"},
+          {"id": "4", "customer": "Asha ", "email": "asha@example.com", "total": "12.00"}]
+tokens = [transform_before_load(r) for r in source]
+print(sorted(tokens[0]))
+print(tokens[0]["customer"] == tokens[1]["customer"], len(tokens[0]["customer"]))
+```
+
+```text
+['customer', 'id', 'total']
+True 16
+```
+
+Both orders still belong to the same pseudonymous customer (the normalisation makes `"Asha "` and `"asha"` match), so "orders per customer" works, but the name and email never reach the warehouse. A plain unsalted hash would not be enough: names and emails are easy to guess, so anyone could hash a list of candidates and match them. Pseudonymised data is generally still personal data under GDPR, so access control and retention rules still apply.
+
+After this step the rest of the pipeline can be ordinary ELT: **light, mandatory transformation on the way in, modelling after load**. This hybrid is sometimes called EtLT, and it is what most real pipelines look like.
+
+## How to decide
+
+Ask these questions in order:
+
+1. **Do compliance or privacy rules require transformation before storage?** If yes, transform (at least that part) before load.
+2. **Where is compute cheapest and most scalable?** If the warehouse scales well, push SQL transformations there.
+3. **Do you need to reprocess history?** Keeping raw data (ELT) makes backfills far easier.
+4. **Is the data SQL-friendly?** Tabular and semi-structured data suit ELT; binary formats and heavy non-SQL processing suit a code step.
+5. **Who maintains the transformations?** SQL-first teams favour ELT; teams with strong software-engineering practice may accept code-based ETL.
+
+<Callout tone="info" title="Both need the same discipline">
+
+Whichever order you choose, the pipeline should be **idempotent** (safe to re-run), validated with data-quality checks, and observable. Those qualities matter more than the acronym.
+
+</Callout>
+
+## Related terms you will hear
+
+- **Reverse ETL**: copying modelled data from the warehouse back into operational tools (CRM, marketing, support), the opposite direction from classic pipelines.
+- **Zero-ETL**: managed integrations that replicate an operational database into an analytics store without a pipeline you build. Transformation still has to happen somewhere; it usually becomes ELT in the target.
+- **Streaming ETL**: transformation applied to events in flight, for example in Flink or Spark Structured Streaming, before they land. See [batch vs streaming](/etl-elt/batch-vs-streaming/).
 
 ## Common mistakes
 
 1. Treating ELT as "dump everything and clean it later" with no staging layer or tests.
 2. Loading personal data raw when policy requires it to be masked first.
-3. Choosing ETL tooling out of habit when SQL in the warehouse would be simpler.
-4. Forgetting that raw storage grows; retention rules still apply.
+3. Using an unsalted hash as "anonymisation" for guessable values such as emails.
+4. Choosing ETL tooling out of habit when SQL in the warehouse would be simpler.
+5. Forgetting that raw storage grows; retention and deletion rules apply to the raw layer too.
 
 ## Interview relevance
 
-"ETL versus ELT" is a classic question. A strong answer states the definition, gives two or three deciding factors (compliance, compute location, reprocessing needs) and admits that real systems often combine both.
+"ETL versus ELT" is a classic question. A strong answer states the definition, gives two or three deciding factors (compliance, compute location, reprocessing needs) and admits that real systems often combine both: mandatory masking or filtering before load, modelling in SQL after it. Expect follow-ups on PII ("how would you keep emails out of the warehouse but still count unique customers?") and on reprocessing ("what happens when a business rule changes?"). Practise with [ETL vs ELT: deciding factors](/interview/data-engineering/etl-vs-elt-factors/) and [handling PII in pipelines](/interview/data-engineering/handle-pii-in-pipelines/).
 
 ## Key takeaway
 
-ETL and ELT are about where transformation runs. Pick based on compliance, where compute is cheapest, and how often you need to reprocess history.
+ETL and ELT are about where transformation runs. Keep raw data and model in SQL where you can, transform before load where you must (privacy, format, volume), and expect most pipelines to be a hybrid.
