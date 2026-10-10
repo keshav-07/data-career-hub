@@ -1,8 +1,8 @@
 ---
 seoTitle: "How to Explain a Data Project in an Interview"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "How to Explain a Data Engineering Project in an Interview"
 description: "A repeatable structure for explaining a data engineering project in an interview: problem, design, trade-offs, failure handling and honest results."
 inventoryId: "SUPPORT-20"
@@ -11,67 +11,145 @@ topic: ["interview", "projects"]
 difficulty: "Beginner"
 featured: true
 section: "career"
-related: ["projects:csv-to-warehouse-pipeline", "interview-questions:data-engineering/idempotent-batch-pipeline"]
-sources: []
-versionContext: "Applies to any project and any interview format"
+learningObjectives:
+  - "Tell a project story with STAR, extended with architecture, trade-offs and failure handling"
+  - "Draw the architecture in under a minute and name why each component is there"
+  - "Report results you actually measured, and say how you measured them"
+  - "Prepare answers for the follow-up questions interviewers ask about every project"
+related: ["projects:csv-to-warehouse-pipeline", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:career/data-engineering-interview-trade-offs", "articles:career/behavioral-interview-data-engineers", "articles:career/data-engineer-resume-bullets"]
+next: "articles:career/data-engineering-interview-trade-offs"
+sources:
+  - { label: "Python documentation: statistics", url: "https://docs.python.org/3/library/statistics.html" }
+versionContext: "Applies to any project and any interview format. The measurement example runs on Python 3.11 (standard library)."
 ---
 
-Interviewers rarely want a list of tools. They want to see **how you think**: what problem you solved, why you designed it that way, what went wrong and what you would change. Use the same structure every time.
+"Tell me about a project you are proud of" opens most Data Engineer interviews, and the answer shapes the rest of the conversation: interviewers dig into whatever you mention. They rarely want a list of tools. They want to see **how you think**: what problem you solved, why you designed it that way, what went wrong, how you knew it worked, and what you would change. Use the same structure every time and prepare it in advance.
 
-## The structure: problem, design, decisions, failure, result
+## The structure: STAR, extended for engineering
 
-### 1. Problem (20 seconds)
+STAR (Situation, Task, Action, Result) is the standard structure for interview stories. For a technical project, expand the Action into the parts engineers care about:
 
-State the business problem, not the stack. *"A retailer's daily sales reports were built by hand from CSV exports and were often a day late. I built a pipeline that loads them automatically and checks quality before anyone sees the numbers."*
+| Part | What to say | Time in a 3-minute answer |
+|------|-------------|---------------------------|
+| **Situation** | The business problem and who had it | 20 s |
+| **Task** | Your responsibility and the constraints: volume, freshness, team, deadline | 15 s |
+| **Action: architecture** | Sources, ingestion, storage layers, transformation, orchestration, serving | 45 s |
+| **Action: decisions** | Two or three choices, what you rejected and why | 45 s |
+| **Action: reliability** | Idempotency, data quality checks, monitoring, failure handling | 30 s |
+| **Result** | What changed, with numbers you measured, and how you measured them | 15 s |
+| **Reflection** | One thing you would do differently | 10 s |
 
-### 2. Scale and constraints (15 seconds)
+Then stop and let the interviewer choose where to go deeper. A monologue of ten minutes is a common way to lose a strong project.
 
-Give honest numbers: file sizes, frequency, latency needs. Say what you actually had. If it was a personal project with a small dataset, say so. Interviewers respect honesty and are quick to spot inflated claims.
+## 1. Situation and task
 
-### 3. Design (60 seconds)
+State the problem in business terms, not the stack:
 
-Draw or describe the flow end to end: sources, ingestion, storage layers, transformation, orchestration, serving. Name each component and **why** you chose it.
+> "The finance team built daily sales reports by hand from CSV exports of three store systems. Reports were often a day late and totals disagreed between systems. I was asked to automate the load and make the numbers trustworthy. I was the only engineer on it, with a data analyst as the main user."
 
-### 4. Decisions and trade-offs (the most valuable part)
+Then give **honest scale and constraints**: files per day and their size, rows, how fresh the data had to be, what you could and could not change. If it was a personal or course project with a small dataset, say so plainly. Interviewers respect honesty and are quick to spot inflated claims, and a small project explained well beats a large project explained vaguely.
 
-For two or three decisions, say what you chose, what you rejected and why:
+## 2. Architecture in under a minute
 
-- *Why a warehouse star schema rather than one wide table?*
-- *Why upserts instead of append-only loads?*
-- *Why batch rather than streaming?*
+Describe, or better draw, the flow from left to right, naming why each piece is there:
 
-If you cannot explain why, you will be asked. Prepare these.
+```text
+store exports (CSV, 3 systems)
+   │  daily, ~40k rows each
+   ▼
+landing bucket ──▶ load job (Python) ──▶ raw tables ──▶ dbt models ──▶ marts.fct_daily_sales ──▶ BI dashboard
+                        │                                  │
+                        └── Airflow: schedule, retries ────┴── tests: unique keys, totals vs source
+```
 
-### 5. Reliability and data quality
+Practise drawing it on a whiteboard or a shared document in under a minute. In a video interview, say "let me describe it left to right" and keep to that order.
 
-Explain how it behaves when things go wrong: retries, idempotency, bad-record handling, alerts, row-count and null checks, how you detect and recover from a bad load.
+## 3. Decisions and trade-offs: the part that matters most
 
-### 6. Result and what you would change
+Choose two or three decisions and for each say **what you chose, what you rejected, and why for this situation**:
 
-Report results you can **actually back up**. If you measured it, say what you measured and how. If you did not, describe qualitative outcomes and do not invent percentages. End with one improvement you would make with more time; it shows judgement.
+- *"I loaded raw files first and transformed in SQL (ELT) because finance kept changing rules and I wanted to rebuild history from raw without re-requesting exports."*
+- *"I used partition overwrite per business day rather than append, so a rerun after a late file could not duplicate sales."*
+- *"I chose batch over streaming: finance needed figures by 7 am, not in seconds, and batch was cheaper and simpler to operate alone."*
+
+If you cannot explain why you chose something, you will be asked, so prepare these. [Data engineering interview trade-offs](/career/data-engineering-interview-trade-offs/) lists the common ones and how to frame them.
+
+## 4. Reliability and data quality
+
+This is where data engineering projects differ from analytics projects. Explain:
+
+- **What happens if it runs twice?** (Idempotent writes; see [idempotency](/etl-elt/idempotency-in-data-pipelines/).)
+- **What happens if a file is late, missing or malformed?** (Sensor with timeout, quarantine with counts, alert.)
+- **How do you know the data is correct?** (Key uniqueness, row counts against the source, totals reconciled with the store systems.)
+- **How would you notice a problem before the users?** (Freshness alert on the mart, volume check against the same weekday.)
+
+## 5. Results you can defend
+
+Report results you **measured**, and be ready to say how. Good sources of honest numbers are the things your pipeline already records: run durations and row counts from an audit table or orchestrator logs, failure counts, the time a report used to be ready versus now, the number of manual steps removed.
+
+```python
+from statistics import median
+
+# Durations in minutes, taken from the orchestrator's task history for the same job
+before = [46, 52, 49, 61, 47, 55, 50]        # old full-refresh job, last 7 runs
+after = [9, 11, 8, 10, 12, 9, 10]            # incremental version, first 7 runs
+finished_after = ["06:21", "06:24", "06:19", "06:22", "06:58", "06:20", "06:23"]   # publish times, UTC
+
+print(f"median runtime {median(before)} -> {median(after)} minutes")
+print(f"runs measured: {len(before)} before, {len(after)} after")
+on_time = sum(1 for t in finished_after if t < "07:00")
+print(f"report ready by 07:00 on {on_time} of {len(finished_after)} days after the change")
+```
+
+```text
+median runtime 50 -> 10 minutes
+runs measured: 7 before, 7 after
+report ready by 07:00 on 7 of 7 days after the change
+```
+
+That supports a sentence like "median runtime fell from about 50 to about 10 minutes over the first week, measured from the scheduler's task history". It is specific, modest about the sample, and survives the follow-up "how did you measure that?".
+
+If you did not measure something, do not invent a number. Describe the outcome qualitatively ("the analyst no longer rebuilt the report by hand each morning") or say what you would measure. **Never claim percentages, savings or user counts you cannot back up**: interviewers ask, and a made-up number undermines everything else you said.
+
+## 6. What you would change
+
+End with one improvement that shows judgement: "I would add a data contract with the store systems, because most incidents were unannounced format changes", or "I would move the quality checks before publishing; at first they only ran afterwards".
+
+## A complete 2-minute answer
+
+> "The finance team built daily sales reports by hand from CSV exports of three store systems, and the reports were often late and inconsistent. I owned automating it, alone, with an analyst as the user. Each system drops one CSV a day, about 40,000 rows.
+>
+> I land the files in a bucket, a Python job loads them into raw tables, and dbt builds a daily sales mart that the dashboard reads; Airflow schedules it with retries. I kept raw data and modelled in SQL because the rules kept changing, and I overwrite each business day's partition so reruns after a late file cannot double-count. Batch was enough because finance only needs the numbers by 7 am.
+>
+> Each run checks key uniqueness and reconciles totals against the source files, and a failed check stops the publish so the dashboard keeps yesterday's correct numbers. Over the first week the job finished in a median of about 10 minutes and the report was ready by 7 am every day; before, it was assembled by hand most mornings. If I did it again I would agree a file contract with the store teams, because format changes caused most of our failures."
 
 ## Questions to prepare for
 
-- What was the hardest bug and how did you find it?
+- What was the hardest bug, and how did you find it?
 - How do you know the data is correct?
-- What happens if the job runs twice? If a source file arrives late?
-- How would this change at 100× the data?
+- What happens if the job runs twice? If a file arrives late or never?
+- What would change at 100 times the data? At 5-minute freshness?
+- What did you get wrong at first?
+- Why this tool and not the obvious alternative?
 - What would you do differently?
+
+Write a short answer to each for every project on your resume.
 
 ## Common mistakes
 
 1. Describing tools instead of problems and decisions.
-2. Claiming scale or impact you did not have.
+2. Claiming scale, impact or ownership you did not have ("we" for team work is fine; say what **you** did).
 3. Not knowing why a technology was chosen.
-4. Having no story about failure or data quality.
-5. Talking for five minutes without checking whether the interviewer wants more detail.
+4. No story about failure, data quality or monitoring.
+5. Numbers without a source, or percentages that cannot be explained.
+6. Talking for five minutes without checking whether the interviewer wants more detail.
 
 <Callout tone="success" title="A simple rehearsal">
 
-Practise a 2-minute version and a 5-minute version. Record yourself once. The 2-minute version covers steps 1 to 3 and one trade-off; the 5-minute version adds reliability, results and improvements.
+Prepare a 2-minute version and a 5-minute version of each project. Record yourself once and listen back. The 2-minute version covers situation, architecture and one trade-off; the 5-minute version adds reliability, measured results and improvements.
 
 </Callout>
 
 ## Key takeaway
 
-Lead with the problem, explain design choices as trade-offs, show how you handle failure, and report only results you can defend.
+Use STAR extended with architecture, decisions and reliability; draw the design in a minute; explain each major choice as a trade-off; report only results you measured and say how; and end with what you would change.
