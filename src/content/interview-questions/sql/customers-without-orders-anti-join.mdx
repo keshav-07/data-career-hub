@@ -1,0 +1,115 @@
+---
+seoTitle: "Customers With No Orders: NOT IN vs NOT EXISTS"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Find customers who never placed an order, and explain NOT IN vs NOT EXISTS."
+description: "Interview answer: write the anti-join with NOT EXISTS or LEFT JOIN ... IS NULL, and show why NOT IN returns nothing when the subquery contains a NULL."
+technology: ["sql"]
+topic: ["joins", "anti-join", "nulls"]
+difficulty: "Easy"
+questionType: ["coding", "debugging"]
+estimatedMinutes: 8
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Use an anti-join: SELECT ... FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id), or LEFT JOIN orders and keep rows where the order key IS NULL. Avoid NOT IN (SELECT customer_id FROM orders): if any customer_id in orders is NULL, x NOT IN (..., NULL) can never be true, so the query silently returns zero rows. NOT EXISTS only asks whether a matching row exists, so NULLs in the subquery do not matter."
+followUps: ["Why does NOT IN return no rows when the subquery has a NULL?", "Which form does the optimiser turn into an anti-join?", "How would you find products never sold in the last 30 days?", "How do you write this in Spark SQL?"]
+prerequisites: ["articles:sql/joins"]
+related: ["articles:sql/semi-anti-lateral-joins", "articles:sql/operators-nulls-case", "interview-questions:sql/inner-vs-left-join"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and plans are copied from psql."
+practice: {"platform": "LeetCode", "number": 183, "title": "Customers Who Never Order", "url": "https://leetcode.com/problems/customers-who-never-order/"}
+sources:
+  - { label: "PostgreSQL 16 documentation: Subquery expressions (EXISTS, NOT IN)", url: "https://www.postgresql.org/docs/16/functions-subquery.html" }
+---
+
+## Sample data
+
+Diana and Farah never ordered. Order 104 is a guest checkout with no customer, which is perfectly normal data and exactly what breaks `NOT IN`.
+
+```sql
+CREATE TABLE customers (customer_id INT PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE orders (order_id INT PRIMARY KEY, customer_id INT, amount NUMERIC(10, 2));
+INSERT INTO customers VALUES (1, 'Asha'), (2, 'Ben'), (3, 'Chen'), (4, 'Diana'), (5, 'Farah');
+INSERT INTO orders VALUES
+  (101, 1, 40.00), (102, 1, 15.00), (103, 2, 60.00),
+  (104, NULL, 25.00),            -- guest checkout
+  (105, 3, 10.00);
+```
+
+## Answer: NOT EXISTS
+
+```sql
+SELECT c.customer_id, c.name
+FROM customers c
+WHERE NOT EXISTS (
+  SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id
+)
+ORDER BY c.customer_id;
+```
+
+| customer_id | name |
+|---|---|
+| 4 | Diana |
+| 5 | Farah |
+
+`NOT EXISTS` asks one question per customer: is there at least one matching order? The guest order never matches anyone (`NULL = 4` is unknown, not true), so it has no effect. What the subquery selects (`1`, `*`) does not matter.
+
+## Equivalent: LEFT JOIN ... IS NULL
+
+```sql
+SELECT c.customer_id, c.name
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.customer_id
+WHERE o.order_id IS NULL
+ORDER BY c.customer_id;
+```
+
+Same two rows. Test a column that is `NOT NULL` in matched rows (the primary key `o.order_id`), not a nullable column such as `o.amount`, or an order with a `NULL` amount would look like "no order".
+
+## The trap: NOT IN
+
+```sql
+SELECT c.customer_id, c.name
+FROM customers c
+WHERE c.customer_id NOT IN (SELECT customer_id FROM orders)
+ORDER BY c.customer_id;
+```
+
+It returns **zero rows**. `4 NOT IN (1, 1, 2, NULL, 3)` means `4 <> 1 AND 4 <> 1 AND 4 <> 2 AND 4 <> NULL AND 4 <> 3`. The `4 <> NULL` term is unknown, `true AND unknown` is unknown, and `WHERE` keeps only true rows. One `NULL` anywhere in the subquery empties the result, and nothing errors. Filtering the subquery (`WHERE customer_id IS NOT NULL`) fixes it, but `NOT EXISTS` is safer because nobody has to remember.
+
+## What the planner does
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF)
+SELECT c.name FROM customers c
+WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id);
+```
+
+```text
+ Hash Right Anti Join
+   Hash Cond: (o.customer_id = c.customer_id)
+   ->  Seq Scan on orders o
+   ->  Hash
+         ->  Seq Scan on customers c
+```
+
+PostgreSQL plans `NOT EXISTS` (and `LEFT JOIN ... IS NULL`) as a hash **anti join**: one pass over each table. `NOT IN` with a subquery is planned as a filter with a hashed subplan instead, because its `NULL` semantics are different, and it can degrade badly when the subquery result is too large to hash in memory.
+
+| Form | NULL in subquery | Typical plan |
+|---|---|---|
+| `NOT EXISTS` | No effect | Anti join |
+| `LEFT JOIN ... IS NULL` | No effect | Anti join |
+| `NOT IN (subquery)` | Returns no rows | Filter with a hashed or per-row subplan |
+
+## Edge cases to state
+
+- **A `NULL` on the left side.** A customer row with a `NULL` id is returned by `NOT EXISTS` (nothing matches it) and never by `NOT IN`. Decide which you want.
+- **Time-bounded versions** ("no order in the last 30 days") put the date filter **inside** the subquery, or in the `ON` clause of the left join, not in the outer `WHERE`.
+- **Spark SQL** has explicit syntax: `customers LEFT ANTI JOIN orders ON ...` (`how="left_anti"` in PySpark). DuckDB writes `ANTI JOIN`.
+
+## Common mistakes
+
+1. `NOT IN` against a nullable column.
+2. Putting the right table's filter in `WHERE` for the left-join version, which removes the unmatched rows you were looking for.
+3. Using `INNER JOIN ... WHERE o.customer_id <> c.customer_id`, which pairs every customer with every other customer's orders and answers nothing.
