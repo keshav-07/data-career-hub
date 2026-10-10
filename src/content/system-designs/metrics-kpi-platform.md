@@ -1,6 +1,6 @@
 ---
 title: "Design a Metrics and KPI Platform"
-description: "A system-design case study for a metrics platform: metric definitions as code, additivity, precomputed metric tables, versioning, finality, anomaly alerts and APIs."
+description: "Metrics platform system design: metric definitions as code, additivity, precomputed metric tables, versioning, finality, anomaly alerts and serving APIs."
 technology: ["data-engineering", "data-warehousing", "dbt"]
 topic: ["metrics", "semantic-layer", "architecture"]
 difficulty: "Advanced"

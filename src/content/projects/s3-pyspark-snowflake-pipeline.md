@@ -5,7 +5,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "S3 → PySpark → Snowflake Data Pipeline"
-description: "An intermediate project: process raw files from object storage with PySpark, write curated Parquet, and load a cloud warehouse with idempotent, date-partitioned loads."
+description: "Intermediate project: process raw object-storage files with PySpark, write curated Parquet, and load a warehouse with idempotent, date-partitioned loads."
 inventoryId: "PROJ-02"
 technology: ["pyspark", "aws", "snowflake"]
 topic: ["batch", "cloud"]

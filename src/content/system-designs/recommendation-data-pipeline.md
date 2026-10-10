@@ -1,6 +1,6 @@
 ---
 title: "Design a Recommendation Data Pipeline"
-description: "A system-design case study for the data side of recommendations: impression logging, training labels, features, embeddings, candidate indexes, serving and feedback."
+description: "Recommendation data pipeline system design: impression logging, training labels, features, embeddings, candidate indexes, serving and feedback loops."
 technology: ["data-engineering", "spark", "kafka"]
 topic: ["recommendations", "machine-learning", "architecture"]
 difficulty: "Advanced"

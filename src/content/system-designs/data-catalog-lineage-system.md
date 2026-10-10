@@ -1,6 +1,6 @@
 ---
 title: "Design a Data Catalog and Lineage System"
-description: "A system-design case study for a data catalog with lineage: metadata ingestion, search, ownership, column-level lineage, impact analysis, access workflows and adoption."
+description: "Data catalog and lineage system design: metadata ingestion, search, ownership, column-level lineage, impact analysis, access workflows and adoption."
 technology: ["data-engineering", "databricks", "airflow"]
 topic: ["data-catalog", "lineage", "governance"]
 difficulty: "Advanced"

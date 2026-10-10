@@ -1,6 +1,6 @@
 ---
 title: "Design a Data Observability System"
-description: "A system-design case study for data observability: collecting metadata, freshness and volume monitors, seasonal anomaly detection, lineage-based root cause and incidents."
+description: "Data observability system design: metadata collection, freshness and volume monitors, seasonal anomaly detection, lineage-based root cause and incidents."
 technology: ["data-engineering", "etl-elt", "airflow"]
 topic: ["data-observability", "monitoring", "architecture"]
 difficulty: "Advanced"

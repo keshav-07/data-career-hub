@@ -1,6 +1,6 @@
 ---
 title: "Design an Event-Driven Architecture"
-description: "A system-design case study for event-driven systems: event types, the transactional outbox, idempotent consumers, sagas, schema versioning, replay and analytics use."
+description: "Event-driven architecture system design: event types, the transactional outbox, idempotent consumers, sagas, schema versioning, replay and analytics use."
 technology: ["data-engineering", "kafka"]
 topic: ["event-driven", "streaming", "architecture"]
 difficulty: "Advanced"

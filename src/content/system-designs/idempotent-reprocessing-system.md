@@ -1,6 +1,6 @@
 ---
 title: "Design an Idempotent Reprocessing System"
-description: "A system-design case study for safe reprocessing and backfills: deterministic jobs, pinned inputs, partition replacement, run ledgers, downstream propagation and replay."
+description: "Reprocessing and backfill system design: deterministic jobs, pinned inputs, partition replacement, run ledgers, downstream propagation and replay."
 technology: ["data-engineering", "airflow", "delta-lake"]
 topic: ["idempotency", "backfill", "reliability"]
 difficulty: "Advanced"
