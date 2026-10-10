@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["backtracking", "recursion", "combinatorics"]
 difficulty: "Advanced"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Apply the choose, explore, unchoose template to generate subsets, combinations and permutations"
   - "Skip duplicate results by sorting and skipping equal siblings"
@@ -99,7 +99,7 @@ def subsets_with_dup(nums):
 
 assert sorted(subsets([1, 2, 3])) == sorted([[], [1], [2], [3], [1, 2], [1, 3], [2, 3], [1, 2, 3]])
 assert subsets([]) == [[]]
-assert sorted(subsets_with_dup([1, 2, 2])) == [[], [1], [1, 2], [1, 2, 2], [2], [2, 2]]
+assert sorted(subsets_with_dup([3, 1, 3])) == [[], [1], [1, 3], [1, 3, 3], [3], [3, 3]]
 assert len(subsets_with_dup([4, 4, 4, 1, 4])) == 10
 ```
 
@@ -151,11 +151,11 @@ def combination_sum2(candidates, target):
     return result
 
 
-assert combination_sum([2, 3, 6, 7], 7) == [[2, 2, 3], [7]]
-assert combination_sum([2, 3, 5], 8) == [[2, 2, 2, 2], [2, 3, 3], [3, 5]]
+assert combination_sum([3, 4, 5], 9) == [[3, 3, 3], [4, 5]]
+assert combination_sum([2, 7], 11) == [[2, 2, 7]]
 assert combination_sum([2], 1) == []
-assert combination_sum2([10, 1, 2, 7, 6, 1, 5], 8) == [[1, 1, 6], [1, 2, 5], [1, 7], [2, 6]]
-assert combination_sum2([2, 5, 2, 1, 2], 5) == [[1, 2, 2], [5]]
+assert combination_sum2([4, 1, 3, 2, 1, 3], 6) == [[1, 1, 4], [1, 2, 3], [2, 4], [3, 3]]
+assert combination_sum2([3, 3, 3, 1], 4) == [[1, 3]]          # the three 3s give one combination
 ```
 
 Sorting enables two things: skipping duplicates, and `break` (not just `continue`) as soon as a candidate exceeds what remains. That pruning is what keeps these searches fast in practice.
@@ -214,7 +214,7 @@ def letter_combinations(digits):
     return result
 
 
-assert letter_combinations("23") == ["ad", "ae", "af", "bd", "be", "bf", "cd", "ce", "cf"]
+assert letter_combinations("29") == ["aw", "ax", "ay", "az", "bw", "bx", "by", "bz", "cw", "cx", "cy", "cz"]
 assert letter_combinations("") == []
 assert len(letter_combinations("79")) == 16
 ```
@@ -242,7 +242,7 @@ def palindrome_partition(s):
     return result
 
 
-assert palindrome_partition("aab") == [["a", "a", "b"], ["aa", "b"]]
+assert palindrome_partition("noon") == [["n", "o", "o", "n"], ["n", "oo", "n"], ["noon"]]
 assert palindrome_partition("a") == [["a"]]
 ```
 
@@ -270,11 +270,11 @@ def exist(board, word):
     return any(dfs(r, c, 0) for r in range(rows) for c in range(cols))
 
 
-grid = [list("ABCE"), list("SFCS"), list("ADEE")]
-assert exist(grid, "ABCCED") is True
-assert exist(grid, "SEE") is True
-assert exist(grid, "ABCB") is False                 # would reuse the B
-assert grid == [list("ABCE"), list("SFCS"), list("ADEE")]   # board restored
+grid = [list("DATA"), list("FLOW"), list("ETLX")]
+assert exist(grid, "DFE") is True                   # straight down the first column
+assert exist(grid, "TOW") is True                   # turns a corner
+assert exist(grid, "DAD") is False                  # would reuse the D
+assert grid == [list("DATA"), list("FLOW"), list("ETLX")]   # board restored
 ```
 
 ### Many words at once: Word Search II
@@ -316,8 +316,8 @@ def find_words(board, words):
     return found
 
 
-board = [list("oaan"), list("etae"), list("ihkr"), list("iflv")]
-assert sorted(find_words(board, ["oath", "pea", "eat", "rain"])) == ["eat", "oath"]
+board = [list("spa"), list("ekr"), list("tml")]
+assert sorted(find_words(board, ["spark", "set", "melt", "task"])) == ["set", "spark"]
 assert find_words([list("ab"), list("cd")], ["abcb"]) == []
 ```
 
@@ -420,6 +420,12 @@ Recommended order, easy to hard:
 8. **Word Search** (Medium): DFS from each cell, marking the path and restoring cells on return.
 9. **N-Queens** (Hard): one queen per row; sets for columns and both diagonals (`r - c`, `r + c`).
 10. **Word Search II** (Hard): build a trie of the words and walk the grid once, pruning trie branches as words are found.
+
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Generate Parentheses** (Medium): add `(` while some remain and `)` while there are more opens than closes.
+- **Letter Case Permutation** (Medium): branch twice on each letter and once on each digit.
+- **Sudoku Solver** (Hard): fill the empty cell with the fewest candidates, tracking row, column and box sets, and undo on failure.
 
 ## Practice questions
 

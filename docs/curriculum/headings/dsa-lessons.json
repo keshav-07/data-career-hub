@@ -4,7 +4,7 @@
     "Big-O: how cost grows with input size",
     "How to approach a coding round",
     "Python built-ins that matter",
-    "How to study the 157 problems in the planner",
+    "How to study the problems in the planner",
     "Practice questions",
     "Key takeaways"
   ],
@@ -26,6 +26,17 @@
     "Complexity",
     "Variations and common bugs",
     "Strings in data-engineering work",
+    "Problems in this pattern",
+    "Practice questions",
+    "Key takeaways"
+  ],
+  "articles:dsa/bit-manipulation": [
+    "How bits work in Python",
+    "Recognising the pattern",
+    "Core templates in Python",
+    "Complexity",
+    "Variations and common bugs",
+    "Bits in data-engineering work",
     "Problems in this pattern",
     "Practice questions",
     "Key takeaways"

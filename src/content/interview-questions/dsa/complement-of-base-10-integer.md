@@ -14,7 +14,7 @@ reviewedDate: "2026-10-09"
 shortAnswer: "Only the bits up to the highest set bit count, so build a mask of that many 1s: mask = (1 << n.bit_length()) - 1. XOR with the mask flips exactly those bits, so the answer is n ^ mask, or equivalently mask - n. The trap is 0: its binary form is a single 0, whose complement is 1, but bit_length() is 0, so handle it with max(1, ...). It runs in O(log n) time at worst and O(1) space. Python's ~n does not work: it gives -n - 1 because Python integers have no fixed width."
 followUps: ["Why does ~n give a negative number in Python?", "How would you flip only bits i through j?", "How would you compute the bit length without bit_length()?"]
 versionContext: "Python 3 solutions verified with assert-based tests"
-related: ["articles:dsa/arrays-and-hashing"]
+related: ["articles:dsa/bit-manipulation"]
 practice: {"platform": "LeetCode", "number": 1009, "title": "Complement of Base 10 Integer", "url": "https://leetcode.com/problems/complement-of-base-10-integer/"}
 previous: "interview-questions:dsa/counting-bits"
 next: "interview-questions:dsa/sum-of-two-integers"

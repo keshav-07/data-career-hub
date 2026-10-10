@@ -6,14 +6,14 @@ technology: ["dsa"]
 topic: ["queues", "deque", "design"]
 difficulty: "Beginner"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain first-in, first-out behaviour and why collections.deque beats list for queues"
   - "Implement a queue with two stacks and analyse its amortised cost"
   - "Build a fixed-capacity circular queue with index arithmetic"
   - "Count recent events with a queue and relate it to buffering in streaming systems"
-prerequisites: ["articles:dsa/stacks"]
+prerequisites: ["articles:dsa/arrays-and-hashing"]
 versionContext: "All examples run on CPython 3.11; each block ends with assert-based tests."
 sources:
   - { label: "Python documentation: collections.deque", url: "https://docs.python.org/3/library/collections.html#collections.deque" }
@@ -67,7 +67,7 @@ For queues shared between threads, use `queue.Queue`, which adds locking and blo
 
 ### Queue using two stacks
 
-Push onto an `inbox` stack. To dequeue, pop from an `outbox` stack; when it is empty, move everything from `inbox` to `outbox`, which reverses the order so the oldest item is on top.
+A stack here is just a Python list used only through `append`, `pop()` and `[-1]` (last in, first out); the stacks lesson later in the course goes deeper. Push onto an `inbox` stack. To dequeue, pop from an `outbox` stack; when it is empty, move everything from `inbox` to `outbox`, which reverses the order so the oldest item is on top.
 
 ```python
 class MyQueue:
@@ -183,12 +183,13 @@ class MyCircularQueue:
         return self.size == self.capacity
 
 
-cq = MyCircularQueue(3)
-assert [cq.enQueue(v) for v in (1, 2, 3, 4)] == [True, True, True, False]
-assert cq.Rear() == 3 and cq.isFull()
+cq = MyCircularQueue(2)
+assert cq.deQueue() is False and cq.Front() == -1    # empty queue
+assert [cq.enQueue(v) for v in (7, 8, 9)] == [True, True, False]
+assert cq.Rear() == 8 and cq.isFull()
 assert cq.deQueue() is True
-assert cq.enQueue(4) is True              # wraps around to index 0
-assert cq.Front() == 2 and cq.Rear() == 4
+assert cq.enQueue(9) is True              # wraps around to index 0
+assert cq.Front() == 8 and cq.Rear() == 9
 ```
 
 Keeping an explicit `size` avoids the classic ambiguity where `head == tail` could mean either empty or full. The alternative is to waste one slot and treat `(tail + 1) % capacity == head` as full.
@@ -214,10 +215,10 @@ class RecentCounter:
 
 
 rc = RecentCounter()
-assert [rc.ping(t) for t in (1, 100, 3001, 3002)] == [1, 2, 3, 3]
+assert [rc.ping(t) for t in (5, 900, 3005, 3006, 7000)] == [1, 2, 3, 3, 1]
 ```
 
-The window is inclusive here, `[t - 3000, t]`, which is why the call at time 1 is still counted at time 3001 and evicted at 3002. Always confirm whether the boundary is inclusive.
+The window is inclusive here, `[t - 3000, t]`, which is why the call at time 5 is still counted at time 3005 and evicted at 3006. Always confirm whether the boundary is inclusive.
 
 ## Complexity
 

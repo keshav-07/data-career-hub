@@ -13,6 +13,7 @@ estimatedMinutes: 10
 interviewRelevance: "Medium"
 shortAnswer: "Each answer can be built from a smaller one. Shifting right drops the lowest bit, so bits(i) = bits(i >> 1) + (i & 1). Alternatively, i & (i - 1) clears the lowest set bit, so bits(i) = bits(i & (i - 1)) + 1. Either recurrence, with bits(0) = 0, fills the whole list in O(n) time; the output list is the only O(n) space. Counting each number separately costs O(n log n)."
 followUps: ["Why does i & (i - 1) clear the lowest set bit?", "How would you count set bits of one 64-bit number quickly?", "How does the 'most significant power of two' recurrence work?"]
+related: ["articles:dsa/bit-manipulation"]
 versionContext: "Python 3 solutions verified with assert-based tests"
 practice: {"platform": "LeetCode", "number": 338, "title": "Counting Bits", "url": "https://leetcode.com/problems/counting-bits/"}
 previous: "interview-questions:dsa/single-number"

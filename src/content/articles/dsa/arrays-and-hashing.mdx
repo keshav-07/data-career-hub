@@ -1,18 +1,18 @@
 ---
 title: "Arrays and Hashing: Sets, Hash Maps, Prefix Sums and Intervals"
 seoTitle: "Arrays and Hashing for Coding Interviews"
-description: "The most common coding-interview pattern: seen sets, value-to-index maps, counting, prefix sums, Kadane, intervals, matrices and bit tricks, with tested Python."
+description: "The most common coding-interview pattern: seen sets, value-to-index maps, counting, prefix sums, Kadane, intervals and matrices, with tested Python."
 technology: ["dsa"]
 topic: ["arrays", "hashing", "prefix-sums", "intervals"]
 difficulty: "Beginner"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain how arrays and hash tables store data and what their operations cost"
   - "Recognise when a set, a dict or a Counter turns an O(n²) scan into one pass"
   - "Apply prefix sums, Kadane's algorithm and sort-then-sweep interval merging"
-  - "Traverse and transform matrices in place and use basic bit manipulation"
+  - "Traverse and transform matrices in place with index arithmetic"
   - "Connect hashing to deduplication, hash joins and group-by in data pipelines"
 prerequisites: ["articles:dsa/dsa-for-data-engineers"]
 related: ["articles:python/data-structures-for-interviews"]
@@ -26,7 +26,7 @@ previous: "articles:dsa/dsa-for-data-engineers"
 next: "articles:dsa/strings"
 ---
 
-Arrays and hash maps are the foundation of almost every coding problem, and in Data Engineering interviews they are the single most frequent topic. This lesson covers how both structures work, the handful of templates that solve most array problems (seen sets, value-to-index maps, counting, prefix sums, Kadane's algorithm, interval merging, matrix traversal and bit tricks), and how the same ideas power deduplication, joins and aggregation in real pipelines.
+Arrays and hash maps are the foundation of almost every coding problem, and in Data Engineering interviews they are the single most frequent topic. This lesson covers how both structures work, the handful of templates that solve most array problems (seen sets, value-to-index maps, counting, prefix sums, Kadane's algorithm, interval merging and matrix traversal), and how the same ideas power deduplication, joins and aggregation in real pipelines.
 
 Every code block is self-contained and ends with `assert` tests, so you can run it as-is.
 
@@ -73,7 +73,7 @@ Reach for arrays and hashing when the problem says:
 | "maximum subarray", "best contiguous run" | Kadane's algorithm |
 | "intervals", "meetings", "time ranges", "overlap" | Sort by start, then sweep |
 | "rotate", "spiral", "matrix in place" | Index arithmetic, layer by layer |
-| "appears once while others appear twice", "bits" | XOR and bit masks |
+| "appears once while others appear twice", "bits" | XOR and masks (see the bit manipulation lesson) |
 
 ## Core templates in Python
 
@@ -89,11 +89,12 @@ def contains_duplicate(nums):
     return False
 
 
-assert contains_duplicate([1, 2, 3, 1]) is True
-assert contains_duplicate([1, 2, 3]) is False
+assert contains_duplicate([8, 3, 5, 3]) is True
+assert contains_duplicate([8, 3, 5]) is False
 assert contains_duplicate([]) is False
+assert contains_duplicate([-4, -4]) is True          # negatives hash like any other int
 # One-liner alternative: len(set(nums)) != len(nums), but it cannot stop early.
-assert (len(set([1, 2, 3, 1])) != 4) is True
+assert (len(set([8, 3, 5, 3])) != 4) is True
 ```
 
 The loop version stops at the first duplicate; the one-liner always builds the full set. Both are O(n) time and space.
@@ -113,13 +114,15 @@ def two_sum(nums, target):
     return []
 
 
-assert two_sum([2, 7, 11, 15], 9) == [0, 1]
-assert two_sum([3, 2, 4], 6) == [1, 2]
-assert two_sum([3, 3], 6) == [0, 1]
+assert two_sum([4, 9, 13, 2], 11) == [1, 3]
+assert two_sum([5, 8, 1], 9) == [1, 2]
+assert two_sum([6, 6], 12) == [0, 1]
+assert two_sum([6], 12) == []
+assert two_sum([-3, 10, 7], 4) == [0, 2]
 assert two_sum([1, 2], 10) == []
 ```
 
-Checking before storing is what makes `[3, 3]` with target 6 work and `[3]` with target 6 correctly fail.
+Checking before storing is what makes `[6, 6]` with target 12 work and `[6]` with target 12 correctly fail.
 
 ### Counting and grouping
 
@@ -153,10 +156,11 @@ def top_k_frequent(nums, k):
     return result
 
 
-assert is_anagram("anagram", "nagaram") and not is_anagram("rat", "car")
-groups = group_anagrams(["eat", "tea", "tan", "ate", "nat", "bat"])
-assert sorted(sorted(g) for g in groups) == [["ate", "eat", "tea"], ["bat"], ["nat", "tan"]]
-assert sorted(top_k_frequent([1, 1, 1, 2, 2, 3], 2)) == [1, 2]
+assert is_anagram("listen", "silent") and not is_anagram("data", "date")
+assert is_anagram("", "") and not is_anagram("ab", "a")
+groups = group_anagrams(["pots", "cat", "tops", "dog", "act", "spot"])
+assert sorted(sorted(g) for g in groups) == [["act", "cat"], ["dog"], ["pots", "spot", "tops"]]
+assert sorted(top_k_frequent([4, 4, 4, 9, 9, 1], 2)) == [4, 9]
 assert top_k_frequent([7], 1) == [7]
 ```
 
@@ -204,11 +208,12 @@ def product_except_self(nums):
 
 s = range_sums([3, 1, 4, 1, 5])
 assert s(1, 4) == 6 and s(0, 5) == 14
-assert subarray_sum_equals_k([1, 1, 1], 2) == 2
+assert subarray_sum_equals_k([2, 2, 2], 4) == 2
 assert subarray_sum_equals_k([1, -1, 0], 0) == 3
-assert product_except_self([1, 2, 3, 4]) == [24, 12, 8, 6]
+assert subarray_sum_equals_k([], 0) == 0
+assert product_except_self([2, 3, 5]) == [15, 10, 6]
 assert product_except_self([0, 4, 0]) == [0, 0, 0]
-assert product_except_self([-1, 1, 0, -3, 3]) == [0, 0, 9, 0, 0]
+assert product_except_self([2, -1, 0, 4]) == [0, 0, -8, 0]
 ```
 
 The `seen[0] = 1` line is the most forgotten detail: without it you miss subarrays that start at index 0.
@@ -226,7 +231,7 @@ def max_subarray(nums):
     return best
 
 
-assert max_subarray([-2, 1, -3, 4, -1, 2, 1, -5, 4]) == 6
+assert max_subarray([3, -5, 4, -1, 2, -6, 1]) == 5   # 4 - 1 + 2
 assert max_subarray([-3, -1, -2]) == -1     # all negative: best single element
 assert max_subarray([5]) == 5
 ```
@@ -273,14 +278,14 @@ def min_removals_for_no_overlap(intervals):
     return removed
 
 
-assert merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]) == [[1, 6], [8, 10], [15, 18]]
-assert merge_intervals([[1, 4], [4, 5]]) == [[1, 5]]
+assert merge_intervals([[9, 12], [1, 3], [11, 14], [2, 5], [20, 21]]) == [[1, 5], [9, 14], [20, 21]]
+assert merge_intervals([[3, 6], [6, 8]]) == [[3, 8]]          # touching intervals merge
 assert merge_intervals([]) == []
-assert insert_interval([[1, 3], [6, 9]], [2, 5]) == [[1, 5], [6, 9]]
-assert insert_interval([[1, 2], [3, 5], [6, 7], [8, 10], [12, 16]], [4, 8]) == [[1, 2], [3, 10], [12, 16]]
+assert insert_interval([[1, 2], [5, 7]], [3, 6]) == [[1, 2], [3, 7]]
+assert insert_interval([[0, 1], [3, 4], [6, 8], [10, 12]], [4, 10]) == [[0, 1], [3, 12]]
 assert insert_interval([], [5, 7]) == [[5, 7]]
-assert min_removals_for_no_overlap([[1, 2], [2, 3], [3, 4], [1, 3]]) == 1
-assert min_removals_for_no_overlap([[1, 2], [1, 2], [1, 2]]) == 2
+assert min_removals_for_no_overlap([[0, 5], [1, 2], [2, 4], [4, 6]]) == 1
+assert min_removals_for_no_overlap([[5, 9], [5, 9], [5, 9]]) == 2
 ```
 
 Decide early whether touching intervals (`[1, 4]` and `[4, 5]`) overlap. Merging treats them as overlapping (`<=`); the removal problem treats them as compatible (`>=`). Ask the interviewer.
@@ -346,15 +351,18 @@ def is_valid_sudoku(board):
     return True
 
 
-m = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+m = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
 rotate_image(m)
-assert m == [[7, 4, 1], [8, 5, 2], [9, 6, 3]]
-assert spiral_order([[1, 2, 3], [4, 5, 6], [7, 8, 9]]) == [1, 2, 3, 6, 9, 8, 7, 4, 5]
-assert spiral_order([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]) == [1, 2, 3, 4, 8, 12, 11, 10, 9, 5, 6, 7]
+assert m == [[14, 8, 2], [16, 10, 4], [18, 12, 6]]
+m = [[1, 2], [3, 4]]
+rotate_image(m)
+assert m == [[3, 1], [4, 2]]
+assert spiral_order([[1, 2, 3], [4, 5, 6]]) == [1, 2, 3, 6, 5, 4]
+assert spiral_order([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]) == [1, 2, 3, 6, 9, 12, 11, 10, 7, 4, 5, 8]
 assert spiral_order([[1], [2], [3]]) == [1, 2, 3]
-z = [[0, 1, 2, 0], [3, 4, 5, 2], [1, 3, 1, 5]]
+z = [[5, 0, 7], [1, 2, 3], [4, 6, 0]]
 set_zeroes(z)
-assert z == [[0, 0, 0, 0], [0, 4, 5, 0], [0, 3, 1, 0]]
+assert z == [[0, 0, 0], [1, 0, 0], [0, 0, 0]]
 board = [["." for _ in range(9)] for _ in range(9)]
 board[0][0] = board[4][4] = "5"
 assert is_valid_sudoku(board) is True
@@ -366,54 +374,7 @@ The `r // 3, c // 3` pair identifies which of the nine boxes a cell is in; this 
 
 ### Bit manipulation
 
-Three facts cover most bit problems: `x ^ x == 0`, `x ^ 0 == x`, and `x & (x - 1)` clears the lowest set bit.
-
-```python
-from functools import reduce
-from operator import xor
-
-
-def single_number(nums):
-    return reduce(xor, nums)                 # pairs cancel out
-
-
-def missing_number(nums):
-    n = len(nums)
-    return n * (n + 1) // 2 - sum(nums)      # or XOR indices with values
-
-
-def hamming_weight(n):
-    count = 0
-    while n:
-        n &= n - 1                           # drop the lowest 1 bit
-        count += 1
-    return count
-
-
-def reverse_bits(n):
-    result = 0
-    for _ in range(32):
-        result = (result << 1) | (n & 1)
-        n >>= 1
-    return result
-
-
-def get_sum(a, b):
-    # Add without + or -, simulating 32-bit two's complement.
-    mask, max_int = 0xFFFFFFFF, 0x7FFFFFFF
-    while b:
-        a, b = (a ^ b) & mask, ((a & b) << 1) & mask
-    return a if a <= max_int else ~(a ^ mask)
-
-
-assert single_number([4, 1, 2, 1, 2]) == 4
-assert missing_number([3, 0, 1]) == 2 and missing_number([0]) == 1
-assert hamming_weight(0b1011) == 3 and hamming_weight(0) == 0
-assert reverse_bits(0b00000010100101000001111010011100) == 964176192
-assert get_sum(2, 3) == 5 and get_sum(-2, -3) == -5 and get_sum(-1, 1) == 0
-```
-
-Python integers have unlimited size, so problems that assume 32-bit integers need explicit masking (as in `get_sum`), or a negative number loops forever.
+Problems such as Single Number, Missing Number (XOR version) and Number of 1 Bits are often filed under arrays, but they rely on a separate toolkit: XOR cancellation, `n & (n - 1)` and 32-bit masks in Python. They have their own lesson, [Bit Manipulation](/dsa/bit-manipulation/), which comes after Strings in this course.
 
 ### Three more one-pass ideas
 
@@ -454,9 +415,10 @@ def decode(data):
     return out
 
 
-assert longest_consecutive([100, 4, 200, 1, 3, 2]) == 4
+assert longest_consecutive([10, 5, 12, 11, 6, 13, 7]) == 4     # 10, 11, 12, 13
 assert longest_consecutive([]) == 0
-assert majority_element([2, 2, 1, 1, 1, 2, 2]) == 2
+assert longest_consecutive([3, 3, 3]) == 1                    # duplicates do not extend a run
+assert majority_element([6, 1, 6, 2, 6]) == 6
 for case in [["hello", "world"], ["", "a#b", "12#"], []]:
     assert decode(encode(case)) == case
 ```
@@ -475,7 +437,6 @@ for case in [["hello", "world"], ["", "a#b", "12#"], []]:
 | Kadane | O(n) | O(1) |
 | Merge intervals | O(n log n) for the sort | O(n) for the output |
 | Rotate, spiral, set zeroes | O(rows·cols) | O(1) (spiral output aside) |
-| Bit tricks | O(number of bits) | O(1) |
 | Longest consecutive | O(n) | O(n) |
 
 ## Variations and common bugs
@@ -488,7 +449,6 @@ for case in [["hello", "world"], ["", "a#b", "12#"], []]:
 - **Unhashable keys:** a list or dict as a key raises `TypeError`. Convert to a tuple or frozenset.
 - **Interval edge semantics:** decide whether `[1, 2]` and `[2, 3]` overlap, and whether ends are inclusive.
 - **Sorting intervals by the wrong field:** merging sorts by start; "max non-overlapping" sorts by end.
-- **Integer width:** bit problems that assume 32-bit numbers need masks in Python.
 
 ## Hashing in data-engineering work
 
@@ -533,32 +493,48 @@ Recommended order, easy to hard, with the key idea for each:
 2. **Valid Anagram** (Easy): equal lengths and equal character counts.
 3. **Two Sum** (Easy): map each value to its index; look up `target - x` before storing `x`.
 4. **Majority Element** (Easy): Boyer-Moore voting keeps one candidate and a counter.
-5. **Single Number** (Easy): XOR everything; pairs cancel to zero.
-6. **Missing Number** (Easy): expected sum minus actual sum (or XOR indices and values).
-7. **Number of 1 Bits** (Easy): `n &= n - 1` removes one set bit per step.
-8. **Reverse Bits** (Easy): shift the lowest bit of `n` into the result 32 times.
-9. **Group Anagrams** (Medium): group by sorted letters or a 26-count tuple.
-10. **Top K Frequent Elements** (Medium): count, then bucket by frequency (or a heap of size k).
-11. **Product of Array Except Self** (Medium): left products times right products, no division.
-12. **Encode and Decode Strings** (Medium): prefix each string with its length and a separator.
-13. **Valid Sudoku** (Medium): one seen set of (row, value), (column, value) and (box, value) keys.
-14. **Longest Consecutive Sequence** (Medium): a set, and only count from numbers whose predecessor is missing.
-15. **Maximum Subarray** (Medium): Kadane; extend the current run or restart.
-16. **Subarray Sum Equals K** (Medium): count earlier prefix sums equal to `running - k`.
-17. **Merge Intervals** (Medium): sort by start and extend the last merged interval.
-18. **Insert Interval** (Medium): copy intervals before, absorb overlaps, copy the rest.
-19. **Non-overlapping Intervals** (Medium): sort by end and greedily keep the earliest-ending.
-20. **Rotate Image** (Medium): transpose, then reverse each row.
-21. **Spiral Matrix** (Medium): four shrinking boundaries; check bounds before the bottom and left passes.
-22. **Set Matrix Zeroes** (Medium): use the first row and column as marker storage.
-23. **Sum of Two Integers** (Medium): XOR is the sum without carry, AND shifted left is the carry; mask to 32 bits.
+5. **Missing Number** (Easy): expected sum minus actual sum (or XOR indices and values).
+6. **Group Anagrams** (Medium): group by sorted letters or a 26-count tuple.
+7. **Top K Frequent Elements** (Medium): count, then bucket by frequency (or a heap of size k).
+8. **Product of Array Except Self** (Medium): left products times right products, no division.
+9. **Encode and Decode Strings** (Medium): prefix each string with its length and a separator.
+10. **Valid Sudoku** (Medium): one seen set of (row, value), (column, value) and (box, value) keys.
+11. **Longest Consecutive Sequence** (Medium): a set, and only count from numbers whose predecessor is missing.
+12. **Maximum Subarray** (Medium): Kadane; extend the current run or restart.
+13. **Subarray Sum Equals K** (Medium): count earlier prefix sums equal to `running - k`.
+14. **Merge Intervals** (Medium): sort by start and extend the last merged interval.
+15. **Insert Interval** (Medium): copy intervals before, absorb overlaps, copy the rest.
+16. **Non-overlapping Intervals** (Medium): sort by end and greedily keep the earliest-ending.
+17. **Rotate Image** (Medium): transpose, then reverse each row.
+18. **Spiral Matrix** (Medium): four shrinking boundaries; check bounds before the bottom and left passes.
+19. **Set Matrix Zeroes** (Medium): use the first row and column as marker storage.
+
+The bit problems (Single Number, Number of 1 Bits, Reverse Bits, Sum of Two Integers and others) are listed in the bit manipulation lesson.
+
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Find Pivot Index** (Easy): keep a running left sum; index i is a pivot when the left sum equals total − left − nums[i].
+- **Find All Numbers Disappeared in an Array** (Easy): mark each value v by negating slot v − 1 (or cyclic sort); unmarked slots are the missing values.
+- **Set Mismatch** (Easy): cyclic sort puts each value v at slot v − 1; the one slot holding the wrong value gives both the duplicate and the missing number.
+- **First Unique Character in a String** (Easy): count every character, then return the first index whose count is 1.
+- **Longest Palindrome** (Easy): use every pair of each letter, plus one centre letter if any count is odd.
+- **Ransom Note** (Easy): count the magazine's letters and spend them on the note; fail when a count would go negative.
+- **Find All Duplicates in an Array** (Medium): negate slot v − 1 on each visit; a value whose slot is already negative has been seen before.
+- **Subarray Sums Divisible by K** (Medium): count prefix sums by remainder mod k; two prefixes with the same remainder bound a divisible subarray.
+- **Contiguous Array** (Medium): treat 0 as −1 and store the first index of each prefix sum; equal sums bound a balanced subarray.
+- **Maximum Product Subarray** (Medium): track the largest and the smallest product ending here, because a negative value swaps them.
+- **Maximum Subarray Sum with One Deletion** (Medium): Kadane with two states, the best sum ending here with no deletion and with one deletion used.
+- **Maximum Absolute Sum of Any Subarray** (Medium): run Kadane for the maximum and for the minimum and take the larger absolute value.
+- **Maximum Sum Circular Subarray** (Medium): a wrapping subarray is the total minus a minimum subarray; use plain Kadane when every value is negative.
+- **First Missing Positive** (Hard): cyclic sort each value 1 to n into slot v − 1; the first slot without its own value gives the answer.
+- **Shortest Subarray with Sum at Least K** (Hard): negatives break a window, so keep a deque of prefix-sum indices with increasing sums and pop from the front while the condition holds.
 
 ## Practice questions
 
 <details>
 <summary>Why does Two Sum check for the complement before inserting the current number?</summary>
 
-If you insert first, a number can match itself: with `[3]` and target 6 you would return `[0, 0]`. Checking first means only earlier indices can be partners, which also handles duplicates like `[3, 3]` correctly.
+If you insert first, a number can match itself: with `[6]` and target 12 you would return `[0, 0]`. Checking first means only earlier indices can be partners, which also handles duplicates like `[6, 6]` correctly.
 
 </details>
 
@@ -593,7 +569,7 @@ Intervals `[a, b]` and `[c, d]` overlap when `a <= d and c <= b` (use `<` if tou
 <details>
 <summary>How would you find the top 3 most frequent error codes in a log, and what if there were millions of distinct codes?</summary>
 
-Count with `Counter` and call `most_common(3)`, which is O(n log k) with a heap internally. With millions of distinct codes the counts may not fit on one machine; aggregate counts per partition, combine them (a map-reduce), then take the top 3. For a stream with bounded memory, an approximate algorithm such as Count-Min Sketch with a small heap is the usual answer.
+Count with `Counter` (O(n)) and call `most_common(3)`, which uses a heap over the d distinct codes: O(d log 3). With millions of distinct codes the counts may not fit on one machine; aggregate counts per partition, combine them (a map-reduce), then take the top 3. For a stream with bounded memory, an approximate algorithm such as Count-Min Sketch with a small heap is the usual answer.
 
 </details>
 
@@ -603,5 +579,4 @@ Count with `Counter` and call `most_common(3)`, which is O(n log k) with a heap 
 - Check before you store in complement problems, and seed prefix-sum maps with `{0: 1}`.
 - Prefix sums handle range sums and subarray counts with negatives; Kadane handles the best contiguous run.
 - Interval problems are sort-then-sweep; agree whether touching intervals overlap.
-- Mask to 32 bits when a problem assumes fixed-width integers, because Python's integers are unbounded.
 - In pipelines, the same ideas are deduplication, hash joins, group-by and hash partitioning.

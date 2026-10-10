@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["greedy", "intervals", "sessionization"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain what makes a greedy choice safe and how to argue it with an exchange or invariant"
   - "Solve reach, refuelling, grouping and partition problems with one-pass greedy templates"
@@ -79,8 +79,8 @@ def min_jumps(nums):
     return jumps
 
 
-assert can_jump([2, 3, 1, 1, 4]) is True and can_jump([3, 2, 1, 0, 4]) is False and can_jump([0]) is True
-assert min_jumps([2, 3, 1, 1, 4]) == 2 and min_jumps([2, 3, 0, 1, 4]) == 2 and min_jumps([0]) == 0
+assert can_jump([3, 0, 2, 0, 1]) is True and can_jump([2, 1, 0, 3]) is False and can_jump([0]) is True
+assert min_jumps([1, 4, 1, 1, 1, 2]) == 2 and min_jumps([3, 1, 0, 2, 1]) == 2 and min_jumps([0]) == 0
 ```
 
 `min_jumps` is a breadth-first search in disguise: each "level" is the range of indices reachable with the same number of jumps.
@@ -99,8 +99,8 @@ def can_complete_circuit(gas, cost):
     return start
 
 
-assert can_complete_circuit([1, 2, 3, 4, 5], [3, 4, 5, 1, 2]) == 3
-assert can_complete_circuit([2, 3, 4], [3, 4, 3]) == -1
+assert can_complete_circuit([4, 1, 5, 2], [3, 4, 1, 3]) == 2
+assert can_complete_circuit([1, 1], [2, 2]) == -1          # total gas < total cost
 assert can_complete_circuit([5], [4]) == 0
 ```
 
@@ -127,8 +127,8 @@ def is_n_straight_hand(hand, group_size):
     return True
 
 
-assert is_n_straight_hand([1, 2, 3, 6, 2, 3, 4, 7, 8], 3) is True
-assert is_n_straight_hand([1, 2, 3, 4, 5], 4) is False
+assert is_n_straight_hand([5, 6, 7, 6, 7, 8], 3) is True   # 5-6-7 and 6-7-8
+assert is_n_straight_hand([1, 2, 4], 3) is False
 assert is_n_straight_hand([], 2) is True
 ```
 
@@ -145,8 +145,8 @@ def merge_triplets(triplets, target):
     return len(found) == 3
 
 
-assert merge_triplets([[2, 5, 3], [1, 8, 4], [1, 7, 5]], [2, 7, 5]) is True
-assert merge_triplets([[3, 4, 5], [4, 5, 6]], [3, 2, 5]) is False
+assert merge_triplets([[1, 3, 2], [2, 1, 4], [3, 3, 1]], [3, 3, 4]) is True
+assert merge_triplets([[5, 1, 1], [1, 2, 3]], [4, 2, 3]) is False    # nothing usable supplies the 4
 ```
 
 Merging takes the maximum of each position, so any triplet with a value above the target poisons the result and must be ignored; every other triplet is harmless to include.
@@ -165,8 +165,8 @@ def partition_labels(s):
     return sizes
 
 
-assert partition_labels("ababcbacadefegdehijhklij") == [9, 7, 8]
-assert partition_labels("eccbbbbdec") == [10]
+assert partition_labels("abacdcef") == [3, 3, 1, 1]       # "aba", "cdc", "e", "f"
+assert partition_labels("xyzx") == [4]
 ```
 
 This is interval merging in disguise: each letter spans from its first to its last occurrence, and the parts are the merged spans.
@@ -191,8 +191,8 @@ def check_valid_string(s):
     return low == 0
 
 
-assert check_valid_string("()") and check_valid_string("(*)") and check_valid_string("(*))")
-assert not check_valid_string(")(") and not check_valid_string("(((*)")
+assert check_valid_string("(*()") and check_valid_string("*)") and check_valid_string("((*)")
+assert not check_valid_string(")(") and not check_valid_string("(()*(")
 assert check_valid_string("")
 ```
 
@@ -228,9 +228,9 @@ def max_concurrent(intervals):
     return best
 
 
-meetings = [[0, 30], [5, 10], [15, 20]]
+meetings = [[9, 12], [10, 11], [11, 13]]
 assert min_meeting_rooms(meetings) == 2 == max_concurrent(meetings)
-assert min_meeting_rooms([[7, 10], [2, 4]]) == 1 == max_concurrent([[7, 10], [2, 4]])
+assert min_meeting_rooms([[8, 9], [1, 3]]) == 1 == max_concurrent([[8, 9], [1, 3]])
 assert min_meeting_rooms([[1, 5], [5, 10]]) == 1 == max_concurrent([[1, 5], [5, 10]])
 ```
 
@@ -248,8 +248,8 @@ def max_non_overlapping(intervals):
     return count
 
 
-assert max_non_overlapping([[1, 2], [2, 3], [3, 4], [1, 3]]) == 3
-assert max_non_overlapping([[1, 10], [2, 3], [4, 5]]) == 2
+assert max_non_overlapping([[0, 5], [1, 2], [2, 4], [4, 6]]) == 3
+assert max_non_overlapping([[1, 9], [2, 3], [5, 6]]) == 2
 ```
 
 Choosing the interval that **ends** earliest is the textbook exchange argument: swapping any optimal first interval for the earliest-ending one never blocks more of the rest. Sorting by start instead fails on the second test.
@@ -352,6 +352,16 @@ Recommended order, easy to hard:
 7. **Valid Parenthesis String** (Medium): track the range of possible open counts; clamp the low end at zero.
 
 The interval problems Merge Intervals, Insert Interval and Non-overlapping Intervals are taught in the arrays and hashing lesson.
+
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Meeting Rooms** (Easy): sort by start; a meeting that starts before the previous one ends is a clash.
+- **Maximum Length of Pair Chain** (Medium): sort by end and take each pair whose left value is greater than the last end taken.
+- **Minimum Add to Make Parentheses Valid** (Medium): count unmatched openers; every `)` with nothing open costs one insertion, and leftover openers cost one each.
+- **Interval List Intersections** (Medium): two pointers; the overlap runs from the larger start to the smaller end; advance the interval that ends first.
+- **Meeting Rooms II** (Medium): sort starts and ends separately and sweep, or keep a min-heap of end times; the peak number of open meetings is the answer.
+- **My Calendar I** (Medium): keep bookings sorted and check only the neighbours of the insertion point.
+- **Remove Duplicate Letters** (Medium): an increasing stack; pop a larger letter when it appears again later.
 
 ## Practice questions
 

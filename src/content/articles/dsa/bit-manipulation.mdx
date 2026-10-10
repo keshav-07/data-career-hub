@@ -1,0 +1,375 @@
+---
+title: "Bit Manipulation: XOR Tricks, Masks and Fixed-Width Integers"
+seoTitle: "Bit Manipulation for Coding Interviews"
+description: "How integers look in binary, the XOR and n & (n - 1) tricks, masks for 32-bit problems in Python, bit DP, and where bit arrays show up in data systems."
+technology: ["dsa"]
+topic: ["bit-manipulation", "xor", "bitmasks"]
+difficulty: "Beginner"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+learningObjectives:
+  - "Read and write integers in binary and use &, |, ^, ~, << and >> correctly in Python"
+  - "Use XOR cancellation to find values that appear an odd number of times"
+  - "Count, test, set and clear bits, including the n & (n - 1) and x & -x tricks"
+  - "Simulate 32-bit two's complement in Python, whose integers have no fixed width"
+  - "Recognise bit arrays and bitmasks in Bloom filters, flags and hash partitioning"
+prerequisites: ["articles:dsa/arrays-and-hashing"]
+related: ["articles:dsa/backtracking"]
+versionContext: "All examples run on CPython 3.11 (int.bit_count needs 3.10+); each block ends with assert-based tests."
+sources:
+  - { label: "Python documentation: Bitwise operations on integer types", url: "https://docs.python.org/3/library/stdtypes.html#bitwise-operations-on-integer-types" }
+  - { label: "Python documentation: int.bit_length and int.bit_count", url: "https://docs.python.org/3/library/stdtypes.html#int.bit_length" }
+  - { label: "Python documentation: enum.Flag", url: "https://docs.python.org/3/library/enum.html#enum.Flag" }
+previous: "articles:dsa/strings"
+next: "articles:dsa/two-pointers"
+---
+
+Bit manipulation problems are short, and they are mostly a test of whether you know a handful of identities and can apply them without off-by-one or sign mistakes. They come up less often than arrays or strings in Data Engineering rounds, but they are cheap points when they do, and the same ideas sit inside Bloom filters, bitmap indexes and hash partitioning.
+
+Every code block is self-contained and ends with `assert` tests.
+
+## How bits work in Python
+
+An integer is stored in binary: `13` is `1101`, which means 8 + 4 + 0 + 1. Bit 0 is the rightmost (least significant) bit. Python's operators work on these bits directly:
+
+| Operator | Meaning | Example (`a = 0b1100`, `b = 0b1010`) |
+|---|---|---|
+| `a & b` | 1 where both bits are 1 | `0b1000` (8) |
+| `a \| b` | 1 where either bit is 1 | `0b1110` (14) |
+| `a ^ b` | 1 where the bits differ (XOR) | `0b0110` (6) |
+| `~a` | flip every bit; in Python this equals `-a - 1` | `-13` |
+| `a << k` | shift left, multiply by 2^k | `0b1100 << 2 == 48` |
+| `a >> k` | shift right, floor-divide by 2^k | `0b1100 >> 2 == 3` |
+
+Two facts about Python matter more than anything else in this lesson:
+
+- **Python integers have no fixed width.** `1 << 40` is fine, and there is no overflow. Conceptually a negative number has infinitely many leading 1 bits (two's complement extended forever), which is why `~5 == -6` and why `bin(-5)` prints `'-0b101'` rather than a 32-bit pattern.
+- **Problems written for 32-bit integers need explicit masks.** `x & 0xFFFFFFFF` keeps the low 32 bits as an unsigned value. To read those bits back as a signed 32-bit number, subtract 2^32 when bit 31 is set.
+
+```python
+assert bin(13) == "0b1101" and int("1101", 2) == 13
+assert (13).bit_length() == 4                  # bits needed, ignoring the sign
+assert (13).bit_count() == 3                   # set bits (Python 3.10+)
+assert ~5 == -6 and -7 >> 1 == -4              # >> on negatives floors, like // 2
+
+def to_unsigned32(x):
+    return x & 0xFFFFFFFF
+
+def to_signed32(u):
+    return u - (1 << 32) if u & (1 << 31) else u
+
+assert to_unsigned32(-1) == 0xFFFFFFFF == 4294967295
+assert to_signed32(0xFFFFFFFF) == -1
+assert to_signed32(to_unsigned32(-123456)) == -123456
+assert to_signed32(0x7FFFFFFF) == 2**31 - 1     # largest positive 32-bit value
+```
+
+## Recognising the pattern
+
+| Signal in the problem | Likely tool |
+|---|---|
+| "every value appears twice except one", "find the odd one out" | XOR everything |
+| "count the 1 bits", "Hamming weight", "Hamming distance" | `n & (n - 1)` or `bit_count()` |
+| "power of two", "single set bit" | `n > 0 and n & (n - 1) == 0` |
+| "without using + or -", "without multiplication" | XOR for the sum, AND plus shift for the carry |
+| "reverse the bits", "unsigned 32-bit", "two's complement" | shift loop with a 32-bit mask |
+| "flip the bits of the binary form" | all-ones mask of the right length, then XOR |
+| "for every number from 0 to n, count ..." | bit DP: reuse the answer for `i >> 1` |
+| "all subsets of a small set (n up to about 20)" | integers 0 to 2^n − 1 as membership masks |
+| "constant extra space" on an array of small integers | bits or signs as markers |
+
+## Core templates in Python
+
+### Test, set, clear and toggle one bit
+
+```python
+def test_bit(x, i):
+    return (x >> i) & 1 == 1
+
+def set_bit(x, i):
+    return x | (1 << i)
+
+def clear_bit(x, i):
+    return x & ~(1 << i)
+
+def toggle_bit(x, i):
+    return x ^ (1 << i)
+
+
+x = 0b10010
+assert test_bit(x, 1) and not test_bit(x, 0)
+assert set_bit(x, 0) == 0b10011
+assert clear_bit(x, 4) == 0b00010
+assert toggle_bit(x, 1) == 0b10000 and toggle_bit(toggle_bit(x, 3), 3) == x
+```
+
+Write `(x >> i) & 1 == 1` with the parentheses: comparison operators bind tighter than `&` in Python, so `x & 1 == 0` means `x & (1 == 0)`, which is always 0.
+
+### XOR cancellation
+
+Three identities do the work: `a ^ a == 0`, `a ^ 0 == a`, and XOR is commutative and associative, so order does not matter. XOR a list together and every value that appears an even number of times disappears.
+
+```python
+from functools import reduce
+from operator import xor
+
+
+def single_number(nums):
+    # Every value appears twice except one.
+    return reduce(xor, nums, 0)
+
+
+def missing_number(nums):
+    # nums holds n distinct values from 0..n with one missing.
+    result = len(nums)
+    for i, v in enumerate(nums):
+        result ^= i ^ v              # indices 0..n and the values pair up except the gap
+    return result
+
+
+def two_singles(nums):
+    # Exactly two values appear once; every other value appears twice.
+    both = reduce(xor, nums, 0)      # = a ^ b, non-zero because a != b
+    low = both & -both               # lowest set bit: a and b differ here
+    a = 0
+    for v in nums:
+        if v & low:
+            a ^= v                   # one group holds a and some pairs
+    return sorted((a, both ^ a))
+
+
+assert single_number([7, 3, 7, 5, 3]) == 5
+assert single_number([-8]) == -8                     # single element, negative
+assert missing_number([4, 0, 1, 3]) == 2
+assert missing_number([0]) == 1 and missing_number([1]) == 0
+assert two_singles([6, 2, 9, 2, 6, 4]) == [4, 9]
+assert two_singles([-1, 5]) == [-1, 5]
+```
+
+**Why `two_singles` works:** `both = a ^ b` has a 1 exactly where `a` and `b` differ, so pick any such bit (`x & -x` isolates the lowest one, also for negative numbers in Python). Splitting the list by that bit puts `a` and `b` in different groups and keeps each duplicate pair together, because equal values have equal bits. XOR inside one group then leaves `a` alone.
+
+### Counting set bits
+
+`n & (n - 1)` clears the lowest set bit: subtracting 1 turns the lowest 1 into 0 and the zeros below it into 1s, and the AND wipes all of those. So a loop of `n &= n - 1` runs once per set bit, not once per bit position.
+
+```python
+def hamming_weight(n):
+    count = 0
+    while n:
+        n &= n - 1
+        count += 1
+    return count
+
+
+def is_power_of_two(n):
+    return n > 0 and n & (n - 1) == 0
+
+
+def count_bits_upto(limit):
+    # bits[i] = bits[i >> 1] + lowest bit of i: i >> 1 drops one bit we already counted.
+    bits = [0] * (limit + 1)
+    for i in range(1, limit + 1):
+        bits[i] = bits[i >> 1] + (i & 1)
+    return bits
+
+
+assert hamming_weight(0b101101) == 4 and hamming_weight(0) == 0
+assert hamming_weight(0xFFFFFFFF) == 32
+assert all(hamming_weight(v) == v.bit_count() for v in range(2000))
+assert is_power_of_two(64) and not is_power_of_two(96) and not is_power_of_two(0)
+assert count_bits_upto(6) == [0, 1, 1, 2, 1, 2, 2]
+assert count_bits_upto(0) == [0]
+```
+
+Never run `n &= n - 1` on a negative Python integer: it has infinitely many 1 bits, so the loop never ends. Mask first (`n & 0xFFFFFFFF`) if negatives can appear.
+
+`count_bits_upto` is a one-line dynamic programme: the answer for `i` reuses the answer for a smaller number, which is O(n) in total instead of O(n log n) for counting each number from scratch.
+
+### Masks of the right length
+
+To flip only the bits that belong to the binary form of `n` (no leading zeros), build an all-ones mask of the same length and XOR.
+
+```python
+def complement(n):
+    if n == 0:
+        return 1                             # "0" flips to "1"
+    mask = (1 << n.bit_length()) - 1         # e.g. 0b1111 for a 4-bit number
+    return n ^ mask
+
+
+assert complement(0b1011) == 0b0100
+assert complement(1) == 0 and complement(0) == 1
+assert complement(0b1000) == 0b0111
+```
+
+### Fixed-width problems: reverse bits and add without +
+
+```python
+def reverse_bits(n):
+    result = 0
+    for _ in range(32):
+        result = (result << 1) | (n & 1)     # move the lowest bit of n into result
+        n >>= 1
+    return result
+
+
+def add(a, b):
+    # 32-bit two's complement addition with only bitwise operators.
+    mask = 0xFFFFFFFF
+    a, b = a & mask, b & mask
+    while b:
+        a, b = (a ^ b) & mask, ((a & b) << 1) & mask   # sum without carry, carry
+    return a - (1 << 32) if a & (1 << 31) else a
+
+
+assert reverse_bits(1) == 1 << 31
+assert reverse_bits(0b1011) == 0b1101 << 28
+assert reverse_bits(0xFFFFFFFF) == 0xFFFFFFFF and reverse_bits(0) == 0
+assert add(19, 23) == 42 and add(-9, 4) == -5 and add(-6, -7) == -13
+assert add(-1, 1) == 0 and add(0, 0) == 0
+```
+
+`a ^ b` adds each column without the carry, and `(a & b) << 1` is the carry moved into the next column. Repeating until the carry is zero finishes the addition. The masks matter: without them a negative carry keeps growing to the left forever in Python.
+
+### Bitmasks as subsets
+
+With up to about 20 items, an integer from 0 to 2^n − 1 can describe a subset: bit `i` is 1 when item `i` is included. This is the iterative alternative to the backtracking template for subsets.
+
+```python
+def all_subsets(items):
+    out = []
+    for mask in range(1 << len(items)):
+        out.append([items[i] for i in range(len(items)) if mask >> i & 1])
+    return out
+
+
+subsets = all_subsets(["a", "b", "c"])
+assert len(subsets) == 8 and [] in subsets and ["a", "c"] in subsets
+assert all_subsets([]) == [[]]
+```
+
+## Complexity
+
+| Template | Time | Extra space |
+|---|---|---|
+| Test, set, clear, toggle | O(1) | O(1) |
+| XOR a list (single number, missing number) | O(n) | O(1) |
+| Two singles by partition bit | O(n), two passes | O(1) |
+| `n &= n - 1` loop | O(number of set bits) | O(1) |
+| Bit DP for 0..n | O(n) | O(n) for the output |
+| Reverse bits, add without + (32-bit) | O(32) = O(1) | O(1) |
+| Enumerate subsets by mask | O(n · 2^n) | O(n · 2^n) for the output |
+
+## Variations and common bugs
+
+- **Operator precedence:** `x & 1 == 0` is `x & (1 == 0)`. Parenthesise every bit expression used in a comparison.
+- **Negative numbers in Python:** `bin(-5)` is `'-0b101'`, `-7 >> 1` is `-4`, and loops that wait for a negative number to reach 0 by shifting or clearing bits never end. Mask to the width the problem assumes.
+- **Missing the signed conversion** after masking: `0xFFFFFFFF` is 4294967295, not -1, until you subtract 2^32.
+- **`~` is not "flip the meaningful bits".** `~10` is -11. To flip only the bits of the binary form, XOR with an all-ones mask of `bit_length()` bits, and treat 0 separately.
+- **XOR only cancels pairs.** If values can appear three times, count each bit position modulo 3 instead.
+- **Variants:** Hamming distance (`(a ^ b).bit_count()`), power of four (a power of two whose set bit is in an even position), counting bits in a range, the single number that appears once among triples, and finding the duplicate and missing values with XOR.
+
+## Bits in data-engineering work
+
+- **Bloom filters** keep a bit array and set k bit positions per key, chosen by k hash functions. A lookup that finds any of those bits at 0 proves the key was never added; all 1s means "probably added". Storage engines and joins use them to skip files or partitions that cannot contain a key.
+- **Power-of-two hash tables** pick a slot with `hash & (size - 1)` instead of `hash % size`, which is the same thing when the size is a power of two and avoids a division.
+- **Flags packed into one integer:** permissions, feature switches or "which checks failed" stored as a bitmask take one column instead of many booleans, and `flags & CHECK` tests one of them.
+- **Bitmap indexes** keep one bit per row for each distinct value of a low-cardinality column, so a filter like `country = 'IN' AND status = 'active'` becomes an AND of two bitmaps.
+
+```python
+import hashlib
+from enum import Flag, auto
+
+
+class Bloom:
+    def __init__(self, size_bits=1024, k=3):
+        self.size, self.k, self.bits = size_bits, k, 0     # an int used as a bit array
+
+    def _positions(self, key):
+        for seed in range(self.k):
+            digest = hashlib.sha256(f"{seed}:{key}".encode()).digest()
+            yield int.from_bytes(digest[:8], "big") % self.size
+
+    def add(self, key):
+        for p in self._positions(key):
+            self.bits |= 1 << p
+
+    def might_contain(self, key):
+        return all(self.bits >> p & 1 for p in self._positions(key))
+
+
+seen = Bloom()
+for order_id in ("o-101", "o-102", "o-205"):
+    seen.add(order_id)
+assert all(seen.might_contain(o) for o in ("o-101", "o-102", "o-205"))   # no false negatives
+
+
+class Check(Flag):
+    NOT_NULL = auto()
+    UNIQUE = auto()
+    IN_RANGE = auto()
+
+
+failed = Check.NOT_NULL | Check.IN_RANGE
+assert Check.IN_RANGE in failed and Check.UNIQUE not in failed
+assert failed.value == 0b101
+print(bin(seen.bits).count("1"), failed)
+```
+
+```text
+9 Check.NOT_NULL|IN_RANGE
+```
+
+The Bloom filter can report a key it never saw (a false positive) but never misses one it did see. A real implementation sizes the bit array and k from the expected number of keys and the false-positive rate you can accept.
+
+## Problems in this pattern
+
+Recommended order, easy to medium:
+
+1. **Number of 1 Bits** (Easy): `n &= n - 1` removes one set bit per step.
+2. **Single Number** (Easy): XOR everything; pairs cancel to zero.
+3. **Missing Number** (Easy): XOR the indices 0 to n with the values, or use the sum formula.
+4. **Reverse Bits** (Easy): shift the lowest bit of `n` into the result 32 times.
+5. **Counting Bits** (Easy): `bits[i] = bits[i >> 1] + (i & 1)`.
+6. **Complement of Base 10 Integer** (Easy): XOR with an all-ones mask of the same bit length; 0 maps to 1.
+7. **Sum of Two Integers** (Medium): XOR is the sum without carry, AND shifted left is the carry; mask to 32 bits.
+8. **Single Number III** (Medium): XOR all values, split by one bit where the two singles differ.
+
+## Practice questions
+
+<details>
+<summary>Why does XOR-ing every element find the value that appears once?</summary>
+
+XOR is associative and commutative, so the order of the elements does not matter, and `a ^ a == 0` and `a ^ 0 == a`. Rearrange the XOR so that equal values sit next to each other: every pair becomes 0, and what is left is the single value. It is O(n) time and O(1) space, against O(n) space for a set of seen values.
+
+</details>
+
+<details>
+<summary>Explain why n & (n - 1) clears the lowest set bit, and give two uses.</summary>
+
+Subtracting 1 from `n` turns its lowest 1 bit into 0 and every 0 below it into 1, leaving higher bits unchanged. ANDing with the original keeps the higher bits and clears the rest, so exactly the lowest set bit disappears. Uses: counting set bits in O(number of set bits), and testing for a power of two (`n > 0 and n & (n - 1) == 0`, since a power of two has one set bit).
+
+</details>
+
+<details>
+<summary>Your 32-bit bit-manipulation solution loops forever in Python on negative input. Why, and how do you fix it?</summary>
+
+Python integers are unbounded, and a negative integer behaves as if it had infinitely many leading 1 bits. A loop that waits for the value to become 0 by shifting right or clearing bits never gets there (`-1 >> 1` is still -1). Mask the value to 32 bits (`x & 0xFFFFFFFF`) before looping, and convert back to signed at the end by subtracting 2^32 when bit 31 is set.
+
+</details>
+
+<details>
+<summary>A Bloom filter says a key is present. Can you trust it? What if it says absent?</summary>
+
+"Absent" is certain: the key would have set all k bits when it was added, so a 0 among them proves it never was. "Present" is probabilistic: other keys may have set the same bits, giving a false positive. That is why Bloom filters are used to skip work (reading a file, probing a join side) rather than to decide that a record exists.
+
+</details>
+
+## Key takeaways
+
+- Learn the identities: `a ^ a == 0`, `a ^ 0 == a`, `n & (n - 1)` clears the lowest set bit, `x & -x` isolates it.
+- Parenthesise bit expressions in comparisons; `&` binds more loosely than `==` in Python.
+- Python integers have no width: mask with `0xFFFFFFFF` for 32-bit problems and convert back to signed explicitly.
+- Bit DP (`bits[i >> 1]`) and subset masks are small examples of reusing earlier answers and of compact state.
+- Bit arrays power Bloom filters, bitmap indexes and packed flags in data systems.
