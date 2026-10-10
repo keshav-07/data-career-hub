@@ -1,0 +1,196 @@
+---
+seoTitle: "SCD Type 2 MERGE in SQL: Interview Answer"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Write an SCD Type 2 upsert in SQL that closes old versions and inserts new ones."
+description: "Interview answer: maintain a Type 2 dimension with one MERGE using the union-of-changes trick, compare with IS DISTINCT FROM, stay idempotent and handle new, changed and unchanged keys."
+technology: ["sql"]
+topic: ["scd", "merge", "data-modelling"]
+difficulty: "Hard"
+questionType: ["coding", "scenario"]
+estimatedMinutes: 20
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Each change must close the current row (set valid_to and is_current = false) and insert a new current row. A plain MERGE can do only one action per source row, so feed it the staged rows twice: once keyed by the business key (matches the current row and closes it when a tracked column changed, or inserts brand-new keys) and once with a NULL key for changed rows only (never matches, so it inserts the new version). Detect changes with IS DISTINCT FROM so NULLs compare correctly, deduplicate the batch first, and check that a rerun changes nothing."
+followUps: ["How would you do the same with an UPDATE followed by an INSERT, and why must they share a transaction?", "What happens if the batch contains two changes for the same customer?", "How do you handle a late-arriving change dated before the current version?", "How do you represent a customer deleted in the source?", "How do fact tables pick up the right surrogate key?"]
+prerequisites: ["articles:sql/top-n-deduplication-scd-queries"]
+related: ["articles:sql/top-n-deduplication-scd-queries", "interview-questions:sql/remove-duplicate-records", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:sql/transactions-isolation-mvcc"]
+versionContext: "Queries run on PostgreSQL 16.14 (MERGE needs PostgreSQL 15 or later) with scripts/verify-examples.py; outputs are copied from psql. Snowflake, Databricks and BigQuery MERGE notes were written from their documentation and not executed."
+sources:
+  - { label: "PostgreSQL 16 documentation: MERGE", url: "https://www.postgresql.org/docs/16/sql-merge.html" }
+  - { label: "PostgreSQL 16 documentation: Comparison predicates (IS DISTINCT FROM)", url: "https://www.postgresql.org/docs/16/functions-comparison.html" }
+  - { label: "Delta Lake documentation: Upsert into a table using merge", url: "https://docs.delta.io/latest/delta-update.html" }
+---
+
+## What Type 2 means
+
+A Type 2 slowly changing dimension keeps **history**: when a tracked attribute changes, the old row is closed and a new row is added, each with its own surrogate key and validity interval. Facts loaded while Asha lived in Mumbai keep pointing at the Mumbai row, so historical reports do not change when she moves.
+
+## Sample data
+
+```sql
+CREATE TABLE dim_customer (
+  customer_sk  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  customer_id  INT  NOT NULL,          -- business key
+  city         TEXT,
+  tier         TEXT,
+  valid_from   DATE NOT NULL,
+  valid_to     DATE NOT NULL,          -- exclusive; 9999-12-31 = open
+  is_current   BOOLEAN NOT NULL
+);
+CREATE UNIQUE INDEX dim_customer_one_current ON dim_customer (customer_id) WHERE is_current;
+
+INSERT INTO dim_customer (customer_id, city, tier, valid_from, valid_to, is_current) VALUES
+  (1, 'Mumbai', 'gold',   '2026-01-01', '9999-12-31', true),
+  (2, 'London', 'silver', '2026-01-01', '9999-12-31', true),
+  (4, 'Austin', NULL,     '2026-01-01', '9999-12-31', true);
+
+-- Today's extract: Asha moved, Ben is unchanged, Chen is new, Diana got a tier
+CREATE TABLE stg_customer (
+  customer_id    INT PRIMARY KEY,
+  city           TEXT,
+  tier           TEXT,
+  effective_date DATE NOT NULL
+);
+INSERT INTO stg_customer VALUES
+  (1, 'Pune',      'gold',   '2026-10-01'),
+  (2, 'London',    'silver', '2026-10-01'),
+  (3, 'Singapore', 'bronze', '2026-10-01'),
+  (4, 'Austin',    'silver', '2026-10-01');
+```
+
+The partial unique index enforces the most important invariant: **at most one current row per customer**. Diana's tier goes from `NULL` to `silver`, which a plain `<>` comparison would miss.
+
+## The MERGE
+
+```sql
+MERGE INTO dim_customer d
+USING (
+  -- every staged row, keyed by the business key
+  SELECT s.customer_id AS merge_key, s.*
+  FROM stg_customer s
+  UNION ALL
+  -- changed rows again, with a NULL key so they never match: these insert the new version
+  SELECT NULL, s.*
+  FROM stg_customer s
+  JOIN dim_customer cur
+    ON cur.customer_id = s.customer_id AND cur.is_current
+  WHERE (cur.city, cur.tier) IS DISTINCT FROM (s.city, s.tier)
+) AS src
+ON d.customer_id = src.merge_key AND d.is_current
+WHEN MATCHED AND (d.city, d.tier) IS DISTINCT FROM (src.city, src.tier) THEN
+  UPDATE SET valid_to = src.effective_date, is_current = false
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, city, tier, valid_from, valid_to, is_current)
+  VALUES (src.customer_id, src.city, src.tier, src.effective_date, DATE '9999-12-31', true);
+
+SELECT customer_sk, customer_id, city, tier, valid_from, valid_to, is_current
+FROM dim_customer
+ORDER BY customer_id, valid_from;
+```
+
+| customer_sk | customer_id | city | tier | valid_from | valid_to | is_current |
+|---|---|---|---|---|---|---|
+| 1 | 1 | Mumbai | gold | 2026-01-01 | 2026-10-01 | f |
+| 5 | 1 | Pune | gold | 2026-10-01 | 9999-12-31 | t |
+| 2 | 2 | London | silver | 2026-01-01 | 9999-12-31 | t |
+| 4 | 3 | Singapore | bronze | 2026-10-01 | 9999-12-31 | t |
+| 3 | 4 | Austin | NULL | 2026-01-01 | 2026-10-01 | f |
+| 6 | 4 | Austin | silver | 2026-10-01 | 9999-12-31 | t |
+
+How each customer flowed through the statement:
+
+| Customer | Source rows | Outcome |
+|---|---|---|
+| Asha (changed) | key 1 and key `NULL` | key 1 matches the current row and closes it; the `NULL` row matches nothing and inserts Pune |
+| Ben (unchanged) | key 2 only | matches, but the `WHEN MATCHED AND ...` condition is false, so nothing happens |
+| Chen (new) | key 3 only | no current row, so it inserts |
+| Diana (`NULL` to silver) | key 4 and key `NULL` | same as Asha; `IS DISTINCT FROM` treats `NULL` versus `silver` as a change |
+
+The surrogate keys come from the identity column, in whatever order `MERGE` processed the inserts; their exact values do not matter, only that they never change once assigned.
+
+## Rerun: it must change nothing
+
+```sql
+MERGE INTO dim_customer d
+USING (
+  SELECT s.customer_id AS merge_key, s.* FROM stg_customer s
+  UNION ALL
+  SELECT NULL, s.* FROM stg_customer s
+  JOIN dim_customer cur ON cur.customer_id = s.customer_id AND cur.is_current
+  WHERE (cur.city, cur.tier) IS DISTINCT FROM (s.city, s.tier)
+) AS src
+ON d.customer_id = src.merge_key AND d.is_current
+WHEN MATCHED AND (d.city, d.tier) IS DISTINCT FROM (src.city, src.tier) THEN
+  UPDATE SET valid_to = src.effective_date, is_current = false
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, city, tier, valid_from, valid_to, is_current)
+  VALUES (src.customer_id, src.city, src.tier, src.effective_date, DATE '9999-12-31', true);
+
+SELECT COUNT(*) AS total_rows, COUNT(*) FILTER (WHERE is_current) AS current_rows
+FROM dim_customer;
+```
+
+| total_rows | current_rows |
+|---|---|
+| 6 | 4 |
+
+After the first run, every staged row equals its current version, so the second branch of the `UNION ALL` is empty and every matched row fails the change condition. A retry after a failure is therefore safe, which is what an orchestrator needs.
+
+## Querying the dimension
+
+Point in time, with the half-open interval `valid_from <= day < valid_to`, so a change date belongs to exactly one version:
+
+```sql
+SELECT customer_id, city, tier
+FROM dim_customer
+WHERE DATE '2026-06-15' >= valid_from AND DATE '2026-06-15' < valid_to
+ORDER BY customer_id;
+```
+
+| customer_id | city | tier |
+|---|---|---|
+| 1 | Mumbai | gold |
+| 2 | London | silver |
+| 4 | Austin | NULL |
+
+Chen does not appear: he did not exist on 15 June. A fact loader joins on the business key and the fact's event date with the same predicate to pick the right `customer_sk`.
+
+## Validation checks worth automating
+
+```sql
+-- overlapping or gapped versions for the same key (should return nothing)
+SELECT customer_id, valid_from, valid_to,
+       LEAD(valid_from) OVER (PARTITION BY customer_id ORDER BY valid_from) AS next_from
+FROM dim_customer
+ORDER BY customer_id, valid_from;
+```
+
+Every closed row's `valid_to` should equal the next row's `valid_from`; wrap the query and filter `valid_to <> next_from` for a test that fails loudly. Pair it with "exactly one current row per key" (already enforced here by the partial unique index).
+
+## The alternative: UPDATE then INSERT
+
+The [SCD lesson](/sql/top-n-deduplication-scd-queries/) shows the two-statement form: an `UPDATE` closes changed current rows, then an `INSERT ... WHERE NOT EXISTS (current row)` adds new versions and new keys. It is easier to read and works on engines without `MERGE`. Both statements **must run in one transaction**: if the job dies between them, customers are left with no current row.
+
+## Engine notes
+
+- **Snowflake and Databricks (Delta Lake)** support the same union-of-changes `MERGE`; the Delta Lake documentation uses this exact staged-union idea for SCD Type 2. Both raise an error (or behave non-deterministically, depending on settings) when several source rows match one target row, so deduplicate the batch first.
+- **BigQuery** `MERGE` supports the same shape.
+- **dbt snapshots** generate this logic for you (`dbt_valid_from`, `dbt_valid_to`) using a timestamp or check strategy.
+
+## Edge cases to state
+
+- **Several changes for one key in a batch.** The `MERGE` errors in PostgreSQL ("MERGE command cannot affect row a second time") if two source rows match the same target row. Deduplicate to the latest change per key first, or apply the changes in order, one version per change.
+- **Late-arriving changes** dated before the current `valid_from` need the version that covers that date split, not the current one closed; handle them in a separate, explicit path.
+- **Deletes in the source.** Close the current row and mark it (`is_deleted = true`) rather than removing history.
+- **Which columns are tracked.** Only Type 2 columns go in the change comparison; Type 1 columns (such as a corrected email) are overwritten in place on all versions or only the current one, by agreement.
+- **Same-day changes** with `DATE` validity produce zero-length versions; use timestamps if intraday history matters.
+
+## Common mistakes
+
+1. Comparing with `<>`, which never sees a change to or from `NULL`.
+2. Running the close and the insert in separate transactions.
+3. Not deduplicating the staging batch.
+4. Using an inclusive `valid_to` and `BETWEEN`, so the change date matches two versions.
+5. Generating surrogate keys with `MAX(sk) + 1` under concurrency instead of an identity or sequence.
