@@ -461,7 +461,7 @@ assert not wd.search("dog") and wd.search("log") and wd.search(".og") and wd.sea
 assert not wd.search("l.")                    # dots still have to match the length
 ```
 
-Nested dicts keep the code short. A node class with a `children` dict and an `is_word` flag is the more explicit alternative and is equally acceptable. The end marker matters: without it you cannot tell that "app" is a word rather than just a prefix of "apple".
+Nested dicts keep the code short. A node class with a `children` dict and an `is_word` flag is the more explicit alternative and is equally acceptable. The end marker matters: without it you cannot tell that "spa" is a word rather than just a prefix of "spark".
 
 ## Complexity
 
