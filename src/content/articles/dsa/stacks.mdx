@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["stacks", "monotonic-stack"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain last-in, first-out behaviour and implement a stack with a Python list"
   - "Validate nested structures and evaluate postfix expressions with a stack"
@@ -70,7 +70,7 @@ def is_valid(s):
     return not stack                     # leftover openers mean unbalanced
 
 
-assert is_valid("()[]{}") is True
+assert is_valid("{}()[]") is True
 assert is_valid("([{}])") is True
 assert is_valid("(]") is False
 assert is_valid("([)]") is False
@@ -104,11 +104,14 @@ class MinStack:
 
 
 ms = MinStack()
-for v in [-2, 0, -3]:
+for v in [5, 7, 2]:
     ms.push(v)
-assert ms.get_min() == -3
+assert ms.get_min() == 2
 ms.pop()
-assert ms.top() == 0 and ms.get_min() == -2
+assert ms.top() == 7 and ms.get_min() == 5
+ms.push(5)                                   # duplicate of the minimum
+ms.pop()
+assert ms.get_min() == 5
 ```
 
 ### Evaluation stack: reverse Polish notation
@@ -134,9 +137,10 @@ def eval_rpn(tokens):
     return stack[0]
 
 
-assert eval_rpn(["2", "1", "+", "3", "*"]) == 9
-assert eval_rpn(["4", "13", "5", "/", "+"]) == 6
-assert eval_rpn(["10", "6", "9", "3", "+", "-11", "*", "/", "*", "17", "+", "5", "+"]) == 22
+assert eval_rpn(["3", "4", "+", "2", "*"]) == 14          # (3 + 4) * 2
+assert eval_rpn(["20", "3", "7", "-", "/"]) == -5        # 20 / (3 - 7)
+assert eval_rpn(["6", "2", "3", "*", "-"]) == 0          # right operand popped first
+assert eval_rpn(["42"]) == 42
 assert eval_rpn(["7", "-2", "/"]) == -3          # -3.5 truncates to -3; 7 // -2 would be -4
 ```
 
@@ -198,10 +202,10 @@ def next_greater_element(nums1, nums2):
     return [next_greater.get(v, -1) for v in nums1]
 
 
-assert daily_temperatures([73, 74, 75, 71, 69, 72, 76, 73]) == [1, 1, 4, 2, 1, 1, 0, 0]
+assert daily_temperatures([61, 58, 63, 60, 59, 65]) == [2, 1, 3, 2, 1, 0]
 assert daily_temperatures([30, 30, 30]) == [0, 0, 0]
-assert next_greater_element([4, 1, 2], [1, 3, 4, 2]) == [-1, 3, -1]
-assert next_greater_element([2, 4], [1, 2, 3, 4]) == [3, -1]
+assert next_greater_element([6, 2], [2, 9, 6, 1, 7]) == [7, 9]
+assert next_greater_element([5, 1], [1, 5, 3]) == [-1, 5]
 ```
 
 Each index is pushed once and popped at most once, so both run in O(n) despite the nested `while`.
@@ -223,8 +227,8 @@ def largest_rectangle_area(heights):
     return best
 
 
-assert largest_rectangle_area([2, 1, 5, 6, 2, 3]) == 10
-assert largest_rectangle_area([2, 4]) == 4
+assert largest_rectangle_area([3, 1, 4, 4, 2]) == 8      # the two bars of height 4
+assert largest_rectangle_area([1, 5]) == 5
 assert largest_rectangle_area([]) == 0
 assert largest_rectangle_area([3, 3, 3]) == 9
 ```
@@ -247,9 +251,9 @@ def car_fleet(target, position, speed):
     return len(fleets)
 
 
-assert car_fleet(12, [10, 8, 0, 5, 3], [2, 4, 1, 1, 3]) == 3
-assert car_fleet(10, [3], [3]) == 1
-assert car_fleet(100, [0, 2, 4], [4, 2, 1]) == 1
+assert car_fleet(20, [18, 10, 4], [1, 2, 4]) == 2      # the car at 4 catches the one at 10
+assert car_fleet(15, [0], [5]) == 1
+assert car_fleet(30, [0, 10, 20], [3, 2, 1]) == 1     # all arrive together at time 10
 ```
 
 ## Complexity
