@@ -118,7 +118,7 @@ spark.read.format("delta").load(orders).orderBy("order_id").show()
 +--------+----------+
 ```
 
-Each step is reversible until the last, and no consumer breaks at any point. If you need to roll back after the drop, time travel to the version before it still has the old column, within the retention period.
+This sequence keeps the old and new columns available while consumers migrate, but it cannot guarantee that every consumer remains compatible; validate readers and writers at each stage. Before the old column is dropped, rollback can restore the dual-column state. After the drop, restoring a prior table version is possible only while its log and data files remain available, and downstream streams may treat the restore as new data.
 
 ## Pattern 3: renames behind a view
 

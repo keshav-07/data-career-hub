@@ -229,7 +229,7 @@ No file was rewritten and no rows were copied; the table directory now holds the
 
 Trade-offs and pitfalls:
 
-- Writes get much cheaper; reads pay a small cost to apply the vectors until files are compacted. `OPTIMIZE` rewrites files with deletion vectors as part of compaction.
+- Writes get much cheaper; reads pay a small cost to apply the vectors. `OPTIMIZE` may apply deletion vectors when it rewrites eligible files, but it does not guarantee that every deletion vector is purged. Use `REORG TABLE ... APPLY (PURGE)` when every affected file must be rewritten.
 - **Deleted rows are still in the Parquet files.** For GDPR-style erasure, run `REORG TABLE ... APPLY (PURGE)` to rewrite affected files, then `VACUUM` after the retention period so the old files are gone.
 - Enabling the feature upgrades the table protocol; readers that do not support deletion vectors cannot read the table.
 
