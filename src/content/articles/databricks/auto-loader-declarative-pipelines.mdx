@@ -8,8 +8,8 @@ description: "Databricks Auto Loader and Lakeflow Declarative Pipelines (formerl
 technology: ["databricks", "spark", "delta-lake"]
 topic: ["ingestion", "pipelines", "streaming"]
 difficulty: "Intermediate"
-prerequisites: ["articles:databricks/workspace-jobs-lakehouse", "articles:spark/structured-streaming"]
-related: ["interview-questions:databricks/auto-loader-vs-copy-into", "articles:databricks/unity-catalog-governance", "articles:etl-elt/incremental-loading-watermarks-backfills", "articles:etl-elt/data-quality-checks-contracts"]
+prerequisites: ["articles:databricks/workspace-jobs-lakehouse"]
+related: ["articles:databricks/unity-catalog-governance", "articles:etl-elt/incremental-loading-watermarks-backfills", "articles:etl-elt/data-quality-checks-contracts"]
 previous: "articles:databricks/unity-catalog-governance"
 sources:
   - {"label": "Databricks documentation: What is Auto Loader?", "url": "https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/"}
@@ -20,7 +20,7 @@ sources:
 versionContext: "Describes Databricks as documented in October 2026. Lakeflow Spark Declarative Pipelines were called Delta Live Tables (DLT) until 2025; the Python module is pyspark.pipelines (imported as dp), and the older dlt module still works. Auto Loader and pipeline code need a Databricks workspace and were checked against the documentation, not executed. The open-source streaming example runs on PySpark 4.2.0 in local mode."
 ---
 
-Most Databricks pipelines start with files landing in cloud storage: JSON events, CSV exports, Parquet drops from another team. Two features handle that ingestion. **Auto Loader** incrementally picks up new files exactly once, and **Lakeflow Spark Declarative Pipelines** (formerly Delta Live Tables, DLT) let you declare the bronze, silver and gold tables and leave orchestration, retries and checkpoints to the platform. Both are built on [Spark Structured Streaming](/spark/structured-streaming/), so the streaming concepts carry over directly.
+Most Databricks pipelines start with files landing in cloud storage: JSON events, CSV exports, Parquet drops from another team. Two features handle that ingestion. **Auto Loader** incrementally picks up new files exactly once, and **Lakeflow Spark Declarative Pipelines** (formerly Delta Live Tables, DLT) let you declare the bronze, silver and gold tables and leave orchestration, retries and checkpoints to the platform. Both are built on Spark Structured Streaming, so the streaming concepts carry over directly.
 
 ## Ingestion options at a glance
 
@@ -198,7 +198,7 @@ Apache Spark 4.1 added the open-source core of this as **Spark Declarative Pipel
 
 ## Interview angle
 
-Expect "How would you ingest files that land in S3 every few minutes?" A good answer: Auto Loader (or a streaming table with `read_files`) into a bronze Delta table, a checkpoint per stream for exactly-once file processing, schema evolution with a schema location and rescued data, `availableNow` on a schedule or a continuous stream depending on latency, expectations or checks in silver, and a Lakeflow Job or declarative pipeline to run it. See [Auto Loader vs COPY INTO](/interview/databricks/auto-loader-vs-copy-into/).
+Expect "How would you ingest files that land in S3 every few minutes?" A good answer: Auto Loader (or a streaming table with `read_files`) into a bronze Delta table, a checkpoint per stream for exactly-once file processing, schema evolution with a schema location and rescued data, `availableNow` on a schedule or a continuous stream depending on latency, expectations or checks in silver, and a Lakeflow Job or declarative pipeline to run it. See Auto Loader vs COPY INTO.
 
 ## Key takeaway
 

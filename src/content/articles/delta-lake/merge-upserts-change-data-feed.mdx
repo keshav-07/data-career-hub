@@ -14,9 +14,8 @@ learningObjectives:
   - "Enable and read the change data feed in batch and streaming"
   - "Use a Delta table as a streaming source and sink, and make foreachBatch MERGE idempotent"
 prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
-related: ["articles:data-warehousing/slowly-changing-dimensions", "interview-questions:delta-lake/delta-merge-internals-conflicts", "interview-questions:data-engineering/design-cdc-pipeline", "projects:kafka-spark-delta-streaming"]
+related: ["articles:data-warehousing/slowly-changing-dimensions", "interview-questions:data-engineering/design-cdc-pipeline", "projects:kafka-spark-delta-streaming"]
 previous: "articles:delta-lake/delta-vs-traditional-lake-tables"
-next: "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering"
 sources:
   - { label: "Delta Lake documentation: Table deletes, updates and merges", url: "https://docs.delta.io/delta-update/" }
   - { label: "Delta Lake documentation: Change data feed", url: "https://docs.delta.io/delta-change-data-feed/" }
@@ -111,7 +110,7 @@ WHEN NOT MATCHED AND s.op <> 'D' THEN INSERT (customer_id, name, city) VALUES (s
 ### How MERGE executes
 
 1. Delta joins the source with the target to find which **target files** contain matching rows (an inner join on the condition, using file statistics and partition filters to skip files).
-2. It rewrites only those files: matched rows are updated or dropped and unmatched rows in the same files are copied unchanged. With deletion vectors enabled, matched rows are marked deleted instead of copying the rest of the file (see the [maintenance lesson](/delta-lake/optimize-zorder-vacuum-liquid-clustering/)).
+2. It rewrites only those files: matched rows are updated or dropped and unmatched rows in the same files are copied unchanged. With deletion vectors enabled, matched rows are marked deleted instead of copying the rest of the file (see the maintenance lesson).
 3. Inserted rows go to new files, and one commit removes the old files and adds the new ones.
 
 The cost is driven by how many target files the condition touches, not by the source size. A condition on the key alone forces Delta to consider every file that might contain any key; adding a partition or clustering column (`AND t.event_date = s.event_date`) or a range filter lets it prune most of the table.

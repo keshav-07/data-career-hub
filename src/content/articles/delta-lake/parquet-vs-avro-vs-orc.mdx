@@ -16,7 +16,7 @@ learningObjectives:
   - "Evolve an Avro schema with a defaulted field and explain reader/writer schema resolution"
   - "Choose a format for analytics tables, streaming messages and interchange"
 prerequisites: ["articles:delta-lake/json-vs-parquet"]
-related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/transactions-schema-evolution", "interview-questions:delta-lake/parquet-internals", "articles:kafka/schema-registry-schema-evolution"]
+related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/transactions-schema-evolution", "articles:kafka/schema-registry-schema-evolution"]
 previous: "articles:delta-lake/json-vs-parquet"
 next: "articles:delta-lake/transactions-schema-evolution"
 sources:
@@ -101,7 +101,7 @@ country: SNAPPY ('BIT_PACKED', 'PLAIN_DICTIONARY') 28581 -> 1675 bytes
 
 Two things to read from this:
 
-- **Row-group skipping.** A query with `WHERE order_id >= 180000` only needs group 2: the footer proves the other groups cannot match. This works because `order_id` is sorted. For an unsorted column every group spans nearly the full range and nothing is skipped, which is why layout techniques such as sorting, [Z-ordering and liquid clustering](/delta-lake/optimize-zorder-vacuum-liquid-clustering/) matter.
+- **Row-group skipping.** A query with `WHERE order_id >= 180000` only needs group 2: the footer proves the other groups cannot match. This works because `order_id` is sorted. For an unsorted column every group spans nearly the full range and nothing is skipped, which is why layout techniques such as sorting, Z-ordering and liquid clustering matter.
 - **Encoding before compression.** `country` has five distinct values, so Parquet stores a small dictionary and then each value as a few bits (dictionary plus bit-packed/RLE encoding). The chunk shrinks to a few percent of its raw size before the codec does much. Low-cardinality columns are almost free to store.
 
 Spark reports pushed filters and the pruned read schema in the plan:
