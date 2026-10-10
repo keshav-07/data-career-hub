@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["heaps", "priority-queues", "top-k"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain the heap invariant and the cost of push, pop and heapify"
   - "Use heapq as a min-heap and a max-heap, with tuple priorities and tie-breakers"
@@ -114,8 +114,9 @@ class KthLargest:
         return self.heap[0]                      # k-th largest so far
 
 
-kl = KthLargest(3, [4, 5, 8, 2])
-assert [kl.add(v) for v in [3, 5, 10, 9, 4]] == [4, 5, 5, 8, 8]
+kl = KthLargest(2, [6, 1])
+assert [kl.add(v) for v in [3, 9, 2, 7]] == [3, 6, 6, 7]
+assert KthLargest(1, []).add(-5) == -5            # starts empty
 
 
 def k_closest(points, k):
@@ -129,8 +130,8 @@ def k_closest(points, k):
     return sorted([[x, y] for _, x, y in heap])
 
 
-assert k_closest([[1, 3], [-2, 2]], 1) == [[-2, 2]]
-assert k_closest([[3, 3], [5, -1], [-2, 4]], 2) == [[-2, 4], [3, 3]]
+assert k_closest([[2, 2], [-1, 1], [3, 0]], 1) == [[-1, 1]]
+assert k_closest([[4, 0], [0, -2], [1, 1], [3, 3]], 2) == [[0, -2], [1, 1]]
 ```
 
 To keep the k **smallest** (like the k closest points), flip it: a max-heap of size k whose root is the largest kept item.
@@ -172,8 +173,8 @@ def find_kth_largest_quickselect(nums, k):
 
 random.seed(1)
 for fn in (find_kth_largest_heap, find_kth_largest_quickselect):
-    assert fn([3, 2, 1, 5, 6, 4], 2) == 5
-    assert fn([3, 2, 3, 1, 2, 4, 5, 5, 6], 4) == 4
+    assert fn([9, 4, 7, 1, 8], 2) == 8
+    assert fn([5, 5, 3, 1, 5, 2], 3) == 5          # duplicates count separately
     assert fn([1], 1) == 1
     for _ in range(100):
         arr = [random.randint(-20, 20) for _ in range(random.randint(1, 30))]
@@ -206,7 +207,7 @@ def last_stone_weight(stones):
     return -heap[0] if heap else 0
 
 
-assert last_stone_weight([2, 7, 4, 1, 8, 1]) == 1
+assert last_stone_weight([9, 3, 5]) == 1          # 9 - 5 = 4, then 4 - 3 = 1
 assert last_stone_weight([1]) == 1
 assert last_stone_weight([3, 3]) == 0
 ```
@@ -243,7 +244,7 @@ def least_interval_formula(tasks, n):
     return max(len(tasks), (top - 1) * (n + 1) + tied)
 
 
-for tasks, n, expected in [(list("AAABBB"), 2, 8), (list("ACABDB"), 1, 6), (list("AAABBB"), 3, 10), (list("A"), 5, 1)]:
+for tasks, n, expected in [(list("AAAB"), 2, 7), (list("AABBCC"), 1, 6), (list("AAAA"), 1, 7), (list("A"), 5, 1)]:
     assert least_interval(tasks, n) == expected
     assert least_interval_formula(tasks, n) == expected
 ```
@@ -335,13 +336,13 @@ class Twitter:
 
 
 tw = Twitter()
-tw.post_tweet(1, 5)
-assert tw.get_news_feed(1) == [5]
-tw.follow(1, 2)
-tw.post_tweet(2, 6)
-assert tw.get_news_feed(1) == [6, 5]
-tw.unfollow(1, 2)
-assert tw.get_news_feed(1) == [5]
+tw.post_tweet(7, 101)
+assert tw.get_news_feed(7) == [101]
+tw.follow(7, 8)
+tw.post_tweet(8, 102)
+assert tw.get_news_feed(7) == [102, 101]
+tw.unfollow(7, 8)
+assert tw.get_news_feed(7) == [101]
 ```
 
 ## Complexity
