@@ -1,8 +1,8 @@
 ---
 seoTitle: "Python Iterators and Generators for Big Data"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Python Iterators, Generators and Memory-Efficient Processing"
 description: "Use Python iterators and generators to process files and API pages lazily, in batches, with flat memory use, and avoid the mistakes that silently exhaust them."
 inventoryId: "TECH-07"
@@ -14,7 +14,7 @@ related: ["interview-questions:python/generators-large-datasets", "articles:pyth
 previous: "articles:python/functions-modules-reusable-code"
 next: "articles:python/idempotent-csv-loader"
 sources: [{"label": "Python documentation: Generators (functional programming HOWTO)", "url": "https://docs.python.org/3/howto/functional.html#generators"}, {"label": "Python documentation: itertools", "url": "https://docs.python.org/3/library/itertools.html"}]
-versionContext: "Examples run on Python 3.12; itertools.batched requires Python 3.12"
+versionContext: "Examples run on Python 3.11 and 3.12; itertools.batched exists from Python 3.12, and the fallback helper covers older versions"
 ---
 
 A list holds every element in memory at once. An **iterator** produces elements one at a time, on demand. For data that is large, unbounded or arrives in pages, that difference decides whether a job runs in a few megabytes or runs out of memory.
@@ -98,10 +98,18 @@ for record in to_cents(only_large(read(rows), 50)):
 
 ## Batching for databases and APIs
 
-Writing one row at a time is slow; loading everything is memory-hungry. Batches are the middle ground. Python 3.12 adds `itertools.batched`:
+Writing one row at a time is slow; loading everything is memory-hungry. Batches are the middle ground. Python 3.12 adds `itertools.batched`; on older versions a three-line helper built on `itertools.islice` does the same, so this pattern works everywhere:
 
 ```python
-from itertools import batched
+from itertools import islice
+
+try:
+    from itertools import batched          # Python 3.12+
+except ImportError:                        # Python 3.11 and older
+    def batched(iterable, n):
+        it = iter(iterable)
+        while chunk := tuple(islice(it, n)):
+            yield chunk
 
 for batch in batched(range(1, 8), 3):
     print(batch)
@@ -113,7 +121,7 @@ for batch in batched(range(1, 8), 3):
 (7,)
 ```
 
-On older versions, `itertools.islice` gives the same effect in a short helper.
+Feed each batch to `executemany` or a bulk API call. Only one batch is in memory at a time, however long the input is.
 
 ## Paginated APIs
 
