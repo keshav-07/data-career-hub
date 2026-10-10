@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Databricks Workspace, Jobs and Lakehouse Concepts"
 seoTitle: "Databricks Workspace, Jobs and Lakehouse Basics"
 description: "Get oriented in Databricks: workspaces, notebooks and Git folders, all-purpose versus job compute, scheduled jobs, and the medallion lakehouse on Delta tables."
@@ -9,32 +9,115 @@ inventoryId: "TECH-24"
 technology: ["databricks", "delta-lake"]
 topic: ["platform", "jobs", "lakehouse"]
 difficulty: "Beginner"
-related: ["articles:databricks/unity-catalog-governance", "articles:delta-lake/transactions-schema-evolution", "articles:spark/execution-model-jobs-stages-tasks"]
+prerequisites: ["articles:databricks/databricks-for-data-engineers"]
+related: ["articles:databricks/unity-catalog-governance", "articles:databricks/auto-loader-declarative-pipelines", "interview-questions:databricks/choose-databricks-compute", "articles:delta-lake/transactions-schema-evolution", "articles:spark/execution-model-jobs-stages-tasks"]
+previous: "articles:databricks/databricks-for-data-engineers"
 next: "articles:databricks/unity-catalog-governance"
-sources: [{"label": "Databricks documentation", "url": "https://docs.databricks.com/"}, {"label": "Databricks documentation: Medallion architecture", "url": "https://docs.databricks.com/en/lakehouse/medallion.html"}]
-versionContext: "Describes Databricks as documented in 2026; Databricks renames products frequently, so check current names. Examples were not executed in a Databricks workspace"
+sources:
+  - {"label": "Databricks documentation", "url": "https://docs.databricks.com/"}
+  - {"label": "Databricks documentation: Compute", "url": "https://docs.databricks.com/aws/en/compute/"}
+  - {"label": "Databricks documentation: Access modes", "url": "https://docs.databricks.com/aws/en/compute/access-mode-limitations"}
+  - {"label": "Databricks documentation: SQL warehouse types", "url": "https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-types"}
+  - {"label": "Databricks documentation: Automating jobs with schedules and triggers", "url": "https://docs.databricks.com/aws/en/jobs/triggers"}
+  - {"label": "Databricks documentation: Bundle configuration", "url": "https://docs.databricks.com/aws/en/dev-tools/bundles/settings"}
+  - {"label": "Databricks documentation: Medallion architecture", "url": "https://docs.databricks.com/aws/en/lakehouse/medallion"}
+versionContext: "Describes Databricks as documented in October 2026 (Lakeflow Jobs, standard and dedicated access modes, Declarative Automation Bundles, formerly Databricks Asset Bundles). Databricks renames products often, so check current names. The bundle YAML and dbutils code need a Databricks workspace and were checked against the documentation, not executed; the local PySpark example runs on PySpark 4.2.0 with delta-spark 4.4.0."
 ---
 
-Databricks is a managed platform for Spark, SQL and machine learning on a lakehouse. The concepts below are the ones a data engineer uses every day.
+Databricks is a managed platform for Spark, SQL and machine learning on a lakehouse of Delta tables. This lesson covers the pieces a data engineer touches every day: where code lives, which compute runs it, how jobs schedule it, and how tables are layered. Governance (Unity Catalog) has [its own lesson](/databricks/unity-catalog-governance/), and ingestion with Auto Loader and declarative pipelines is covered in [Auto Loader and Lakeflow Declarative Pipelines](/databricks/auto-loader-declarative-pipelines/).
 
-## Workspace
+## The control plane and your data
 
-The **workspace** is where you organise and run work: notebooks, files, SQL queries, dashboards, and **Git folders** that connect a folder to a Git repository. Treat Git as the source of truth for production code; notebooks are fine for exploration, but production jobs should run code that is version-controlled and reviewed.
+A Databricks **account** owns one or more **workspaces**. Each workspace has a **control plane**, run by Databricks, that hosts the web UI, notebooks, job scheduler and APIs. The **compute plane** is where Spark actually runs: for classic compute it is virtual machines in your own cloud account; for serverless compute it is capacity Databricks runs for you. Table data stays in cloud object storage (S3, ADLS, GCS) in open formats, mostly Delta Lake, and Unity Catalog decides who can read it.
+
+This split explains several interview answers: your data does not live "inside Databricks", classic clusters take minutes to start because VMs are provisioned in your account, and serverless starts in seconds because the pool is already warm on Databricks' side.
+
+## Workspace: notebooks, files and Git folders
+
+The **workspace** is where you organise and run work: notebooks, Python files, SQL queries, dashboards, and **Git folders** that connect a folder to a Git repository (branch, commit, pull, push from the UI).
+
+Treat Git as the source of truth for anything that runs on a schedule:
+
+- Explore in notebooks; move reusable logic into Python modules (`.py` files or a wheel) that can be unit-tested outside Databricks.
+- Review changes through pull requests, then deploy with CI rather than editing production notebooks by hand.
+- Deploy jobs, pipelines and their settings as code with **Declarative Automation Bundles** (formerly Databricks Asset Bundles): a `databricks.yml` file that describes resources per target environment.
+
+<Callout tone="info" title="Product names change">
+
+Databricks renames products regularly: Workflows is now **Lakeflow Jobs**, Delta Live Tables (DLT) is now **Lakeflow Spark Declarative Pipelines**, Asset Bundles are now **Declarative Automation Bundles**, and the shared and single-user access modes are now **standard** and **dedicated**. Interviewers accept either name; knowing that they are the same thing is what matters.
+
+</Callout>
 
 ## Compute
 
-| Type | Use |
-|------|-----|
-| **All-purpose (interactive) compute** | Development and exploration, shared by people |
-| **Job compute** | Created for a scheduled job run and shut down after; usually cheaper for production |
-| **SQL warehouses** | SQL and BI workloads |
-| **Serverless options** | Compute managed by Databricks, with fast start-up |
+| Type | What it is | Use it for |
+|------|-----------|------------|
+| **All-purpose compute** | A cluster you create and keep running, shared by notebook users | Development and exploration |
+| **Jobs compute** | A cluster created for one job run and terminated afterwards | Scheduled production pipelines on classic compute |
+| **Serverless compute** (notebooks, jobs, pipelines) | Compute Databricks provisions and scales; starts in seconds; no cluster settings to tune | Most new production and interactive work where it is available |
+| **SQL warehouses** (serverless, pro, classic) | Compute for SQL only, with Photon, result caching and concurrency scaling | BI dashboards, ad hoc SQL, dbt models |
 
-Run production pipelines on job compute (or serverless job compute), not on an interactive cluster someone might restart.
+A few properties matter in practice:
 
-## Jobs
+- **Access mode.** Unity Catalog needs **standard** access mode (formerly *shared*: many users, isolated from each other, recommended for most workloads) or **dedicated** (formerly *single user*: one user or group, full feature set such as RDD APIs and some ML libraries). The legacy *no isolation shared* mode does not support Unity Catalog.
+- **Databricks Runtime (DBR).** A versioned bundle of Spark, Delta, Python and libraries. Pin a **long-term support (LTS)** version for production jobs and upgrade deliberately.
+- **Photon.** Databricks' vectorised C++ execution engine for SQL and DataFrame operations. It is used by SQL warehouses and serverless compute and can be enabled on classic clusters (at a higher DBU rate). It speeds up scans, joins and aggregations; it does not speed up Python UDFs or RDD code, which fall back to the regular engine.
+- **Serverless runs on Spark Connect.** Serverless and standard-mode compute expose the DataFrame and SQL APIs through Spark Connect, so code that uses `spark.sparkContext`, RDDs or JVM internals fails there. This is the [Spark Connect architecture](/spark/apache-spark-architecture/) in practice.
+- **Autoscaling and auto-termination.** Set a minimum and maximum worker count and an idle timeout on all-purpose clusters so forgotten clusters stop billing.
 
-A **job** runs one or more tasks (a notebook, a Python script or wheel, a SQL query, a pipeline) on a schedule or trigger, with dependencies, retries, parameters, notifications and run history. The same design rules as any orchestrator apply: make each task idempotent, pass the processing date as a parameter, and alert on failure. Teams that already use Airflow can trigger Databricks jobs from Airflow instead.
+Cost follows from this: compute is billed in Databricks Units (DBUs) per hour at rates that depend on the compute type, plus (for classic) the cloud VM cost. Production pipelines on jobs or serverless compute are cheaper than the same code on an all-purpose cluster, and a shared all-purpose cluster that someone restarts mid-run is a reliability risk too.
+
+## Lakeflow Jobs
+
+A **job** runs one or more **tasks** as a directed acyclic graph. Task types include notebooks, Python scripts and wheels, SQL queries and files, dbt projects, declarative pipelines, JARs, and control-flow tasks (**Run Job**, **If/else condition**, **For each**).
+
+Each job has:
+
+- **Triggers**: a cron schedule, **file arrival** in a Unity Catalog location, **table update** of source tables, **continuous** (start a new run as soon as one ends), or manual and API runs (for example from Airflow).
+- **Parameters**: job-level parameters passed to every task, with dynamic values such as `{{job.start_time.iso_date}}`, and **task values** that one task sets and a later task reads.
+- **Retries, timeouts and notifications** per task, plus a **max concurrent runs** limit (1 by default, so a slow run makes the next scheduled run skip rather than overlap).
+- **Repair run**: after a failure, re-run only the failed tasks and their dependants instead of the whole job.
+
+A bundle that deploys a two-task job, with the processing date passed as a parameter:
+
+{/* noexec */}
+```yaml
+# databricks.yml (Declarative Automation Bundles)
+bundle:
+  name: orders_pipeline
+
+resources:
+  jobs:
+    orders_daily:
+      name: orders_daily
+      schedule:
+        quartz_cron_expression: "0 30 2 * * ?"   # 02:30 every day
+        timezone_id: "UTC"
+      parameters:
+        - name: run_date
+          default: "{{job.start_time.iso_date}}"
+      tasks:
+        - task_key: bronze_to_silver
+          notebook_task:
+            notebook_path: ./src/bronze_to_silver.py
+          max_retries: 2
+        - task_key: silver_to_gold
+          depends_on:
+            - task_key: bronze_to_silver
+          notebook_task:
+            notebook_path: ./src/silver_to_gold.py
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+```
+
+`databricks bundle validate`, then `databricks bundle deploy -t prod`, creates or updates the job; with no compute settings the tasks run on serverless jobs compute where it is enabled. Inside a notebook task, `dbutils.widgets.get("run_date")` reads the parameter.
+
+The same design rules as any orchestrator apply: make each task **idempotent** for its `run_date` (overwrite that date's partition, or `MERGE` on a key), keep tasks small enough that a repair run is cheap, and alert on failure. See [idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/).
 
 ## The medallion lakehouse
 
@@ -42,33 +125,87 @@ Databricks popularised organising Delta tables in layers:
 
 | Layer | Contents | Typical rules |
 |-------|----------|---------------|
-| **Bronze** | Raw data as ingested | Append, keep source fidelity, add ingestion metadata |
-| **Silver** | Cleaned, deduplicated, conformed | Typed schemas, quality checks, merges |
+| **Bronze** | Raw data as ingested | Append only, keep source fidelity, add ingestion metadata (file name, load time) |
+| **Silver** | Cleaned, deduplicated, conformed | Typed schemas, quality checks, `MERGE` for updates |
 | **Gold** | Business-level aggregates and models | Star schemas and marts for BI and ML |
 
-Each layer is a set of Delta tables. Because Delta provides ACID commits and time travel, each step can be rerun safely and audited.
+In Unity Catalog the layers are usually **schemas** (`prod.bronze`, `prod.silver`, `prod.gold`) or catalogs. Each layer can be rebuilt from the one before it, and because Delta commits are atomic, a failed run leaves the previous version readable.
+
+The code inside each task is ordinary Spark. This runs locally with open-source PySpark and Delta Lake, and the same DataFrame code runs unchanged in a Databricks notebook (where `spark` already exists and tables would be three-part Unity Catalog names):
+
+```python
+import tempfile
+from pyspark.sql import SparkSession, functions as F
+from delta import configure_spark_with_delta_pip
+
+builder = (SparkSession.builder.master("local[2]").appName("medallion")
+           .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+           .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+           .config("spark.sql.shuffle.partitions", "4"))
+spark = configure_spark_with_delta_pip(builder).getOrCreate()
+base = tempfile.mkdtemp()
+
+raw = spark.createDataFrame(
+    [("o1", "c1", "120.50", "2026-10-01"), ("o2", "c2", "80.00", "2026-10-01"),
+     ("o2", "c2", "80.00", "2026-10-01"), ("o3", "c1", "not-a-number", "2026-10-02")],
+    ["order_id", "customer_id", "amount", "order_date"])
+
+bronze = raw.withColumn("_ingested_at", F.current_timestamp())
+bronze.write.format("delta").mode("append").save(f"{base}/bronze_orders")
+
+silver = (spark.read.format("delta").load(f"{base}/bronze_orders")
+          .withColumn("amount", F.expr("try_cast(amount AS DECIMAL(10,2))"))
+          .withColumn("order_date", F.to_date("order_date"))
+          .filter(F.col("amount").isNotNull())          # quarantine these in a real pipeline
+          .dropDuplicates(["order_id"]))
+silver.write.format("delta").mode("overwrite").save(f"{base}/silver_orders")
+
+gold = (spark.read.format("delta").load(f"{base}/silver_orders")
+        .groupBy("order_date").agg(F.sum("amount").alias("revenue"), F.count("*").alias("orders")))
+gold.orderBy("order_date").show()
+```
+
+```text
++----------+-------+------+
+|order_date|revenue|orders|
++----------+-------+------+
+|2026-10-01| 200.50|     2|
++----------+-------+------+
+```
+
+The duplicate `o2` and the malformed `o3` stayed in bronze, so the silver logic can be fixed and replayed without going back to the source.
 
 ## Where Spark fits
 
-Most Databricks pipeline code is ordinary PySpark or SQL. Everything in the [Spark execution model](/spark/execution-model-jobs-stages-tasks/) and [partitions and skew](/spark/partitions-shuffles-skew/) guides applies unchanged.
-
-<Callout tone="info" title="Product names change">
-
-Databricks regularly renames and regroups features (for example, its job orchestration and declarative pipeline products have been rebranded over time). Learn the underlying concepts (compute, jobs, Delta tables, governance) and look up current names in the documentation.
-
-</Callout>
+Most Databricks pipeline code is ordinary PySpark or SQL. Everything in the [Spark execution model](/spark/execution-model-jobs-stages-tasks/) and [partitions and skew](/spark/partitions-shuffles-skew/) lessons applies unchanged, and the Spark UI is available from each cluster and job run.
 
 ## Common mistakes
 
-1. Running production jobs on shared interactive clusters.
-2. Keeping production logic only in notebooks without version control or tests.
+1. Running production jobs on shared all-purpose clusters.
+2. Keeping production logic only in notebooks without version control, tests or deployment as code.
 3. Skipping the silver layer and building gold tables directly on raw data.
-4. Leaving interactive clusters running without auto-termination.
+4. Leaving all-purpose clusters running without auto-termination.
+5. Using `spark.sparkContext` or RDDs in code meant for serverless or standard access mode.
+6. Non-idempotent tasks, so a retry or repair run double-loads data.
 
-## Interview relevance
+## Interview angle
 
-Interviewers ask how you would structure a Databricks pipeline: medallion layers, job compute, idempotent tasks, Delta tables and Unity Catalog permissions.
+Interviewers ask how you would structure and run a pipeline on Databricks. A strong answer names the layers (bronze, silver, gold Delta tables), the compute (serverless or jobs compute for pipelines, a SQL warehouse for BI), the orchestration (a Lakeflow Job with dependent tasks, a date parameter, retries and alerts, deployed from Git with bundles), and governance (Unity Catalog, jobs running as service principals). See [Which Databricks compute should you use?](/interview/databricks/choose-databricks-compute/).
+
+<details>
+<summary>Why is jobs compute cheaper than an all-purpose cluster for the same code?</summary>
+
+It has a lower DBU rate and exists only for the run: it is created for the job and terminated when the job ends, so you do not pay for idle time between runs.
+
+</details>
+
+<details>
+<summary>A job's 02:30 run is still running at the next 02:30. What happens?</summary>
+
+With the default max concurrent runs of 1, the new run is skipped. Raise concurrency only if runs are independent; otherwise fix the slow run.
+
+</details>
 
 ## Key takeaway
 
-Develop in the workspace, version code in Git, run production on job compute, and organise Delta tables into bronze, silver and gold layers.
+Develop in the workspace, version code in Git and deploy it with bundles, run production on jobs or serverless compute, orchestrate with Lakeflow Jobs, and organise Delta tables into bronze, silver and gold layers.
