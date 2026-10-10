@@ -20,6 +20,7 @@ anything not checked is marked as such. No ranking or traffic outcome is implied
 | SEO-11 | Topic clusters | Started | Tier 1 supporting pages now link to their preferred URL (4 missing links added). Hubs link to lessons, questions and projects by template. |
 | SEO-12 | Highest-value pages | Started | Course hub H1s fixed (rendered "SQLSQL", "AfAirflow" because the tile monogram was inside the H1); hub, interview, roadmap, projects, system-design and tracker titles retargeted to Data Engineer queries. |
 | SEO-13 | Weekly GSC workflow | Not started | Needs GSC data. Use the weekly section in the keyword map. |
+| SEO-19 | Sitemap lastmod | Done | 562 URLs carry `<lastmod>` from their real `updatedDate`; hubs have none rather than an invented date. |
 | SEO-14 | Mobile performance baseline | Partial | Build budgets: largest initial JS 27.7 KB gz, CSS 13.7 KB gz. PageSpeed Insights could not be run from the sandbox; owner should run it for `/`, `/sql/`, one lesson. Hashed assets now cached `immutable`; HSTS added. |
 | SEO-15 | Orphan pages | Done | 0 content pages without an in-content inbound link (About/Privacy/Terms are linked from the footer). |
 | SEO-16 | Original reference assets | Not started | Candidates: Spark troubleshooting checklist, pipeline reliability checklist (only once tested and useful). |
@@ -36,7 +37,7 @@ anything not checked is marked as such. No ranking or traffic outcome is implied
 | Nonexistent path | Real 404 |
 | `*.pages.dev` | `X-Robots-Tag: noindex` live; canonicals point to datadank.com |
 | `http://` → `https://`, `www` → apex | **Not verified**: datadank.com is not reachable from the sandbox. Owner: `curl -sI http://datadank.com/` and `curl -sI https://www.datadank.com/` should both 301 to `https://datadank.com/`. Add a Cloudflare Redirect Rule for `www` if needed. |
-| Meta descriptions over 160 chars | 227 being shortened to 120–158 (in progress) |
+| Meta descriptions over 160 chars | 0 (227 rewritten to 120–158 chars, search term first) |
 
 ## Change log
 
