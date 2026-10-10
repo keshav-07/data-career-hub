@@ -16,7 +16,7 @@ learningObjectives:
   - "Write structured logs that carry run context"
   - "Design alerts with owners, severities and runbooks, and use lineage to scope impact"
 prerequisites: ["articles:etl-elt/data-quality-checks-contracts"]
-related: ["articles:etl-elt/data-quality-checks-contracts", "articles:etl-elt/pipeline-reliability-and-retries", "interview-questions:data-engineering/investigate-slow-pipeline", "system-designs:data-sla-freshness-monitoring-system", "system-designs:data-observability-system"]
+related: ["articles:etl-elt/data-quality-checks-contracts", "articles:etl-elt/pipeline-reliability-and-retries", "interview-questions:data-engineering/investigate-slow-pipeline", "system-designs:data-sla-freshness-monitoring-system", "system-designs:data-observability-system", "interview-questions:data-engineering/monitor-pipeline-freshness-slas"]
 previous: "articles:etl-elt/data-quality-checks-contracts"
 next: "articles:etl-elt/pipeline-reliability-and-retries"
 sources:
@@ -263,7 +263,7 @@ Compare duration and volume with the same weekday over recent weeks. Fixed thres
 
 ## Interview angle
 
-"How would you monitor this pipeline?" and "How would you know the data is late or wrong before the business does?" come up in design rounds. Name the signals per run (status, duration, volume, freshness, schema, quality), the audit table that stores them, freshness as the first alert, same-weekday baselines for volume, SLOs agreed with consumers, and lineage for impact analysis. Practise with the [freshness monitoring system design](/data-engineering/system-design/data-sla-freshness-monitoring-system/).
+"How would you monitor this pipeline?" and "How would you know the data is late or wrong before the business does?" come up in design rounds. Name the signals per run (status, duration, volume, freshness, schema, quality), the audit table that stores them, freshness as the first alert, same-weekday baselines for volume, SLOs agreed with consumers, and lineage for impact analysis. Practise with [monitoring pipeline freshness and SLAs](/interview/data-engineering/monitor-pipeline-freshness-slas/) and the [freshness monitoring system design](/data-engineering/system-design/data-sla-freshness-monitoring-system/).
 
 ## Key takeaway
 
