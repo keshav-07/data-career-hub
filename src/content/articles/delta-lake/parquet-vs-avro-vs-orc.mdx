@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Parquet vs Avro vs ORC for Data Engineering"
 seoTitle: "Parquet vs Avro vs ORC for Data Engineering"
 description: "Compare Parquet, ORC and Avro by layout, compression, schema evolution and use case, with a measured size comparison and how column pruning works in Spark."
@@ -9,61 +9,224 @@ inventoryId: "SUPPORT-07"
 technology: ["delta-lake", "spark"]
 topic: ["file-formats", "comparison"]
 difficulty: "Intermediate"
-related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/transactions-schema-evolution"]
-sources: [{"label": "Apache Parquet documentation", "url": "https://parquet.apache.org/docs/"}, {"label": "Apache ORC documentation", "url": "https://orc.apache.org/docs/"}, {"label": "Apache Avro documentation", "url": "https://avro.apache.org/docs/"}]
-versionContext: "Measurements taken with PySpark 4.2 default writers on synthetic data; your sizes will differ"
+learningObjectives:
+  - "Describe the internal layout of Parquet (row groups, column chunks, pages, footer) and of ORC and Avro"
+  - "Read a Parquet footer and explain how its statistics let engines skip row groups"
+  - "Compare file sizes fairly, accounting for each writer's default codec"
+  - "Evolve an Avro schema with a defaulted field and explain reader/writer schema resolution"
+  - "Choose a format for analytics tables, streaming messages and interchange"
+prerequisites: ["articles:delta-lake/json-vs-parquet"]
+related: ["articles:delta-lake/json-vs-parquet", "articles:data-warehousing/partitioning-clustering-data-layout", "articles:delta-lake/transactions-schema-evolution", "interview-questions:delta-lake/parquet-internals", "articles:kafka/schema-registry-schema-evolution"]
+previous: "articles:delta-lake/json-vs-parquet"
+next: "articles:delta-lake/transactions-schema-evolution"
+sources:
+  - { label: "Apache Parquet documentation: File format", url: "https://parquet.apache.org/docs/file-format/" }
+  - { label: "Apache ORC documentation", url: "https://orc.apache.org/docs/" }
+  - { label: "Apache Avro specification", url: "https://avro.apache.org/docs/1.12.0/specification/" }
+  - { label: "Spark documentation: Apache Avro data source", url: "https://spark.apache.org/docs/latest/sql-data-sources-avro.html" }
+  - { label: "Spark documentation: Parquet files", url: "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html" }
+versionContext: "Examples and measurements run with PySpark 4.2.0 (with the spark-avro 4.2.0 package) and PyArrow 25 on synthetic data; sizes depend on your data and codec"
 ---
 
-The first question is **row or column?** Parquet and ORC store data by column; Avro stores it by row. That determines what each is good at.
+The first question is **row or column?** Parquet and ORC store data by column; Avro stores it by row. That determines what each is good at: columnar formats for scanning a few columns of many rows, row formats for writing and reading whole records one at a time, as in a message stream.
 
 | | Parquet | ORC | Avro |
 |--|---------|-----|------|
-| Layout | Columnar | Columnar | Row-based |
-| Best for | Analytics, lakehouse tables | Analytics (strong in the Hive ecosystem) | Streaming records, messages, write-heavy ingestion |
-| Reads a few columns of many rows | Excellent | Excellent | Reads whole rows |
-| Schema | Embedded in file | Embedded in file | Embedded; strong schema-evolution rules |
-| Typical ecosystem | Spark, Delta Lake, Iceberg, warehouses | Hive, Spark | Kafka, schema registries |
+| Layout | Columnar: row groups, then column chunks | Columnar: stripes, then column streams | Row-based: blocks of records |
+| Schema | In the file footer | In the file footer | JSON schema in the file header (or in a schema registry for messages) |
+| Statistics for skipping | Min/max/null count per row group and page; optional bloom filters | Min/max per file, stripe and every 10,000 rows; optional bloom filters | None |
+| Splittable | Yes, at row groups | Yes, at stripes | Yes, at sync markers between blocks |
+| Schema evolution | Add columns; readers match by name (or field ID) | Add columns; readers match by name or position | Explicit reader/writer schema resolution rules |
+| Typical ecosystem | Spark, Delta Lake, Iceberg, Hudi, warehouses, DuckDB, pandas | Hive, Spark, Trino | Kafka with a schema registry, Hadoop-era ingestion |
 
-## Why columnar wins for analytics
+## Setup
 
-Analytical queries usually read a few columns across many rows. A columnar file stores each column together, so the engine reads only the columns it needs (**column pruning**) and compresses well because similar values sit together. Files also keep per-column statistics, so filters can skip row groups (**predicate pushdown**).
+The Avro data source ships as a separate Spark module, so the session adds the `spark-avro` package matching the Spark version.
 
-In Spark, selecting one column and filtering it on a Parquet file produces a scan that reads only that column and pushes the filter down:
+```python
+import glob, json, os, tempfile
+import pyarrow.parquet as pq
+from pyspark.sql import SparkSession, functions as F
 
-```text
-FileScan parquet [amount] ... PushedFilters: [IsNotNull(amount), GreaterThan(amount,50.0)],
-ReadSchema: struct<amount:double>
+spark = (SparkSession.builder.master("local[2]").appName("file-formats")
+         .config("spark.jars.packages", "org.apache.spark:spark-avro_2.13:4.2.0")
+         .config("spark.sql.shuffle.partitions", "2").getOrCreate())
+spark.sparkContext.setLogLevel("ERROR")
+base = tempfile.mkdtemp()
+
+orders = spark.range(0, 200_000).select(
+    F.col("id").alias("order_id"),
+    (F.col("id") % 5000).alias("customer_id"),
+    F.element_at(F.array(*[F.lit(c) for c in ["UK", "FR", "DE", "ES", "IT"]]),
+                 (F.col("id") % 5 + 1).cast("int")).alias("country"),
+    F.round(F.rand(42) * 500, 2).alias("amount"),
+)
+
+def size_kb(path):
+    return sum(os.path.getsize(f) for f in glob.glob(f"{path}/part-*")) // 1024
 ```
 
-## A measured example
+## Inside a Parquet file
 
-Writing the same 200,000 synthetic rows (five columns) with PySpark 4.2's default settings, as one file each:
+A Parquet file is laid out as:
 
-| Format | Size |
-|--------|------|
-| JSON | 21,260 KB |
-| CSV | 9,151 KB |
-| Parquet | 2,382 KB |
-| ORC | 1,473 KB |
+1. **Row groups**: horizontal slices of the rows. Spark's writer targets 128 MB per row group by default (`parquet.block.size`). A row group is the unit of parallelism and of skipping.
+2. **Column chunks**: inside each row group, the values of one column stored together.
+3. **Pages**: inside each chunk, the unit of encoding and compression (around 1 MB by default).
+4. **Footer**: at the end of the file, the schema plus, for every column chunk, its offset, encodings, compressed size and **statistics** (min, max, null count).
 
-This is one test on generated data with each format's default compression, not a benchmark. Real ratios depend on your data, compression codec and settings. The direction, though, is typical: columnar formats are several times smaller than text formats.
+A reader fetches the footer first, decides which row groups and column chunks it needs, then reads only those byte ranges. Write a small file with deliberately small row groups and read its footer with PyArrow:
 
-## Where Avro fits
+```python
+path = f"{base}/orders_parquet"
+orders.coalesce(1).write.option("parquet.block.size", 1024 * 1024).parquet(path)
 
-Avro is compact, row-oriented and schema-first, with well-defined rules for evolving schemas (adding fields with defaults, for example). That makes it a good fit for **messages and streaming ingestion**, especially with a schema registry, where each record is written and read whole. It is a poor fit for analytical scans. In Spark, Avro support is provided by a separate module.
+meta = pq.ParquetFile(glob.glob(f"{path}/part-*.parquet")[0]).metadata
+print("row groups:", meta.num_row_groups, "rows:", meta.num_rows)
+col = meta.schema.names.index("order_id")
+for g in range(meta.num_row_groups):
+    s = meta.row_group(g).column(col).statistics
+    print(f"group {g}: order_id {s.min}..{s.max}")
+c = meta.row_group(0).column(meta.schema.names.index("country"))
+print("country:", c.compression, c.encodings, c.total_uncompressed_size, "->", c.total_compressed_size, "bytes")
+```
+
+```text
+row groups: 3 rows: 200000
+group 0: order_id 0..75378
+group 1: order_id 75379..150757
+group 2: order_id 150758..199999
+country: SNAPPY ('BIT_PACKED', 'PLAIN_DICTIONARY') 28581 -> 1675 bytes
+```
+
+Two things to read from this:
+
+- **Row-group skipping.** A query with `WHERE order_id >= 180000` only needs group 2: the footer proves the other groups cannot match. This works because `order_id` is sorted. For an unsorted column every group spans nearly the full range and nothing is skipped, which is why layout techniques such as sorting, [Z-ordering and liquid clustering](/delta-lake/optimize-zorder-vacuum-liquid-clustering/) matter.
+- **Encoding before compression.** `country` has five distinct values, so Parquet stores a small dictionary and then each value as a few bits (dictionary plus bit-packed/RLE encoding). The chunk shrinks to a few percent of its raw size before the codec does much. Low-cardinality columns are almost free to store.
+
+Spark reports pushed filters and the pruned read schema in the plan:
+
+```python
+spark.read.parquet(path).where("order_id >= 180000").select("amount").explain()
+```
+
+```text
+== Physical Plan ==
+*(1) Project [amount#...]
++- *(1) Filter (isnotnull(order_id#...) AND (order_id#... >= 180000))
+   +- *(1) ColumnarToRow
+      +- FileScan parquet [order_id#...,amount#...] ... PushedFilters: [IsNotNull(order_id), GreaterThanOrEqual(order_id,180000)], ReadSchema: struct<order_id:bigint,amount:double>
+```
+
+(Plan shortened.) Only `order_id` and `amount` are read (**column pruning**), and the filter is passed to the Parquet reader (**predicate pushdown**), which uses the statistics above. Spark still applies the `Filter` afterwards, because statistics only rule groups out; they do not select individual rows.
+
+## Inside ORC and Avro
+
+**ORC** (Optimized Row Columnar) splits a file into **stripes** (64 MB by default), each holding column streams plus an index with min/max statistics for every 10,000 rows, and a file footer with stripe-level statistics. Its finer-grained index and built-in bloom filters can skip more data than Parquet's default statistics on some selective queries. ORC is also the format behind Hive ACID tables. In Spark 4 its default codec is zstd.
+
+**Avro** writes a header containing the full schema as JSON, then **blocks** of rows separated by a 16-byte **sync marker**. The marker lets a reader start at any byte offset and find the next block, so large Avro files are splittable even when blocks are compressed. Each record is written whole, with no column statistics, so there is nothing to skip: reading one column means reading every row.
+
+## Sizes, measured fairly
+
+```python
+for fmt in ["json", "csv", "parquet", "orc", "avro"]:
+    orders.coalesce(1).write.format(fmt).option("header", "true").save(f"{base}/{fmt}")
+orders.coalesce(1).write.option("compression", "zstd").parquet(f"{base}/parquet_zstd")
+print({k: spark.conf.get(f"spark.sql.{k}.compression.codec") for k in ["parquet", "orc", "avro"]})
+for fmt in ["json", "csv", "avro", "parquet", "parquet_zstd", "orc"]:
+    print(f"{fmt:13}{size_kb(f'{base}/{fmt}'):>7} KB")
+```
+
+```text
+{'parquet': 'snappy', 'orc': 'zstd', 'avro': 'snappy'}
+json           13457 KB
+csv             4082 KB
+avro            2541 KB
+parquet         2006 KB
+parquet_zstd     964 KB
+orc              647 KB
+```
+
+Each writer uses its own default codec (Snappy for Parquet and Avro, zstd for ORC in Spark 4), so a naive size table compares codecs as much as formats. Switching Parquet to zstd halves its size here, which is a fairer comparison with ORC. ORC is still smaller on this synthetic data, largely because the `order_id` column is a perfect sequence: ORC's integer run-length encoding stores it as runs with a fixed step, while Spark's default Parquet writer stores it with plain encoding (the footer lists the encodings used per column chunk). On real data the gap is usually smaller and can go either way. Both columnar formats are several times smaller than JSON or CSV; Avro sits between them, compact binary but without columnar encoding. Treat any ratio as specific to your data and measure your own before deciding.
+
+## Avro schema evolution
+
+Avro defines precise rules for reading data written with one schema (the **writer schema**) using another (the **reader schema**): fields are matched by name, a field missing from the data takes the reader's **default**, and a field present in the data but absent from the reader schema is ignored. That is how a new consumer can read old records after a field is added:
+
+```python
+v1 = spark.createDataFrame([(1, "Ana"), (2, "Ben")], "id INT, name STRING")
+v1.coalesce(1).write.format("avro").save(f"{base}/customers_v1")
+
+reader_schema = json.dumps({
+    "type": "record", "name": "topLevelRecord",
+    "fields": [
+        {"name": "id", "type": ["int", "null"]},
+        {"name": "name", "type": ["string", "null"]},
+        {"name": "tier", "type": "string", "default": "standard"},   # new field with a default
+    ],
+})
+spark.read.format("avro").option("avroSchema", reader_schema).load(f"{base}/customers_v1") \
+     .orderBy("id").show()
+```
+
+```text
++---+----+--------+
+| id|name|    tier|
++---+----+--------+
+|  1| Ana|standard|
+|  2| Ben|standard|
++---+----+--------+
+```
+
+Adding a field **without** a default would make old data unreadable with the new schema, which is exactly what a schema registry's `BACKWARD` compatibility check rejects. Renaming a field is only safe with an alias in the reader schema; changing a type is allowed only for Avro's defined promotions (for example `int` to `long`, `float` to `double`). Parquet and ORC handle added columns too (readers return nulls for files without them, and Spark can merge Parquet schemas with `mergeSchema`), but they have no defaults and no aliases; table formats such as Delta and Iceberg add that management on top.
 
 ## Choosing
 
-- Lakehouse and analytical tables: **Parquet** (the basis of Delta Lake and Iceberg data files).
-- Existing Hive-centric platform: **ORC** is a reasonable choice.
-- Kafka messages and record-oriented ingestion: **Avro** (or Protobuf), then convert to Parquet for analytics.
+| Situation | Format |
+|---|---|
+| Lakehouse and analytical tables | **Parquet**, usually inside Delta, Iceberg or Hudi |
+| Existing Hive-centric platform, Hive ACID tables | **ORC** |
+| Kafka messages and record-at-a-time ingestion with a schema registry | **Avro** (or Protobuf), then convert to Parquet for analytics |
+| Landing data from external systems | Whatever arrives (JSON, CSV), converted early, as in [JSON vs Parquet](/delta-lake/json-vs-parquet/) |
 
 ## Common mistakes
 
 1. Keeping analytical data in CSV or JSON long-term.
-2. Writing thousands of tiny Parquet files, which wipes out the benefits.
-3. Using Avro for wide analytical tables.
+2. Writing thousands of tiny Parquet files: each has a footer to read and row groups too small to compress or skip well.
+3. Using Avro for wide analytical tables, where every query reads every column.
+4. Comparing format sizes without noticing the writers used different codecs.
+5. Expecting predicate pushdown to help on a column whose values are randomly spread across row groups.
 
-## Key takeaway
+## Practice questions
 
-Columnar (Parquet, ORC) for analytics; row-based (Avro) for messages and ingestion. Measure on your own data before relying on any size ratio.
+<details><summary>What is a Parquet row group and why does its size matter?</summary>
+
+A horizontal slice of the rows, stored as one column chunk per column, with statistics in the footer. It is the unit Spark splits and skips. Too large and you lose parallelism and skipping granularity; too small and compression worsens and the footer and per-group overhead grow. Spark's writer targets 128 MB.
+
+</details>
+
+<details><summary>Why can a filter on order_id skip data but the same filter on a random column cannot?</summary>
+
+Skipping compares the filter with each row group's min/max. Sorted or clustered data gives narrow, non-overlapping ranges, so most groups are ruled out; randomly distributed values give every group almost the full range, so none can be ruled out.
+
+</details>
+
+<details><summary>Avro and Parquet both support schema evolution. What is different?</summary>
+
+Avro resolves a writer schema against a reader schema with explicit rules: defaults for missing fields, aliases for renames and defined type promotions. Parquet only records each file's own schema; a reader can add missing columns as nulls or merge file schemas, but renames and defaults have to be handled by a table format or by the reader.
+
+</details>
+
+<details><summary>Is Avro splittable? Is gzip-compressed CSV?</summary>
+
+Avro is: blocks are separated by sync markers, so a reader can start mid-file and seek to the next block, even with compressed blocks. A gzip-compressed CSV is not, because a gzip stream can only be decompressed from the beginning.
+
+</details>
+
+## Key takeaways
+
+- Columnar (Parquet, ORC) for analytics; row-based (Avro) for messages and record-at-a-time ingestion.
+- A Parquet footer holds the schema and per-row-group statistics; engines read it first and fetch only the column chunks and row groups they need.
+- Statistics skip data only when the data is sorted or clustered on the filtered column.
+- Compare sizes with the same codec; the defaults differ between writers.
+- Avro's reader/writer schema resolution (defaults, aliases, promotions) is what makes registry-based compatibility checks work.
