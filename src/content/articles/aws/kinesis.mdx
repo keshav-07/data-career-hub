@@ -6,8 +6,8 @@ technology: ["aws", "kafka"]
 topic: ["kinesis", "streaming", "real-time"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain streams, shards, partition keys, sequence numbers and retention in Kinesis Data Streams"
   - "Size a stream from shard limits and choose between provisioned and on-demand modes"
@@ -23,6 +23,8 @@ sources:
   - { label: "Kinesis Data Streams: Terminology and concepts", url: "https://docs.aws.amazon.com/streams/latest/dev/key-concepts.html" }
   - { label: "Kinesis Data Streams: Quotas and limits", url: "https://docs.aws.amazon.com/streams/latest/dev/service-sizes-and-limits.html" }
   - { label: "Kinesis Data Streams: Enhanced fan-out consumers", url: "https://docs.aws.amazon.com/streams/latest/dev/enhanced-consumers.html" }
+  - { label: "AWS What's New: Kinesis Data Streams supports 10x larger record sizes (October 2025)", url: "https://aws.amazon.com/about-aws/whats-new/2025/10/amazon-kinesis-data-streams-10x-larger-record-sizes" }
+  - { label: "AWS What's New: Kinesis Data Streams On-demand Advantage mode (November 2025)", url: "https://aws.amazon.com/about-aws/whats-new/2025/11/amazon-kinesis-data-streams-ondemand-advantage" }
   - { label: "Kinesis Data Streams: Choose the capacity mode", url: "https://docs.aws.amazon.com/streams/latest/dev/how-do-i-size-a-stream.html" }
   - { label: "AWS News Blog: Managed Service for Apache Flink renamed from Kinesis Data Analytics", url: "https://aws.amazon.com/blogs/aws/announcing-amazon-managed-service-for-apache-flink-renamed-from-amazon-kinesis-data-analytics/" }
   - { label: "Kinesis Data Analytics for SQL Applications: Discontinuation", url: "https://docs.aws.amazon.com/kinesisanalytics/latest/dev/discontinuation.html" }
@@ -43,7 +45,8 @@ The Python models reproduce the arithmetic behind Kinesis design decisions (shar
 - **Retention** is 24 hours by default and can be raised up to 365 days (8,760 hours), at extra cost above 24 hours. Records cannot be deleted individually before they expire.
 - **Producers** call `PutRecord` or `PutRecords` (batches of up to 500 records), or use the KPL, agents, or AWS services that write to streams.
 - **Consumers** read with `GetShardIterator` and `GetRecords`, or more usually through Lambda event source mappings, the KCL, Firehose, or Flink.
-- **Capacity modes**: in **provisioned** mode you choose the shard count and reshard (split or merge shards) as load changes; in **on-demand** mode Kinesis manages shards for you, starting from a default write capacity of 4 MB/s (4,000 records/s) and scaling with observed traffic.
+- **Capacity modes**: in **provisioned** mode you choose the shard count and reshard (split or merge shards) as load changes; in **on-demand** mode Kinesis manages shards for you, starting from a default write capacity of 4 MB/s (4,000 records/s) and scaling with observed traffic. Since November 2025 on-demand comes in two flavours: **On-demand Standard** (the original, billed per stream-hour plus data in and out) and **On-demand Advantage** (an account-level setting with lower per-GB rates, a minimum billed throughput, and *warm throughput* you can set in advance so a stream absorbs a known spike instantly). Check the pricing page before choosing; Advantage pays off only at sustained volume.
+- **Record size**: a record's data blob can be up to 10 MiB (raised from 1 MiB in October 2025, with `PutRecords` requests up to 10 MiB). The 1 MB/s per-shard write limit did not change: large records are absorbed by short bursts, and AWS advises keeping them to a small share of traffic. For anything bigger, write the payload to S3 and send its key through the stream.
 
 {/* noexec */}
 ```python
