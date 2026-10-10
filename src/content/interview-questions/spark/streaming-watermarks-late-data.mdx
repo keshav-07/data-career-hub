@@ -1,0 +1,95 @@
+---
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "How does Spark Structured Streaming handle late data with watermarks?"
+seoTitle: "Spark Watermarks and Late Data: Interview Answer"
+description: "Spark watermark interview answer: how Structured Streaming handles late events, when windows are emitted in append vs update mode, and how state is bounded."
+technology: ["spark", "pyspark"]
+topic: ["streaming", "watermarks"]
+difficulty: "Hard"
+questionType: ["conceptual", "scenario"]
+estimatedMinutes: 10
+interviewRelevance: "High"
+shortAnswer: "A watermark is the maximum event time seen so far minus an allowed delay, declared with withWatermark. Events newer than the watermark are still added to their windows; state for windows that end before the watermark is removed, and events for those windows are dropped. In append mode a window is written once, after the watermark passes its end; in update mode it is written every time it changes. The delay is a trade-off: longer accepts later data but keeps more state and delays final results."
+followUps: ["Why does a streaming aggregation without a watermark eventually run out of memory?", "What do you do with data that arrives later than the watermark allows?", "Why do stream-stream joins need watermarks on both sides?", "Where is the watermark stored across restarts?"]
+related: ["articles:spark/structured-streaming", "interview-questions:data-engineering/late-arriving-data", "articles:databricks/auto-loader-declarative-pipelines"]
+sources:
+  - {"label": "Apache Spark documentation: Structured Streaming programming guide (handling late data and watermarking)", "url": "https://spark.apache.org/docs/latest/streaming/index.html"}
+versionContext: "Example runs on PySpark 4.2.0 in local mode (local[2], session time zone UTC) with a JSON file source and availableNow triggers so the output is deterministic."
+---
+
+## Detailed explanation
+
+Streaming aggregations group by **event time** (when something happened), but events arrive in **processing time** order, and some arrive late. Spark cannot keep every window open forever, so you declare how late data may be:
+
+```text
+watermark = max(event_time seen in earlier batches) - delay
+```
+
+Spark updates the watermark at the end of each micro-batch and stores it in the checkpoint. Then:
+
+- A late event **newer than the watermark** is still applied to its window.
+- A window whose end is **before the watermark** is final: in append mode it is emitted, and its state is removed.
+- An event for a window whose state is gone is **dropped** (counted in the query progress as `numRowsDroppedByWatermark`). Spark guarantees not to drop data newer than the watermark; data older than it may be dropped.
+
+## Example
+
+```python
+import json, os, tempfile
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("late-data")
+         .config("spark.sql.shuffle.partitions", "2")
+         .config("spark.sql.session.timeZone", "UTC").getOrCreate())
+landing = tempfile.mkdtemp() + "/events"
+os.makedirs(landing)
+checkpoint = landing + "_checkpoint"
+
+def drop_file(name, times_and_amounts):
+    with open(f"{landing}/{name}", "w") as fh:
+        fh.write("\n".join(json.dumps({"event_time": f"2026-10-01 {t}:00", "amount": a})
+                           for t, a in times_and_amounts))
+
+def run():
+    totals = (spark.readStream.schema("event_time TIMESTAMP, amount DOUBLE").json(landing)
+              .withWatermark("event_time", "10 minutes")
+              .groupBy(F.window("event_time", "10 minutes")).agg(F.sum("amount").alias("total")))
+    written = []
+    q = (totals.writeStream.outputMode("append")
+         .foreachBatch(lambda df, _: written.extend(
+             (r.window.start.strftime("%H:%M"), r.total) for r in df.collect()))
+         .option("checkpointLocation", checkpoint).trigger(availableNow=True).start())
+    q.awaitTermination()
+    return sorted(written), q.lastProgress["eventTime"]["watermark"][11:16]
+
+drop_file("1.json", [("12:01", 10), ("12:04", 5), ("12:12", 7)])
+print(run())
+drop_file("2.json", [("12:08", 4), ("12:25", 3)])     # 12:08 is late but within the delay
+print(run())
+drop_file("3.json", [("12:03", 100), ("12:41", 1)])   # 12:03 is older than the watermark
+print(run())
+```
+
+```text
+([], '12:02')
+([('12:00', 19.0)], '12:15')
+([('12:10', 7.0), ('12:20', 3.0)], '12:31')
+```
+
+The late 12:08 event made it into the 12:00 window (10 + 5 + 4 = 19), because the watermark was only 12:02. The 12:03 event in the third file arrived after the watermark reached 12:15, so it was dropped and the 12:00 total was never changed. Append mode wrote each window exactly once, only when it was final.
+
+## Trade-offs and pitfalls
+
+- **Delay length.** A 10-minute delay drops events later than about 10 minutes and holds roughly 10 minutes of window state; a 2-hour delay accepts much later data but holds 2 hours of state and, in append mode, delays every result by 2 hours. Pick it from measured lateness (for example the 99th percentile of arrival minus event time).
+- **Append versus update.** Append needs no upserting sink but adds latency; update gives early results that the sink must overwrite by key (for example `MERGE` in `foreachBatch`). Complete mode keeps all state and ignores the watermark for cleanup.
+- **Data later than the watermark** is a business decision: accept the loss, or land raw events in a bronze table and run a periodic batch correction that recomputes affected windows.
+- **Multiple watermarks.** When a query has several inputs with watermarks, Spark uses the minimum by default (`spark.sql.streaming.multipleWatermarkPolicy=min`), so the slowest stream holds back results.
+- **Watermark column must be used in the aggregation**: a watermark on `event_time` with a `groupBy` that does not include `event_time` or a window over it does not bound the state.
+
+## Common mistakes
+
+1. No watermark on a windowed aggregation or a streaming `dropDuplicates`, so state grows until executors fail.
+2. Expecting append mode to show a window as soon as its first event arrives.
+3. Thinking the watermark is based on wall-clock time; it moves only when newer events arrive, so a quiet stream does not close its windows.
+4. Deleting the checkpoint, which loses the watermark and all window state.
