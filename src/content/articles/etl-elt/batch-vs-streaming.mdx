@@ -1,20 +1,29 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Batch vs Streaming Data Pipelines"
-description: "When to process data in batches and when to stream it: latency needs, complexity, correctness with late data, cost, and the micro-batch middle ground."
+description: "When to process data in batches and when to stream it: latency needs, cost, event time vs processing time, watermarks and late data, and the micro-batch middle ground."
 inventoryId: "TECH-22"
 technology: ["etl-elt", "kafka", "spark"]
 topic: ["batch", "streaming", "architecture"]
 difficulty: "Intermediate"
+learningObjectives:
+  - "Choose batch, micro-batch or streaming from the freshness requirement and its cost"
+  - "Explain event time versus processing time and why aggregating by arrival gives wrong numbers"
+  - "Describe how a watermark bounds lateness and what happens to events that arrive after it"
+  - "Recognise the operational costs of streaming: state, checkpoints, duplicates and always-on compute"
 prerequisites: ["articles:etl-elt/etl-vs-elt"]
-related: ["articles:kafka/topics-partitions-consumer-groups", "system-designs:scalable-batch-pipeline", "projects:kafka-spark-delta-streaming"]
-sources: [{"label": "Spark documentation: Structured Streaming programming guide", "url": "https://spark.apache.org/docs/latest/streaming/index.html"}]
-versionContext: "Conceptual; applies to Spark Structured Streaming, Flink, Kafka Streams and warehouse streaming features"
+related: ["articles:kafka/topics-partitions-consumer-groups", "system-designs:scalable-batch-pipeline", "projects:kafka-spark-delta-streaming", "system-designs:unified-batch-streaming-lambda-kappa", "interview-questions:data-engineering/batch-vs-streaming-choice", "articles:kafka/delivery-semantics-exactly-once"]
+previous: "articles:etl-elt/etl-vs-elt"
+next: "articles:etl-elt/idempotency-in-data-pipelines"
+sources:
+  - { label: "Spark documentation: Structured Streaming programming guide", url: "https://spark.apache.org/docs/latest/streaming/index.html" }
+  - { label: "Apache Flink documentation: Timely stream processing", url: "https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/time/" }
+versionContext: "The Python simulation runs on Python 3.11 (standard library). The Structured Streaming snippet was run on PySpark 4.2.0 (local mode) with the built-in rate source. Concepts apply to Spark Structured Streaming, Flink, Kafka Streams and warehouse streaming ingestion."
 ---
 
-**Batch** pipelines process a bounded set of data on a schedule (every night, every hour). **Streaming** pipelines process an unbounded flow of events continuously, with results updated within seconds or minutes.
+**Batch** pipelines process a bounded set of data on a schedule: every night, every hour. **Streaming** pipelines process an unbounded flow of events continuously, with results updated within seconds or minutes. Between them sits **micro-batch**, which processes a stream in small, frequent batches. The choice is one of the first decisions in any pipeline design, and in interviews it is a reliable way to show judgement.
 
 ## Compare them on what matters
 
@@ -23,55 +32,155 @@ versionContext: "Conceptual; applies to Spark Structured Streaming, Flink, Kafka
 | Latency | Minutes to hours | Seconds to minutes |
 | Complexity | Lower: bounded input, simple reruns | Higher: state, late data, ordering, checkpoints |
 | Correctness with late data | Rerun the affected period | Watermarks and update logic required |
-| Reprocessing history | Natural (rerun a date range) | Possible, but needs replayable sources and care |
+| Reprocessing history | Natural (rerun a date range) | Possible, but needs a replayable source and care |
 | Cost | Compute runs only during the window | Compute runs continuously |
-| Debugging | Easier: inspect a fixed input | Harder: input keeps changing |
+| Debugging | Easier: inspect a fixed input | Harder: the input keeps changing |
+| Failure impact | A late report | Growing lag; recovery from checkpoints |
 
 ## Start from the latency requirement
 
-Ask: **what decision depends on this data, and how fresh must it be?**
+Ask: **what decision depends on this data, and how fresh must it be for that decision?**
 
-- A daily finance report needs correct numbers by morning: **batch**.
-- Fraud detection must react before a payment completes: **streaming**.
-- A dashboard "refreshed every 15 minutes" is often well served by **frequent batch or micro-batch**, which keeps batch's simplicity.
+- A daily finance report must be correct by 07:00: **batch**. Streaming would add cost and complexity for no benefit.
+- Card fraud must be scored before a payment is approved: **streaming**, with latency in the tens or hundreds of milliseconds (usually in a dedicated service rather than an analytics pipeline).
+- A dashboard "refreshed every 15 minutes" is usually served well by **frequent batch or micro-batch**, which keeps batch's simplicity.
+- Inventory sync between a warehouse system and a web shop, where overselling costs money: **streaming or CDC** with seconds of latency.
 
-Streaming is not automatically "better". It trades simplicity and cost for latency, so it should be justified by a real requirement.
+Ask too what happens if data is late: if the answer is "someone looks at the dashboard a bit later", batch is fine. Streaming is not automatically "better"; it trades simplicity and cost for latency, so it should be justified by a requirement someone will pay for.
 
-## Streaming concepts you must handle
+## Event time vs processing time
 
-- **Event time vs processing time.** Events arrive late or out of order; aggregate by when they happened, not when they arrived.
-- **Watermarks** bound how late data may be and let the engine discard old state.
-- **State and checkpoints** let a job restart without losing or double-counting data.
-- **Delivery semantics.** Most systems are at-least-once end to end; make sinks idempotent.
+A streaming system sees events in **processing time** (when they arrive), but most questions are about **event time** (when they happened). Mobile apps buffer events while offline, producers retry, and partitions are consumed at different speeds, so events arrive late and out of order.
+
+The simulation below counts clicks per one-minute window. Event `e4` happened at 10:00:50 but arrived after events from 10:01.
+
+```python
+from collections import Counter
+
+events = [  # (event_id, event_time, arrival_time) as "HH:MM:SS" strings
+    ("e1", "10:00:10", "10:00:11"),
+    ("e2", "10:00:40", "10:00:41"),
+    ("e3", "10:01:05", "10:01:06"),
+    ("e4", "10:00:50", "10:01:20"),   # late: happened in the 10:00 window
+    ("e5", "10:01:30", "10:01:31"),
+    ("e6", "10:00:30", "10:03:10"),   # very late
+]
+
+minute = lambda ts: ts[:5]
+by_processing_time = Counter(minute(arrival) for _, _, arrival in events)
+by_event_time = Counter(minute(event_time) for _, event_time, _ in events)
+print("processing time:", dict(sorted(by_processing_time.items())))
+print("event time:     ", dict(sorted(by_event_time.items())))
+```
+
+```text
+processing time: {'10:00': 2, '10:01': 3, '10:03': 1}
+event time:      {'10:00': 4, '10:01': 2}
+```
+
+Counting by arrival puts clicks in the wrong minute and invents activity at 10:03. Counting by event time is correct, but raises a new question: **when is the 10:00 window finished?** If you wait forever for late events, you can never emit a final result or free the window's memory.
+
+## Watermarks
+
+A **watermark** is the engine's estimate of how far event time has progressed: "I do not expect events older than T any more". A common rule is *watermark = latest event time seen minus an allowed lateness*. When the watermark passes the end of a window, the window is finalised and its state can be dropped. Events that arrive for a window after that are **too late**: dropped, sent to a side output, or handled by a batch correction.
+
+```python
+from datetime import datetime, timedelta
+
+def to_dt(ts):
+    return datetime.strptime(ts, "%H:%M:%S")
+
+def windowed_counts(events, allowed_lateness=timedelta(seconds=30), window=timedelta(minutes=1)):
+    open_windows, finalised, too_late = Counter(), {}, []
+    max_event_time = None
+    for event_id, event_time, _arrival in sorted(events, key=lambda e: e[2]):   # process in arrival order
+        et = to_dt(event_time)
+        max_event_time = et if max_event_time is None else max(max_event_time, et)
+        watermark = max_event_time - allowed_lateness
+        start = et.replace(second=0)
+        if start + window <= watermark and start.strftime("%H:%M") in finalised:
+            too_late.append(event_id)
+            continue
+        open_windows[start] += 1
+        for w in [w for w in open_windows if w + window <= watermark]:          # close finished windows
+            finalised[w.strftime("%H:%M")] = open_windows.pop(w)
+    finalised.update({w.strftime("%H:%M"): c for w, c in open_windows.items()})  # end of input
+    return finalised, too_late
+
+print(windowed_counts(events))
+```
+
+```text
+({'10:00': 3, '10:01': 2}, ['e6'])
+```
+
+With 30 seconds of allowed lateness, `e4` (15 seconds behind the newest event time when it arrives) still counts for 10:00, but `e6` arrives after the 10:00 window was finalised and is reported as too late. More allowed lateness means more correct counts, but results are emitted later and the engine holds more state. That trade-off is the core tuning decision in event-time streaming.
+
+In Spark Structured Streaming the same idea is one call:
+
+{/* noexec */}
+```python
+from pyspark.sql import SparkSession, functions as F
+
+spark = SparkSession.builder.appName("clicks").getOrCreate()
+clicks = (spark.readStream.format("rate").option("rowsPerSecond", 5).load()
+          .withColumnRenamed("timestamp", "event_time"))
+
+per_minute = (clicks
+    .withWatermark("event_time", "30 seconds")                 # allowed lateness
+    .groupBy(F.window("event_time", "1 minute"))
+    .count())
+
+query = (per_minute.writeStream
+    .outputMode("append")                                       # emit each window once, when final
+    .format("console")
+    .option("checkpointLocation", "/tmp/checkpoints/clicks")    # state and progress survive restarts
+    .trigger(processingTime="10 seconds")                       # micro-batch interval
+    .start())
+```
+
+Flink and Kafka Streams use the same concepts with different APIs (Flink calls the per-source rule a watermark strategy; Kafka Streams uses a grace period on windows).
+
+## Other things a streaming job must handle
+
+- **State and checkpoints.** Windows, joins and deduplication keep state. Checkpoints store state and source offsets so a restarted job continues without losing or double-counting data. A changed query can be incompatible with an old checkpoint, which makes upgrades a planned operation.
+- **Delivery semantics.** Most pipelines are at-least-once end to end; make sinks idempotent or use transactional sinks. See [Kafka delivery semantics](/kafka/delivery-semantics-exactly-once/).
+- **Backpressure and lag.** When input outpaces processing, lag grows. Monitor consumer lag in time, not just in messages.
+- **Reprocessing.** To fix a bug you replay the source from an earlier offset, which needs enough retention in Kafka or a copy of the raw events in the lake.
+- **Always-on operations.** Someone owns the job at 03:00 on Sunday.
 
 ## The micro-batch middle ground
 
-Engines such as Spark Structured Streaming process a stream as a sequence of small batches. You get continuous ingestion with batch-style processing, and you can tune the trigger interval from seconds to hours to trade latency for cost.
+Spark Structured Streaming runs by default as a sequence of small batches. You get continuous ingestion with batch-style processing, and the trigger interval tunes latency against cost: every 10 seconds, every 5 minutes, or `availableNow`, which processes everything new and then stops. `availableNow` is a useful pattern: the job is written as a stream (incremental, checkpointed, exactly-once into Delta Lake) but scheduled like a batch job, so you pay only while it runs and can move to continuous running later without rewriting it.
 
-## Lambda and kappa (briefly)
+Warehouses offer similar options: Snowpipe and Snowpipe Streaming for continuous loading into Snowflake, and streaming ingestion into BigQuery, often combined with scheduled transformations.
 
-- **Lambda architecture** runs a batch layer and a streaming layer in parallel and merges them. It is powerful but means maintaining logic twice.
-- **Kappa architecture** uses a single streaming pipeline and replays the log to reprocess. It is simpler if the log retains enough history.
+## Lambda and kappa
 
-Most modern designs prefer one code path where possible.
+- **Lambda architecture** runs a batch layer and a streaming layer in parallel and merges them: the stream gives fresh approximate results, the batch recomputes accurate ones. It works, but the logic exists twice and the two versions drift.
+- **Kappa architecture** uses a single streaming pipeline and replays the log to reprocess history. It is simpler if the log (or a lake copy of it) retains enough history.
+
+Most modern designs avoid maintaining logic twice: one code path, run continuously or in micro-batches, with batch reprocessing from the raw layer when needed. The [lambda and kappa case study](/data-engineering/system-design/unified-batch-streaming-lambda-kappa/) goes deeper.
 
 <Callout tone="info" title="A practical pattern">
 
-Ingest events continuously into a lakehouse table (streaming), then build curated aggregates on a schedule (batch). Fresh raw data is available quickly, and the complex business logic runs in simpler batch jobs.
+Ingest events continuously into a raw lakehouse table (streaming), then build curated aggregates on a schedule (batch). Fresh raw data is available within minutes for the few consumers that need it, and the complex business logic runs in simpler batch jobs that are easy to rerun.
 
 </Callout>
 
 ## Common mistakes
 
-1. Choosing streaming without a latency requirement that justifies it.
-2. Aggregating by processing time and getting wrong counts when events arrive late.
-3. Ignoring replay: if the source cannot be replayed, recovery from a bug is hard.
-4. Running a streaming job with no monitoring of lag.
+1. Choosing streaming without a latency requirement that justifies its cost.
+2. Aggregating by processing time and reporting wrong counts when events arrive late.
+3. No watermark, so state grows until the job runs out of memory.
+4. Ignoring replay: if the source cannot be replayed, recovering from a bug is hard.
+5. Running a streaming job with no monitoring of lag, and no owner.
+6. Changing a stateful query and restarting it on an incompatible checkpoint.
 
-## Interview relevance
+## Interview angle
 
-"Batch or streaming for this use case?" appears in most system-design rounds. Start from the freshness requirement, then discuss late data, state and cost.
+"Batch or streaming for this use case?" appears in most system-design rounds. Start from the freshness requirement and what late data costs, propose the simplest option that meets it (often micro-batch), and then show you know what streaming brings: event time, watermarks and late data, state and checkpoints, at-least-once delivery and idempotent sinks, and the cost of always-on compute. Practise with [batch vs streaming: how do you choose?](/interview/data-engineering/batch-vs-streaming-choice/).
 
 ## Key takeaway
 
-Choose by freshness need. Batch is simpler and cheaper; streaming is justified when decisions depend on near-real-time data, and it requires deliberate handling of time, state and duplicates.
+Choose by the freshness the decision needs. Batch is simpler and cheaper; streaming is justified when decisions depend on near-real-time data, and it requires deliberate handling of event time, watermarks, state and duplicates. Micro-batch often gives most of the freshness with most of batch's simplicity.
