@@ -417,6 +417,20 @@ Recommended order, easy to hard:
 6. **Design Twitter** (Medium): k-way merge of followees' time-ordered tweets, stopping at 10.
 7. **Find Median from Data Stream** (Hard): max-heap for the lower half, min-heap for the upper half, kept balanced.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Top K Frequent Elements** (Medium): count, then keep a size-k min-heap of (count, value), or bucket values by count.
+- **Min Cost to Connect Ropes** (Medium): always join the two shortest ropes, taken from a min-heap.
+- **Sort Characters By Frequency** (Medium): count, then emit characters from a max-heap (or buckets) by count.
+- **Find K Closest Elements** (Medium): a size-k max-heap by distance works on any input; on sorted input, binary search the left edge of the answer window.
+- **Reorganize String** (Medium): place the most frequent remaining letter that differs from the last one placed; impossible when a letter occurs more than (n + 1) // 2 times.
+- **Maximum Sum Combination** (Medium): sort both lists descending and expand the largest sums from position (0, 0) with a max-heap and a visited set.
+- **Merge k Sorted Lists** (Hard): a heap of the k current heads (taught in the linked lists lesson).
+- **Smallest Range Covering Elements from K Lists** (Hard): a heap holds one value per list; the range runs from the heap minimum to the current maximum; advance the list that gave the minimum.
+- **Sliding Window Median** (Hard): the two heaps of the running median, with lazy deletion for values that leave the window.
+- **IPO** (Hard): sort projects by required capital; push the affordable ones into a max-heap by profit and take the best one k times.
+- **Maximum Frequency Stack** (Hard): one stack per frequency level; pop from the highest level.
+
 ## Practice questions
 
 <details>

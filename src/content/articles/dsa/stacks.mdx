@@ -330,6 +330,16 @@ Recommended order, easy to hard:
 7. **Car Fleet** (Medium): sort by position descending; a car whose arrival time is not later than the fleet ahead merges with it.
 8. **Largest Rectangle in Histogram** (Hard): increasing stack; popping a bar gives its height and both width boundaries.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Remove All Adjacent Duplicates In String** (Easy): push characters and pop when the next one equals the top.
+- **Simplify Path** (Medium): split on `/`, push names, pop on `..`, and ignore `.` and empty parts.
+- **Remove All Adjacent Duplicates in String II** (Medium): a stack of (character, run length) pairs; drop the run when it reaches k.
+- **Next Greater Element II** (Medium): a decreasing stack of indices over two passes handles the wrap-around.
+- **Remove Nodes From Linked List** (Medium): a decreasing stack of nodes; a larger value pops every smaller node before it.
+- **Remove K Digits** (Medium): an increasing stack; pop a larger digit while removals remain, then trim the end and leading zeros.
+- **132 Pattern** (Medium): scan from the right with a decreasing stack; popped values are the best "2" so far, and any value below it completes the pattern.
+
 ## Practice questions
 
 <details>

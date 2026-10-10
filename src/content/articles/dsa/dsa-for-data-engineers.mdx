@@ -1,19 +1,19 @@
 ---
 title: "Data Structures and Algorithms for Data Engineers: How to Prepare"
 seoTitle: "DSA for Data Engineers: How to Prepare"
-description: "Big-O, a repeatable method for coding rounds, the Python built-ins that solve most problems, and a study plan for the 157 practice problems in the planner."
+description: "Big-O, a repeatable method for coding rounds, the Python built-ins that solve most problems, and a topic-by-topic study plan for the practice planner."
 technology: ["dsa"]
 topic: ["complexity", "interview-preparation", "python-built-ins"]
 difficulty: "Beginner"
 pillar: true
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Estimate time and space complexity with Big-O and use it to choose between approaches"
   - "Run a coding round in six steps: clarify, examples, brute force, optimise, code, test"
   - "Use dict, set, Counter, defaultdict, deque, heapq, bisect and sorted with a key fluently"
-  - "Plan your practice across the 15 patterns and 157 problems in a sensible order"
+  - "Plan your practice across the 17 planner topics in a beginner-to-advanced order"
 prerequisites: ["articles:python/python-for-data-engineering"]
 related: ["articles:python/data-structures-for-interviews"]
 versionContext: "All Python examples run on CPython 3.11 with assert-based tests. The max-heap helpers in heapq need Python 3.14 and are mentioned but not executed."
@@ -26,7 +26,7 @@ sources:
 next: "articles:dsa/arrays-and-hashing"
 ---
 
-Most Data Engineering interview loops include a coding round, and it is usually the round people under-prepare for. The problems are rarely exotic: counting, deduplicating, merging ranges, finding the top K, ordering dependencies. This guide gives you the tools to handle them: a working understanding of Big-O, a method for the round itself, the Python built-ins that do most of the work, and a plan for the 157 problems in the planner.
+Most Data Engineering interview loops include a coding round, and it is usually the round people under-prepare for. The problems are rarely exotic: counting, deduplicating, merging ranges, finding the top K, ordering dependencies. This guide gives you the tools to handle them: a working understanding of Big-O, a method for the round itself, the Python built-ins that do most of the work, and a plan for working through the problems in the planner.
 
 Every code block on this page is self-contained and ends with `assert` checks, so you can paste it into a Python 3.10+ shell and run it.
 
@@ -187,7 +187,7 @@ You do not need to implement a hash table or a heap from scratch. You do need to
 |---|---|---|
 | `dict` | Lookup by key, grouping, counting, memoisation | get/set/`in`: O(1) average |
 | `set` | Membership, deduplication, set algebra | add/`in`/remove: O(1) average |
-| `collections.Counter` | Frequency counts, anagram checks, top-k by count | build: O(n); `most_common(k)`: O(n log k) |
+| `collections.Counter` | Frequency counts, anagram checks, top-k by count | build: O(n); `most_common(k)`: O(d log k) for d distinct keys |
 | `collections.defaultdict` | Grouping without "if key not in dict" checks | as dict |
 | `collections.deque` | Queues (BFS), sliding windows, both-ended stacks | append/pop at either end: O(1) |
 | `heapq` | Top K, k-way merge, scheduling, Dijkstra | push/pop: O(log n); heapify: O(n) |
@@ -390,29 +390,31 @@ print([r["user"] for r in ranked])
 
 Using `Counter`, `defaultdict`, `deque` and `heapq` is normally welcome; it is how you would write production Python. If the interviewer asks you to implement the structure yourself (for example a heap or an LRU cache), they will say so.
 
-## How to study the 157 problems in the planner
+## How to study the problems in the planner
 
-The planner lists 157 problems across 15 patterns. Do not work through them alphabetically or at random. Learn a pattern, then solve its problems from easy to hard so that each one reinforces the same template.
+The planner groups about 250 problems into 17 topics, and the lessons in this course follow the same order, from beginner to advanced. Do not work through the problems alphabetically or at random. Learn a pattern, then solve its problems from easy to hard so that each one reinforces the same template.
 
 ### Recommended order
 
-| Order | Pattern | Problems | Priority for DE interviews |
-|---|---|---|---|
-| 1 | Arrays and hashing | 23 | Core |
-| 2 | Strings | 4 | Core |
-| 3 | Two pointers | 7 | Core |
-| 4 | Sliding window | 7 | Core |
-| 5 | Stacks | 8 | Core |
-| 6 | Queues | 4 | Core |
-| 7 | Binary search | 8 | Core |
-| 8 | Linked lists | 11 | Useful |
-| 9 | Binary trees and tries | 15 | Useful |
-| 10 | Binary search trees | 6 | Useful |
-| 11 | Heaps and priority queues | 7 | Core |
-| 12 | Backtracking | 10 | Occasional |
-| 13 | Graphs | 18 | Useful (topological sort is core) |
-| 14 | Dynamic programming | 22 | Occasional to useful |
-| 15 | Greedy and intervals | 7 | Useful |
+| Order | Planner topic | Lesson | Problems | Priority for DE interviews |
+|---|---|---|---|---|
+| 1 | Arrays | Arrays and hashing | 20 | Core |
+| 2 | Hashing | Arrays and hashing | 9 | Core |
+| 3 | Strings | Strings | 4 | Core |
+| 4 | Bit manipulation | Bit manipulation | 7 | Occasional |
+| 5 | Two pointers | Two pointers | 17 | Core |
+| 6 | Queue | Queues | 4 | Core |
+| 7 | Sliding window | Sliding window | 13 | Core |
+| 8 | Stack | Stacks | 14 | Core |
+| 9 | Binary search | Binary search | 20 | Core |
+| 10 | Linked list | Linked lists | 18 | Useful |
+| 11 | Trees | Binary trees and tries | 18 | Useful |
+| 12 | BST | Binary search trees | 6 | Useful |
+| 13 | Heap | Heaps and priority queues | 18 | Core |
+| 14 | Greedy | Greedy and intervals | 17 | Useful |
+| 15 | Backtracking | Backtracking | 12 | Occasional |
+| 16 | Graph | Graphs | 27 | Useful (topological sort is core) |
+| 17 | Dynamic programming | Dynamic programming | 24 | Occasional to useful |
 
 If your interview is soon, do the "Core" rows first, plus topological sort from the graphs lesson and the interval problems from arrays and greedy. These cover the majority of what Data Engineering coding rounds ask.
 
@@ -426,7 +428,7 @@ If your interview is soon, do the "Core" rows first, plus topological sort from 
 
 ### A realistic weekly plan
 
-Two or three problems a day, on most days of the week, gets you through all 157 in around three months; the core patterns alone take a few weeks at that pace. Keep one session a week for **mixed** practice: pick problems from different patterns without looking at the label, because recognising the pattern is the skill the real interview tests.
+Two or three problems a day, on most days of the week, gets you through the whole planner in roughly three to four months; the core topics alone take five or six weeks at that pace. Keep one session a week for **mixed** practice: pick problems from different patterns without looking at the label, because recognising the pattern is the skill the real interview tests.
 
 ### In interviews
 

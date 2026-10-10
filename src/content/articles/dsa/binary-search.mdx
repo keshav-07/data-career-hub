@@ -369,6 +369,21 @@ Recommended order, easy to hard:
 7. **Time Based Key-Value Store** (Medium): per-key sorted timestamps; `bisect_right(times, t) - 1`.
 8. **Median of Two Sorted Arrays** (Hard): binary search the cut in the shorter array so the left halves hold half the elements and are all `<=` the right halves.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Ceil in Sorted Array** (Easy): lower bound, the first index whose value is at least x.
+- **Find Rotation Count** (Easy): the count is the index of the minimum, found by comparing the middle with the right end.
+- **Number of Occurrence** (Easy): upper bound minus lower bound.
+- **Peak Index in a Mountain Array** (Medium): move right while `arr[mid] < arr[mid + 1]`; that answer flips exactly once, at the peak.
+- **Find Peak Element** (Medium): the same uphill test works with many peaks, because walking uphill always ends at one.
+- **Search a 2D Matrix II** (Medium): start at the top-right corner and discard a row or a column with each comparison.
+- **Minimum Number of Days to Make m Bouquets** (Medium): binary search the day; a greedy scan counts bouquets of adjacent open flowers.
+- **Capacity To Ship Packages Within D Days** (Medium): binary search the capacity between the heaviest package and the total weight.
+- **Aggressive Cows** (Medium): binary search the largest minimum gap; place cows greedily from the left.
+- **Maximum Candies Allocated to K Children** (Medium): binary search the amount per child; it is feasible when the piles split into at least k such shares.
+- **Kth Smallest Element in a Sorted Matrix** (Medium): binary search on the value; count cells at most `mid` with a staircase walk.
+- **Split Array Largest Sum** (Hard): binary search the largest part sum; cut greedily whenever the running sum would exceed it.
+
 ## Practice questions
 
 <details>

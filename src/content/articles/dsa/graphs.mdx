@@ -682,6 +682,18 @@ Recommended order, from the foundations to the hardest:
 17. **Reconstruct Itinerary** (Hard): Hierholzer: greedy smallest-first DFS, record on the way back, reverse.
 18. **Alien Dictionary** (Hard): one edge from the first difference of each adjacent pair, then topological sort.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Find if Path Exists in Graph** (Easy): BFS from the source, or union-find over the edges.
+- **Flood Fill** (Easy): DFS from the start pixel over neighbours of the same colour; return at once if the new colour equals the old one.
+- **Island Perimeter** (Easy): four sides per land cell minus two for every shared edge.
+- **Number of Provinces** (Medium): connected components on an adjacency matrix.
+- **Number of Closed Islands** (Medium): sink the islands that touch the border, then count the rest.
+- **Is Graph Bipartite?** (Medium): two-colour each component with BFS; an edge between equal colours means it is not bipartite.
+- **Topological Sort** (Medium): Kahn's algorithm with in-degrees, or reversed DFS finish order.
+- **Minimum Height Trees** (Medium): peel leaves layer by layer; the last one or two nodes are the centres.
+- **Path With Minimum Effort** (Medium): Dijkstra where a route's cost is its largest step, or union-find over edges in increasing order.
+
 ## Practice questions
 
 <details>

@@ -511,6 +511,24 @@ Recommended order, easy to hard, with the key idea for each:
 
 The bit problems (Single Number, Number of 1 Bits, Reverse Bits, Sum of Two Integers and others) are listed in the bit manipulation lesson.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Find Pivot Index** (Easy): keep a running left sum; index i is a pivot when the left sum equals total − left − nums[i].
+- **Find All Numbers Disappeared in an Array** (Easy): mark each value v by negating slot v − 1 (or cyclic sort); unmarked slots are the missing values.
+- **Set Mismatch** (Easy): cyclic sort puts each value v at slot v − 1; the one slot holding the wrong value gives both the duplicate and the missing number.
+- **First Unique Character in a String** (Easy): count every character, then return the first index whose count is 1.
+- **Longest Palindrome** (Easy): use every pair of each letter, plus one centre letter if any count is odd.
+- **Ransom Note** (Easy): count the magazine's letters and spend them on the note; fail when a count would go negative.
+- **Find All Duplicates in an Array** (Medium): negate slot v − 1 on each visit; a value whose slot is already negative has been seen before.
+- **Subarray Sums Divisible by K** (Medium): count prefix sums by remainder mod k; two prefixes with the same remainder bound a divisible subarray.
+- **Contiguous Array** (Medium): treat 0 as −1 and store the first index of each prefix sum; equal sums bound a balanced subarray.
+- **Maximum Product Subarray** (Medium): track the largest and the smallest product ending here, because a negative value swaps them.
+- **Maximum Subarray Sum with One Deletion** (Medium): Kadane with two states, the best sum ending here with no deletion and with one deletion used.
+- **Maximum Absolute Sum of Any Subarray** (Medium): run Kadane for the maximum and for the minimum and take the larger absolute value.
+- **Maximum Sum Circular Subarray** (Medium): a wrapping subarray is the total minus a minimum subarray; use plain Kadane when every value is negative.
+- **First Missing Positive** (Hard): cyclic sort each value 1 to n into slot v − 1; the first slot without its own value gives the answer.
+- **Shortest Subarray with Sum at Least K** (Hard): negatives break a window, so keep a deque of prefix-sum indices with increasing sums and pop from the front while the condition holds.
+
 ## Practice questions
 
 <details>

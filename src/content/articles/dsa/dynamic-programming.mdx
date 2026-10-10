@@ -569,6 +569,13 @@ Recommended order, easy to hard:
 21. **Regular Expression Matching** (Hard): memoised match of suffixes; `*` means zero copies or one more.
 22. **Burst Balloons** (Hard): interval DP over the balloon burst last in each interval.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **0 - 1 Knapsack Problem** (Medium): best value for each capacity, looping capacity downwards so each item is used at most once.
+- **Subset Sum Problem** (Medium): a boolean table of reachable sums, updated from high to low.
+- **Count Subsets with Sum** (Medium): the same table holding counts; remember that zeros double the count.
+- **Partition Into 2 Subsets with Min Sum Diff** (Hard): find the reachable subset sum closest to half the total.
+
 ## Practice questions
 
 <details>

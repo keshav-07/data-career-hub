@@ -353,6 +353,16 @@ Recommended order, easy to hard:
 
 The interval problems Merge Intervals, Insert Interval and Non-overlapping Intervals are taught in the arrays and hashing lesson.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Meeting Rooms** (Easy): sort by start; a meeting that starts before the previous one ends is a clash.
+- **Maximum Length of Pair Chain** (Medium): sort by end and take each pair whose left value is greater than the last end taken.
+- **Minimum Add to Make Parentheses Valid** (Medium): count unmatched openers; every `)` with nothing open costs one insertion, and leftover openers cost one each.
+- **Interval List Intersections** (Medium): two pointers; the overlap runs from the larger start to the smaller end; advance the interval that ends first.
+- **Meeting Rooms II** (Medium): sort starts and ends separately and sweep, or keep a min-heap of end times; the peak number of open meetings is the answer.
+- **My Calendar I** (Medium): keep bookings sorted and check only the neighbours of the insertion point.
+- **Remove Duplicate Letters** (Medium): an increasing stack; pop a larger letter when it appears again later.
+
 ## Practice questions
 
 <details>

@@ -512,6 +512,17 @@ Recommended order, easy to hard:
 10. **Merge k Sorted Lists** (Hard): min-heap of the current head of each list, with an index tie-breaker.
 11. **Reverse Nodes in k-Group** (Hard): check k nodes exist, reverse them, reconnect, repeat.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Middle of the Linked List** (Easy): fast moves two steps and slow one; slow stops on the second middle node.
+- **Happy Number** (Easy): the digit-square sequence either reaches 1 or repeats, so detect the cycle with fast and slow pointers.
+- **Palindrome Linked List** (Easy): find the middle, reverse the second half, compare, then restore it.
+- **Linked List Cycle II** (Medium): after the pointers meet, restart one at the head; moving both one step at a time, they meet at the cycle start.
+- **Circular Array Loop** (Medium): fast and slow pointers over indices, abandoning a path when the direction changes or a move lands on itself.
+- **Reverse Linked List II** (Medium): stop at the node before the section, then move each following node to the front of the section.
+- **Swap Nodes in Pairs** (Medium): a dummy head, then relink each pair with three pointer updates.
+- **Rotate List** (Medium): join the tail to the head, then cut at length − (k mod length).
+
 ## Practice questions
 
 <details>

@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["strings", "parsing"]
 difficulty: "Beginner"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Explain string immutability in Python and build strings in linear time"
   - "Use character counts, two-pointer scans and prefix comparison on strings"
@@ -92,9 +92,12 @@ def reverse_string(chars):
         right -= 1
 
 
-letters = list("hello")
+letters = list("stream")
 reverse_string(letters)
-assert letters == list("olleh")
+assert letters == list("maerts")
+one = ["x"]
+reverse_string(one)
+assert one == ["x"]
 empty = []
 reverse_string(empty)
 assert empty == []
@@ -123,11 +126,12 @@ def valid_palindrome_ii(s):
     return True
 
 
-assert valid_palindrome_ii("aba") is True
-assert valid_palindrome_ii("abca") is True       # delete "b" or "c"
-assert valid_palindrome_ii("abc") is False
+assert valid_palindrome_ii("level") is True       # already a palindrome
+assert valid_palindrome_ii("racecxar") is True    # delete "x"
+assert valid_palindrome_ii("abaab") is True       # only deleting the first "a" works
+assert valid_palindrome_ii("pipeline") is False
 assert valid_palindrome_ii("") is True
-assert valid_palindrome_ii("deeee") is True
+assert valid_palindrome_ii("xyyyy") is True
 ```
 
 Passing indices into the helper, rather than slicing, keeps the extra space at O(1).
@@ -159,8 +163,9 @@ def longest_common_prefix_sorted(words):
 
 
 for fn in (longest_common_prefix, longest_common_prefix_sorted):
-    assert fn(["flower", "flow", "flight"]) == "fl"
-    assert fn(["dog", "racecar", "car"]) == ""
+    assert fn(["stream", "streamline", "strong"]) == "str"
+    assert fn(["kafka", "spark", "flink"]) == ""
+    assert fn(["etl", "etl"]) == "etl"
     assert fn(["solo"]) == "solo"
     assert fn(["", "abc"]) == ""
     assert fn([]) == ""
@@ -190,13 +195,14 @@ def my_atoi(s):
     return max(INT_MIN, min(INT_MAX, value))         # 4. clamp to 32 bits
 
 
-assert my_atoi("42") == 42
-assert my_atoi("   -042") == -42
-assert my_atoi("1337c0d3") == 1337
-assert my_atoi("0-1") == 0
-assert my_atoi("words and 987") == 0
-assert my_atoi("-91283472332") == -2147483648
-assert my_atoi("+") == 0 and my_atoi("") == 0
+assert my_atoi("817") == 817
+assert my_atoi("   -0091") == -91
+assert my_atoi("56kb") == 56                      # stop at the first non-digit
+assert my_atoi("3-4") == 3
+assert my_atoi("batch 77") == 0                   # no leading digits
+assert my_atoi("-99999999999") == -2147483648     # clamp low
+assert my_atoi("2147483648") == 2147483647        # clamp high
+assert my_atoi("+") == 0 and my_atoi("") == 0 and my_atoi("+-5") == 0
 ```
 
 Comparing with `"0" <= c <= "9"` rather than `c.isdigit()` matters here: `isdigit()` accepts other Unicode digits such as superscripts, which `ord(c) - ord("0")` would turn into nonsense. Python integers do not overflow, so clamping once at the end is safe; in Java or C++ you would have to check before each multiplication.
@@ -285,6 +291,10 @@ Recommended order, easy to hard:
 
 The two pointers and sliding window lessons contain more string problems, such as Valid Palindrome and Longest Substring Without Repeating Characters.
 
+More problems from the planner that reuse these templates, easy to hard:
+
+- **Encode and Decode Strings** (Medium): prefix each string with its length and a separator, so any character can appear inside; taught in the arrays and hashing lesson.
+
 ## Practice questions
 
 <details>
@@ -297,7 +307,7 @@ Strings are immutable, so each `+=` can create a new string and copy everything 
 <details>
 <summary>In Valid Palindrome II, why do you need to try both deletions at the first mismatch?</summary>
 
-At a mismatch you do not know which character is the extra one. For `"abca"`, deleting either `b` or `c` works, but in other strings only one choice does (for `"ebcbbececabbacecbbcbe"` only one side leads to a palindrome). Checking both remaining ranges once keeps the algorithm O(n).
+At a mismatch you do not know which character is the extra one. In `"racecxar"` only one side can work, which is easy to see. In `"abaab"` the first mismatch is `a` against `b`, and both deletions look plausible because the next characters match either way, yet only deleting the first `a` gives a palindrome (`"baab"`); deleting the last `b` leaves `"abaa"`. A greedy rule that always skips one side fails on inputs like this. Checking both remaining ranges once keeps the algorithm O(n).
 
 </details>
 
