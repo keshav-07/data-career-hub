@@ -1,59 +1,161 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Schema Evolution: Safe Design Patterns"
 seoTitle: "Schema Evolution: Safe Design Patterns"
-description: "Schema evolution patterns that keep consumers working: additive changes, expand-and-contract migrations, data contracts, versioned events and type changes."
+description: "Patterns for evolving data schemas without breaking consumers: additive changes, expand-and-contract migrations, contracts, versioned events and handling type changes."
 inventoryId: "SUPPORT-10"
 technology: ["delta-lake", "data-engineering"]
 topic: ["schema-evolution", "data-contracts"]
 difficulty: "Advanced"
+learningObjectives:
+  - "Classify a schema change as compatible or breaking for readers and for writers"
+  - "Run an expand-and-contract migration on a Delta table, end to end"
+  - "Evolve nested structs and handle type changes without corrupting history"
+  - "Put a contract check at the boundary so drift is caught where it enters"
 prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
-related: ["interview-questions:delta-lake/schema-evolution-safety", "system-designs:kafka-ingestion-system"]
-sources: [{"label": "Delta Lake documentation: Schema validation and evolution", "url": "https://docs.delta.io/latest/delta-batch.html#schema-validation"}, {"label": "Apache Avro specification: Schema resolution", "url": "https://avro.apache.org/docs/1.12.0/specification/#schema-resolution"}]
-versionContext: "Patterns apply to table formats, warehouses and event schemas; exact support for type changes varies by engine"
+related: ["interview-questions:delta-lake/schema-evolution-safety", "system-designs:kafka-ingestion-system", "articles:kafka/schema-registry-schema-evolution", "articles:etl-elt/data-quality-checks-contracts"]
+previous: "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering"
+sources:
+  - { label: "Delta Lake documentation: Schema validation and evolution", url: "https://docs.delta.io/delta-batch/" }
+  - { label: "Delta Lake documentation: Column mapping", url: "https://docs.delta.io/delta-column-mapping/" }
+  - { label: "Delta Lake documentation: Type widening", url: "https://docs.delta.io/delta-type-widening/" }
+  - { label: "Apache Avro specification: Schema resolution", url: "https://avro.apache.org/docs/1.12.0/specification/#schema-resolution" }
+versionContext: "Delta examples run locally on PySpark 4.2.0 with delta-spark 4.4.0. The patterns apply to table formats, warehouses and event schemas; exact support for type changes varies by engine."
 ---
 
-Schemas change because businesses change. The goal is to change them **without breaking the people and pipelines that read the data.**
+Schemas change because businesses change. The goal is to change them **without breaking the people and pipelines that read the data**. The mechanics for Delta (`mergeSchema`, column mapping, type widening) are in the [transactions and schema evolution lesson](/delta-lake/transactions-schema-evolution/); this lesson is about the patterns that decide *when* and *how* to use them, with one worked migration.
 
 ## Classify the change first
 
+Ask two questions: can existing **readers** still read new data, and can new readers still read **old** data?
+
 | Change | Compatibility | Default approach |
 |--------|---------------|------------------|
-| Add an optional (nullable) column | Backward compatible | Add it; old readers ignore it |
-| Add a required column | Breaks old writers or rows | Add as nullable, backfill, then enforce |
-| Widen a type | Usually compatible, check support | Allowed where the engine supports it |
-| Narrow or change a type | Breaking | Expand and contract |
-| Rename a column | Breaking for readers | Expand and contract |
-| Remove a column | Breaking for readers | Deprecate, then remove |
+| Add an optional (nullable) column | Compatible both ways | Add it; old readers ignore it, old rows read as NULL |
+| Add a required (NOT NULL) column | Breaks old writers and old rows | Add as nullable, backfill, then enforce |
+| Widen a type (`INT` to `BIGINT`) | Usually compatible; readers must support it | Type widening where the engine supports it |
+| Narrow or change a type (`STRING` to `INT`) | Breaking | Expand and contract |
+| Rename a column | Breaking for every reader by name | Expand and contract, or a column-mapping rename plus a compatibility view |
+| Remove a column | Breaking for readers that use it | Deprecate, announce, then remove |
+| Change the meaning or unit (pence to pounds) | Breaking, and invisible to schema checks | New column with a new name |
+
+The last row is the most dangerous because nothing fails: queries keep running and return wrong numbers.
 
 ## Pattern 1: additive by default
 
-Most changes can be made additive. New information goes in new nullable columns; nothing existing changes meaning. Make this the team default and many problems never happen.
+Most changes can be made additive. New information goes in new nullable columns; nothing existing changes meaning. Make this the team default and many problems never happen. In Delta, an explicit `ALTER TABLE ... ADD COLUMNS` in a reviewed migration is preferable to `mergeSchema` on curated tables, because the schema then changes only when someone meant it to.
 
 ## Pattern 2: expand and contract
 
-For a rename or type change (`amount` string → `amount_decimal`):
+For a rename or type change, never change the column in place. Run the migration in reversible steps. The example moves `amount` from a string to `amount_gbp DECIMAL(10,2)` on a Delta table.
 
-1. **Expand**: add `amount_decimal`; write both columns.
-2. **Backfill**: populate the new column for historical rows.
-3. **Migrate readers**: update every consumer to the new column.
-4. **Contract**: stop writing the old column, then drop it after a notice period.
+```python
+import tempfile
+from pyspark.sql import SparkSession, functions as F
+from delta import configure_spark_with_delta_pip
 
-Each step is reversible and no consumer breaks.
+builder = (
+    SparkSession.builder.master("local[2]").appName("expand-contract")
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.sql.shuffle.partitions", "2")
+)
+spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark.sparkContext.setLogLevel("ERROR")
+orders = f"{tempfile.mkdtemp()}/orders"
 
-## Pattern 3: contracts at the boundary
+spark.createDataFrame([(1, "12.50"), (2, "7.00"), (3, "n/a")], "order_id INT, amount STRING") \
+     .write.format("delta").save(orders)
+```
 
-A **data contract** states the schema, meaning, keys and freshness a producer promises. Validate incoming data against it (schema registry for events, schema checks for batch loads) so violations are caught where they enter, not three layers downstream.
+**1. Expand**: add the new column. Writers start filling both columns.
 
-## Pattern 4: versioned events
+```python
+spark.sql(f"ALTER TABLE delta.`{orders}` ADD COLUMNS (amount_gbp DECIMAL(10,2))")
+spark.createDataFrame([(4, "3.25")], "order_id INT, amount STRING") \
+     .withColumn("amount_gbp", F.col("amount").cast("decimal(10,2)")) \
+     .write.format("delta").mode("append").save(orders)
+```
 
-For event streams, use a schema registry with a compatibility rule (for example backward compatibility, so new readers can read old data and fields are added with defaults). If a change cannot be compatible, publish a new event version or topic and run both during migration.
+**2. Backfill** history, and look at what does not convert instead of losing it:
 
-## Pattern 5: explicit, not automatic, evolution
+```python
+spark.sql(f"""UPDATE delta.`{orders}` SET amount_gbp = try_cast(amount AS DECIMAL(10,2))
+              WHERE amount_gbp IS NULL""")
+spark.read.format("delta").load(orders).where("amount_gbp IS NULL").show()
+```
 
-Automatic schema merging is convenient for raw landing tables, where capturing whatever arrives is the point. For curated tables, make evolution explicit (`ALTER TABLE ... ADD COLUMNS`, reviewed in code) so a typo upstream cannot silently create a new column.
+```text
++--------+------+----------+
+|order_id|amount|amount_gbp|
++--------+------+----------+
+|       3|   n/a|      NULL|
++--------+------+----------+
+```
+
+Order 3 needs a decision (fix at source, or accept NULL) before anyone relies on the new column.
+
+**3. Migrate readers** to `amount_gbp`. Track who still reads `amount`, for example from query history or lineage in your catalog.
+
+**4. Contract**: stop writing the old column, then drop it after the notice period. On Delta, dropping a column without rewriting data needs column mapping:
+
+```python
+spark.sql(f"ALTER TABLE delta.`{orders}` SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name')")
+spark.sql(f"ALTER TABLE delta.`{orders}` DROP COLUMN amount")
+spark.read.format("delta").load(orders).orderBy("order_id").show()
+```
+
+```text
++--------+----------+
+|order_id|amount_gbp|
++--------+----------+
+|       1|     12.50|
+|       2|      7.00|
+|       3|      NULL|
+|       4|      3.25|
++--------+----------+
+```
+
+Each step is reversible until the last, and no consumer breaks at any point. If you need to roll back after the drop, time travel to the version before it still has the old column, within the retention period.
+
+## Pattern 3: renames behind a view
+
+A rename is often cosmetic, but every query that uses the old name breaks. With column mapping enabled, a Delta `RENAME COLUMN` is a metadata-only change, so it is cheap; the risk is in the readers. Publish a view that exposes both names during the migration (`SELECT customer_ref, customer_ref AS cust_id FROM ...`), move consumers, then drop the alias. Consumers that read the table by path (Spark jobs, other engines) do not go through the view, so find them first.
+
+## Pattern 4: nested fields
+
+Adding a field inside a struct (`address.postcode`) is additive and `mergeSchema` handles it. Two traps:
+
+- A source that sends a struct as a **string** one day and an object the next (common in JSON APIs) is a type change, not an addition; enforcement rejects it, which is what you want.
+- Arrays of structs evolve per element; a consumer that explodes the array and selects `item.*` picks up the new field unexpectedly. Select fields explicitly in curated layers.
+
+## Pattern 5: contracts at the boundary
+
+A **data contract** states the schema, meaning, keys and freshness a producer promises. Validate incoming data against it where it enters (a schema registry for events, a check before the bronze-to-silver write for batch), so a violation is caught once, at the edge, rather than three layers downstream. A minimal batch check compares the incoming schema with the contract and fails or quarantines on any difference:
+
+```python
+contract = {"order_id": "int", "amount_gbp": "decimal(10,2)"}
+incoming = spark.createDataFrame([(5, "1.00", "x")], "order_id INT, amount_gbp STRING, extra STRING")
+actual = {f.name: f.dataType.simpleString() for f in incoming.schema.fields}
+problems = sorted(
+    [f"missing {c}" for c in contract if c not in actual]
+    + [f"type {c}: {actual[c]} != {t}" for c, t in contract.items() if c in actual and actual[c] != t]
+    + [f"unexpected {c}" for c in actual if c not in contract]
+)
+print(problems)
+```
+
+```text
+['type amount_gbp: string != decimal(10,2)', 'unexpected extra']
+```
+
+Decide per table whether unexpected columns are an error (curated tables) or allowed (raw landing tables, where capturing whatever arrives is the point).
+
+## Pattern 6: versioned events
+
+For event streams, a schema registry enforces a compatibility rule on every new schema version. `BACKWARD` (the usual default) means consumers using the new schema can read data written with the previous one, which allows adding fields with defaults and deleting fields. If a change cannot be made compatible, publish a new event version or topic and run both during the migration. The rules and registry setup are covered in [Kafka schema registry and schema evolution](/kafka/schema-registry-schema-evolution/).
 
 <Callout tone="info" title="Tell people">
 
@@ -63,11 +165,47 @@ Even compatible changes surprise someone. Announce schema changes, document them
 
 ## Common mistakes
 
-1. Renaming a column in place.
-2. Enabling automatic merge on curated tables.
-3. Changing the meaning of a column without changing its name.
-4. No owner or notice process for schema changes.
+1. Renaming or retyping a column in place.
+2. Enabling automatic schema merge on curated tables, so an upstream typo becomes a new column.
+3. Changing the meaning or unit of a column without changing its name.
+4. Backfilling with a plain `CAST` that turns bad values into NULL without anyone looking.
+5. Enabling column mapping or type widening without checking that every reader supports the new protocol.
+6. No owner or notice process for schema changes.
 
-## Key takeaway
+## Practice questions
 
-Prefer additive changes, use expand-and-contract for breaking ones, validate contracts at the boundary, and keep evolution of curated tables explicit.
+<details>
+<summary>Walk through renaming customer_id to customer_ref on a table read by 20 jobs.</summary>
+
+Expand: add `customer_ref`, write both. Backfill history. Publish a compatibility view and move readers one by one, tracking remaining users of the old name. Contract: stop writing `customer_id`, then drop it after the notice period (on Delta, with column mapping, the drop is metadata-only). Each step can be rolled back until the drop.
+
+</details>
+
+<details>
+<summary>Why is a unit change more dangerous than a type change?</summary>
+
+A type change is caught by schema enforcement or fails in readers. A unit change keeps the same name and type, so every query succeeds and silently returns numbers that are off by a factor. Use a new column name that states the unit.
+
+</details>
+
+<details>
+<summary>Should a raw landing table and a curated table have the same evolution policy?</summary>
+
+No. The landing table should capture whatever arrives (automatic merge, permissive parsing) so nothing is lost and replay is possible. The curated table should change only through reviewed migrations, with enforcement rejecting anything else.
+
+</details>
+
+<details>
+<summary>A NOT NULL column must be added to a table with five years of history. How?</summary>
+
+Add it as nullable, change writers to populate it, backfill history (with a documented default or derived value), verify there are no NULLs left, then add the `NOT NULL` constraint. Adding it as required in one step would fail for existing rows and old writers.
+
+</details>
+
+## Key takeaways
+
+- Classify every change by its effect on old readers and old data before choosing a mechanism.
+- Prefer additive changes; use expand and contract for renames and type changes.
+- Backfill with checks that surface unconvertible values instead of hiding them.
+- Validate contracts at the boundary; keep evolution of curated tables explicit and reviewed.
+- Unit and meaning changes need a new column name, because no schema check will catch them.
