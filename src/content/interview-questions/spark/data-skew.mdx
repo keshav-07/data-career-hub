@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "What is data skew and how can you mitigate it?"
 description: "Interview answer: Spark data skew is uneven key distribution making a few tasks far slower; diagnose it in the Spark UI, fix with AQE, broadcasts or salting."
 seoTitle: "Data Skew in Spark: Interview Answer"
@@ -26,7 +26,7 @@ versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say 
 
 ## Fixes
 
-1. **AQE skew join** (on by default) splits oversized partitions in sort-merge joins.
+1. **AQE skew join** (on by default) splits oversized partitions in sort-merge and shuffled hash joins and replicates the matching partition of the other side. It does not split a skewed `groupBy` or window partition.
 2. **Broadcast** the small side so the skewed large side is never shuffled.
 3. **Handle hot keys separately**: filter `NULL` keys that cannot match, or process the top key in its own branch.
 4. **Salting**: spread a hot key across N sub-keys.
@@ -57,7 +57,20 @@ The 40,000 "hot" rows are now spread across 8 salt values instead of one partiti
 
 ## Skew in aggregations
 
-For `groupBy` on a hot key, aggregate in two phases: group by `(key, salt)` first, then group the partial results by `key`.
+Aggregations are skewed less often than joins, because Spark already pre-aggregates on the map side: for `sum`, `count`, `min` or `max`, each input partition sends one partial row per key, however hot the key is. Skew bites when the aggregate cannot be combined early (`collect_list`, `collect_set`, exact `countDistinct`, percentiles) or when a window function partitions by a hot key. Then aggregate in two phases: group by `(key, salt)` first, then group the partial results by `key`.
+
+```python
+partial = (facts.withColumn("salt", (F.rand(seed=2) * N).cast("int"))
+                .groupBy("key", "salt").agg(F.collect_set("id").alias("ids")))
+final = partial.groupBy("key").agg(F.size(F.flatten(F.collect_list("ids"))).alias("n_ids"))
+print(final.filter(F.col("key") == "hot").first())
+```
+
+```text
+Row(key='hot', n_ids=40000)
+```
+
+The hot key's 40,000 values are first collected in 8 smaller groups, then merged.
 
 ## Common mistakes
 
