@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Consumer lag keeps growing. How do you diagnose and fix it?"
 seoTitle: "Kafka Consumer Lag Causes and Fixes: Interview"
-description: "Interview answer: measure lag per partition and in time, separate dead, rebalancing, skewed and slow consumers, then fix the bottleneck before adding partitions."
+description: "Interview answer: measure Kafka consumer lag per partition and in time, separate dead, rebalancing, skewed and slow consumers, fix the bottleneck first."
 technology: ["kafka"]
 topic: ["consumer-lag", "monitoring", "performance"]
 difficulty: "Medium"

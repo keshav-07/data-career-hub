@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "How would you design a CDC pipeline?"
 seoTitle: "Designing a CDC Pipeline: Interview Answer"
-description: "Interview answer: read changes from the database log, publish keyed events, apply them idempotently in order with MERGE, and handle snapshots, deletes and schema changes."
+description: "Interview answer: design a CDC pipeline that reads the database log, publishes keyed events, applies them in order with MERGE, and handles snapshots, deletes."
 inventoryId: "INT-29"
 technology: ["data-engineering", "kafka"]
 topic: ["cdc", "architecture"]

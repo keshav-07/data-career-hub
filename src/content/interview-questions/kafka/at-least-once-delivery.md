@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What is at-least-once delivery and what problems can it create?"
 seoTitle: "At-Least-Once Delivery in Kafka: Interview Answer"
-description: "Interview answer: at-least-once means no message is lost but some may be processed twice after failures, so consumers and sinks must be idempotent or deduplicate."
+description: "Interview answer: Kafka at-least-once delivery loses no messages but may process some twice after failures, so consumers and sinks must be idempotent."
 inventoryId: "INT-23"
 technology: ["kafka", "data-engineering"]
 topic: ["delivery-semantics"]

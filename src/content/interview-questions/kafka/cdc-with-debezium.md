@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How would you stream database changes into Kafka with Debezium?"
 seoTitle: "CDC with Debezium and Kafka: Interview Answer"
-description: "Interview answer: Debezium reads the database log through a replication slot, snapshots first, keys events by primary key, and sinks apply them with ordered idempotent upserts."
+description: "Interview answer: Debezium CDC reads the database log through a replication slot, snapshots first, keys events by primary key, and sinks upsert in order."
 technology: ["kafka", "data-engineering"]
 topic: ["cdc", "debezium", "kafka-connect"]
 difficulty: "Hard"

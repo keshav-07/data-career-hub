@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "What is schema evolution and when is it safe?"
 seoTitle: "Schema Evolution and When It Is Safe: Interview"
-description: "Interview answer: schema evolution changes a table's schema as data changes; adding nullable columns is safe, while type changes, renames and drops can break readers."
+description: "Interview answer: schema evolution adapts a table as data changes; adding nullable columns is safe, while type changes, renames and drops can break readers."
 inventoryId: "INT-18"
 technology: ["delta-lake", "data-engineering"]
 topic: ["schema-evolution"]

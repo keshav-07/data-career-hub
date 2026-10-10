@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "What problems does Delta Lake solve?"
 seoTitle: "What Problems Does Delta Lake Solve? Interview"
-description: "Interview answer: Delta Lake adds a transaction log to Parquet data lakes, giving ACID writes, consistent reads, schema enforcement, time travel and efficient upserts."
+description: "Interview answer: Delta Lake adds a transaction log to Parquet data lakes for ACID writes, consistent reads, schema enforcement, time travel and upserts."
 inventoryId: "INT-17"
 technology: ["delta-lake", "spark"]
 topic: ["lakehouse", "acid"]

@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How do you backfill a pipeline safely?"
 seoTitle: "Backfilling a Pipeline Safely: Interview Answer"
-description: "Interview answer: rerun the normal idempotent job for past intervals in small chunks, limit concurrency, leave incremental state alone, validate in a shadow table and communicate."
+description: "Interview answer: backfill safely by rerunning the idempotent job for past intervals in small chunks, limiting concurrency, validating in a shadow table."
 technology: ["data-engineering", "airflow"]
 topic: ["backfills", "idempotency", "operations"]
 difficulty: "Medium"

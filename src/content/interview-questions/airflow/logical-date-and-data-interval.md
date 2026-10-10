@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What are the logical date and data interval in Airflow, and what changed in Airflow 3?"
 seoTitle: "Airflow Logical Date and Data Interval Explained"
-description: "Interview answer: the logical date labels the data a run is responsible for; Airflow 3 removed execution_date and made cron schedules fire with empty data intervals."
+description: "Interview answer: the Airflow logical date labels the data a run covers; Airflow 3 removed execution_date and cron schedules fire with empty data intervals."
 technology: ["airflow"]
 topic: ["scheduling", "logical-date", "timetables"]
 difficulty: "Medium"

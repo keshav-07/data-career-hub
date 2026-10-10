@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Adobe Data Engineering Interview Preparation"
 seoTitle: "Adobe Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Adobe using its published 'How we hire' page, plus labelled practice questions on subscription, usage and product analytics data."
+description: "Adobe Data Engineer interview prep from its 'How we hire' page, with labelled practice questions on subscription, usage and product analytics data."
 inventoryId: "COMPANY-08"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

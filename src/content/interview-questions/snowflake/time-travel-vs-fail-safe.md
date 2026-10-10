@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What is the difference between Snowflake Time Travel and Fail-safe?"
 seoTitle: "Snowflake Time Travel vs Fail-safe: Interview"
-description: "Interview answer: Time Travel is self-service history you query, clone or undrop within retention; Fail-safe is 7 more days only Snowflake Support can recover, for permanent tables."
+description: "Interview answer: Snowflake Time Travel is self-service history to query, clone or undrop; Fail-safe is 7 more days only Snowflake Support can recover."
 technology: ["snowflake"]
 topic: ["time-travel", "fail-safe", "data-recovery"]
 difficulty: "Easy"

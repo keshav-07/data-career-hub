@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "When should you define a clustering key on a Snowflake table?"
 seoTitle: "Snowflake Clustering Keys: When to Use Them"
-description: "Interview answer: cluster only large, often-queried tables whose selective filters prune poorly today, choose coarse keys from real filters, and weigh reclustering cost."
+description: "Interview answer: use Snowflake clustering keys only on large, often-queried tables that prune poorly today, with coarse keys and reclustering cost weighed."
 technology: ["snowflake"]
 topic: ["clustering", "micro-partitions", "performance"]
 difficulty: "Medium"

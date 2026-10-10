@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What is zero-copy cloning in Snowflake, and how would you use it?"
 seoTitle: "Snowflake Zero-Copy Cloning: Interview Answer"
-description: "Interview answer: a clone is new metadata pointing at the same immutable micro-partitions, so it is instant and free at first; use it for dev copies, safe migrations and restores."
+description: "Interview answer: a Snowflake zero-copy clone is new metadata over the same micro-partitions, instant and free at first; use it for dev copies and restores."
 technology: ["snowflake"]
 topic: ["cloning", "time-travel", "testing"]
 difficulty: "Easy"

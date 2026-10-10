@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "When should Airflow tasks pass data through XCom, and when through external storage?"
 seoTitle: "Airflow XCom vs External Storage: Interview Answer"
-description: "Interview answer: XCom is for small metadata such as paths, counts and IDs; datasets belong in object storage or a warehouse, with only a reference passed between tasks."
+description: "Interview answer: Airflow XCom is for small metadata like paths, counts and IDs; datasets belong in object storage or a warehouse, passing only a reference."
 technology: ["airflow"]
 topic: ["xcom", "data-passing", "taskflow"]
 difficulty: "Medium"

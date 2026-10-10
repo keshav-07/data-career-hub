@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you handle task failures and alerting in Airflow?"
 seoTitle: "Airflow Failure Handling and Alerting: Interview"
-description: "Interview answer: classify errors, retry transient ones with backoff, fail fast on permanent ones, alert on final failure with callbacks or notifiers, and use deadline alerts for late runs."
+description: "Interview answer: handle Airflow failures by retrying transient errors with backoff, failing fast on permanent ones, alerting on final failure."
 technology: ["airflow"]
 topic: ["alerting", "callbacks", "retries", "deadline-alerts"]
 difficulty: "Medium"

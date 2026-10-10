@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Walmart Data Engineering Interview Preparation"
 seoTitle: "Walmart Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Walmart using its published hiring-process resources, plus labelled practice questions on retail, inventory and supply-chain data."
+description: "Walmart Data Engineer interview prep from its published hiring-process resources, with labelled practice on retail, inventory and supply-chain data."
 inventoryId: "COMPANY-05"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

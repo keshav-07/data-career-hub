@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you build an incremental pipeline with Snowflake streams and tasks?"
 seoTitle: "Snowflake Streams and Tasks Pipeline: Interview"
-description: "Interview answer: a stream tracks changes on the source, a task with WHEN SYSTEM$STREAM_HAS_DATA runs a MERGE that consumes it, and the offset moves only when that DML commits."
+description: "Interview answer: a Snowflake stream tracks source changes, a task gated by SYSTEM$STREAM_HAS_DATA runs a MERGE, and the offset moves only on commit."
 technology: ["snowflake"]
 topic: ["streams", "tasks", "cdc", "incremental-loading"]
 difficulty: "Medium"

@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you choose retention and size disk for a Kafka topic?"
 seoTitle: "Kafka Retention and Disk Sizing: Interview Answer"
-description: "Interview answer: set retention from the longest consumer outage plus replay needs, then size disk as write rate × retention × replication factor, with headroom."
+description: "Interview answer: size Kafka retention from the longest consumer outage plus replay needs, then disk as write rate x retention x replication, with headroom."
 technology: ["kafka"]
 topic: ["retention", "capacity-planning", "storage"]
 difficulty: "Medium"

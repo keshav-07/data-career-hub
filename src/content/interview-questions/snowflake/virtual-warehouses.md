@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "What are Snowflake virtual warehouses?"
 seoTitle: "Snowflake Virtual Warehouses: Interview Answer"
-description: "Interview answer: virtual warehouses are independent compute clusters over shared storage, sized and billed while running, that scale up for heavy queries and out for concurrency."
+description: "Interview answer: Snowflake virtual warehouses are independent compute over shared storage, billed per use, scaled up for heavy queries, out for concurrency."
 inventoryId: "INT-20"
 technology: ["snowflake"]
 topic: ["compute", "cost"]

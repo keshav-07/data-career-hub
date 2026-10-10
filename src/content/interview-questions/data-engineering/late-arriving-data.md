@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How do you handle late-arriving data?"
 seoTitle: "Handling Late-Arriving Data: Interview Answer"
-description: "Interview answer: separate event time from arrival time, select new rows by arrival, rebuild only the event-time partitions they touch, and agree a lateness policy."
+description: "Interview answer: handle late-arriving data by separating event time from arrival time, rebuilding affected partitions and setting a lateness policy."
 technology: ["data-engineering", "sql"]
 topic: ["late-data", "event-time", "incremental-loading"]
 difficulty: "Medium"

@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you make one Airflow DAG depend on another?"
 seoTitle: "Airflow Cross-DAG Dependencies: Assets and Sensors"
-description: "Interview answer: compare asset-aware scheduling, ExternalTaskSensor and TriggerDagRunOperator for cross-DAG dependencies, and why assets are the Airflow 3 default."
+description: "Interview answer: compare asset-aware scheduling, ExternalTaskSensor and TriggerDagRunOperator for Airflow cross-DAG dependencies, and why assets are default."
 technology: ["airflow"]
 topic: ["assets", "cross-dag-dependencies", "scheduling"]
 difficulty: "Medium"

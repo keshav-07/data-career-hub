@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Should you scale a Snowflake warehouse up or out?"
 seoTitle: "Snowflake Scale Up vs Multi-Cluster: Interview"
-description: "Interview answer: scale up for slow, heavy queries that spill or barely parallelise, scale out with multi-cluster warehouses for queueing, and fix pruning before either."
+description: "Interview answer: scale a Snowflake warehouse up for heavy or spilling queries, out with multi-cluster for queueing, and fix pruning before either."
 technology: ["snowflake"]
 topic: ["virtual-warehouses", "concurrency", "cost"]
 difficulty: "Medium"

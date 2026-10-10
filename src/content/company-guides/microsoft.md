@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Microsoft Data Engineering Interview Preparation"
 seoTitle: "Microsoft Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Microsoft using its published hiring and interview-tips pages, plus labelled practice questions on SQL, Spark, Azure-style pipelines and design."
+description: "Microsoft Data Engineer interview prep from its published hiring and interview-tips pages, with labelled practice on SQL, Spark, Azure pipelines and design."
 inventoryId: "COMPANY-03"
 technology: ["data-engineering"]
 topic: ["company-preparation"]
