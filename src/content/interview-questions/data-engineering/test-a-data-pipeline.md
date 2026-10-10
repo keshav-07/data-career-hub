@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How do you test a data pipeline?"
 seoTitle: "How to Test a Data Pipeline: Interview Answer"
-description: "Testing a data pipeline, interview answer: unit tests for transforms, integration tests on a real engine, data tests on every run and regression diffs before merging."
+description: "Testing a data pipeline, interview answer: unit tests for transforms, integration tests on a real engine, data tests and diffs before merging."
 technology: ["data-engineering", "python"]
 topic: ["testing", "data-quality", "ci-cd"]
 difficulty: "Medium"

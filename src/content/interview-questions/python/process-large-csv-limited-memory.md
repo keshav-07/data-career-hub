@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How would you process a 50 GB CSV file on a machine with 8 GB of RAM?"
 seoTitle: "Process a 50 GB CSV With Limited Memory"
-description: "Process a huge CSV in Python with limited memory: stream rows with csv and generators, aggregate in small state, write in batches, or push the work into DuckDB or Spark."
+description: "Process a huge CSV in Python with limited memory: stream rows, keep small state, write in batches, or push the work into DuckDB or Spark."
 technology: ["python"]
 topic: ["memory", "generators", "large-files"]
 difficulty: "Medium"

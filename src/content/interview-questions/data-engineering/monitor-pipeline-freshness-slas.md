@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How would you monitor pipeline freshness and data SLAs?"
 seoTitle: "Monitoring Data Freshness and SLAs: Interview Answer"
-description: "Data freshness monitoring, interview answer: measure the age of each table from the data or successful publishes, set SLOs with consumers, alert on breaches with lineage context."
+description: "Data freshness and SLA monitoring, interview answer: measure table age, agree SLOs with consumers and alert on breaches with lineage context."
 technology: ["data-engineering", "airflow"]
 topic: ["observability", "sla", "freshness"]
 difficulty: "Medium"

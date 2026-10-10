@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "What does CI/CD look like for data pipelines?"
 seoTitle: "CI/CD for Data Pipelines: Interview Answer"
-description: "CI/CD for data pipelines, interview answer: lint and test on every change, build into an isolated schema, run data tests and diffs, deploy versioned code with safe migrations."
+description: "CI/CD for data pipelines, interview answer: lint and test each change, build in an isolated schema, diff against production and deploy safely."
 technology: ["data-engineering", "airflow"]
 topic: ["ci-cd", "testing", "deployment"]
 difficulty: "Medium"

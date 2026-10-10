@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "Exactly-once vs effectively-once: what can a pipeline really guarantee?"
 seoTitle: "Exactly-Once vs Effectively-Once: Interview Answer"
-description: "Interview answer: delivery is at-least-once across systems, so exactly-once results come from idempotent writes or committing output and progress in one transaction."
+description: "Exactly-once vs effectively-once, interview answer: delivery is at-least-once, so use idempotent writes or commit output and offsets together."
 technology: ["data-engineering", "kafka"]
 topic: ["delivery-semantics", "idempotency", "streaming"]
 difficulty: "Hard"

@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How would you choose a partitioning strategy for a large table?"
 seoTitle: "Partitioning a Large Table: Interview Answer"
-description: "Table partitioning strategy, interview answer: partition by the column most queries filter on, usually a date, keep partitions large, and cluster or sort by high-cardinality keys."
+description: "Table partitioning strategy, interview answer: partition by the column most queries filter on, keep partitions large and cluster high-cardinality keys."
 technology: ["data-engineering", "sql"]
 topic: ["partitioning", "performance", "data-layout"]
 difficulty: "Medium"

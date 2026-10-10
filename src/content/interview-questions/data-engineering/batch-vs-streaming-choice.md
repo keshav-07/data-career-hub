@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "Batch or streaming: how do you choose for a use case?"
 seoTitle: "Batch vs Streaming Choice: Interview Answer"
-description: "Batch vs streaming, interview answer: start from the freshness the decision needs and the cost of late data, prefer the simplest option that meets it, and name what streaming adds."
+description: "Batch vs streaming, interview answer: start from the freshness the decision needs, pick the simplest option that meets it, and know what streaming adds."
 technology: ["data-engineering", "kafka"]
 topic: ["batch", "streaming", "architecture"]
 difficulty: "Medium"

@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How would you add retries with backoff to API ingestion in Python?"
 seoTitle: "Python API Retries With Backoff: Interview Answer"
-description: "Python API retries with backoff, interview answer: retry only timeouts, 429 and 5xx, use capped exponential backoff with jitter, honour Retry-After and keep requests idempotent."
+description: "Python API retries with backoff, interview answer: retry timeouts, 429 and 5xx only, with capped jittered backoff that honours Retry-After."
 technology: ["python"]
 topic: ["retries", "apis", "reliability"]
 difficulty: "Medium"

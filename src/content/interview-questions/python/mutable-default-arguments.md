@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "Why are mutable default arguments dangerous in Python?"
 seoTitle: "Python Mutable Default Arguments: Interview Answer"
-description: "Python mutable default arguments, interview answer: defaults are evaluated once at definition time, so a list or dict default is shared across calls; use None and create it inside."
+description: "Python mutable default arguments, interview answer: defaults are evaluated once, so a list default is shared across calls. Use None instead."
 technology: ["python"]
 topic: ["functions", "gotchas"]
 difficulty: "Easy"

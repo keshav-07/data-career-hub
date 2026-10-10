@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How do you handle PII in a data pipeline?"
 seoTitle: "Handling PII in Data Pipelines: Interview Answer"
-description: "PII in data pipelines, interview answer: minimise what you collect, classify columns, pseudonymise or mask early, restrict access by role, and design for deletion requests."
+description: "PII in data pipelines, interview answer: minimise and classify data, pseudonymise early, restrict access by role and design for deletion requests."
 technology: ["data-engineering", "sql"]
 topic: ["pii", "governance", "security"]
 difficulty: "Medium"

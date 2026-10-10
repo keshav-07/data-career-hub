@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "When would you not use pandas in a data pipeline?"
 seoTitle: "When Not to Use pandas: Interview Answer"
-description: "When not to use pandas, interview answer: avoid it for data near or above memory, work the warehouse can do in SQL, distributed scale and row-wise logic; use DuckDB, Polars or Spark."
+description: "When not to use pandas, interview answer: data near memory size, work the warehouse can do, distributed scale; use DuckDB, Polars or Spark."
 technology: ["python"]
 topic: ["pandas", "architecture", "performance"]
 difficulty: "Medium"

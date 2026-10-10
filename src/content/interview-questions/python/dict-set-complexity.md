@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "Why are dict and set lookups O(1) in Python, and when are they not?"
 seoTitle: "Python dict and set Complexity: Interview Answer"
-description: "Python dict and set time complexity, interview answer: hash tables give O(1) average lookups, O(n) worst case, amortised O(1) inserts, and need hashable, stable keys."
+description: "Python dict and set complexity, interview answer: hash tables give O(1) average lookups, O(n) worst case and amortised O(1) inserts."
 technology: ["python"]
 topic: ["data-structures", "complexity", "hashing"]
 difficulty: "Medium"
