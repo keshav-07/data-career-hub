@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Walmart Data Engineering Interview Preparation"
 seoTitle: "Walmart Data Engineering Interview Preparation"
 description: "Walmart Data Engineer interview prep from its published hiring-process resources, with labelled practice on retail, inventory and supply-chain data."
@@ -9,9 +9,9 @@ inventoryId: "COMPANY-05"
 technology: ["data-engineering"]
 topic: ["company-preparation"]
 company: "Walmart"
-evidenceNote: "Sources below are pages on Walmart's own website, identified on 2026-10-05. They describe the company's general hiring process; they are not specific to Data Engineering roles, and processes vary by team and change over time. Summaries on this page are deliberately brief and must be checked against the live pages by a reviewer before publication. We have not added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us."
+evidenceNote: "Sources below are pages on Walmart's own website, identified on 2026-10-05. They describe the company's general hiring process; they are not specific to Data Engineering roles, and processes vary by team and change over time. Summaries are deliberately brief and only say what each linked page covers, without paraphrasing details that may change; treat the linked page as authoritative. We have not added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us."
 verifiedSources: [{"label": "Walmart Careers: Hiring process", "url": "https://careers.walmart.com/us/en/home/resources/hiring-process"}]
-commonTopics: [{"topic": "Walmart publishes a hiring-process resource on its careers site describing how to apply and prepare, including preparing for interviews by learning about the company's values and using a structured (STAR-style) way of answering behavioural questions.", "basis": "verified-attributed", "source": {"label": "Walmart Careers: Hiring process", "url": "https://careers.walmart.com/us/en/home/resources/hiring-process"}}]
+commonTopics: [{"topic": "Walmart publishes a hiring-process resource on its careers site about applying and preparing for interviews.", "basis": "verified-attributed", "source": {"label": "Walmart Careers: Hiring process", "url": "https://careers.walmart.com/us/en/home/resources/hiring-process"}}]
 reportedQuestions: []
 representativeQuestions: ["Write SQL that returns, for each store and day, products whose closing inventory fell below their reorder point.", "Design a pipeline that combines point-of-sale transactions from thousands of stores into daily sales and inventory tables. How do you handle stores that upload late?", "How would you model a product dimension where categories are reorganised several times a year?", "How would you detect duplicate transactions caused by a store system resending a file?", "Tell me about a time you improved a process that many people depended on."]
 related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "system-designs:scalable-batch-pipeline", "roadmaps:interview-preparation-roadmap"]
@@ -19,7 +19,7 @@ related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "sys
 
 ## Preparation overview
 
-Prepare in three areas: technical fundamentals, data system design, and behavioural stories. Retail data is high-volume, arrives from many locations and must reconcile with finance, so expect questions on modelling, late data and reconciliation.
+Prepare in three areas: technical fundamentals, data system design, and behavioural stories. Retail data is high-volume, arrives from many locations and must reconcile with finance, so modelling, late data and reconciliation are sensible themes to prepare; they are our suggestion, not a description of Walmart's interviews.
 
 ## Technology focus
 
