@@ -6,8 +6,8 @@ technology: ["sql"]
 topic: ["dates", "time-series", "calendar-table", "growth-metrics"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Bucket timestamps into days, weeks, months and custom intervals, in the right time zone"
   - "Generate a date series or calendar table and use it to fill missing periods"
@@ -23,7 +23,7 @@ sources:
   - { label: "SQL Server documentation: GENERATE_SERIES", url: "https://learn.microsoft.com/en-us/sql/t-sql/functions/generate-series-transact-sql" }
   - { label: "SQL Server documentation: DATETRUNC", url: "https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql" }
   - { label: "BigQuery documentation: Date functions", url: "https://cloud.google.com/bigquery/docs/reference/standard-sql/date_functions" }
-versionContext: "Examples run on PostgreSQL 16 against a generated, deterministic dataset; the range() example runs on DuckDB 1.5. Snowflake, BigQuery, SQL Server and MySQL variants were not executed."
+versionContext: "Examples run on PostgreSQL 16 against a generated, deterministic dataset; the range() example runs on DuckDB 1.5; the Spark SQL interval frame was checked on PySpark 4.2. Snowflake, BigQuery, SQL Server and MySQL variants were not executed."
 ---
 
 Most dashboards a Data Engineer feeds are time series: revenue per day, orders per week, active users over the last 30 days, growth versus last month and last year. The SQL is a combination of three skills: **bucketing** timestamps into periods, making sure **every period exists** even when nothing happened, and **comparing** periods with window functions. Each step has a classic bug, and this lesson shows all of them.
@@ -485,7 +485,7 @@ LIMIT 7;
 - 18 June 2025 (day 169 of the year) had no orders. Because the calendar supplied a zero row for it, every 7-day and 30-day window around it still spans exactly 7 or 30 days.
 - The first 6 (or 29) days of the series have incomplete windows; flag or exclude them as shown in the [window frames lesson](/sql/window-frames-running-totals/).
 
-Without a calendar, use a time-based frame on the daily aggregate, which handles gaps by value: `SUM(revenue) OVER (ORDER BY day RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW)`. Engines that lack interval frames (SQL Server, BigQuery, Spark) need the calendar approach or a numeric day key.
+Without a calendar, use a time-based frame on the daily aggregate, which handles gaps by value: `SUM(revenue) OVER (ORDER BY day RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW)`. Spark SQL accepts the same interval frame (`RANGE BETWEEN INTERVAL 6 DAYS PRECEDING AND CURRENT ROW`). Engines that lack interval frames (SQL Server, and BigQuery, which needs a numeric order key such as `UNIX_DATE(day)`) need the calendar approach or a numeric day key.
 
 ### Rolling distinct counts: 7-day active customers
 
