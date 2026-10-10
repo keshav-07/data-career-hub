@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Which Databricks compute should you use for each workload?"
 seoTitle: "Databricks Compute Types: Interview Answer"
-description: "Databricks compute interview answer: when to use all-purpose clusters, jobs compute, serverless or SQL warehouses, plus access modes, Photon and cost trade-offs."
+description: "Databricks compute interview answer: when to use all-purpose clusters, jobs compute, serverless or SQL warehouses, plus access modes, Photon and cost."
 technology: ["databricks", "spark"]
 topic: ["compute", "cost", "platform"]
 difficulty: "Medium"
