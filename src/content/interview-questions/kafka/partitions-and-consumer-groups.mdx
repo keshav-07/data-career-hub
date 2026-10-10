@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Explain Kafka partitions and consumer groups."
 description: "Interview answer: partitions give ordering and parallelism, and a consumer group assigns each partition to one consumer so the group shares the work."
 inventoryId: "INT-22"
@@ -13,7 +13,8 @@ estimatedMinutes: 8
 interviewRelevance: "High"
 shortAnswer: "A Kafka topic is split into partitions, each an ordered log; ordering is guaranteed only within a partition, and records with the same key go to the same partition. A consumer group is a set of consumers sharing a group id, and Kafka assigns each partition to exactly one consumer in the group, so partitions are divided among them. This means the partition count caps how many consumers in one group can work in parallel."
 followUps: ["What happens if a group has more consumers than partitions?", "What triggers a rebalance and why does it matter?", "How do you keep all events for one customer in order?", "What happens if you add partitions to an existing topic?"]
-related: ["articles:kafka/topics-partitions-consumer-groups"]
+related: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/consumer-groups-rebalancing", "interview-questions:kafka/choose-partition-count", "interview-questions:kafka/rebalancing-problems", "interview-questions:kafka/kafka-ordering-guarantees"]
+versionContext: "Applies to Apache Kafka 4.x consumer groups (classic and KIP-848 consumer protocols)."
 ---
 
 ## Detailed explanation
@@ -38,6 +39,14 @@ A second group `analytics` reads all 6 partitions on its own, unaffected by `bil
 ## Failure and rebalancing
 
 If a consumer crashes or stops sending heartbeats, the group **rebalances** and its partitions move to other members, which resume from the last committed offsets. Records processed but not yet committed are processed again, which is why at-least-once consumers need idempotent processing.
+
+With the classic eager protocol every member pauses during a rebalance; cooperative-sticky assignment and the KIP-848 consumer protocol (`group.protocol=consumer`, GA since Kafka 4.0) move only the partitions that change owner. Kafka 4.2 also added **share groups**, where members share partitions and acknowledge records individually like a queue; they are a different tool from ordinary consumer groups and give up ordering.
+
+## Trade-offs
+
+- More partitions allow more parallel consumers but cost broker resources and, on keyed topics, cannot be added later without moving keys.
+- A narrow key (order ID) spreads load; a broad key (country) creates hot partitions but orders more events together.
+- Separate groups give independent reads and offsets; sharing a group ID between two applications splits the data between them.
 
 ## Common mistakes
 
