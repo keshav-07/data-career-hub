@@ -16,7 +16,7 @@ learningObjectives:
   - "Explain how credits are consumed by warehouses, serverless features and cloud services"
   - "Tell the result cache, the warehouse cache and the metadata cache apart and predict when each is used"
 related: ["articles:snowflake/snowflake-for-data-engineers", "interview-questions:snowflake/virtual-warehouses", "articles:snowflake/micro-partitions-clustering-pruning", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "cheat-sheets:snowflake"]
-next: "articles:snowflake/virtual-warehouses-scaling"
+next: "articles:snowflake/loading-copy-snowpipe"
 sources:
   - { label: "Snowflake documentation: Key concepts and architecture", url: "https://docs.snowflake.com/en/user-guide/intro-key-concepts" }
   - { label: "Snowflake documentation: Overview of warehouses", url: "https://docs.snowflake.com/en/user-guide/warehouses-overview" }
@@ -29,7 +29,7 @@ versionContext: "Written against the current Snowflake documentation (October 20
 
 Snowflake is a managed data platform whose design starts from one decision: **data is stored once, centrally, and any number of independent compute clusters can query it**. That decision explains how Snowflake scales, how it bills you, why Time Travel and cloning are cheap, and most of the questions you will be asked about it in interviews.
 
-This lesson walks through the three layers, the metadata that ties them together, the editions, the credit-based pricing model and the three caches. The next lesson goes deeper into sizing and scaling warehouses.
+This lesson walks through the three layers, the metadata that ties them together, the editions, the credit-based pricing model and the three caches. The next lesson shows how data gets in (stages, `COPY INTO` and Snowpipe), and [Virtual Warehouses: Sizing, Scaling and Concurrency](/snowflake/virtual-warehouses-scaling/) goes deeper into warehouses.
 
 <Callout tone="info" title="About the examples">
 
@@ -199,7 +199,7 @@ Link metadata to pruning: "the optimiser reads the min/max of each micro-partiti
 
 ## Multi-cluster shared data
 
-**Multi-cluster shared data** is Snowflake's name for the overall architecture: many compute clusters, one shared copy of the data. Do not confuse it with **multi-cluster warehouses**, which are a single warehouse that can run several clusters for concurrency (an Enterprise Edition feature, covered in the next lesson).
+**Multi-cluster shared data** is Snowflake's name for the overall architecture: many compute clusters, one shared copy of the data. Do not confuse it with **multi-cluster warehouses**, which are a single warehouse that can run several clusters for concurrency (an Enterprise Edition feature, covered in [the warehouse scaling lesson](/snowflake/virtual-warehouses-scaling/)).
 
 What it means in practice:
 

@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Kafka and Real-Time Data Engineering"
 seoTitle: "Kafka and Real-Time Data Engineering Guide"
 description: "Real-time data engineering with Kafka: logs, partitions and consumer groups, delivery semantics, schemas, stream processing, CDC and operating streaming pipelines."
@@ -12,51 +12,65 @@ difficulty: "Intermediate"
 pillar: true
 featured: false
 related: ["articles:kafka/topics-partitions-consumer-groups", "articles:kafka/kafka-vs-message-queues", "system-designs:kafka-ingestion-system", "cheat-sheets:kafka"]
-sources: []
-versionContext: "Concepts apply to Apache Kafka 3.x and later"
+sources:
+  - { label: "Apache Kafka documentation", url: "https://kafka.apache.org/documentation/" }
+  - { label: "Apache Kafka 4.0.0 release announcement", url: "https://kafka.apache.org/blog/2025/03/18/apache-kafka-4.0.0-release-announcement/" }
+versionContext: "Describes Apache Kafka 4.x (KRaft only; ZooKeeper mode was removed in 4.0). The linked lessons record the exact versions their examples were run on."
 ---
 
-Real-time data engineering means processing events continuously instead of in scheduled batches. Kafka is the most common backbone; this guide connects the concepts from transport to processing to operations.
+Real-time data engineering means processing events continuously instead of in scheduled batches. Kafka is the most common backbone: a durable, partitioned log that many systems can write to and read from independently. This guide is the map of the Kafka course. Each step names the idea, the lesson that teaches it and the interview questions that test it.
 
 ## 1. Kafka's model
 
-A topic is a partitioned, replicated, append-only log. Partitions provide ordering and parallelism; keys route related events to the same partition; consumer groups divide partitions among consumers.
+A topic is a partitioned, replicated, append-only log. Partitions provide ordering and parallelism; keys route related events to the same partition; consumer groups divide partitions among consumers. Kafka 4.x runs without ZooKeeper: cluster metadata lives in a Raft log on KRaft controllers.
 
-Read: [Topics, partitions and consumer groups](/kafka/topics-partitions-consumer-groups/) · Practise: [Partitions and consumer groups](/interview/kafka/partitions-and-consumer-groups/)
+Read: [Topics, partitions and consumer groups](/kafka/topics-partitions-consumer-groups/) · Practise: [Partitions and consumer groups](/interview/kafka/partitions-and-consumer-groups/) · [How Kafka guarantees ordering](/interview/kafka/kafka-ordering-guarantees/) · [Choosing a partition count](/interview/kafka/choose-partition-count/)
 
-## 2. Log or queue?
+## 2. Storage, retention and compaction
 
-Logs retain events for replay by many consumers; queues distribute units of work. Most data pipelines want the log model.
+Each partition is a set of segment files. Retention deletes whole segments by time or size; compaction keeps the latest value per key and uses tombstones for deletes.
 
-Read: [Kafka vs message queues](/kafka/kafka-vs-message-queues/)
+Read: [Log storage, retention and compaction](/kafka/log-storage-retention-compaction/) · Practise: [Log compaction use cases](/interview/kafka/log-compaction-use-cases/) · [Sizing retention and disk](/interview/kafka/retention-sizing/)
 
-## 3. Delivery semantics
+## 3. Producers, consumers and groups
 
-At-least-once is the practical default; make processing and sinks idempotent. Kafka's exactly-once covers read-process-write within Kafka.
+Producers batch, compress and retry; `acks=all` plus the idempotent producer are the defaults. Consumers poll, process and commit offsets; the order of "process" and "commit" decides whether you lose or duplicate data. Rebalances move partitions between group members, and the KIP-848 consumer protocol makes them incremental.
 
-Practise: [At-least-once delivery](/interview/kafka/at-least-once-delivery/)
+Read: [Producers](/kafka/producers/) · [Consumers, offsets and lag](/kafka/consumers-offsets/) · [Consumer groups and rebalancing](/kafka/consumer-groups-rebalancing/) · Practise: [Consumer lag causes and fixes](/interview/kafka/consumer-lag-causes-fixes/) · [Rebalancing problems](/interview/kafka/rebalancing-problems/)
 
-## 4. Schemas and contracts
+## 4. Durability and delivery semantics
 
-Use a schema registry with compatibility rules so producers cannot break consumers.
+Replication factor 3, `min.insync.replicas=2` and `acks=all` survive a broker loss without losing acknowledged writes. At-least-once is the practical default; make processing and sinks idempotent. Kafka's exactly-once covers read-process-write within Kafka.
 
-Read: [Schema evolution patterns](/delta-lake/schema-evolution-patterns/)
+Read: [Replication and ISR](/kafka/replication-isr/) · [Delivery semantics and exactly-once](/kafka/delivery-semantics-exactly-once/) · Practise: [acks and min.insync.replicas](/interview/kafka/acks-min-insync-replicas-durability/) · [At-least-once delivery](/interview/kafka/at-least-once-delivery/) · [Exactly-once semantics](/interview/kafka/exactly-once-semantics/)
 
-## 5. Stream processing
+## 5. Integration and change data capture
 
-Aggregate by event time, use watermarks for late data, deduplicate by event id, checkpoint state and offsets.
+Kafka Connect runs reusable source and sink connectors; Debezium streams database changes from the transaction log, keyed by primary key, so they can be applied with ordered, idempotent merges. Bad records go to a dead-letter topic instead of blocking the pipeline.
 
-Read: [Batch vs streaming](/etl-elt/batch-vs-streaming/) · Case study: [Real-time analytics pipeline](/data-engineering/system-design/real-time-analytics-pipeline/)
+Read: [Kafka Connect and Debezium](/kafka/kafka-connect-debezium/) · [CDC patterns and failure modes](/etl-elt/cdc-patterns-and-failure-modes/) · Practise: [CDC with Debezium](/interview/kafka/cdc-with-debezium/) · [Poison messages and DLQs](/interview/kafka/poison-messages-dlq/) · Case study: [CDC platform](/data-engineering/system-design/change-data-capture-platform/)
 
-## 6. Change data capture
+## 6. Schemas and contracts
 
-Stream database changes from the transaction log through Kafka and apply them with ordered, idempotent merges.
+Use a schema registry with a compatibility mode so producers cannot break consumers, register schemas from CI, and ship real breaking changes as new topics.
 
-Read: [CDC patterns and failure modes](/etl-elt/cdc-patterns-and-failure-modes/) · Case study: [CDC platform](/data-engineering/system-design/change-data-capture-platform/)
+Read: [Schema Registry and schema evolution](/kafka/schema-registry-schema-evolution/) · Practise: [Schema evolution with Schema Registry](/interview/kafka/schema-evolution-schema-registry/)
 
-## 7. Operations
+## 7. Stream processing
 
-Monitor consumer lag, under-replicated partitions and end-to-end latency; size partitions for peak throughput and consumer parallelism; set retention longer than your longest outage.
+Aggregate by event time, use windows and grace periods (or watermarks) for late data, deduplicate by event ID, and checkpoint state together with offsets. Kafka Streams does this inside a JVM service; Spark and Flink run it on their own clusters.
+
+Read: [Kafka Streams basics](/kafka/kafka-streams-basics/) · [Batch vs streaming](/etl-elt/batch-vs-streaming/) · Case study: [Real-time analytics pipeline](/data-engineering/system-design/real-time-analytics-pipeline/)
+
+## 8. Log or queue?
+
+Logs retain events for replay by many consumers; queues distribute units of work. Most data pipelines want the log model; Kafka 4.2's share groups add queue-style consumption on Kafka topics.
+
+Read: [Kafka vs message queues](/kafka/kafka-vs-message-queues/) · Practise: [Kafka vs Kinesis vs a queue](/interview/kafka/kafka-vs-kinesis-vs-queues/)
+
+## 9. Operations
+
+Monitor consumer lag (in time, not only records), under-replicated and under-min-ISR partitions, and end-to-end latency; size partitions for peak throughput and consumer parallelism; set retention longer than your longest outage.
 
 Read: [Kafka ingestion system design](/data-engineering/system-design/kafka-ingestion-system/)
 

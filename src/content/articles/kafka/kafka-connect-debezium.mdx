@@ -16,6 +16,7 @@ learningObjectives:
 prerequisites: ["articles:kafka/consumers-offsets", "articles:kafka/log-storage-retention-compaction"]
 related: ["articles:etl-elt/cdc-patterns-and-failure-modes", "system-designs:change-data-capture-platform", "articles:kafka/delivery-semantics-exactly-once"]
 previous: "articles:kafka/delivery-semantics-exactly-once"
+next: "articles:kafka/schema-registry-schema-evolution"
 sources:
   - { label: "Debezium documentation: PostgreSQL connector", url: "https://debezium.io/documentation/reference/stable/connectors/postgresql.html" }
   - { label: "Debezium documentation: Signalling (incremental snapshots)", url: "https://debezium.io/documentation/reference/stable/configuration/signalling.html" }
@@ -519,7 +520,7 @@ For re-snapshotting a table while streaming continues, Debezium supports **incre
 
 - **WAL pile-up.** A replication slot keeps WAL until the connector confirms it. If the connector is stopped for days, the database disk fills. Monitor slot lag (`pg_replication_slots`), and drop slots of retired connectors.
 - **Quiet tables, busy database.** If captured tables rarely change while other tables do, the slot's position may not advance; Debezium's `heartbeat.interval.ms` (optionally with a heartbeat action query) keeps it moving.
-- **Schema changes.** Adding a column flows through, but consumers and schemas must handle it; renaming or retyping columns needs a plan (see Schema Registry).
+- **Schema changes.** Adding a column flows through, but consumers and schemas must handle it; renaming or retyping columns needs a plan (see [Schema Registry and schema evolution](/kafka/schema-registry-schema-evolution/)).
 - **Missing before-images.** Updates and deletes carry only the key unless the table uses `REPLICA IDENTITY FULL`.
 - **One slot per connector.** Two connectors cannot share `slot.name`.
 - **Snapshots are not free.** The initial snapshot of a large table reads it all; plan for load and time.

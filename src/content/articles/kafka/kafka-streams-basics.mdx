@@ -1,0 +1,292 @@
+---
+title: "Kafka Streams Basics: KStream, KTable, Windows, Joins and State"
+seoTitle: "Kafka Streams Basics: KStream, KTable, Windows"
+description: "How Kafka Streams applications work: KStream and KTable, stateless and stateful operations, windowed aggregations, joins and co-partitioning, state stores and exactly-once."
+technology: ["kafka"]
+topic: ["kafka-streams", "stream-processing", "windowing", "state-stores"]
+difficulty: "Advanced"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+learningObjectives:
+  - "Explain what Kafka Streams is and how an application scales and recovers"
+  - "Tell KStream, KTable and GlobalKTable apart and pick the right one for a topic"
+  - "Build a windowed aggregation with a grace period and explain what happens to late records"
+  - "Explain co-partitioning and when Kafka Streams creates repartition topics"
+  - "Describe state stores, changelog topics, standby replicas and exactly_once_v2"
+prerequisites: ["articles:kafka/consumer-groups-rebalancing", "articles:kafka/delivery-semantics-exactly-once", "articles:kafka/log-storage-retention-compaction"]
+related: ["articles:etl-elt/batch-vs-streaming", "system-designs:streaming-etl-with-kafka-spark", "system-designs:real-time-analytics-pipeline"]
+previous: "articles:kafka/schema-registry-schema-evolution"
+next: "articles:kafka/kafka-vs-message-queues"
+sources:
+  - { label: "Apache Kafka documentation: Kafka Streams", url: "https://kafka.apache.org/documentation/streams/" }
+  - { label: "Apache Kafka documentation: Streams core concepts", url: "https://kafka.apache.org/documentation/streams/core-concepts" }
+  - { label: "Apache Kafka documentation: Streams DSL developer guide", url: "https://kafka.apache.org/documentation/streams/developer-guide/dsl-api.html" }
+  - { label: "Apache Kafka documentation: Streams architecture", url: "https://kafka.apache.org/documentation/streams/architecture" }
+versionContext: "Written against the Apache Kafka 4.x Streams documentation (October 2026). The Java topology examples need a broker and are marked noexec; they use the current DSL (TimeWindows.ofSizeAndGrace, JoinWindows.ofTimeDifferenceWithNoGrace) and were checked against the API documentation, not run here. The windowing and stream-table simulations are plain Python 3.11 and were run."
+---
+
+Kafka Streams is a Java library for building stream-processing applications whose inputs and outputs are Kafka topics. There is no separate cluster to run: your application is an ordinary JVM process, and you scale it by starting more copies. Kafka itself provides the parallelism (partitions), the fault tolerance (consumer groups and changelog topics) and the exactly-once guarantees (transactions). This lesson covers the model, the main operations, windows, joins, state and the settings that matter in production and in interviews.
+
+## Where Kafka Streams fits
+
+| Option | Runs as | Good at | Consider when |
+|--------|---------|---------|---------------|
+| Plain consumer and producer | Your service | Simple per-record work, writing to external systems | No state, no joins |
+| **Kafka Streams** | A library inside your JVM service | Stateful Kafka-to-Kafka processing: aggregations, joins, enrichment, deduplication | Inputs and outputs are Kafka topics; the team runs JVM services |
+| Apache Flink | Its own cluster or managed service | Large stateful jobs, many sources and sinks, advanced event-time features | Heavy state, non-Kafka sources, a platform team to run it |
+| Spark Structured Streaming | Spark cluster | Micro-batch processing next to batch jobs, writing to lakehouse tables | The lakehouse is the main sink |
+
+Kafka Streams has no official Python API. Python teams usually use a consumer loop, Flink's or Spark's Python APIs, or a third-party Python stream library.
+
+## How an application runs
+
+- Every instance sets the same **`application.id`**. It is the consumer group ID, the prefix of internal topic names and the identity of the application's state.
+- The library splits the topology into **tasks**, one per input partition (per sub-topology). Tasks are distributed across all running instances and threads (`num.stream.threads`), using the consumer group machinery.
+- Partitions therefore cap parallelism, exactly as for consumers: a 12-partition input gives at most 12 busy tasks.
+- When an instance dies, its tasks move to the others. Their state is restored from **changelog topics** (below) before processing resumes.
+
+{/* noexec */}
+```java
+Properties props = new Properties();
+props.put(StreamsConfig.APPLICATION_ID_CONFIG, "page-view-counter");
+props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.StringSerde.class);
+props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.StringSerde.class);
+props.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
+props.put(StreamsConfig.NUM_STANDBY_REPLICAS_CONFIG, 1);
+
+StreamsBuilder builder = new StreamsBuilder();
+// ... define the topology (examples below) ...
+KafkaStreams streams = new KafkaStreams(builder.build(), props);
+Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+streams.start();
+```
+
+Kafka 4.x also ships a dedicated Streams rebalance protocol (KIP-1071, `group.protocol=streams`), which moves task assignment to the broker in the same way KIP-848 did for consumers. Applications use the classic protocol unless configured otherwise; check your version's documentation before switching.
+
+## KStream, KTable and GlobalKTable
+
+The central idea of Kafka Streams is the **stream-table duality**: a stream of changes can be replayed into a table, and a table's updates form a stream.
+
+| Abstraction | A record means | Typical topic | Example |
+|-------------|----------------|---------------|---------|
+| `KStream` | An independent event; every record counts | Event topics | `page-views`, `payments` |
+| `KTable` | An update to the latest value for its key; a `null` value deletes the key | Compacted changelog topics | `customers` (latest profile per customer) |
+| `GlobalKTable` | Same as `KTable`, but every instance holds a **full copy** of all partitions | Small reference topics | `currencies`, `countries` |
+
+The same three records give different answers depending on how they are read:
+
+```python
+records = [("c1", "bronze"), ("c2", "silver"), ("c1", "gold")]
+
+# KStream view: every record is an event
+as_stream = list(records)
+
+# KTable view: each record upserts the latest value for its key
+as_table = {}
+for key, value in records:
+    if value is None:
+        as_table.pop(key, None)      # a null value (tombstone) deletes the key
+    else:
+        as_table[key] = value
+
+print("stream:", as_stream)
+print("events per key (stream count):", {k: sum(1 for kk, _ in records if kk == k) for k, _ in records})
+print("table:", as_table, "| rows:", len(as_table))
+```
+
+```text
+stream: [('c1', 'bronze'), ('c2', 'silver'), ('c1', 'gold')]
+events per key (stream count): {'c1': 2, 'c2': 1}
+table: {'c1': 'gold', 'c2': 'silver'} | rows: 2
+```
+
+Counting the stream says customer `c1` produced two events; reading it as a table says `c1` is currently `gold`. Choosing the wrong abstraction is a classic bug: reading a profile changelog as a `KStream` and joining against it uses stale and duplicate values.
+
+## Stateless and stateful operations
+
+| Kind | Operations | Notes |
+|------|------------|-------|
+| Stateless | `filter`, `map`, `mapValues`, `flatMap`, `split` (branching), `peek`, `merge` | No state store; `mapValues` keeps the key, so it never forces repartitioning |
+| Re-keying | `selectKey`, `map`, `groupBy` | The next stateful step or join triggers a **repartition topic** so records with the new key meet in one task |
+| Stateful | `groupByKey().count()`, `aggregate`, `reduce`, joins, windowed versions of these | Backed by state stores |
+
+{/* noexec */}
+```java
+KStream<String, String> views = builder.stream("page-views");   // key = user_id, value = page
+
+views.filter((user, page) -> page.startsWith("/product/"))
+     .selectKey((user, page) -> page)          // re-key by page: the count below causes a repartition
+     .groupByKey()
+     .count(Materialized.as("product-view-counts"))
+     .toStream()
+     .to("product-view-counts", Produced.with(Serdes.String(), Serdes.Long()));
+```
+
+**Repartition topics** are internal topics named `<application.id>-...-repartition`. They are correct and necessary, but each one adds a network hop, disk and latency. Use `mapValues` instead of `map` when the key does not change, and key topics upstream by the field you aggregate on when you can.
+
+## Windowed aggregations
+
+Aggregations over unbounded streams need **windows**:
+
+| Window | Definition | Use |
+|--------|------------|-----|
+| Tumbling | Fixed size, no overlap: `TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5))` | Counts per 5-minute bucket |
+| Hopping | Fixed size, advancing by a smaller step: `...ofSizeAndGrace(size, grace).advanceBy(step)` | Moving averages |
+| Sliding | Defined by a maximum time difference between records: `SlidingWindows.ofTimeDifferenceWithNoGrace(...)` | "Within any 10 minutes" rules |
+| Session | Activity separated by an inactivity gap: `SessionWindows.ofInactivityGapWithNoGrace(...)` | User sessions |
+
+Windows use **event time**: by default the record's timestamp (set by the producer, or the broker with `LogAppendTime`), or a custom `TimestampExtractor` that reads a field from the payload. **Stream time** is the largest timestamp the task has seen so far. A window accepts records until stream time passes the window's end plus its **grace period**; later records are **dropped** (and counted in a metric).
+
+{/* noexec */}
+```java
+views.groupByKey()
+     .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofMinutes(5), Duration.ofMinutes(2)))
+     .count(Materialized.as("views-per-5min"))
+     .suppress(Suppressed.untilWindowCloses(Suppressed.BufferConfig.unbounded()))  // one final result per window
+     .toStream()
+     .map((windowedKey, count) -> KeyValue.pair(
+             windowedKey.key() + "@" + windowedKey.window().startTime(), count))
+     .to("page-view-counts", Produced.with(Serdes.String(), Serdes.Long()));
+```
+
+Without `suppress`, a windowed `count` emits an updated result as records arrive (subject to caching), so downstream sees several versions of each window. With `suppress(untilWindowCloses(...))`, it emits once, after the grace period, at the price of latency.
+
+### Worked example: grace period and late records
+
+This simulation applies the tumbling-window and grace rules to out-of-order events (times in minutes):
+
+```python
+from collections import defaultdict
+
+WINDOW, GRACE = 5, 2
+# (event_time_minute, user) in arrival order; some arrive late
+events = [(0, "u1"), (1, "u2"), (4, "u1"), (6, "u3"), (3, "u2"), (9, "u1"),
+          (12, "u2"), (2, "u3"), (8, "u2")]
+
+counts, dropped, stream_time = defaultdict(int), [], -1
+for t, user in events:
+    stream_time = max(stream_time, t)
+    start = (t // WINDOW) * WINDOW
+    window_close = start + WINDOW + GRACE        # accepted while stream_time < close
+    if stream_time >= window_close:
+        dropped.append((t, user, f"window [{start},{start + WINDOW}) closed at stream time {stream_time}"))
+        continue
+    counts[start] += 1
+
+for start in sorted(counts):
+    print(f"window [{start:2},{start + WINDOW:2}): {counts[start]} events")
+for d in dropped:
+    print("dropped:", d)
+```
+
+```text
+window [ 0, 5): 4 events
+window [ 5,10): 2 events
+window [10,15): 1 events
+dropped: (2, 'u3', 'window [0,5) closed at stream time 12')
+dropped: (8, 'u2', 'window [5,10) closed at stream time 12')
+```
+
+The event at minute 3 arrived after minute 6 but within the grace period, so it was counted. The event at minute 2 arrived when stream time had reached 12, past its window's close at 7, so it was dropped. The event at minute 8 was dropped too: its window closes at 10 + 2 = 12, and stream time had already reached 12, because the minute-12 event arrived first. One early record from a fast producer can close windows for everyone on that task. Choosing the grace period is a trade-off between completeness and how long results (and state) are held.
+
+## Joins and co-partitioning
+
+| Join | Semantics | Windowed? |
+|------|-----------|-----------|
+| `KStream`-`KStream` | Match events from both streams with the same key within a time difference | Yes: `JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofMinutes(10))` |
+| `KStream`-`KTable` | Enrich each event with the **current** table value for its key (a lookup) | No |
+| `KTable`-`KTable` | Result is a table, updated when either side changes; foreign-key joins are also supported | No |
+| `KStream`-`GlobalKTable` | Lookup with a key extracted from the event; no co-partitioning needed | No |
+
+{/* noexec */}
+```java
+KTable<String, String> customers = builder.table("customers");   // compacted, key = customer_id
+KStream<String, String> orders = builder.stream("orders");       // key = customer_id
+
+orders.join(customers, (order, customer) -> order + " | " + customer)   // inner join: needs a match
+      .to("orders-enriched");
+```
+
+**Co-partitioning** is the rule that makes joins work without a shuffle: both sides must be keyed by the join key, have the **same number of partitions**, and use the same partitioner, so key `c1` sits in partition N on both topics and both land in the same task. Kafka Streams checks partition counts at start-up; if the keys differ it inserts a repartition topic. A `GlobalKTable` sidesteps the rule by giving every instance all the data, which only suits small tables.
+
+Timing matters for stream-table joins: an order that arrives before its customer row exists finds no match (an inner join drops it; a left join emits it with a null). Load reference tables first, or use a versioned state store and timestamps to join against the table as of the event's time.
+
+## State stores and fault tolerance
+
+Stateful operations keep their state in **state stores**, local to each task, by default in **RocksDB** on the instance's disk (in-memory stores are an option).
+
+- Each store is backed by a compacted **changelog topic** (`<application.id>-<store>-changelog`). Every update is written to it, so a task that moves to another instance rebuilds its store by replaying the changelog.
+- **Restoration time** grows with state size. **Standby replicas** (`num.standby.replicas`) keep warm copies of stores on other instances, so failover does not wait for a full replay.
+- Stores can be queried from outside the topology with **interactive queries**, for example to serve "current count for this key" from the application's API.
+
+### Processing guarantees
+
+| `processing.guarantee` | Behaviour |
+|------------------------|-----------|
+| `at_least_once` (default) | Offsets are committed periodically (`commit.interval.ms`, 30 seconds by default); a crash reprocesses since the last commit, so outputs and state updates can repeat |
+| `exactly_once_v2` | Each task's output records, changelog writes and input offsets are committed in one Kafka transaction; consumers of the output must use `read_committed`. The commit interval drops to 100 ms by default |
+
+`exactly_once_v2` is the read-process-write pattern from the [delivery semantics lesson](/kafka/delivery-semantics-exactly-once/), applied automatically. It covers Kafka-to-Kafka effects only: a call to an external API inside a `foreach` can still happen twice.
+
+## Pitfalls
+
+- **Joining topics that are not co-partitioned.** Different partition counts fail at start-up; different partitioners (for example a Python producer using librdkafka's default) silently break joins.
+- **Unbounded state.** Aggregations over high-cardinality keys without windows, or windows with long retention, grow RocksDB without limit. Bound state with windows and retention, and watch disk.
+- **Changing the topology of a running application.** Renaming or reordering operators changes generated internal topic and store names, so state is not found. Name stores and processors explicitly (`Materialized.as`, `Named.as`), and use a new `application.id` for incompatible changes.
+- **Long restores after failure.** Large state without standby replicas means minutes or hours of catch-up. Add standbys and keep state small.
+- **Treating the default `at_least_once` as exactly-once.** Choose `exactly_once_v2` when duplicates in outputs are not acceptable.
+
+## Practice questions
+
+<details>
+<summary>What is the difference between a KStream and a KTable?</summary>
+
+A `KStream` treats every record as an independent event, so counting it counts events. A `KTable` treats each record as an update to the latest value for its key (and a null value as a delete), so it represents current state. Event topics are read as streams; compacted changelog topics, such as customer profiles, are read as tables.
+
+</details>
+
+<details>
+<summary>How does a Kafka Streams application scale, and what limits it?</summary>
+
+Every instance shares the same `application.id`, which acts as the consumer group. The topology is split into tasks, one per input partition, and tasks are spread across instances and threads. Adding instances adds throughput until there is one task per thread; beyond that, extra instances only act as standbys. The input partition count is the ceiling.
+
+</details>
+
+<details>
+<summary>Why would Kafka Streams create a repartition topic?</summary>
+
+When a stateful operation or join needs records grouped by a key that differs from the input key, for example after `selectKey` or `groupBy` on another field. It writes the re-keyed records to an internal repartition topic so that all records with the new key reach the same task. Avoid unnecessary ones by keeping keys unchanged (`mapValues`) and by keying topics upstream on the aggregation key.
+
+</details>
+
+<details>
+<summary>What is a grace period, and what happens to a record that arrives after it?</summary>
+
+The grace period is how long after a window's end the window still accepts out-of-order records, measured in stream time (the largest event timestamp seen). A record that belongs to a window whose end plus grace has already passed is dropped and recorded in a metric. A longer grace improves completeness but delays final results and keeps state longer.
+
+</details>
+
+<details>
+<summary>How does Kafka Streams recover state when an instance fails?</summary>
+
+Each state store is backed by a compacted changelog topic. When a task moves to another instance, the store is rebuilt by replaying its changelog from Kafka before processing resumes. Standby replicas keep up-to-date copies on other instances so that failover is fast. With `exactly_once_v2`, the changelog writes, outputs and offsets are committed together, so the restored state matches the committed position.
+
+</details>
+
+<details>
+<summary>When would you choose Flink or Spark over Kafka Streams?</summary>
+
+When sources or sinks are not mainly Kafka, when state is very large or needs features such as savepoint-based upgrades across topology changes, when the team does not run JVM services, or when the main sink is a lakehouse table that Spark already writes. Kafka Streams is strongest for Kafka-to-Kafka processing embedded in a service, with no extra cluster to operate.
+
+</details>
+
+## Key takeaways
+
+- Kafka Streams is a Java library: an application is a set of instances sharing an `application.id`, with one task per input partition.
+- `KStream` is events, `KTable` is latest value per key, `GlobalKTable` is a full copy on every instance for small lookups.
+- Windows use event time with a grace period; late records beyond it are dropped, and `suppress` emits one final result per window.
+- Joins need co-partitioning (same key, same partition count, same partitioner); re-keying creates repartition topics.
+- State lives in RocksDB stores backed by compacted changelog topics, with standby replicas for fast failover.
+- `exactly_once_v2` makes outputs, state and offsets atomic for Kafka-to-Kafka processing; the default is at-least-once.

@@ -379,7 +379,7 @@ The last two lines show the classic weakness of range assignment: because it wor
 
 ### Replica placement is a different assignment
 
-Do not confuse consumer assignment with **replica placement**: when you create a topic, the controller spreads each partition's replicas and leaders across brokers (and across racks when `broker.rack` is set), as the rotated `Replicas` lists in the `describe` output show. Moving replicas later is done with `kafka-reassign-partitions.sh` or a tool such as Cruise Control (see operating Kafka).
+Do not confuse consumer assignment with **replica placement**: when you create a topic, the controller spreads each partition's replicas and leaders across brokers (and across racks when `broker.rack` is set), as the rotated `Replicas` lists in the `describe` output show. Moving replicas later is done with `kafka-reassign-partitions.sh` or a balancer such as Cruise Control.
 
 ### Pitfalls
 
