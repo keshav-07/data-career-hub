@@ -1,0 +1,349 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Testing Python Data Pipelines with pytest"
+seoTitle: "Testing Python Data Pipelines with pytest"
+description: "pytest for data pipelines: test transforms with parametrize, fixtures and tmp_path, fake APIs with monkeypatch, test database loads and idempotency, and compare DataFrames."
+technology: ["python"]
+topic: ["testing", "pytest"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Lay out a pipeline project so pytest finds and imports the code"
+  - "Write table-driven tests with parametrize, including the edge cases that break pipelines"
+  - "Use fixtures, tmp_path and an in-memory database for fast integration tests"
+  - "Replace network calls with monkeypatch and test retry behaviour without waiting"
+  - "Assert idempotency and compare DataFrames with readable diffs"
+prerequisites: ["articles:python/pandas-for-data-engineers"]
+related: ["articles:etl-elt/testing-data-pipelines-cicd", "articles:python/idempotent-csv-loader", "articles:airflow/best-practices-testing-cicd", "articles:python/functions-modules-reusable-code"]
+previous: "articles:python/pandas-for-data-engineers"
+next: "articles:python/idempotent-csv-loader"
+sources:
+  - { label: "pytest documentation: Get started", url: "https://docs.pytest.org/en/stable/getting-started.html" }
+  - { label: "pytest documentation: How to parametrize fixtures and test functions", url: "https://docs.pytest.org/en/stable/how-to/parametrize.html" }
+  - { label: "pytest documentation: How to use temporary directories and files in tests", url: "https://docs.pytest.org/en/stable/how-to/tmp_path.html" }
+  - { label: "pytest documentation: How to monkeypatch/mock modules and environments", url: "https://docs.pytest.org/en/stable/how-to/monkeypatch.html" }
+versionContext: "Examples run on Python 3.11 with pytest 9.1 and pandas 3.0. Each block writes files into a temporary project and runs pytest on it, so the output shown is pytest's real summary."
+---
+
+Pipeline bugs are expensive because they are quiet: a deduplication that keeps the wrong version, a time zone off by an hour, a join that doubles revenue. Tests are how you find them before the finance team does. pytest is the standard test runner for Python: tests are plain functions whose names start with `test_`, and checks are plain `assert` statements that pytest rewrites to show useful details on failure.
+
+## Project layout
+
+Keep pipeline logic in an importable package and tests next to it:
+
+```text
+orders_pipeline/
+  pyproject.toml
+  src/orders/__init__.py
+  src/orders/transform.py      # pure functions
+  src/orders/load.py           # database writes
+  tests/conftest.py            # shared fixtures
+  tests/test_transform.py
+  tests/test_load.py
+```
+
+Install the package in editable mode (`pip install -e .`) so tests import it the same way production does, then run `pytest` from the project root. To keep this page self-contained, the examples build a tiny project in a temporary directory and run pytest on it:
+
+```python
+import subprocess
+import sys
+import tempfile
+import textwrap
+from pathlib import Path
+
+project = Path(tempfile.mkdtemp())
+
+def write(relative: str, source: str) -> None:
+    path = project / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(source), encoding="utf-8")
+
+def run_pytest(*args: str) -> None:
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *args],
+                            cwd=project, capture_output=True, text=True)
+    print(result.stdout.strip().splitlines()[-1].split(" in ")[0])     # the summary, without timing
+
+write("orders/__init__.py", "")
+write("orders/transform.py", '''
+    from datetime import datetime, timezone
+    from decimal import Decimal, InvalidOperation
+
+    def parse_amount(raw):
+        """Return the amount in cents, or None if the text is not a valid non-negative amount."""
+        try:
+            value = Decimal(raw.strip())
+        except (InvalidOperation, AttributeError):
+            return None
+        if value < 0 or value.as_tuple().exponent < -2:
+            return None
+        return int(value * 100)
+
+    def to_utc(ts):
+        return datetime.fromisoformat(ts).astimezone(timezone.utc)
+
+    def latest_per_key(rows, key="order_id", ts="updated_at"):
+        latest = {}
+        for r in rows:
+            if r[key] not in latest or r[ts] > latest[r[key]][ts]:
+                latest[r[key]] = r
+        return [latest[k] for k in sorted(latest)]
+''')
+print("project ready")
+```
+
+```text
+project ready
+```
+
+## Table-driven tests with parametrize
+
+Most transformation tests are "this input gives that output". `@pytest.mark.parametrize` runs one test function per case and reports each separately, which makes it cheap to cover the edge cases that matter:
+
+```python
+write("tests/test_transform.py", '''
+    import pytest
+    from datetime import datetime, timezone
+    from orders.transform import parse_amount, to_utc, latest_per_key
+
+    @pytest.mark.parametrize("raw, expected", [
+        ("19.99", 1999),       # float("19.99") * 100 would give 1998.9999...
+        (" 5 ", 500),          # whitespace
+        ("0", 0),
+        ("-1.00", None),       # negative
+        ("1.999", None),       # more than two decimals
+        ("abc", None),
+        ("", None),
+        (None, None),          # missing field
+    ])
+    def test_parse_amount(raw, expected):
+        assert parse_amount(raw) == expected
+
+    def test_to_utc_converts_offsets():
+        assert to_utc("2026-10-05T01:30:00+02:00") == datetime(2026, 10, 4, 23, 30, tzinfo=timezone.utc)
+
+    def test_latest_per_key_handles_out_of_order_versions():
+        rows = [
+            {"order_id": 1, "updated_at": "2026-10-05T10:00", "amount": 10},
+            {"order_id": 1, "updated_at": "2026-10-05T12:00", "amount": 12},
+            {"order_id": 1, "updated_at": "2026-10-05T11:00", "amount": 11},
+            {"order_id": 2, "updated_at": "2026-10-05T09:00", "amount": 5},
+        ]
+        assert [r["amount"] for r in latest_per_key(rows)] == [12, 5]
+
+    def test_latest_per_key_empty_input():
+        assert latest_per_key([]) == []
+''')
+run_pytest("tests/test_transform.py")
+```
+
+```text
+11 passed
+```
+
+Eight parametrised cases and three plain tests make eleven (pytest also prints the run time, trimmed here). The cases are where the value is: whitespace, negatives, too many decimals, empty strings and missing fields are exactly what real files contain.
+
+## When a test fails
+
+pytest's assertion rewriting shows both sides of a failed comparison, so you rarely need print statements. Here a deliberately wrong expectation:
+
+```python
+write("tests/test_failure_demo.py", '''
+    from orders.transform import latest_per_key
+
+    def test_wrong_expectation():
+        rows = [{"order_id": 1, "updated_at": "b", "v": 2}, {"order_id": 1, "updated_at": "a", "v": 1}]
+        assert latest_per_key(rows) == [{"order_id": 1, "updated_at": "a", "v": 1}]
+''')
+result = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_failure_demo.py"],
+                        cwd=project, capture_output=True, text=True)
+print([line for line in result.stdout.splitlines() if line.startswith("E ")][0])
+print(result.stdout.strip().splitlines()[-1].split(" in ")[0])
+(project / "tests/test_failure_demo.py").unlink()
+```
+
+```text
+E       AssertionError: assert [{'order_id':... 'b', 'v': 2}] == [{'order_id':... 'a', 'v': 1}]
+1 failed
+```
+
+With `-vv`, pytest prints the full differing dictionaries.
+
+## Fixtures, tmp_path and an in-memory database
+
+A **fixture** is a function that prepares something a test needs; tests ask for it by naming it as a parameter. Fixtures in `conftest.py` are available to every test in the directory. Built-in fixtures such as `tmp_path` (a fresh temporary directory per test) and `monkeypatch` cover most needs.
+
+```python
+write("orders/load.py", '''
+    import csv
+    from .transform import parse_amount
+
+    SCHEMA = "CREATE TABLE IF NOT EXISTS orders (order_id INTEGER PRIMARY KEY, amount_cents INTEGER NOT NULL)"
+
+    def load_csv(conn, path):
+        """Upsert orders from a CSV file; return (loaded, rejected)."""
+        loaded, rejected = 0, 0
+        with path.open(newline="", encoding="utf-8") as f, conn:
+            for row in csv.DictReader(f):
+                cents = parse_amount(row.get("amount"))
+                if cents is None or not row.get("order_id", "").isdigit():
+                    rejected += 1
+                    continue
+                conn.execute("INSERT INTO orders VALUES (?, ?) "
+                             "ON CONFLICT(order_id) DO UPDATE SET amount_cents = excluded.amount_cents",
+                             (int(row["order_id"]), cents))
+                loaded += 1
+        return loaded, rejected
+''')
+write("tests/conftest.py", '''
+    import sqlite3
+    import pytest
+    from orders.load import SCHEMA
+
+    @pytest.fixture
+    def conn():
+        connection = sqlite3.connect(":memory:")
+        connection.execute(SCHEMA)
+        yield connection          # the test runs here
+        connection.close()        # teardown runs even if the test fails
+
+    @pytest.fixture
+    def orders_csv(tmp_path):
+        path = tmp_path / "orders.csv"
+        path.write_text("order_id,amount\\n1,19.99\\n2,5\\nx,1\\n3,-2\\n", encoding="utf-8")
+        return path
+''')
+write("tests/test_load.py", '''
+    from orders.load import load_csv
+
+    def snapshot(conn):
+        return conn.execute("SELECT order_id, amount_cents FROM orders ORDER BY order_id").fetchall()
+
+    def test_load_counts_rejects(conn, orders_csv):
+        assert load_csv(conn, orders_csv) == (2, 2)
+        assert snapshot(conn) == [(1, 1999), (2, 500)]
+
+    def test_load_is_idempotent(conn, orders_csv):
+        load_csv(conn, orders_csv)
+        first = snapshot(conn)
+        load_csv(conn, orders_csv)
+        assert snapshot(conn) == first
+''')
+run_pytest("tests/")
+```
+
+```text
+13 passed
+```
+
+The second load test is the **run-twice idempotency test**: the most valuable single test for any loader, because retries and backfills will run it twice in production anyway. An in-memory SQLite database keeps these tests fast; for SQL that uses features of your real database, run the same tests against PostgreSQL in a container or a CI schema (see [testing data pipelines](/etl-elt/testing-data-pipelines-cicd/)).
+
+## Faking the outside world with monkeypatch
+
+Unit tests should not call real APIs, sleep through real backoff delays or read real credentials. `monkeypatch` replaces an attribute, environment variable or dictionary item for the duration of one test and restores it afterwards:
+
+```python
+write("orders/client.py", '''
+    import os
+    import time
+
+    class Transient(Exception):
+        pass
+
+    def fetch_with_retry(fetch, attempts=3, base_delay=1.0):
+        for attempt in range(1, attempts + 1):
+            try:
+                return fetch(token=os.environ["ORDERS_API_TOKEN"])
+            except Transient:
+                if attempt == attempts:
+                    raise
+                time.sleep(base_delay * 2 ** (attempt - 1))
+''')
+write("tests/test_client.py", '''
+    import pytest
+    from orders import client
+
+    def test_retries_then_succeeds_without_sleeping(monkeypatch):
+        monkeypatch.setenv("ORDERS_API_TOKEN", "test-token")
+        sleeps = []
+        monkeypatch.setattr(client.time, "sleep", sleeps.append)
+        responses = iter([client.Transient("503"), client.Transient("timeout"), {"rows": 3}])
+
+        def fake_fetch(token):
+            assert token == "test-token"
+            r = next(responses)
+            if isinstance(r, Exception):
+                raise r
+            return r
+
+        assert client.fetch_with_retry(fake_fetch) == {"rows": 3}
+        assert sleeps == [1.0, 2.0]
+
+    def test_gives_up_after_last_attempt(monkeypatch):
+        monkeypatch.setenv("ORDERS_API_TOKEN", "t")
+        monkeypatch.setattr(client.time, "sleep", lambda s: None)
+        def always_fails(token):
+            raise client.Transient("down")
+        with pytest.raises(client.Transient, match="down"):
+            client.fetch_with_retry(always_fails)
+''')
+run_pytest("tests/test_client.py")
+```
+
+```text
+2 passed
+```
+
+The test checks the backoff schedule (1 s, then 2 s) without waiting three seconds, and `pytest.raises` asserts that the final failure propagates. Passing collaborators in as arguments (like `fetch` here) makes this even easier than patching; see [reusable pipeline code](/python/functions-modules-reusable-code/).
+
+## Comparing DataFrames
+
+`assert df1 == df2` does not work for DataFrames (it compares element-wise). Use `pandas.testing.assert_frame_equal`, which checks values, dtypes, index and column order and prints a readable difference:
+
+```python
+write("tests/test_frames.py", '''
+    import pandas as pd
+    import pandas.testing as pdt
+
+    def daily_revenue(df):
+        return (df.groupby("day", as_index=False)["amount"].sum()
+                  .rename(columns={"amount": "revenue"}))
+
+    def test_daily_revenue():
+        df = pd.DataFrame({"day": ["d1", "d1", "d2"], "amount": [10.0, 5.0, 7.5]})
+        expected = pd.DataFrame({"day": ["d1", "d2"], "revenue": [15.0, 7.5]})
+        pdt.assert_frame_equal(daily_revenue(df), expected)
+''')
+run_pytest("tests/test_frames.py")
+```
+
+```text
+1 passed
+```
+
+Pass `check_dtype=False` or `check_like=True` (ignore column order) only when that difference genuinely does not matter.
+
+## Habits that keep a test suite useful
+
+- **Test behaviour, not implementation**: assert on outputs, not on which helper was called.
+- **One reason to fail per test**, with a name that says what broke (`test_latest_per_key_handles_out_of_order_versions`).
+- **Small, readable fixtures**: a handful of rows, each there for a reason. Never copy production data with personal information into tests.
+- **Fast by default**: mark slow integration tests (`@pytest.mark.integration`, registered in `pyproject.toml`) and run them separately in CI if needed.
+- **Run in CI on every pull request**, together with linting.
+
+## Common mistakes
+
+1. Testing only the happy path.
+2. Tests that call real APIs or databases and fail when the network is slow.
+3. Real `time.sleep` in retry tests.
+4. Asserting on floats with `==` (use `pytest.approx`) or on DataFrames with `==`.
+5. Shared mutable state between tests, so they pass alone and fail together.
+6. No idempotency test for loaders.
+
+## Interview angle
+
+"How would you test this function?" often follows a coding question. Name the cases first (empty input, duplicates, nulls, boundaries, time zones, malformed values), then show parametrize for the table of cases, fixtures for setup, monkeypatch for external calls and a run-twice test for loads. For pipeline-level testing, see [how do you test a data pipeline?](/interview/data-engineering/test-a-data-pipeline/).
+
+## Key takeaway
+
+Keep logic in importable functions, cover edge cases with parametrized tests, build state with fixtures and `tmp_path`, fake the network with monkeypatch, assert idempotency by loading twice, and compare DataFrames with `assert_frame_equal`.
