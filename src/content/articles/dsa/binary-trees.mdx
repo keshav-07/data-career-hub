@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["trees", "dfs", "bfs", "tries"]
 difficulty: "Intermediate"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Describe binary tree vocabulary and the cost of tree operations in terms of height"
   - "Write pre-order, in-order, post-order and level-order traversals, recursively and iteratively"
@@ -75,8 +75,8 @@ def to_level_order(root):
     return out
 
 
-t = from_level_order([3, 9, 20, None, None, 15, 7])
-assert to_level_order(t) == [3, 9, 20, None, None, 15, 7]
+t = from_level_order([8, 4, 12, None, None, 10, 14])
+assert to_level_order(t) == [8, 4, 12, None, None, 10, 14]
 assert from_level_order([]) is None
 ```
 
@@ -136,10 +136,10 @@ def inorder_iterative(root):
     return out
 
 
-t = from_level_order([1, 2, 3, 4, 5])
-assert preorder(t) == [1, 2, 4, 5, 3]
-assert inorder(t) == [4, 2, 5, 1, 3]
-assert postorder(t) == [4, 5, 2, 3, 1]
+t = from_level_order([6, 2, 9, 1, 4])
+assert preorder(t) == [6, 2, 1, 4, 9]
+assert inorder(t) == [1, 2, 4, 6, 9]
+assert postorder(t) == [1, 4, 2, 9, 6]
 assert inorder_iterative(t) == inorder(t)
 ```
 
@@ -176,13 +176,13 @@ def is_subtree(root, sub):
     return is_same_tree(root, sub) or is_subtree(root.left, sub) or is_subtree(root.right, sub)
 
 
-t = from_level_order([3, 9, 20, None, None, 15, 7])
+t = from_level_order([8, 4, 12, None, None, 10, 14])
 assert max_depth(t) == 3 and max_depth(None) == 0
-assert to_level_order(invert_tree(from_level_order([4, 2, 7, 1, 3, 6, 9]))) == [4, 7, 2, 9, 6, 3, 1]
+assert to_level_order(invert_tree(from_level_order([5, 3, 8, 1, 4, 7, 9]))) == [5, 8, 3, 9, 7, 4, 1]
 assert is_same_tree(from_level_order([1, 2, 3]), from_level_order([1, 2, 3]))
 assert not is_same_tree(from_level_order([1, 2]), from_level_order([1, None, 2]))
-assert is_subtree(from_level_order([3, 4, 5, 1, 2]), from_level_order([4, 1, 2]))
-assert not is_subtree(from_level_order([3, 4, 5, 1, 2, None, None, None, None, 0]), from_level_order([4, 1, 2]))
+assert is_subtree(from_level_order([7, 3, 9, 2, 5]), from_level_order([3, 2, 5]))
+assert not is_subtree(from_level_order([7, 3, 9, 2, 5, None, None, None, None, 1]), from_level_order([3, 2, 5]))  # extra child
 ```
 
 ### Return one thing, track another: diameter, balance, max path sum
@@ -234,12 +234,12 @@ def max_path_sum(root):
     return best
 
 
-assert diameter_of_binary_tree(from_level_order([1, 2, 3, 4, 5])) == 3
+assert diameter_of_binary_tree(from_level_order([6, 2, 9, 1, 4])) == 3     # 1 -> 2 -> 6 -> 9
 assert diameter_of_binary_tree(from_level_order([1])) == 0
-assert is_balanced(from_level_order([3, 9, 20, None, None, 15, 7])) is True
-assert is_balanced(from_level_order([1, 2, 2, 3, 3, None, None, 4, 4])) is False
-assert max_path_sum(from_level_order([1, 2, 3])) == 6
-assert max_path_sum(from_level_order([-10, 9, 20, None, None, 15, 7])) == 42
+assert is_balanced(from_level_order([8, 4, 12, None, None, 10, 14])) is True
+assert is_balanced(from_level_order([5, 4, 6, 3, None, None, None, 2])) is False   # left chain of 3
+assert max_path_sum(from_level_order([2, 5, 4])) == 11
+assert max_path_sum(from_level_order([-5, 6, 10, None, None, -2, 8])) == 19     # 6 + -5 + 10 + 8
 assert max_path_sum(from_level_order([-3])) == -3
 ```
 
@@ -259,8 +259,8 @@ def good_nodes(root):
     return visit(root, float("-inf"))
 
 
-assert good_nodes(from_level_order([3, 1, 4, 3, None, 1, 5])) == 4
-assert good_nodes(from_level_order([3, 3, None, 4, 2])) == 3
+assert good_nodes(from_level_order([5, 2, 7, 6, None, 1, 9])) == 4
+assert good_nodes(from_level_order([4, 4, None, 1, 6])) == 3       # equal to the max still counts
 assert good_nodes(from_level_order([1])) == 1
 ```
 
@@ -290,10 +290,10 @@ def right_side_view(root):
     return [level[-1] for level in level_order(root)]
 
 
-assert level_order(from_level_order([3, 9, 20, None, None, 15, 7])) == [[3], [9, 20], [15, 7]]
+assert level_order(from_level_order([8, 4, 12, None, None, 10, 14])) == [[8], [4, 12], [10, 14]]
 assert level_order(None) == []
-assert right_side_view(from_level_order([1, 2, 3, None, 5, None, 4])) == [1, 3, 4]
-assert right_side_view(from_level_order([1, 2, 3, 4])) == [1, 3, 4]
+assert right_side_view(from_level_order([10, 6, 15, None, 7])) == [10, 15, 7]
+assert right_side_view(from_level_order([10, 6, 15, 2])) == [10, 15, 2]    # the deepest node is on the left
 ```
 
 The last test is the trap in Right Side View: the rightmost node of a level may be in the left subtree.
@@ -321,10 +321,10 @@ def find(root, val):
     return find(root.left, val) or find(root.right, val)
 
 
-t = from_level_order([3, 5, 1, 6, 2, 0, 8, None, None, 7, 4])
-assert lowest_common_ancestor(t, find(t, 5), find(t, 1)).val == 3
-assert lowest_common_ancestor(t, find(t, 5), find(t, 4)).val == 5     # a node is its own ancestor
-assert lowest_common_ancestor(t, find(t, 7), find(t, 8)).val == 3
+t = from_level_order([20, 8, 22, 4, 12, None, 25, None, None, 10, 14])
+assert lowest_common_ancestor(t, find(t, 8), find(t, 22)).val == 20
+assert lowest_common_ancestor(t, find(t, 8), find(t, 14)).val == 8     # a node is its own ancestor
+assert lowest_common_ancestor(t, find(t, 10), find(t, 25)).val == 20
 ```
 
 This version assumes both nodes exist in the tree. If they might not, track whether each was actually found.
@@ -351,8 +351,8 @@ def build_tree(preorder_vals, inorder_vals):
     return build(0, len(inorder_vals))
 
 
-t = build_tree([3, 9, 20, 15, 7], [9, 3, 15, 20, 7])
-assert to_level_order(t) == [3, 9, 20, None, None, 15, 7]
+t = build_tree([8, 4, 12, 10, 14], [4, 8, 10, 12, 14])
+assert to_level_order(t) == [8, 4, 12, None, None, 10, 14]
 assert build_tree([], []) is None
 ```
 
@@ -393,10 +393,10 @@ def deserialize(data):
     return build()
 
 
-for shape in ([1, 2, 3, None, None, 4, 5], [], [-1], [1, None, 2, None, 3]):
+for shape in ([5, 1, 9, None, None, 7, 11], [], [-1], [1, None, 2, None, 3]):
     tree = from_level_order(shape)
     assert to_level_order(deserialize(serialize(tree))) == shape
-assert serialize(from_level_order([1, 2, 3, None, None, 4, 5])) == "1,2,#,#,3,4,#,#,5,#,#"
+assert serialize(from_level_order([5, 1, 9, None, None, 7, 11])) == "5,1,#,#,9,7,#,#,11,#,#"
 ```
 
 A traversal without null markers is ambiguous: many trees share the same pre-order sequence. Markers (or two traversals, as in `build_tree`) remove the ambiguity.
@@ -449,16 +449,16 @@ class WordDictionary(Trie):
 
 
 trie = Trie()
-trie.insert("apple")
-assert trie.search("apple") and not trie.search("app") and trie.starts_with("app")
-trie.insert("app")
-assert trie.search("app")
+trie.insert("spark")
+assert trie.search("spark") and not trie.search("spa") and trie.starts_with("spa")
+trie.insert("spa")
+assert trie.search("spa") and not trie.starts_with("spy")
 
 wd = WordDictionary()
-for w in ("bad", "dad", "mad"):
+for w in ("log", "lag", "fog"):
     wd.insert(w)
-assert not wd.search("pad") and wd.search("bad") and wd.search(".ad") and wd.search("b..")
-assert not wd.search("b.")
+assert not wd.search("dog") and wd.search("log") and wd.search(".og") and wd.search("l..")
+assert not wd.search("l.")                    # dots still have to match the length
 ```
 
 Nested dicts keep the code short. A node class with a `children` dict and an `is_word` flag is the more explicit alternative and is equally acceptable. The end marker matters: without it you cannot tell that "app" is a word rather than just a prefix of "apple".
