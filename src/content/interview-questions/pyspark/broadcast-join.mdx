@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "When would you use a broadcast join in Spark?"
 description: "Interview answer: broadcast the smaller side of a join when it fits in memory to avoid shuffling the large side, and know when broadcasting becomes dangerous."
 inventoryId: "INT-12"
@@ -14,9 +14,11 @@ interviewRelevance: "High"
 shortAnswer: "Use a broadcast join when one side of the join is small enough to fit in memory on every executor. Spark copies the small table to each executor, so the large table is joined where it already sits and never has to be shuffled. It turns a costly sort-merge join into a much cheaper hash join, but broadcasting a table that is not truly small can exhaust driver or executor memory."
 followUps: ["When can a broadcast join become dangerous?", "What is spark.sql.autoBroadcastJoinThreshold and what is its default?", "How does Adaptive Query Execution change join strategy at run time?", "Can you broadcast the left side of a left outer join?"]
 prerequisites: ["interview-questions:spark/transformation-vs-action"]
-related: ["articles:spark/partitions-shuffles-skew", "articles:pyspark/window-functions"]
-sources: [{"label": "Apache Spark documentation: Join strategy hints", "url": "https://spark.apache.org/docs/latest/sql-performance-tuning.html#join-strategy-hints-for-sql-queries"}]
-versionContext: "Defaults checked on Spark 4.2"
+related: ["articles:pyspark/joins-and-join-strategy", "articles:spark/partitions-shuffles-skew", "articles:spark/adaptive-query-execution"]
+sources:
+  - {"label": "Apache Spark documentation: Join strategy hints", "url": "https://spark.apache.org/docs/latest/sql-performance-tuning.html#join-strategy-hints-for-sql-queries"}
+  - {"label": "Apache Spark documentation: Adaptive Query Execution", "url": "https://spark.apache.org/docs/latest/sql-performance-tuning.html#adaptive-query-execution"}
+versionContext: "Examples run on PySpark 4.2.0 in local mode (local[2]); join strategies were read from the executed plan with AQE and automatic broadcasting switched off for the hint tests. Defaults checked on Spark 4.2."
 ---
 
 ## Detailed explanation
@@ -28,25 +30,81 @@ In a **broadcast hash join**, Spark sends a full copy of the small table to ever
 ## Example
 
 ```python
-from pyspark.sql import functions as F
+from pyspark.sql import SparkSession, functions as F
 
-orders = spark.read.parquet("/data/orders")       # large
-countries = spark.read.parquet("/data/countries") # a few hundred rows
+spark = (SparkSession.builder.master("local[2]").appName("broadcast")
+         .config("spark.sql.shuffle.partitions", "4").getOrCreate())
+
+codes = F.array(*[F.lit(c) for c in ["IN", "UK", "US", "DE"]])
+orders = spark.range(0, 200_000).select(                     # the "large" side
+    F.col("id").alias("order_id"),
+    F.element_at(codes, (F.col("id") % 4 + 1).cast("int")).alias("country_code"))
+countries = spark.createDataFrame(                           # a handful of rows
+    [("IN", "India"), ("UK", "United Kingdom"), ("US", "United States"), ("DE", "Germany")],
+    ["country_code", "country_name"])
 
 joined = orders.join(F.broadcast(countries), "country_code")
-joined.explain()   # look for BroadcastHashJoin
+joined.explain()
 ```
 
-Spark also broadcasts automatically when it estimates a side is below `spark.sql.autoBroadcastJoinThreshold` (10 MB by default), and Adaptive Query Execution can switch to a broadcast join at run time once it sees actual sizes.
+```text
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- Project [country_code#2, order_id#1L, country_name#4]
+   +- BroadcastHashJoin [country_code#2], [country_code#3], Inner, BuildRight, false, false
+      :- Project [id#0L AS order_id#1L, element_at(...) AS country_code#2]
+      :  +- Range (0, 200000, step=1, splits=2)
+      +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=24]
+         +- Filter isnotnull(country_code#3)
+            +- Scan ExistingRDD[country_code#3,country_name#4]
+```
+
+There is no `Exchange hashpartitioning` above `Range`: the orders are joined where they are. `BuildRight` says the hash table was built from the right side (`countries`).
+
+Spark also broadcasts automatically when it estimates a side is below `spark.sql.autoBroadcastJoinThreshold` (10 MB by default), and Adaptive Query Execution can switch a planned sort-merge join to a broadcast join at run time once a shuffle stage shows the real size (`spark.sql.adaptive.autoBroadcastJoinThreshold`, which falls back to the same value when unset).
+
+## Which side can be broadcast
+
+The build side must be one whose unmatched rows Spark does not need to output, because each executor only sees its own slice of the other table:
+
+```python
+spark.conf.set("spark.sql.adaptive.enabled", "false")
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")   # only hints may broadcast
+
+def strategy(df):
+    plan = df._jdf.queryExecution().executedPlan().toString()
+    return next(s for s in ["BroadcastHashJoin", "SortMergeJoin"] if s in plan)
+
+print("left join, hint on right:", strategy(orders.join(F.broadcast(countries), "country_code", "left")))
+print("left join, hint on left: ", strategy(F.broadcast(orders).join(countries, "country_code", "left")))
+print("full join, hint on right:", strategy(orders.join(F.broadcast(countries), "country_code", "full")))
+
+spark.conf.unset("spark.sql.adaptive.enabled")
+spark.conf.unset("spark.sql.autoBroadcastJoinThreshold")
+```
+
+```text
+left join, hint on right: BroadcastHashJoin
+left join, hint on left:  SortMergeJoin
+full join, hint on right: SortMergeJoin
+```
+
+A hint Spark cannot honour is silently ignored, which is why you check the plan. Left outer, left semi and left anti joins can broadcast only the right side; right outer only the left; a full outer join cannot use a broadcast hash join.
 
 ## When it becomes dangerous
 
-- **The "small" table is not small.** It must be collected and held in memory on the driver and every executor, which can cause out-of-memory errors.
-- **Statistics are wrong.** A filtered table may look small to the optimizer but be large in practice, or the reverse.
-- **Outer-join direction.** For a left outer join, Spark can only broadcast the right side; the side whose unmatched rows must be preserved cannot be the broadcast side.
+- **The "small" table is not small.** It is collected to the driver, then held in memory on every executor (once per executor, not per task). A table of a few hundred MB multiplied across a large cluster, plus the driver copy, can cause out-of-memory errors. Spark also refuses to broadcast a table larger than 8 GB.
+- **Statistics are wrong.** A filtered table may look small to the optimiser but be large in practice, or the reverse. AQE's run-time switch uses real shuffle sizes, which is safer than static estimates.
+- **Slow build.** Broadcasting must finish within `spark.sql.broadcastTimeout` (300 seconds by default); an expensive query on the small side can time out.
+- **Outer-join direction**, as shown above.
+
+## Trade-offs
+
+Broadcasting trades network shuffle of the large side for memory and a driver round trip for the small side. It wins when one side is small and the other large; when both are large, a sort-merge join (possibly with AQE skew handling) is the right choice, and raising the threshold just moves the failure to memory.
 
 ## Common mistakes
 
 1. Forcing a broadcast hint on a table that grows over time.
 2. Raising the threshold globally to "fix" one slow job.
 3. Not checking the physical plan to confirm which join actually ran.
+4. Hinting the preserved side of an outer join and assuming it worked.

@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "PySpark Transformations vs Actions"
 description: "Understand lazy evaluation in PySpark: transformations build a plan, actions run it, and narrow versus wide transformations decide where Spark shuffles data."
 inventoryId: "TECH-11"
@@ -9,28 +9,32 @@ technology: ["pyspark", "spark"]
 topic: ["lazy-evaluation", "execution-model"]
 difficulty: "Beginner"
 prerequisites: ["articles:pyspark/dataframes-and-schemas"]
-related: ["interview-questions:spark/transformation-vs-action", "articles:spark/execution-model-jobs-stages-tasks"]
+related: ["interview-questions:spark/transformation-vs-action", "interview-questions:spark/what-causes-a-shuffle", "articles:spark/execution-model-jobs-stages-tasks"]
 previous: "articles:pyspark/dataframes-and-schemas"
-next: "articles:pyspark/joins-and-join-strategy"
-sources: [{"label": "Spark documentation: RDD programming guide (transformations and actions)", "url": "https://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-operations"}]
-versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+next: "articles:pyspark/aggregations-pivot-views"
+sources:
+  - {"label": "Spark documentation: RDD programming guide (transformations and actions)", "url": "https://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-operations"}
+  - {"label": "PySpark API reference: DataFrame", "url": "https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/dataframe.html"}
+  - {"label": "Spark SQL performance tuning", "url": "https://spark.apache.org/docs/latest/sql-performance-tuning.html"}
+versionContext: "All examples run on PySpark 4.2.0 in local mode (local[2], spark.sql.shuffle.partitions=4). Plans are trimmed and expression IDs such as #1 differ between runs. Spark 4 has ANSI mode on by default; in Spark 3.x the invalid cast in the error example returns NULL instead of failing."
 ---
 
-PySpark code looks like it runs line by line. It does not. **Transformations** only describe a new DataFrame; **actions** make Spark plan and execute the whole chain.
+PySpark code looks like it runs line by line. It does not. **Transformations** only describe a new DataFrame; **actions** make Spark optimise and execute the whole chain. Almost every confusing PySpark behaviour — a "fast" line that is actually slow later, an error that appears far from the code that caused it, a job that recomputes everything twice — follows from this one rule.
 
 ## Laziness in practice
 
 ```python
 from pyspark.sql import SparkSession, functions as F
 
-spark = SparkSession.builder.master("local[2]").appName("example").getOrCreate()
+spark = (SparkSession.builder.master("local[2]").appName("lazy")
+         .config("spark.sql.shuffle.partitions", "4").getOrCreate())
 
 events = spark.range(0, 1_000_000).withColumn("bucket", F.col("id") % 10)   # transformation
 big = events.filter(F.col("id") > 500_000)                                   # transformation
 counts = big.groupBy("bucket").count()                                        # transformation
 
-print(type(counts).__name__)        # still just a plan
-print(counts.orderBy("bucket").first())   # action: now Spark runs a job
+print(type(counts).__name__)                 # still just a plan
+print(counts.orderBy("bucket").first())      # action: now Spark runs a job
 ```
 
 ```text
@@ -38,20 +42,49 @@ DataFrame
 Row(bucket=0, count=49999)
 ```
 
-Until `first()`, nothing was computed. Spark could see the whole chain and optimise it: the filter is applied before the grouping, and only the needed columns are read.
+Until `first()`, nothing was computed: the three assignments returned instantly because they only built a logical plan. When the action arrived, Spark could see the whole chain and optimise it as one unit — the filter runs before the grouping, only the columns that are needed are produced, and partial counts are computed before any data moves.
 
 ## Common transformations and actions
 
-| Transformations (lazy) | Actions (run a job) |
-|------------------------|---------------------|
-| `select`, `withColumn`, `filter` | `show`, `count`, `collect`, `first`, `take` |
-| `join`, `groupBy().agg()`, `distinct` | `write....save()`, `saveAsTable`, `foreach` |
-| `orderBy`, `repartition`, `union` | `toPandas`, `toLocalIterator` |
+| Transformations (lazy, return a DataFrame) | Actions (run a job, return a value or write data) |
+|--------------------------------------------|---------------------------------------------------|
+| `select`, `withColumn`, `filter`, `drop` | `show`, `count`, `collect`, `first`, `take`, `head` |
+| `join`, `groupBy().agg()`, `distinct`, `dropDuplicates` | `write...save()`, `saveAsTable`, `insertInto` |
+| `orderBy`, `repartition`, `coalesce`, `union` | `toPandas`, `toLocalIterator`, `foreach`, `foreachPartition` |
+| `cache`, `persist` (they only mark the DataFrame) | Starting a streaming query with `start()` |
+
+A quick test: if the method returns a `DataFrame`, it is a transformation. If it returns rows, a number, `None` after writing, or a pandas object, it is an action.
+
+## Errors also wait for an action
+
+Because nothing runs until an action, **analysis errors** (a missing column, a type mismatch Spark can see in the schema) are raised immediately, but **data errors** are raised only when a job processes the bad value:
+
+```python
+bad = (events
+       .withColumn("code", F.concat(F.lit("a"), F.col("id").cast("string")))
+       .withColumn("code_num", F.col("code").cast("int")))   # every value is invalid
+print("defined, no error yet")
+
+print(bad.count())          # code_num is never needed, so Spark prunes it away
+
+try:
+    bad.select("code_num").first()
+except Exception as e:
+    print(type(e).__name__, "-", str(e).split("]")[0] + "]")
+```
+
+```text
+defined, no error yet
+1000000
+NumberFormatException - [CAST_INVALID_INPUT]
+```
+
+Two lessons here. First, the failing line in a stack trace is the action, not the `cast` that caused it; PySpark 4 helps by naming the DataFrame call site in the error message. Second, `count()` succeeded because the optimiser removed the column it did not need — so a "smoke test" with `count()` does not prove a pipeline is correct. Under Spark 3.x defaults (ANSI off) the cast would silently return `NULL` instead.
 
 ## Narrow versus wide
 
-- **Narrow**: each output partition depends on one input partition (`filter`, `select`, `withColumn`). No data moves.
-- **Wide**: output partitions need data from many input partitions (`groupBy`, `join`, `distinct`, `orderBy`). Spark must **shuffle**, and that creates a stage boundary.
+- **Narrow**: each output partition depends on one input partition (`filter`, `select`, `withColumn`, `coalesce`, `union`). Spark pipelines consecutive narrow steps into one task, and no data moves between executors.
+- **Wide**: an output partition needs data from many input partitions (`groupBy`, `join` without broadcast, `distinct`, `orderBy`, `repartition`, window functions with `partitionBy`). Spark must **shuffle**: write data to local disk partitioned by key, then have the next stage fetch it across the network. Each shuffle is a stage boundary.
 
 You can see the shuffle in the plan as an `Exchange`:
 
@@ -59,36 +92,102 @@ You can see the shuffle in the plan as an `Exchange`:
 counts.explain()
 ```
 
-The plan shows a partial aggregation, then `Exchange hashpartitioning(bucket, ...)`, then the final aggregation. Spark pre-aggregates on each partition before shuffling, which is why `groupBy().count()` moves far less data than the raw rows.
+```text
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- HashAggregate(keys=[bucket#1L], functions=[count(1)])
+   +- Exchange hashpartitioning(bucket#1L, 4), ENSURE_REQUIREMENTS, [plan_id=72]
+      +- HashAggregate(keys=[bucket#1L], functions=[partial_count(1)])
+         +- Project [(id#0L % 10) AS bucket#1L]
+            +- Filter (id#0L > 500000)
+               +- Range (0, 1000000, step=1, splits=2)
+```
+
+Read it bottom up. `Range → Filter → Project → partial HashAggregate` is one narrow pipeline (stage 1). `Exchange hashpartitioning(bucket, 4)` is the shuffle into 4 partitions. The final `HashAggregate` is stage 2. Spark **pre-aggregates on each partition before shuffling** (`partial_count`), so only one row per bucket per input partition crosses the network instead of 500,000 raw rows.
+
+`AdaptiveSparkPlan isFinalPlan=false` means Adaptive Query Execution (on by default since Spark 3.2) may still change this plan after it sees real shuffle sizes. Here it does:
+
+```python
+print(events.rdd.getNumPartitions(), big.rdd.getNumPartitions(), counts.rdd.getNumPartitions())
+```
+
+```text
+2 2 1
+```
+
+The narrow steps keep the 2 input partitions. The shuffle was planned with 4 partitions, but AQE saw ten tiny groups and coalesced them into 1 at run time.
 
 ## Why repeated actions can be slow
 
-Each action re-executes the plan from the source unless results are cached:
+Each action re-executes the plan from the source unless results are cached. These two lines each run `range → filter → groupBy` again:
 
 ```python
 counts.count()
 counts.show(3)
 ```
 
-Both lines recompute `events → filter → groupBy`. If an expensive DataFrame is reused by several actions, `cache()` it (and `unpersist()` when done). Do not cache everything: memory is finite and caching cheap steps adds overhead.
+When an expensive DataFrame feeds several actions, cache it. `cache()` is itself lazy — the first action fills the cache, later actions read from it:
+
+```python
+counts.cache()
+print(counts.storageLevel)
+counts.count()                      # materialises the cache
+counts.orderBy("bucket").explain()  # now reads InMemoryTableScan
+```
+
+```text
+Disk Memory Deserialized 1x Replicated
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- Sort [bucket#1L ASC NULLS FIRST], true, 0
+   +- Exchange rangepartitioning(bucket#1L ASC NULLS FIRST, 4), ENSURE_REQUIREMENTS, [plan_id=97]
+      +- InMemoryTableScan [bucket#1L, count#2L]
+            +- InMemoryRelation [bucket#1L, count#2L], StorageLevel(disk, memory, deserialized, 1 replicas)
+               ...
+```
+
+```python
+counts.unpersist()
+```
+
+The DataFrame default level is memory-and-disk, so partitions that do not fit spill to local disk instead of being dropped. Do not cache everything: memory is shared with execution, cached data that is used once is pure overhead, and a stale cache hides changes in the source. The [caching lesson](/spark/caching-broadcast-accumulators/) covers storage levels and when caching hurts.
 
 <Callout tone="warning" title="collect() pulls everything to the driver">
 
-`collect()` and `toPandas()` bring all rows into the driver's memory. Use them only on small, aggregated results. To inspect data, use `show()` or `take(n)`.
+`collect()` and `toPandas()` bring all rows into the driver's memory and are a common cause of driver out-of-memory errors. Use them only on small, aggregated results. To inspect data, use `show()`, `take(n)` or `limit(n).toPandas()`.
 
 </Callout>
+
+## Long lineages
+
+Each transformation adds to the plan. In a loop that keeps reassigning `df = df.withColumn(...)` hundreds of times, or an iterative algorithm that joins a DataFrame with itself repeatedly, the plan itself becomes large and slow to analyse. Prefer one `select` with many expressions (or `withColumns` with a dict) over hundreds of `withColumn` calls, and cut very long lineages by writing an intermediate result to a table, or with `df.checkpoint()` / `df.localCheckpoint()`.
 
 ## Common mistakes
 
 1. Timing a transformation line and concluding it is fast (nothing ran).
-2. Calling `count()` "just to check" between every step in production code, triggering a full job each time.
-3. Caching without reuse.
+2. Calling `count()` "just to check" between every step in production code, triggering a full job each time — and, as shown above, not even evaluating every column.
+3. Expecting `cache()` to do anything before an action, or caching a DataFrame used only once.
 4. `collect()` on large data.
+5. Reading a stack trace from the action line and missing the transformation that caused it.
 
-## Interview relevance
+## Interview angle
 
-This is one of the most common Spark interview questions. Combine it with narrow versus wide and where shuffles occur. See the [interview answer](/interview/spark/transformation-vs-action/).
+This is one of the most common Spark interview openers. A strong answer covers four things: transformations are lazy and return a new DataFrame; actions trigger a job; laziness lets Catalyst optimise the whole chain (predicate pushdown, column pruning, pre-aggregation); and wide transformations shuffle and create stage boundaries. See the interview answers for [transformation vs action](/interview/spark/transformation-vs-action/) and [what causes a shuffle](/interview/spark/what-causes-a-shuffle/).
+
+<details>
+<summary>Is cache() a transformation or an action?</summary>
+
+Neither in the strict sense: it marks the DataFrame for caching and returns it, so it is lazy like a transformation. The data is stored only when the next action computes it.
+
+</details>
+
+<details>
+<summary>Why did count() succeed on a DataFrame whose column fails when selected?</summary>
+
+The optimiser prunes columns that the action does not need. `count()` needs no columns, so the failing cast was never evaluated. Validate with the columns you actually write.
+
+</details>
 
 ## Key takeaway
 
-Transformations build a plan; actions run it. Know which of your transformations are wide, because those are where Spark shuffles.
+Transformations build a plan; actions run it. Know which of your transformations are wide, because those are where Spark shuffles — and remember that errors and costs surface at the action, not at the line that caused them.

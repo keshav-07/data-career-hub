@@ -1,0 +1,205 @@
+---
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Auto Loader and Lakeflow Declarative Pipelines on Databricks"
+seoTitle: "Databricks Auto Loader and Declarative Pipelines"
+description: "Databricks Auto Loader and Lakeflow Declarative Pipelines (formerly DLT): incremental file ingestion, schema evolution, streaming tables and expectations."
+technology: ["databricks", "spark", "delta-lake"]
+topic: ["ingestion", "pipelines", "streaming"]
+difficulty: "Intermediate"
+prerequisites: ["articles:databricks/workspace-jobs-lakehouse", "articles:spark/structured-streaming"]
+related: ["interview-questions:databricks/auto-loader-vs-copy-into", "articles:databricks/unity-catalog-governance", "articles:etl-elt/incremental-loading-watermarks-backfills", "articles:etl-elt/data-quality-checks-contracts"]
+previous: "articles:databricks/unity-catalog-governance"
+sources:
+  - {"label": "Databricks documentation: What is Auto Loader?", "url": "https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/"}
+  - {"label": "Databricks documentation: Configure schema inference and evolution in Auto Loader", "url": "https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/schema"}
+  - {"label": "Databricks documentation: Lakeflow Spark Declarative Pipelines", "url": "https://docs.databricks.com/aws/en/ldp/"}
+  - {"label": "Databricks documentation: Pipelines Python language reference", "url": "https://docs.databricks.com/aws/en/dlt/python-ref"}
+  - {"label": "Apache Spark documentation: Structured Streaming programming guide", "url": "https://spark.apache.org/docs/latest/streaming/index.html"}
+versionContext: "Describes Databricks as documented in October 2026. Lakeflow Spark Declarative Pipelines were called Delta Live Tables (DLT) until 2025; the Python module is pyspark.pipelines (imported as dp), and the older dlt module still works. Auto Loader and pipeline code need a Databricks workspace and were checked against the documentation, not executed. The open-source streaming example runs on PySpark 4.2.0 in local mode."
+---
+
+Most Databricks pipelines start with files landing in cloud storage: JSON events, CSV exports, Parquet drops from another team. Two features handle that ingestion. **Auto Loader** incrementally picks up new files exactly once, and **Lakeflow Spark Declarative Pipelines** (formerly Delta Live Tables, DLT) let you declare the bronze, silver and gold tables and leave orchestration, retries and checkpoints to the platform. Both are built on [Spark Structured Streaming](/spark/structured-streaming/), so the streaming concepts carry over directly.
+
+## Ingestion options at a glance
+
+| Option | How it finds new data | Good for |
+|--------|----------------------|----------|
+| `COPY INTO` (SQL) | Tracks which files it already loaded into a table | Simple, idempotent batch loads of thousands of files; SQL-only teams |
+| **Auto Loader** (`cloudFiles`) | Streaming source that records processed files in its checkpoint | Continuous or scheduled ingestion of large, growing directories; schema drift |
+| Lakeflow Connect managed connectors | Databricks-managed connectors for SaaS apps and databases | Sources that are not files (for example a CRM or a database's change feed) |
+| Plain `spark.read` on a folder | Nothing; re-reads everything every run | One-off loads only |
+
+The common problem the first two solve: "load each new file once, even if the job retries, without listing and comparing millions of files myself".
+
+## How Auto Loader works
+
+Auto Loader is a Structured Streaming source with the format `cloudFiles`:
+
+{/* noexec */}
+```python
+# Databricks notebook or job (spark already exists)
+bronze = (spark.readStream
+    .format("cloudFiles")
+    .option("cloudFiles.format", "json")
+    .option("cloudFiles.schemaLocation", "/Volumes/prod/bronze/_schemas/orders")
+    .option("cloudFiles.schemaEvolutionMode", "addNewColumns")    # the default when no schema is given
+    .load("/Volumes/prod/landing/orders/")
+    .selectExpr("*", "_metadata.file_path AS _source_file", "current_timestamp() AS _ingested_at"))
+
+(bronze.writeStream
+    .option("checkpointLocation", "/Volumes/prod/bronze/_checkpoints/orders")
+    .trigger(availableNow=True)          # process everything new, then stop
+    .toTable("prod.bronze.orders"))
+```
+
+The moving parts:
+
+- **File discovery.** By default Auto Loader lists the input directory (directory listing mode). For very large or busy directories, **file notification** mode subscribes to cloud storage events (for example S3 event notifications to a queue), so it does not have to list. Newer workspaces can use **file events** on a Unity Catalog external location, where Databricks manages the notification setup.
+- **Exactly-once file tracking.** Discovered file paths are stored in a key-value store (RocksDB) inside the **checkpoint**. Together with the idempotent Delta sink, a file is ingested exactly once even if the stream fails and restarts. Deleting or moving the checkpoint resets this and reloads everything.
+- **Schema inference and evolution.** With `cloudFiles.schemaLocation`, Auto Loader samples files to infer a schema, stores it, and tracks changes over time. In the default `addNewColumns` mode a new column makes the stream **stop with an error** after recording the new schema; the next run (a job retry) continues with the column added. Other modes: `rescue` (never evolve; unexpected data goes to the rescued column), `failOnNewColumns`, and `none`.
+- **Rescued data.** Values that do not match the schema (a string in a numeric column, a column with different case) are not dropped: they land as JSON in a `_rescued_data` column you can inspect and reprocess.
+- **Triggers.** `trigger(availableNow=True)` processes all available files in batches and stops, which makes a scheduled job behave like an incremental batch load. Omit it, or use `processingTime`, for a continuously running stream.
+
+### The same mechanism in open-source Spark
+
+`cloudFiles` is Databricks-only, but the idea — a streaming file source plus a checkpoint — is plain Structured Streaming. This runs locally and shows that a second run picks up only the new file:
+
+```python
+import json, os, tempfile
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+
+spark = (SparkSession.builder.master("local[2]").appName("incremental-files")
+         .config("spark.sql.shuffle.partitions", "4").getOrCreate())
+base = tempfile.mkdtemp()
+landing, out, chk = f"{base}/landing", f"{base}/bronze", f"{base}/_checkpoint"
+os.makedirs(landing)
+
+def drop_file(name, rows):
+    with open(f"{landing}/{name}", "w") as fh:
+        fh.write("\n".join(json.dumps(r) for r in rows))
+
+schema = StructType([StructField("order_id", StringType()), StructField("amount", DoubleType())])
+
+def run_once():
+    stream = (spark.readStream.schema(schema).json(landing)
+              .withColumn("_source_file", F.col("_metadata.file_name")))
+    q = (stream.writeStream.format("parquet").option("path", out)
+         .option("checkpointLocation", chk).trigger(availableNow=True).start())
+    q.awaitTermination()
+    return q.lastProgress["numInputRows"]
+
+drop_file("orders_001.json", [{"order_id": "o1", "amount": 10.0}, {"order_id": "o2", "amount": 5.5}])
+print("run 1 rows:", run_once())
+drop_file("orders_002.json", [{"order_id": "o3", "amount": 7.0}])
+print("run 2 rows:", run_once())
+print("run 3 rows:", run_once())
+spark.read.parquet(out).groupBy("_source_file").count().orderBy("_source_file").show()
+```
+
+```text
+run 1 rows: 2
+run 2 rows: 1
+run 3 rows: 0
++---------------+-----+
+|   _source_file|count|
++---------------+-----+
+|orders_001.json|    2|
+|orders_002.json|    1|
++---------------+-----+
+```
+
+Run 2 read only the new file, and run 3 found nothing to do. What Auto Loader adds on top is scalable discovery (notifications instead of listing), schema inference and evolution, rescued data, and file state kept in RocksDB so it scales to millions of files.
+
+## Lakeflow Spark Declarative Pipelines
+
+Writing each streaming query, checkpoint and dependency by hand gets repetitive. A **declarative pipeline** lets you define tables as queries; the pipeline works out the dependency graph, creates and updates the tables, manages checkpoints and retries, and records data quality metrics. Two dataset types do most of the work:
+
+- **Streaming table**: a Delta table fed by one or more streaming flows; each run processes only new input (ideal for bronze and append-mostly silver).
+- **Materialized view**: the result of a batch query, kept up to date by the pipeline, incrementally where Databricks can (ideal for gold aggregates).
+
+{/* noexec */}
+```sql
+-- Bronze: Auto Loader inside a pipeline (schema location and checkpoint are managed for you)
+CREATE OR REFRESH STREAMING TABLE bronze_orders
+AS SELECT *, _metadata.file_path AS _source_file
+FROM STREAM read_files('/Volumes/prod/landing/orders/', format => 'json');
+
+-- Silver: typed, with data quality expectations
+CREATE OR REFRESH STREAMING TABLE silver_orders (
+  CONSTRAINT valid_id     EXPECT (order_id IS NOT NULL) ON VIOLATION DROP ROW,
+  CONSTRAINT valid_amount EXPECT (amount >= 0)          ON VIOLATION DROP ROW,
+  CONSTRAINT has_date     EXPECT (order_date IS NOT NULL)          -- warn only: keep the row, record the metric
+)
+AS SELECT order_id, customer_id, CAST(amount AS DECIMAL(10,2)) AS amount, to_date(order_ts) AS order_date
+FROM STREAM bronze_orders;
+
+-- Gold: a materialized view the pipeline keeps up to date
+CREATE OR REFRESH MATERIALIZED VIEW gold_daily_revenue
+AS SELECT order_date, SUM(amount) AS revenue, COUNT(*) AS orders
+FROM silver_orders
+GROUP BY order_date;
+```
+
+The same pipeline in Python uses the `pyspark.pipelines` module:
+
+{/* noexec */}
+```python
+from pyspark import pipelines as dp
+from pyspark.sql import functions as F
+
+@dp.table(comment="Raw orders, ingested once per file")
+def bronze_orders():
+    return (spark.readStream.format("cloudFiles")
+            .option("cloudFiles.format", "json")
+            .load("/Volumes/prod/landing/orders/"))
+
+@dp.table
+@dp.expect_or_drop("valid_id", "order_id IS NOT NULL")
+@dp.expect("has_date", "order_ts IS NOT NULL")
+def silver_orders():
+    return (spark.readStream.table("bronze_orders")
+            .withColumn("amount", F.col("amount").cast("decimal(10,2)")))
+
+@dp.materialized_view
+def gold_daily_revenue():
+    return (spark.read.table("silver_orders")
+            .groupBy(F.to_date("order_ts").alias("order_date"))
+            .agg(F.sum("amount").alias("revenue")))
+```
+
+Key features to know:
+
+- **Expectations**: `EXPECT` alone keeps bad rows and records how many failed; `ON VIOLATION DROP ROW` (`expect_or_drop`) removes them; `ON VIOLATION FAIL UPDATE` (`expect_or_fail`) stops the update. To keep the bad rows for review, write a separate quarantine table with the inverted condition.
+- **AUTO CDC** (formerly `APPLY CHANGES INTO`): applies a change feed with inserts, updates and deletes to a target table as SCD type 1 or type 2, handling out-of-order events with a sequencing column. It replaces a hand-written `MERGE` with deduplication logic.
+- **Triggered or continuous**: a triggered pipeline processes what is available and stops (run it from a Lakeflow Job on a schedule); a continuous pipeline keeps running for low latency.
+- **Development vs production mode**: development mode reuses compute and does not retry, for fast iteration; production mode restarts on failure.
+- **Full refresh** recomputes a table from scratch and resets its streaming state; use it deliberately, because sources that no longer hold old files cannot be replayed.
+
+Apache Spark 4.1 added the open-source core of this as **Spark Declarative Pipelines**, with the same `pyspark.pipelines` module. Auto Loader, expectations and AUTO CDC are Databricks additions.
+
+## Choosing
+
+- A few large files a day and a SQL-first team: `COPY INTO`, or a streaming table with `read_files`.
+- Continuous or growing directories, schema drift, millions of files: Auto Loader.
+- A multi-table medallion flow you want the platform to orchestrate and monitor: a declarative pipeline (with Auto Loader for its bronze tables).
+- Complex custom logic, fine control over each query, or code that must also run outside Databricks: plain Structured Streaming or batch jobs in a Lakeflow Job.
+
+## Common mistakes
+
+1. Sharing one checkpoint between two streams, or reusing a checkpoint after changing the query in incompatible ways.
+2. Deleting the checkpoint "to fix" a stream and silently reloading every file.
+3. Treating the `addNewColumns` stop as a bug: it is the expected signal; configure job retries so the stream restarts with the new schema.
+4. Ignoring `_rescued_data`, so values that failed to parse disappear from downstream counts.
+5. Using `DROP ROW` expectations for business-critical data without a quarantine table or alerting on the drop metrics.
+6. Running a continuous pipeline for data that arrives once a day.
+
+## Interview angle
+
+Expect "How would you ingest files that land in S3 every few minutes?" A good answer: Auto Loader (or a streaming table with `read_files`) into a bronze Delta table, a checkpoint per stream for exactly-once file processing, schema evolution with a schema location and rescued data, `availableNow` on a schedule or a continuous stream depending on latency, expectations or checks in silver, and a Lakeflow Job or declarative pipeline to run it. See [Auto Loader vs COPY INTO](/interview/databricks/auto-loader-vs-copy-into/).
+
+## Key takeaway
+
+Auto Loader is Structured Streaming for files with scalable discovery and schema handling; its checkpoint is what makes ingestion exactly-once. Declarative pipelines wrap streaming tables, materialized views and expectations into one managed graph.
