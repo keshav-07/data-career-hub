@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "What is a generator and why can it help with large datasets?"
 description: "Interview answer: a generator yields values lazily one at a time, so you can stream files and API pages with constant memory instead of loading everything."
 seoTitle: "Python Generators: Interview Answer"
@@ -14,8 +14,8 @@ estimatedMinutes: 6
 interviewRelevance: "High"
 shortAnswer: "A generator is a function that uses yield to produce values one at a time, pausing between them, instead of building a whole list. Because only the current item is held in memory, you can stream a file, a query result or paginated API data of any size with roughly constant memory. The trade-off is that a generator can be consumed only once and has no length or random access."
 followUps: ["What is the difference between a generator expression and a list comprehension?", "What happens if you loop over the same generator twice?", "How would you write rows to a database in batches from a generator?"]
-related: ["articles:python/iterators-generators", "articles:python/idempotent-csv-loader"]
-versionContext: "Examples run on Python 3.12"
+related: ["articles:python/iterators-generators", "articles:python/idempotent-csv-loader", "interview-questions:python/process-large-csv-limited-memory", "articles:python/file-io-csv-json"]
+versionContext: "Examples run on Python 3.11 (standard library)"
 ---
 
 ## Detailed explanation
@@ -56,6 +56,46 @@ print(list(gen), list(gen))
 ```
 
 The second pass is silently empty.
+
+## Generators feeding batched writes
+
+The usual production shape: a generator reads records lazily, a helper groups them into fixed-size batches, and each batch is written in one call.
+
+```python
+import sqlite3
+from itertools import islice
+
+def read_rows(n):
+    for i in range(n):                     # stands in for csv.reader(f) or a database cursor
+        yield (i, f"user_{i % 7}")
+
+def in_batches(iterable, size):
+    it = iter(iterable)
+    while batch := list(islice(it, size)):
+        yield batch
+
+conn = sqlite3.connect(":memory:")
+conn.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, user_name TEXT)")
+calls = 0
+for batch in in_batches(read_rows(25_000), 10_000):
+    with conn:
+        conn.executemany("INSERT INTO events VALUES (?, ?)", batch)
+    calls += 1
+print(calls, "batches,", conn.execute("SELECT count(*) FROM events").fetchone()[0], "rows")
+```
+
+```text
+3 batches, 25000 rows
+```
+
+At most one batch of 10,000 rows is in memory, and the database sees three round trips instead of 25,000.
+
+## Trade-offs
+
+- **Single pass only**: if you need two passes (for example, a total and then each row's share of it), either read the source twice or store an intermediate result.
+- **No length or random access**: `len(gen)` fails; counting consumes it.
+- **Lifetime of resources**: a generator reading a file keeps the file open until it is exhausted or closed, so consume it inside the `with` block that opened the file.
+- **Debugging**: errors surface where the value is consumed, not where the generator was created, which can make tracebacks less obvious.
 
 ## Common mistakes
 
