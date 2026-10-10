@@ -139,8 +139,12 @@ export function initDayCard() {
       (count, task) => count + task.topics.filter((topic) => topic.key).length,
       0,
     );
-    $("[data-dc-count]").textContent = `${studied}/${trackedTopics} topics`;
-    $("[data-dc-foot]").textContent = `${day.h} h · ${trackedTopics} planned topics`;
+    const taskCount = day.tasks.reduce(
+      (count, task) => count + task.topics.length + (task.practice?.length ?? 0),
+      0,
+    );
+    $("[data-dc-count]").textContent = `${studied}/${trackedTopics} topics · ${taskCount} tasks`;
+    $("[data-dc-foot]").textContent = `${day.h} h planned`;
 
     check.dataset.plDay = String(shown);
     check.dataset.hours = String(day.h);

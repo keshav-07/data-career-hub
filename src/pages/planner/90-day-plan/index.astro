@@ -9,6 +9,8 @@ const days = await planDays();
 const hours = days.reduce((a, d) => a + d.hours, 0);
 const trackedTopicCount = (day: PlanDay) =>
   day.tasks.reduce((count, task) => count + task.topics.filter((topic) => topic.key).length, 0);
+const taskCount = (day: PlanDay) =>
+  day.tasks.reduce((count, task) => count + task.topics.length + (task.practice?.length ?? 0), 0);
 const phases = [...new Set(days.map((d) => d.phase))];
 const goalOf = (phase: string) => days.find((d) => d.phase === phase)?.phaseGoal;
 const weeksOf = (phase: string) => {
@@ -96,11 +98,12 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
                         class="day-card__count js-only"
                         data-pl-topic-count={d.day}
                         data-total={trackedTopicCount(d)}
+                        data-tasks={taskCount(d)}
                       >
-                        0/{trackedTopicCount(d)} topics
+                        0/{trackedTopicCount(d)} topics · {taskCount(d)} tasks
                       </span>
                       <span>
-                        {d.hours} h · {trackedTopicCount(d)} planned topics
+                        {d.hours} h planned
                       </span>
                     </p>
                     <label class="day-card__done js-only">
@@ -153,8 +156,9 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
         'input[data-pl-key][data-pl-field="learn"]',
       );
       const total = Number(count.dataset.total) || 0;
+      const tasks = Number(count.dataset.tasks) || 0;
       const completed = checks ? [...checks].filter((check) => check.checked).length : 0;
-      count.textContent = `${completed}/${total} topics`;
+      count.textContent = `${completed}/${total} topics · ${tasks} tasks`;
     });
   }
 

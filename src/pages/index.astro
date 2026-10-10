@@ -33,6 +33,8 @@ const planHours = days.reduce((a, d) => a + d.hours, 0);
 const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).flat().length;
 const dayTopics = (day: PlanDay) =>
   day.tasks.reduce((count, task) => count + task.topics.filter((item) => item.key).length, 0);
+const dayTaskCount = (day: PlanDay) =>
+  day.tasks.reduce((count, task) => count + task.topics.length + (task.practice?.length ?? 0), 0);
 ---
 
 <BaseLayout
@@ -109,10 +111,10 @@ const dayTopics = (day: PlanDay) =>
             <div class="day-card__bar">
               <p class="day-card__foot">
                 <span class="day-card__count js-only" data-dc-count>
-                  0/{dayTopics(day1)} topics
+                  0/{dayTopics(day1)} topics · {dayTaskCount(day1)} tasks
                 </span>
                 <span data-dc-foot>
-                  {day1.hours} h · {dayTopics(day1)} planned topics
+                  {day1.hours} h planned
                 </span>
               </p>
               <div class="day-card__controls js-only">
