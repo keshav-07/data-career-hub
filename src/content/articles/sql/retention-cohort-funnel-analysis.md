@@ -1,7 +1,7 @@
 ---
 title: "Product Analytics SQL: Retention, Cohorts, Funnels and Attribution"
 seoTitle: "SQL Retention, Cohorts, Funnels and Attribution"
-description: "Write the product analytics queries interviewers ask for: day-N retention, cohort matrices, ordered funnels, first and last touch attribution and market basket lift."
+description: "SQL retention and cohort analysis: day-N retention, cohort matrices, ordered funnels, first and last touch attribution and market basket lift queries."
 technology: ["sql"]
 topic: ["product-analytics", "retention", "cohorts", "funnels"]
 difficulty: "Advanced"

@@ -1,7 +1,7 @@
 ---
 title: "Top-N per Group, Deduplication and SCD Queries"
 seoTitle: "SQL Top-N per Group, Deduplication and SCD"
-description: "Solve three everyday pipeline problems in SQL: top N rows per group with ties, deduplicating to the latest record per key, and querying Type 2 slowly changing dimensions."
+description: "Three SQL pipeline patterns: top N rows per group with ties, deduplicating to the latest record per key, and querying Type 2 slowly changing dimensions."
 technology: ["sql"]
 topic: ["window-functions", "deduplication", "scd", "top-n"]
 difficulty: "Intermediate"

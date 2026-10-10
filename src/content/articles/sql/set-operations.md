@@ -1,7 +1,7 @@
 ---
 title: "SQL Set Operations: UNION, UNION ALL, INTERSECT and EXCEPT"
 seoTitle: "SQL UNION, UNION ALL, INTERSECT and EXCEPT"
-description: "Combine and compare query results with UNION, UNION ALL, INTERSECT and EXCEPT: duplicate handling, NULL behaviour, column matching and data reconciliation patterns."
+description: "SQL UNION, UNION ALL, INTERSECT and EXCEPT explained: how duplicates and NULLs are handled, column matching rules and data reconciliation patterns."
 technology: ["sql"]
 topic: ["set-operations", "union", "reconciliation"]
 difficulty: "Beginner"

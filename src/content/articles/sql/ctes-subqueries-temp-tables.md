@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "SQL Subqueries and CTEs: Derived Tables, Correlated Queries and Temporary Tables"
 seoTitle: "SQL Subqueries, CTEs and Temporary Tables"
-description: "Write subqueries in WHERE, FROM and SELECT, understand correlated subqueries, structure logic with chained CTEs, and know when a temporary table is the better choice."
+description: "SQL CTEs and subqueries: write them in WHERE, FROM and SELECT, understand correlated subqueries, chain CTEs, and know when a temp table is the better choice."
 inventoryId: "TECH-03"
 technology: ["sql"]
 topic: ["ctes", "subqueries", "query-structure"]

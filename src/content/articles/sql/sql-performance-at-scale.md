@@ -1,7 +1,7 @@
 ---
 title: "SQL at Scale: Window Performance, Skew and Approximate Distinct"
 seoTitle: "SQL at Scale: Windows, Skew and HyperLogLog"
-description: "Keep big queries fast: tune window functions, handle skewed keys in aggregations with two-phase aggregation and salting, and count distinct values with HyperLogLog."
+description: "SQL performance at scale: tune window functions, fix skewed keys with two-phase aggregation and salting, and count distinct values with HyperLogLog."
 technology: ["sql"]
 topic: ["performance", "window-functions", "data-skew", "hyperloglog"]
 difficulty: "Advanced"

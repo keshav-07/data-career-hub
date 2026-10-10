@@ -1,7 +1,7 @@
 ---
 title: "Transactions, Isolation Levels, Locking and MVCC"
 seoTitle: "Transactions, Isolation Levels, Locks and MVCC"
-description: "Understand ACID transactions, isolation levels and the anomalies they allow, row locks and deadlocks, and how MVCC lets readers and writers work at the same time."
+description: "SQL transactions and isolation levels: ACID, the anomalies each level allows, row locks and deadlocks, and how MVCC lets readers and writers run together."
 technology: ["sql"]
 topic: ["transactions", "isolation-levels", "locking", "mvcc"]
 difficulty: "Advanced"
