@@ -5,7 +5,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "Large-Scale Batch Processing Pipeline"
-description: "An intermediate project: process a multi-gigabyte dataset with PySpark, find and fix skew and join problems with the Spark UI, and write partitioned output that reruns idempotently."
+description: "PySpark large-scale batch project: process a multi-gigabyte dataset, fix skew and join problems using the Spark UI, and write idempotent partitioned output."
 inventoryId: "PROJ-08"
 technology: ["pyspark", "spark"]
 topic: ["batch", "performance"]
