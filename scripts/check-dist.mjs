@@ -3,8 +3,9 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { gzipSync } from "node:zlib";
+import { fileURLToPath } from "node:url";
 
-const DIST = new URL("../dist/", import.meta.url).pathname;
+const DIST = fileURLToPath(new URL("../dist/", import.meta.url));
 const BUDGET = { jsKb: 75, cssKb: 35, jsBlockKb: 150, cssBlockKb: 70 };
 const errors = [];
 const warnings = [];

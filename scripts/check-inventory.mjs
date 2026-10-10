@@ -3,8 +3,9 @@
 // Usage: node scripts/check-inventory.mjs [--write]   (--write updates slug/status for items that now have files)
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("../", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../", import.meta.url));
 const invPath = join(root, "docs/content-inventory.json");
 const inv = JSON.parse(readFileSync(invPath, "utf8"));
 const contentDir = join(root, "src/content");
@@ -39,7 +40,7 @@ const urlFor = (collection, id, fm) => {
 const found = new Map();
 const errors = [];
 for (const file of walk(contentDir).filter((f) => /\.mdx?$/.test(f))) {
-  const rel = relative(contentDir, file);
+  const rel = relative(contentDir, file).replaceAll("\\", "/");
   const [collection, ...rest] = rel.split("/");
   const id = rest.join("/").replace(/\.mdx?$/, "");
   const fm = readFileSync(file, "utf8").split("---")[1] ?? "";
