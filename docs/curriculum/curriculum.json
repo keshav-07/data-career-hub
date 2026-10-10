@@ -2577,58 +2577,6 @@
      "Isolation levels (ACID)",
      "EXCEPT / INTERSECT set operations"
     ]
-   },
-   {
-    "scenario": "Page View Paths",
-    "ref": "interview-questions:sql/page-view-paths-sql-case-study",
-    "techniques": [
-     "Partitioning strategies",
-     "Month-over-month change",
-     "PARTITION BY clause",
-     "Query optimization & cost reduction",
-     "Funnel / conversion analysis",
-     "Scalar subqueries",
-     "Sharding & distributed SQL"
-    ]
-   },
-   {
-    "scenario": "Cart Abandonment",
-    "ref": "interview-questions:sql/cart-abandonment-sql-case-study",
-    "techniques": [
-     "Semi-join with EXISTS",
-     "Deadlocks & locking",
-     "Conditional window frames",
-     "Moving average with frame clause",
-     "Materialized views",
-     "First & last touch attribution",
-     "GROUPING SETS"
-    ]
-   },
-   {
-    "scenario": "Loyalty Tiers",
-    "ref": "interview-questions:sql/loyalty-tiers-sql-case-study",
-    "techniques": [
-     "Cohort analysis",
-     "Conditional aggregation",
-     "Columnar vs row storage",
-     "Hierarchical / org-chart queries",
-     "Cross Join & cartesian products",
-     "MVCC concepts",
-     "LATERAL / CROSS APPLY joins"
-    ]
-   },
-   {
-    "scenario": "Regional Sales Split",
-    "ref": "interview-questions:sql/regional-sales-split-sql-case-study",
-    "techniques": [
-     "Partition pruning",
-     "Rolling 7/30 day metrics",
-     "ROW_NUMBER()",
-     "Reading EXPLAIN / execution plans",
-     "Median & percentile (PERCENTILE_CONT)",
-     "Correlated subqueries",
-     "CTE materialization trade-offs"
-    ]
    }
   ]
  },
@@ -3476,98 +3424,98 @@
     "topic": "Structured Streaming model",
     "category": "Streaming",
     "difficulty": "Beginner",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Input sources (Kafka/files)",
     "category": "Streaming",
     "difficulty": "Beginner",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Output sinks & modes",
     "category": "Streaming",
     "difficulty": "Beginner",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Triggers & micro-batch",
     "category": "Streaming",
     "difficulty": "Intermediate",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Checkpointing in streaming",
     "category": "Streaming",
     "difficulty": "Expert",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Foreach & foreachBatch",
     "category": "Streaming",
     "difficulty": "Expert",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Backpressure & rate limiting",
     "category": "Streaming",
     "difficulty": "Expert",
-    "lesson": "articles:pyspark/structured-streaming-fundamentals",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Event-time vs processing-time",
     "category": "Streaming",
     "difficulty": "Intermediate",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Watermarking",
     "category": "Streaming",
     "difficulty": "Intermediate",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Handling late data",
     "category": "Streaming",
     "difficulty": "Expert",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Stateful aggregations",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Stream-stream joins",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Stream-static joins",
     "category": "Streaming",
     "difficulty": "Advanced",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
     "topic": "Exactly-once in streaming",
     "category": "Streaming",
     "difficulty": "Expert",
-    "lesson": "articles:pyspark/streaming-event-time-state-joins",
+    "lesson": "projects:kafka-spark-delta-streaming",
     "heading": null
    },
    {
@@ -4067,6 +4015,192 @@
     "difficulty": "Expert",
     "lesson": "articles:data-warehousing/modern-modeling-practice",
     "heading": null
+   }
+  ]
+ },
+ "de-concepts": {
+  "hub": "/data-engineering/",
+  "lessons": [],
+  "items": [
+   {
+    "topic": "Data lifecycle and ownership",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:etl-elt/modern-data-pipelines"
+   },
+   {
+    "topic": "OLTP and OLAP workloads",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:data-warehousing/data-warehousing-fundamentals"
+   },
+   {
+    "topic": "Batch versus streaming",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:etl-elt/batch-vs-streaming"
+   },
+   {
+    "topic": "ETL versus ELT",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:etl-elt/etl-vs-elt"
+   },
+   {
+    "topic": "Storage layers and raw landing",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:etl-elt/modern-data-pipelines"
+   },
+   {
+    "topic": "CSV and JSON trade-offs",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:python/file-io-csv-json"
+   },
+   {
+    "topic": "Parquet and columnar storage",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:etl-elt/modern-data-pipelines"
+   },
+   {
+    "topic": "Avro and schema evolution",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:kafka/schema-registry-schema-evolution"
+   },
+   {
+    "topic": "Partitioning and data layout",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:data-warehousing/partitioning-clustering-data-layout"
+   },
+   {
+    "topic": "Warehouse grain and star schemas",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Beginner",
+    "lesson": "articles:data-warehousing/star-schema"
+   },
+   {
+    "topic": "Fact and dimension tables",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:data-warehousing/fact-tables"
+   },
+   {
+    "topic": "Slowly changing dimensions",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:data-warehousing/slowly-changing-dimensions"
+   },
+   {
+    "topic": "Incremental loading and watermarks",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/incremental-loading-watermarks-backfills"
+   },
+   {
+    "topic": "Idempotent pipeline writes",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/idempotency-in-data-pipelines"
+   },
+   {
+    "topic": "Change data capture patterns",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/cdc-patterns-and-failure-modes"
+   },
+   {
+    "topic": "Data quality checks and contracts",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/data-quality-checks-contracts"
+   },
+   {
+    "topic": "Testing pipelines and CI/CD",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/testing-data-pipelines-cicd"
+   },
+   {
+    "topic": "Retries and failure recovery",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/pipeline-reliability-and-retries"
+   },
+   {
+    "topic": "Pipeline observability",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/pipeline-observability"
+   },
+   {
+    "topic": "Late data and backfills",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/incremental-loading-watermarks-backfills"
+   },
+   {
+    "topic": "Python functions and reusable code",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:python/functions-modules-reusable-code"
+   },
+   {
+    "topic": "Python iterators and generators",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:python/iterators-generators"
+   },
+   {
+    "topic": "Python API pagination",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:python/working-with-apis"
+   },
+   {
+    "topic": "Python CSV validation",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:python/idempotent-csv-loader"
+   },
+   {
+    "topic": "Data normalization trade-offs",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:data-warehousing/normalization-denormalization"
+   },
+   {
+    "topic": "Lake, warehouse and lakehouse",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"
+   },
+   {
+    "topic": "Data modeling methods",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:data-warehousing/modeling-methodologies"
+   },
+   {
+    "topic": "Secure data access and PII",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/data-quality-checks-contracts"
+   },
+   {
+    "topic": "Replay-safe event processing",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/cdc-patterns-and-failure-modes"
+   },
+   {
+    "topic": "Cost and freshness trade-offs",
+    "category": "Data Engineering Concepts",
+    "difficulty": "Intermediate",
+    "lesson": "articles:etl-elt/modern-data-pipelines"
    }
   ]
  },

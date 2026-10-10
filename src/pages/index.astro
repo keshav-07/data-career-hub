@@ -9,7 +9,7 @@ import { SITE, TECH_GROUP_LABELS } from "../data/site";
 import HomeRoadmap from "../components/planner/HomeRoadmap.astro";
 import PlannerRing from "../components/planner/PlannerRing.astro";
 import DataFlow from "../components/content/DataFlow.astro";
-import { planDays, TRACKERS, trackerRows } from "../utils/curriculum";
+import { planDays, TRACKERS, trackerRows, type PlanDay } from "../utils/curriculum";
 
 const hubs = (await getItems("technologies")).sort(
   (a, b) => a.entry.data.order - b.entry.data.order,
@@ -30,6 +30,11 @@ const days = await planDays();
 const day1 = days[0];
 const planHours = days.reduce((a, d) => a + d.hours, 0);
 const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).flat().length;
+const dayTopics = (day: PlanDay) =>
+  day.tasks
+    .filter((task) => task.track !== "Review")
+    .flatMap((task) => task.topics.map((item) => ({ skill: task.track, ...item })));
+const firstDayTopics = dayTopics(day1);
 ---
 
 <BaseLayout
@@ -47,8 +52,8 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
             Prepare for Data Engineer interviews <span class="hero-plan__em">in 90 days.</span>
           </h1>
           <p class="deck">
-            One clear plan, day by day: SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS and system
-            design, with mock interviews and applications built in. Every topic opens a full lesson.
+            A structured path from SQL, DSA, Python and data-engineering foundations to reliable
+            pipelines, system design and interview practice. Every planned topic links to a lesson.
           </p>
           <div class="hero__actions">
             <Button href="/planner/90-day-plan/#day-1" size="lg" fullWidthOnMobile data-plan-cta>
@@ -102,7 +107,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
               />
             </div>
             <ul class="day-card__tasks" role="list" data-dc-tasks>
-              {day1.tasks.map((t) => (
+              {firstDayTopics.map((t) => (
                 <li class="day-task" title={`${t.skill}: ${t.topic}`}>
                   {t.href ? (
                     <a class="day-task__link" href={t.href}>
@@ -118,7 +123,7 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
                   <input
                     type="checkbox"
                     class="day-task__check js-only"
-                    data-pl-key={t.key}
+                    data-pl-key={t.key ?? ""}
                     data-pl-field="learn"
                     aria-label={`Studied: ${t.skill}, ${t.topic}`}
                   />
@@ -128,10 +133,10 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
             <div class="day-card__bar">
               <p class="day-card__foot">
                 <span class="day-card__count js-only" data-dc-count>
-                  0/{day1.tasks.length} topics
+                  0/{firstDayTopics.length} topics
                 </span>
                 <span data-dc-foot>
-                  {day1.hours} h · {day1.mock}
+                  {day1.hours} h · {day1.outcome}
                 </span>
               </p>
               <div class="day-card__controls js-only">
@@ -153,6 +158,9 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
                 </button>
               </div>
             </div>
+            <p class="day-card__outcome" data-dc-outcome>
+              {day1.outcome}
+            </p>
             <p class="visually-hidden" aria-live="polite" data-dc-live></p>
             <script
               type="application/json"
@@ -162,8 +170,8 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
                   d: d.day,
                   th: d.theme,
                   h: d.hours,
-                  m: d.mock,
-                  t: d.tasks.map((t) => [t.skill, t.topic, t.href ?? "", t.key]),
+                  m: d.outcome,
+                  t: dayTopics(d).map((t) => [t.skill, t.topic, t.href ?? "", t.key ?? ""]),
                 })),
               ).replace(/</g, "\\u003c")}
             />
@@ -249,7 +257,8 @@ const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).f
         <h2 id="plan-h">Three phases. Thirteen weeks. One goal.</h2>
         <p>
           Foundations first, then advanced topics and projects, then interview mastery. Each week
-          ends with a clear milestone, and every day has one topic per skill.
+          starts with foundations, then adds tools after their prerequisites, with a weekly
+          milestone.
         </p>
       </div>
       <HomeRoadmap />

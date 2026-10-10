@@ -33,12 +33,16 @@ function tile([skill, topic, href, key]: [string, string, string, string]) {
   t.textContent = topic;
   link.append(s, t);
   const box = document.createElement("input");
-  box.type = "checkbox";
-  box.className = "day-task__check";
-  box.dataset.plKey = key;
-  box.dataset.plField = "learn";
-  box.setAttribute("aria-label", `Studied: ${skill}, ${topic}`);
-  li.append(link, box);
+  if (key) {
+    box.type = "checkbox";
+    box.className = "day-task__check";
+    box.dataset.plKey = key;
+    box.dataset.plField = "learn";
+    box.setAttribute("aria-label", `Studied: ${skill}, ${topic}`);
+    li.append(link, box);
+  } else {
+    li.append(link);
+  }
   return li;
 }
 
@@ -93,7 +97,8 @@ export function initDayCard() {
       if (b.checked) studied++;
     });
     $("[data-dc-count]").textContent = `${studied}/${day.t.length} topics`;
-    $("[data-dc-foot]").textContent = `${day.h} h · ${day.m}`;
+    $("[data-dc-foot]").textContent = `${day.h} h · ${day.t.length} planned topics`;
+    $("[data-dc-outcome]").textContent = day.m;
     check.dataset.plDay = String(shown);
     check.dataset.hours = String(day.h);
     check.checked = isDone;

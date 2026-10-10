@@ -88,6 +88,56 @@
   .pl-week {
     margin-top: var(--sp-6);
   }
+  .pl-phase-goal {
+    max-width: 72ch;
+    margin-top: var(--sp-2);
+    color: var(--c-text-muted);
+  }
+  .pl-task {
+    display: grid;
+    gap: var(--sp-1);
+    padding-block: var(--sp-2);
+  }
+  .pl-task__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+  .pl-task__meta {
+    color: var(--c-text-muted);
+    font-size: var(--fs-xs);
+  }
+  .pl-task__topics {
+    display: grid;
+    gap: 3px;
+    margin: 0;
+    padding-left: var(--sp-5);
+  }
+  .pl-day-guidance {
+    display: grid;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-left: 2px solid var(--c-border-strong);
+    background: var(--c-surface);
+    font-size: var(--fs-sm);
+  }
+  .pl-day-guidance div {
+    display: grid;
+    gap: 2px;
+  }
+  .pl-day-guidance dt {
+    color: var(--c-accent);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .pl-day-guidance dd {
+    margin: 0;
+  }
   .pl-week h3 {
     display: flex;
     flex-wrap: wrap;
@@ -152,9 +202,9 @@
     margin: 0;
     font-size: var(--fs-sm);
   }
-  .pl-tasks li {
+  .pl-tasks > li {
     display: grid;
-    grid-template-columns: 7.5rem 1fr;
+    grid-template-columns: 1fr;
     gap: var(--sp-2);
   }
   .pl-tasks__skill {
@@ -596,6 +646,11 @@
     flex: 1 1 12rem;
     font-size: var(--fs-xs);
     color: var(--c-text-muted);
+  }
+  .day-card__outcome {
+    margin-top: var(--sp-3);
+    color: var(--c-text-muted);
+    font-size: var(--fs-sm);
   }
   .day-card__controls {
     display: flex;

@@ -23,7 +23,7 @@ const phases = [...new Set(days.map((d) => d.phase))].map((name, i) => {
     from: list[0].day,
     to: end.day,
     hours: list.reduce((a, d) => a + d.hours, 0),
-    monthly: list.find((d) => d.monthly)?.monthly?.replace(/^Month \d+:\s*/, ""),
+    goal: list[0].phaseGoal,
     outcome: list.find((d) => d.outcome)?.outcome,
     weeks,
   };
@@ -45,7 +45,7 @@ const phases = [...new Set(days.map((d) => d.phase))].map((name, i) => {
             <h3 class="phase-card__title">{p.title}</h3>
           </div>
         </div>
-        {p.monthly && <p class="phase-card__goal">{p.monthly}</p>}
+        <p class="phase-card__goal">{p.goal}</p>
         <ol class="phase-card__weeks" role="list">
           {p.weeks.map((w) => (
             <li>

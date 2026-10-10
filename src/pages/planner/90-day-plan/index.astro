@@ -7,6 +7,7 @@ import { planDays, type PlanDay } from "../../../utils/curriculum";
 const days = await planDays();
 const hours = days.reduce((a, d) => a + d.hours, 0);
 const phases = [...new Set(days.map((d) => d.phase))];
+const goalOf = (phase: string) => days.find((d) => d.phase === phase)?.phaseGoal;
 const weeksOf = (phase: string) => {
   const map = new Map<number, PlanDay[]>();
   for (const d of days.filter((x) => x.phase === phase)) {
@@ -19,10 +20,10 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
 
 <ContentLayout
   title="90-Day Data Engineer Study Plan"
-  description="A day-by-day 90-day plan for Data Engineering interviews: SQL, DSA, PySpark, Snowflake, Kafka, Airflow, AWS and system design each day, with milestones."
+  description="A prerequisite-first 90-day data-engineering interview plan with per-task time, hands-on exercises, interview questions and weekly milestones."
   crumbs={[HOME, { label: "Study planner", href: "/planner/" }, { label: "90-day plan" }]}
   eyebrow="Study planner"
-  deck={`${days.length} days, ${hours} planned hours: about 3 hours on weekdays and 6 at weekends. Each day pairs one topic from every skill with a mock interview, revision or applications. Every topic links to its lesson.`}
+  deck={`${days.length} days, ${hours} planned hours: 3 hours on weekdays and 6 at weekends. Build foundations first, then reliable pipelines and interview readiness. Every day includes a hands-on exercise, an interview question and a clear outcome.`}
   width="wide"
   indexable
 >
@@ -36,8 +37,8 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
             <input type="date" data-pl-start />
           </label>
           <p class="muted" style="font-size: var(--fs-sm)">
-            Set a start date to see a calendar date on each day and highlight today. Saved in this
-            browser only.
+            Set a Saturday start date to align the 6-hour weekend and 3-hour weekday schedule with
+            calendar dates. Saved in this browser only.
           </p>
         </div>
       </div>
@@ -51,6 +52,7 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
     {phases.map((phase, pi) => (
       <section class="section section--tight" aria-labelledby={`phase-${pi + 1}`}>
         <h2 id={`phase-${pi + 1}`}>{phase}</h2>
+        {goalOf(phase) && <p class="pl-phase-goal">{goalOf(phase)}</p>}
         {weeksOf(phase).map(([week, list]) => (
           <div class="pl-week">
             <h3 id={`week-${week}`}>
@@ -74,20 +76,51 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
                   </div>
                   <ul class="pl-tasks" role="list">
                     {d.tasks.map((t) => (
-                      <li>
-                        <span class="pl-tasks__skill">{t.skill}</span>
-                        {t.href ? <a href={t.href}>{t.topic}</a> : <span>{t.topic}</span>}
+                      <li class="pl-task">
+                        <div class="pl-task__head">
+                          <span class="pl-tasks__skill">{t.track}</span>
+                          <span class="pl-task__meta">
+                            {t.minutes} min · {t.kind}
+                          </span>
+                        </div>
+                        <ul class="pl-task__topics" role="list">
+                          {t.topics.map((item) => (
+                            <li>
+                              {item.href ? (
+                                <a href={item.href}>{item.topic}</a>
+                              ) : (
+                                <span>{item.topic}</span>
+                              )}
+                            </li>
+                          ))}
+                          {t.practice?.map((item) => (
+                            <li>
+                              <a href={item.url} target="_blank" rel="noopener noreferrer">
+                                Practice: {item.title} ↗
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
                       </li>
                     ))}
-                    <li>
-                      <span class="pl-tasks__skill">Also</span>
-                      <span>{d.mock}</span>
-                    </li>
                   </ul>
-                  {(d.monthly || d.outcome) && (
+                  <dl class="pl-day-guidance">
+                    <div>
+                      <dt>Exercise</dt>
+                      <dd>{d.exercise}</dd>
+                    </div>
+                    <div>
+                      <dt>Interview question</dt>
+                      <dd>{d.interviewQuestion}</dd>
+                    </div>
+                    <div>
+                      <dt>Outcome</dt>
+                      <dd>{d.outcome}</dd>
+                    </div>
+                  </dl>
+                  {d.monthly && (
                     <p class="pl-month">
-                      {d.monthly && <strong>{d.monthly}</strong>}
-                      {d.outcome && <span> Target: {d.outcome}.</span>}
+                      <strong>{d.monthly}</strong>
                     </p>
                   )}
                 </li>

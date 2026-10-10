@@ -62,6 +62,15 @@ export const TRACKERS: TrackerDef[] = [
     doneLabel: "studied",
   },
   {
+    id: "de-concepts",
+    title: "Data Engineering concepts tracker",
+    short: "DE Concepts",
+    blurb:
+      "Foundations and reliable pipeline practices, linked to the existing ETL/ELT, warehousing and Python lessons.",
+    fields: [LEARN, PRACTICE, R1],
+    doneLabel: "studied",
+  },
+  {
     id: "snowflake",
     title: "Snowflake tracker",
     short: "Snowflake",
@@ -185,61 +194,111 @@ export async function trackerRows(tracker: string): Promise<TopicRow[]> {
   });
 }
 
+export type PlanTopic = {
+  topic: string;
+  key?: string;
+  href?: string;
+  ref?: string;
+};
+export type PlanTask = {
+  track: string;
+  minutes: number;
+  kind: "learn" | "practice" | "project" | "mock" | "revise";
+  topics: PlanTopic[];
+  practice?: { title: string; url: string }[];
+};
 export type PlanDay = {
   day: number;
   week: number;
   phase: string;
   theme: string;
   hours: number;
-  /** key: the planner topic key (`tracker:slug`) used to tick the topic as studied. */
-  tasks: { skill: string; tracker?: string; topic: string; key: string; href?: string }[];
-  mock: string;
+  tasks: PlanTask[];
+  exercise: string;
+  interviewQuestion: string;
+  outcome: string;
   weekly?: string;
   monthly?: string;
-  outcome?: string;
+  phaseGoal: string;
 };
 
-const PLAN_SKILLS: [string, string][] = [
-  ["SQL", "sql"],
-  ["DSA", "dsa"],
-  ["PySpark", "pyspark"],
-  ["Snowflake", "snowflake"],
-  ["Kafka", "kafka"],
-  ["Airflow", "airflow"],
-  ["AWS", "aws"],
-  ["System Design", "system-design"],
-];
+const PLAN_TRACKS: Record<string, string> = {
+  sql: "SQL",
+  dsa: "DSA",
+  "de-concepts": "DE Concepts",
+  python: "Python",
+  "data-modeling": "Data Modeling",
+  pyspark: "PySpark",
+  snowflake: "Snowflake",
+  airflow: "Airflow",
+  aws: "AWS",
+  "system-design": "System Design",
+  kafka: "Kafka",
+  project: "Project / lab",
+  review: "Review",
+};
 
-/** The 90-day day-by-day plan, with each day's topics linked to their study material. */
+type RawPlan = {
+  phases: { title: string; goal: string }[];
+  days: {
+    day: number;
+    phase: number;
+    week: number;
+    theme: string;
+    hours: number;
+    exercise: string;
+    interviewQuestion: string;
+    outcome: string;
+    weekly?: string;
+    monthly?: string;
+    tasks: {
+      track: string;
+      minutes: number;
+      kind: PlanTask["kind"];
+      items: { topic: string; ref?: string; tracker?: string }[];
+      practice?: { title: string; url: string }[];
+    }[];
+  }[];
+};
+
+/** The generated 90-day plan, with tracker topics and course lessons linked to their existing pages. */
 export async function planDays(): Promise<PlanDay[]> {
+  const raw = plan as unknown as RawPlan;
   const lookup = new Map<string, TopicRow>();
-  for (const [, t] of PLAN_SKILLS) {
-    for (const r of await trackerRows(t)) lookup.set(keyOf(t, r.topic), r);
+  for (const tracker of TRACKERS) {
+    for (const row of await trackerRows(tracker.id)) lookup.set(keyOf(tracker.id, row.topic), row);
   }
-  return (plan as Record<string, string | number | null>[]).map((d) => {
-    const day = Number(d["Day"]);
-    return {
-      day,
-      week: Math.ceil(day / 7),
-      phase: String(d["Phase"]),
-      theme: String(d["Focus Theme"]),
-      hours: Number(d["Planned Hrs"]),
-      tasks: PLAN_SKILLS.map(([skill, tracker]) => {
-        const topic = String(d[skill]);
+  const byRef = new Map((await getAllContent()).map((item) => [item.ref, item]));
+  return raw.days.map((day) => ({
+    day: day.day,
+    week: day.week,
+    phase: raw.phases[day.phase - 1].title,
+    phaseGoal: raw.phases[day.phase - 1].goal,
+    theme: day.theme,
+    hours: day.hours,
+    exercise: day.exercise,
+    interviewQuestion: day.interviewQuestion,
+    outcome: day.outcome,
+    weekly: day.weekly,
+    monthly: day.monthly,
+    tasks: day.tasks.map((task) => ({
+      track: PLAN_TRACKS[task.track] ?? task.track,
+      minutes: task.minutes,
+      kind: task.kind,
+      practice: task.practice,
+      topics: task.items.map((item) => {
+        const row = item.tracker ? lookup.get(keyOf(item.tracker, item.topic)) : undefined;
+        const page = item.ref ? byRef.get(item.ref) : undefined;
+        const trackerKey = item.tracker ? keyOf(item.tracker, item.topic) : undefined;
         return {
-          skill,
-          tracker,
-          topic,
-          key: keyOf(tracker, topic),
-          href: lookup.get(keyOf(tracker, topic))?.href,
+          topic: item.topic,
+          key: trackerKey ?? (item.ref ? `${task.track}:${slug(item.topic)}` : undefined),
+          ref: item.ref,
+          href: row?.href ?? page?.url,
         };
       }),
-      mock: String(d["Mock / Apply"]),
-      weekly: (d["Weekly Milestone"] as string) ?? undefined,
-      monthly: (d["Monthly Milestone"] as string) ?? undefined,
-      outcome: (d["Expected Outcome"] as string) ?? undefined,
-    };
-  });
+    })),
+  }));
 }
 
 /** One row of a Practice tab: a DataDank problem page, or a practice-only problem awaiting its write-up. */

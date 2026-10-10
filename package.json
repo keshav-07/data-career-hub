@@ -13,9 +13,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:dist": "node scripts/check-dist.mjs",
-    "validate": "npm run check && npm run lint && npm run check:contrast && npm run check:inventory && npm run build && npm run check:dist",
+    "validate": "npm run check && npm run lint && npm run check:contrast && npm run check:inventory && npm run check:plan && npm run build && npm run check:dist",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "check:inventory": "node scripts/check-inventory.mjs"
+    "check:inventory": "node scripts/check-inventory.mjs",
+    "check:plan": "node scripts/check-plan.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.2",
