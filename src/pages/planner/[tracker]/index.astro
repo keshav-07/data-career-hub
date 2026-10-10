@@ -26,6 +26,7 @@ const others = TRACKERS.filter((t) => t.id !== def.id);
 
 <ContentLayout
   title={def.title}
+  seoTitle={`${def.short} Study Tracker: ${rows.length} Topics for Data Engineers`}
   description={`Every ${def.short} topic from the Data Engineer study planner, each linked to its lesson. Tick what you studied, practised and revised; progress stays in your browser.`}
   crumbs={[HOME, { label: "Study planner", href: "/planner/" }, { label: def.short }]}
   eyebrow="Study planner"

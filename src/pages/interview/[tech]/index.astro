@@ -38,8 +38,9 @@ const hub = await getHub(tech!);
 ---
 
 <ContentLayout
-  title={`${label} interview questions`}
-  description={`Practice ${label} interview questions for Data Engineers with a short answer, a deep explanation, common mistakes and follow-ups.`}
+  title={`${label} interview questions${/data engineering/i.test(label) ? "" : " for Data Engineers"}`}
+  seoTitle={`${label} Interview Questions${/data engineering/i.test(label) ? " and Answers" : " for Data Engineers"}`}
+  description={`${qs.length} ${label} interview questions for Data Engineers, each with a short answer you can say out loud, a deeper explanation, common mistakes and follow-ups.`}
   crumbs={[HOME, { label: "Interview", href: "/interview/" }, { label }]}
   eyebrow="Interview preparation"
   deck="Every question starts with a direct answer you could say out loud, then explains why, when and what goes wrong. Tick questions off as you practise."

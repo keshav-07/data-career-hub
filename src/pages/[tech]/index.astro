@@ -56,7 +56,7 @@ const tabs = [
 
 <BaseLayout
   title={d.shortName}
-  seoTitle={`${d.shortName}: Learning Path and Guides`}
+  seoTitle={`${d.shortName} for Data Engineers: Course and Practice`}
   description={d.description}
   schema={[breadcrumbSchema(crumbs, Astro.url.pathname, Astro.site)]}
   indexable
@@ -68,12 +68,14 @@ const tabs = [
       <div class="course-hero__grid">
         <div>
           <p class="eyebrow">Course · {TECH_GROUP_LABELS[d.group]}</p>
-          <h1 class="course-hero__title" data-pagefind-weight="10">
+          <div class="course-hero__title">
             <span class="tile__mono" aria-hidden="true">
               {d.monogram ?? d.shortName.slice(0, 2)}
             </span>
-            {d.shortName}
-          </h1>
+            <h1 class="course-hero__h1" data-pagefind-weight="10">
+              {d.shortName} <span class="course-hero__for">for Data Engineers</span>
+            </h1>
+          </div>
           <p class="deck" data-pagefind-weight="4">
             {d.description}
           </p>

@@ -492,6 +492,16 @@
     gap: var(--sp-4);
     margin-top: var(--sp-2);
   }
+  .course-hero__h1 {
+    margin: 0;
+  }
+  .course-hero__for {
+    display: block;
+    margin-top: 0.15em;
+    font-size: 0.42em;
+    letter-spacing: 0;
+    color: var(--c-text-muted);
+  }
   .course-hero__title .tile__mono {
     width: 64px;
     height: 64px;
