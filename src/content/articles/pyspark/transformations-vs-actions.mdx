@@ -9,7 +9,7 @@ technology: ["pyspark", "spark"]
 topic: ["lazy-evaluation", "execution-model"]
 difficulty: "Beginner"
 prerequisites: ["articles:pyspark/dataframes-and-schemas"]
-related: ["interview-questions:spark/transformation-vs-action", "interview-questions:spark/narrow-vs-wide-transformations", "articles:spark/execution-model-jobs-stages-tasks"]
+related: ["interview-questions:spark/transformation-vs-action", "interview-questions:spark/what-causes-a-shuffle", "articles:spark/execution-model-jobs-stages-tasks"]
 previous: "articles:pyspark/dataframes-and-schemas"
 next: "articles:pyspark/aggregations-pivot-views"
 sources:
@@ -172,7 +172,7 @@ Each transformation adds to the plan. In a loop that keeps reassigning `df = df.
 
 ## Interview angle
 
-This is one of the most common Spark interview openers. A strong answer covers four things: transformations are lazy and return a new DataFrame; actions trigger a job; laziness lets Catalyst optimise the whole chain (predicate pushdown, column pruning, pre-aggregation); and wide transformations shuffle and create stage boundaries. See the interview answers for [transformation vs action](/interview/spark/transformation-vs-action/) and [narrow vs wide transformations](/interview/spark/narrow-vs-wide-transformations/).
+This is one of the most common Spark interview openers. A strong answer covers four things: transformations are lazy and return a new DataFrame; actions trigger a job; laziness lets Catalyst optimise the whole chain (predicate pushdown, column pruning, pre-aggregation); and wide transformations shuffle and create stage boundaries. See the interview answers for [transformation vs action](/interview/spark/transformation-vs-action/) and [what causes a shuffle](/interview/spark/what-causes-a-shuffle/).
 
 <details>
 <summary>Is cache() a transformation or an action?</summary>
