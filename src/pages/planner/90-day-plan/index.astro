@@ -6,6 +6,8 @@ import { planDays, type PlanDay } from "../../../utils/curriculum";
 
 const days = await planDays();
 const hours = days.reduce((a, d) => a + d.hours, 0);
+const trackedTopicCount = (day: PlanDay) =>
+  day.tasks.reduce((count, task) => count + task.topics.filter((topic) => topic.key).length, 0);
 const phases = [...new Set(days.map((d) => d.phase))];
 const goalOf = (phase: string) => days.find((d) => d.phase === phase)?.phaseGoal;
 const weeksOf = (phase: string) => {
@@ -64,19 +66,27 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
             <ol class="pl-days" role="list">
               {list.map((d) => (
                 <li class="pl-day" data-pl-day-card id={`day-${d.day}`}>
-                  <div class="pl-day__head">
-                    <div class="pl-day__title">
-                      <label class="pl-day__done js-only">
-                        <input type="checkbox" data-pl-day={d.day} data-hours={d.hours} />
-                        <span class="visually-hidden">Mark day {d.day} as done</span>
-                      </label>
-                      <strong>Day {d.day}</strong>
+                  <div class="day-card__head pl-day__head">
+                    <div class="day-card__heading pl-day__heading">
+                      <p class="day-card__eyebrow">
+                        <span>Daily focus</span>
+                        <span class="day-card__pill">
+                          {d.day === 1 ? "Start here" : `Week ${d.week}`}
+                        </span>
+                      </p>
+                      <p class="pl-day__day">
+                        <span class="pl-day__number">Day {d.day}</span>
+                        <span class="pl-day__total">/ {days.length}</span>
+                      </p>
+                      <p class="pl-day__date" data-pl-date={d.day}></p>
+                      <h3 class="day-card__title pl-day__theme">{d.theme}</h3>
                     </div>
-                    <div class="pl-day__summary">
-                      <span class="pl-day__date" data-pl-date={d.day}></span>
-                      <span class="pl-day__theme">{d.theme}</span>
-                    </div>
-                    <span class="pl-day__hours">{d.hours} h</span>
+                    <PlannerRing
+                      tracker="days"
+                      label={`Plan progress, day ${d.day}`}
+                      total={days.length}
+                      hours={hours}
+                    />
                   </div>
                   <ul class="pl-tasks" role="list">
                     {d.tasks.map((t) => (
@@ -89,18 +99,39 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
                         </div>
                         <ul class="pl-task__topics" role="list">
                           {t.topics.map((item) => (
-                            <li>
+                            <li class="day-task" title={`${t.track}: ${item.topic}`}>
                               {item.href ? (
-                                <a href={item.href}>{item.topic}</a>
+                                <a class="day-task__link" href={item.href}>
+                                  <span class="day-task__skill">{t.track}</span>
+                                  <span class="day-task__topic">{item.topic}</span>
+                                </a>
                               ) : (
-                                <span>{item.topic}</span>
+                                <span class="day-task__link">
+                                  <span class="day-task__skill">{t.track}</span>
+                                  <span class="day-task__topic">{item.topic}</span>
+                                </span>
+                              )}
+                              {item.key && (
+                                <input
+                                  type="checkbox"
+                                  class="day-task__check js-only"
+                                  data-pl-key={item.key}
+                                  data-pl-field="learn"
+                                  aria-label={`Studied: ${t.track}, ${item.topic}`}
+                                />
                               )}
                             </li>
                           ))}
                           {t.practice?.map((item) => (
-                            <li>
-                              <a href={item.url} target="_blank" rel="noopener noreferrer">
-                                Practice: {item.title} ↗
+                            <li class="day-task" title={`${t.track} practice: ${item.title}`}>
+                              <a
+                                class="day-task__link"
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <span class="day-task__skill">{t.track} practice</span>
+                                <span class="day-task__topic">{item.title} ↗</span>
                               </a>
                             </li>
                           ))}
@@ -108,6 +139,29 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
                       </li>
                     ))}
                   </ul>
+                  <div class="day-card__bar">
+                    <p class="day-card__foot">
+                      <span
+                        class="day-card__count js-only"
+                        data-pl-topic-count={d.day}
+                        data-total={trackedTopicCount(d)}
+                      >
+                        0/{trackedTopicCount(d)} topics
+                      </span>
+                      <span>
+                        {d.hours} h · {trackedTopicCount(d)} planned topics
+                      </span>
+                    </p>
+                    <label class="day-card__done js-only">
+                      <input
+                        type="checkbox"
+                        data-pl-day={d.day}
+                        data-hours={d.hours}
+                        aria-label={`Day ${d.day} complete`}
+                      />
+                      <span>Mark complete</span>
+                    </label>
+                  </div>
                   <dl class="pl-day-guidance">
                     <div>
                       <dt>Exercise</dt>
@@ -140,4 +194,19 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
 <script>
   import { initPlanner } from "../../../scripts/planner";
   initPlanner();
+
+  function updateDayTopicCounts() {
+    document.querySelectorAll<HTMLElement>("[data-pl-topic-count]").forEach((count) => {
+      const card = count.closest<HTMLElement>("[data-pl-day-card]");
+      const checks = card?.querySelectorAll<HTMLInputElement>(
+        'input[data-pl-key][data-pl-field="learn"]',
+      );
+      const total = Number(count.dataset.total) || 0;
+      const completed = checks ? [...checks].filter((check) => check.checked).length : 0;
+      count.textContent = `${completed}/${total} topics`;
+    });
+  }
+
+  document.addEventListener("planner:change", updateDayTopicCounts);
+  updateDayTopicCounts();
 </script>
