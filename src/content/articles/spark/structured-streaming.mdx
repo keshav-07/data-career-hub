@@ -1,0 +1,261 @@
+---
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Spark Structured Streaming: Triggers, Watermarks and Exactly-Once"
+seoTitle: "Spark Structured Streaming: Watermarks, Triggers"
+description: "Spark Structured Streaming explained with runnable PySpark: micro-batches, triggers, output modes, watermarks for late data, checkpoints and exactly-once sinks."
+technology: ["spark", "pyspark"]
+topic: ["streaming", "watermarks", "fault-tolerance"]
+difficulty: "Advanced"
+prerequisites: ["articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew"]
+related: ["interview-questions:spark/streaming-watermarks-late-data", "articles:databricks/auto-loader-declarative-pipelines", "articles:etl-elt/batch-vs-streaming", "interview-questions:data-engineering/exactly-once-vs-effectively-once", "interview-questions:data-engineering/late-arriving-data"]
+previous: "articles:spark/deployment-monitoring"
+next: "articles:pyspark/dataframes-and-schemas"
+sources:
+  - {"label": "Apache Spark documentation: Structured Streaming programming guide", "url": "https://spark.apache.org/docs/latest/streaming/index.html"}
+  - {"label": "Apache Spark documentation: Structured Streaming + Kafka integration guide", "url": "https://spark.apache.org/docs/latest/streaming/structured-streaming-kafka-integration.html"}
+  - {"label": "PySpark API reference: DataStreamWriter", "url": "https://spark.apache.org/docs/latest/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html"}
+versionContext: "All examples except the Kafka one run on PySpark 4.2.0 in local mode (local[2], spark.sql.shuffle.partitions=2, session time zone UTC) using a JSON file source so results are deterministic; the outputs are from that run. The Kafka example needs a broker and the spark-sql-kafka package and was not executed; its options were checked against the Spark 4.2 Kafka integration guide."
+---
+
+Structured Streaming lets you write a streaming job with the same DataFrame API as a batch job. Spark treats the stream as an **unbounded table**: each trigger, it reads the new rows, runs your query incrementally over them (keeping state for aggregations, joins and deduplication), and writes the changed results to a sink. Underneath, by default, each trigger is a small batch job — a **micro-batch** — with the usual stages, tasks and shuffles.
+
+This lesson covers what interviewers probe: triggers, output modes, watermarks and late data, checkpoints, and what "exactly-once" really means.
+
+## The pieces of a query
+
+```text
+source  ->  transformations (stateless or stateful)  ->  sink
+  ^                         |                             |
+  |                    state store                        |
+  +-------------- checkpoint: offsets, commits, state ----+
+```
+
+- **Source**: Kafka, files in a directory, Delta tables, or test sources (`rate`, `socket`). Production sources must be **replayable**: Spark must be able to re-read a range of input by offset after a failure.
+- **Transformations**: stateless ones (`select`, `filter`, `withColumn`) act on each micro-batch alone. Stateful ones (`groupBy` aggregations, `dropDuplicates`, stream-stream joins, `transformWithState`) keep state across batches in a **state store** on the executors.
+- **Sink**: Delta, files, Kafka, `foreachBatch` (your own code per micro-batch), or `console`/`memory` for testing.
+- **Checkpoint**: a directory (`checkpointLocation`) where Spark records, per batch, the offsets it is about to process, which batches completed, and snapshots of the state. Restarting a query with the same checkpoint resumes exactly where it stopped.
+
+## Triggers
+
+| Trigger | Behaviour | Use it for |
+|---------|-----------|-----------|
+| Default (none set) | Start the next micro-batch as soon as the previous one finishes | Lowest latency with micro-batches |
+| `trigger(processingTime="1 minute")` | Start a micro-batch at a fixed interval (skips ahead if a batch overruns) | Steady streams where you want fewer, bigger batches |
+| `trigger(availableNow=True)` | Process everything available now, in possibly several batches respecting rate limits, then stop | Scheduled incremental jobs: streaming semantics, batch cost |
+| `trigger(once=True)` | One batch, then stop | Deprecated: use `availableNow` |
+| `trigger(continuous="1 second")` | Experimental continuous processing, millisecond latency, limited operations, at-least-once | Rarely used |
+
+`availableNow` is worth highlighting: a job that runs every hour with `availableNow` gets exactly-once, checkpointed incremental processing without a cluster that runs all day. The examples below use it so they finish deterministically.
+
+## Output modes
+
+- **Append**: only rows that will never change are written. For an aggregation, that means a window is emitted once, after the watermark passes its end. Required by file sinks; the default.
+- **Update**: rows that changed in this trigger are written, possibly many times as late data arrives. Needs a sink that can upsert (for example `foreachBatch` with a `MERGE`).
+- **Complete**: the whole result table is rewritten every trigger. Only for aggregations, and only when the result is small, because no state can ever be dropped.
+
+## Watermarks and late data
+
+Event time (when something happened) and processing time (when Spark sees it) differ: phones go offline, partitions lag. A **watermark** tells Spark how late data may be:
+
+```text
+watermark = max(event_time seen so far) - allowed delay
+```
+
+Rows older than the watermark may be dropped, and state for windows that end before the watermark is removed. Without a watermark, a windowed aggregation keeps every window's state forever.
+
+The example feeds three files of events to a 10-minute tumbling-window sum with a 10-minute watermark, and runs the query three times against the same checkpoint, as a scheduled job would:
+
+```python
+import json, os, tempfile
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("watermarks")
+         .config("spark.sql.shuffle.partitions", "2")
+         .config("spark.sql.session.timeZone", "UTC").getOrCreate())
+
+base = tempfile.mkdtemp()
+landing = f"{base}/events"
+os.makedirs(landing)
+schema = "user STRING, event_time TIMESTAMP, amount DOUBLE"
+
+def drop_file(name, rows):
+    with open(f"{landing}/{name}", "w") as fh:
+        fh.write("\n".join(json.dumps(r) for r in rows))
+
+def windowed_totals():
+    events = spark.readStream.schema(schema).json(landing)
+    return (events
+            .withWatermark("event_time", "10 minutes")
+            .groupBy(F.window("event_time", "10 minutes"))
+            .agg(F.sum("amount").alias("total"), F.count("*").alias("events")))
+
+def run(mode, checkpoint):
+    emitted = []
+    def collect(batch_df, batch_id):
+        for r in batch_df.orderBy("window").collect():
+            emitted.append((r.window.start.strftime("%H:%M"), r.window.end.strftime("%H:%M"), r.total))
+    q = (windowed_totals().writeStream.outputMode(mode).foreachBatch(collect)
+         .option("checkpointLocation", checkpoint).trigger(availableNow=True).start())
+    q.awaitTermination()
+    return emitted, q.lastProgress["eventTime"].get("watermark")
+
+drop_file("001.json", [{"user": "a", "event_time": "2026-10-01 12:01:00", "amount": 10},
+                       {"user": "b", "event_time": "2026-10-01 12:04:00", "amount": 5},
+                       {"user": "a", "event_time": "2026-10-01 12:12:00", "amount": 7}])
+print("run 1:", run("append", f"{base}/chk_append"))
+
+drop_file("002.json", [{"user": "c", "event_time": "2026-10-01 12:25:00", "amount": 3},
+                       {"user": "b", "event_time": "2026-10-01 12:08:00", "amount": 4}])   # late, but within 10 min
+print("run 2:", run("append", f"{base}/chk_append"))
+
+drop_file("003.json", [{"user": "d", "event_time": "2026-10-01 12:03:00", "amount": 100},  # too late
+                       {"user": "d", "event_time": "2026-10-01 12:41:00", "amount": 1}])
+print("run 3:", run("append", f"{base}/chk_append"))
+```
+
+```text
+run 1: ([], '2026-10-01T12:02:00.000Z')
+run 2: ([('12:00', '12:10', 19.0)], '2026-10-01T12:15:00.000Z')
+run 3: ([('12:10', '12:20', 7.0), ('12:20', '12:30', 3.0)], '2026-10-01T12:31:00.000Z')
+```
+
+Trace it:
+
+1. **Run 1.** Latest event 12:12, so the watermark becomes 12:02. No window has ended before 12:02, so append mode writes nothing yet.
+2. **Run 2.** The 12:08 event is late but newer than the watermark (12:02), so it is added to the 12:00–12:10 window (10 + 5 + 4 = 19). The latest event is now 12:25, the watermark moves to 12:15, and the 12:00 window is final and emitted once.
+3. **Run 3.** The 12:03 event (amount 100) is older than the watermark (12:15): its window is closed and its state is gone, so it is **dropped** — the 19.0 already written is never corrected. The 12:41 event moves the watermark to 12:31, finalising the 12:10 and 12:20 windows.
+
+The watermark survived between runs because it is stored in the checkpoint. That is also why each run emitted results without waiting for more data: after a data batch, Spark runs a no-data batch when the watermark has moved so that newly final windows are written.
+
+The same input in **update** mode emits every window whenever it changes:
+
+```python
+for name in sorted(os.listdir(landing)):
+    os.remove(f"{landing}/{name}")
+
+drop_file("001.json", [{"user": "a", "event_time": "2026-10-01 12:01:00", "amount": 10},
+                       {"user": "b", "event_time": "2026-10-01 12:04:00", "amount": 5},
+                       {"user": "a", "event_time": "2026-10-01 12:12:00", "amount": 7}])
+print("run 1:", run("update", f"{base}/chk_update")[0])
+drop_file("002.json", [{"user": "c", "event_time": "2026-10-01 12:25:00", "amount": 3},
+                       {"user": "b", "event_time": "2026-10-01 12:08:00", "amount": 4}])
+print("run 2:", run("update", f"{base}/chk_update")[0])
+drop_file("003.json", [{"user": "d", "event_time": "2026-10-01 12:03:00", "amount": 100},
+                       {"user": "d", "event_time": "2026-10-01 12:41:00", "amount": 1}])
+print("run 3:", run("update", f"{base}/chk_update")[0])
+```
+
+```text
+run 1: [('12:00', '12:10', 15.0), ('12:10', '12:20', 7.0)]
+run 2: [('12:00', '12:10', 19.0), ('12:20', '12:30', 3.0)]
+run 3: [('12:40', '12:50', 1.0)]
+```
+
+Update mode gives early, provisional answers (15.0, then 19.0 for the same window), so the sink must overwrite by key. The too-late 12:03 event is still dropped. The trade-off is the same in both modes: **a longer watermark accepts later data but keeps more state and, in append mode, delays results**.
+
+## Checkpoints and exactly-once
+
+"Exactly-once" in Structured Streaming means **each input record affects the sink's result exactly once**, even across failures. It holds only when three things are true:
+
+1. **The source is replayable** (Kafka offsets, files, Delta versions), so Spark can re-read a batch.
+2. **The checkpoint records progress**: before a batch runs, its offsets are written to the offset log; after it commits, a commit entry is written. On restart, Spark re-runs any batch that has offsets but no commit, with the same offsets.
+3. **The sink is idempotent** for a re-run batch. The file sink and the Delta sink are: they record which batch IDs they committed and ignore a replay. The Kafka sink is **at-least-once** (a replayed batch can write duplicates). `foreachBatch` is only as safe as your code.
+
+For `foreachBatch`, make writes idempotent with the batch ID or a key:
+
+{/* noexec */}
+```python
+def upsert_to_silver(batch_df, batch_id):
+    # MERGE on a business key: replaying the same batch produces the same table
+    batch_df.createOrReplaceTempView("updates")
+    batch_df.sparkSession.sql("""
+        MERGE INTO silver.orders t
+        USING (SELECT * FROM updates) s
+        ON t.order_id = s.order_id
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+    """)
+
+(orders_stream.writeStream
+    .foreachBatch(upsert_to_silver)
+    .option("checkpointLocation", "s3://bucket/checkpoints/silver_orders")
+    .trigger(processingTime="1 minute")
+    .start())
+```
+
+Delta also offers `txnAppId` and `txnVersion` write options for idempotent appends from `foreachBatch`. Checkpoint rules that prevent most incidents:
+
+- **One checkpoint per query**, never shared, stored on durable storage, not local disk.
+- **Do not delete a checkpoint to "fix" a query**: the source position and all state are lost, so the query either reprocesses everything or skips data, depending on its starting options.
+- **Some query changes are incompatible with an existing checkpoint**: changing the grouping keys, the stateful operations or the number of shuffle partitions of a stateful query. Adding a filter or a projection is usually fine. Plan a new checkpoint, and a backfill, for incompatible changes.
+
+## Reading from Kafka
+
+{/* noexec */}
+```python
+from pyspark.sql import functions as F
+
+raw = (spark.readStream.format("kafka")
+       .option("kafka.bootstrap.servers", "broker1:9092,broker2:9092")
+       .option("subscribe", "orders")
+       .option("startingOffsets", "earliest")        # used only when there is no checkpoint yet
+       .option("maxOffsetsPerTrigger", 500000)       # cap batch size to keep latency predictable
+       .load())
+
+orders = (raw.select(F.from_json(F.col("value").cast("string"),
+                                 "order_id STRING, amount DOUBLE, event_time TIMESTAMP").alias("o"))
+             .select("o.*"))
+```
+
+The checkpoint, not Kafka consumer-group commits, is the source of truth for the offsets Spark has processed. `startingOffsets` is ignored once a checkpoint exists.
+
+## Other stateful operations
+
+- **Deduplication**: `dropDuplicates(["event_id"])` on a stream keeps every key ever seen unless combined with a watermark; `dropDuplicatesWithinWatermark(["event_id"])` (Spark 3.5+) keeps keys only for the watermark delay, which bounds state.
+- **Stream-stream joins**: need watermarks on both sides plus an event-time range condition so Spark knows when it can drop buffered rows; outer joins emit unmatched rows only after the watermark passes.
+- **Arbitrary state**: `transformWithState` / `transformWithStateInPandas` (Spark 4.0+) replace `applyInPandasWithState` for custom sessionisation or alerts, with timers and per-key TTL.
+- **State store**: the default provider keeps state in executor memory and checkpoints it; for large state switch to RocksDB with `spark.sql.streaming.stateStore.providerClass=org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
+
+## Monitoring a query
+
+`query.lastProgress` and `query.recentProgress` return JSON per batch: input rows and rows per second, batch duration, the current watermark, and for each stateful operator the number of state rows, memory used and `numRowsDroppedByWatermark`. Alert when **processing rate stays below input rate** (the query is falling behind), when batch duration keeps growing, or when state rows grow without bound (a missing or too-long watermark). The Spark UI has a Structured Streaming tab with the same metrics over time.
+
+## Common mistakes
+
+1. No watermark on a windowed aggregation or streaming deduplication, so state grows until executors run out of memory.
+2. Expecting append mode to show a window as soon as data arrives; it waits for the watermark.
+3. Calling the Kafka sink or a non-idempotent `foreachBatch` "exactly-once".
+4. Sharing or deleting checkpoints, or storing them on local disk.
+5. Changing `spark.sql.shuffle.partitions` or grouping keys for a stateful query and reusing its checkpoint.
+6. Running an always-on stream for data needed once an hour, when `availableNow` on a schedule would do.
+
+## Interview angle
+
+<details>
+<summary>What happens to an event that arrives after the watermark?</summary>
+
+If its window's state has already been removed, it is dropped and does not change any result already written; you can count such rows through `numRowsDroppedByWatermark`. If the state still exists, it is still applied. Data needed later than the watermark allows must be reconciled by a separate batch correction job.
+
+</details>
+
+<details>
+<summary>How does Structured Streaming achieve exactly-once?</summary>
+
+A replayable source, a checkpoint that writes each batch's offsets before processing and a commit after, and an idempotent sink that ignores a replayed batch ID. Remove any of the three — for example a Kafka sink — and you get at-least-once.
+
+</details>
+
+<details>
+<summary>When would you choose availableNow over a continuously running query?</summary>
+
+When the freshness requirement is minutes to hours. You keep streaming's incremental, exactly-once processing and pay for compute only while each run is working.
+
+</details>
+
+See [Structured Streaming watermarks and late data](/interview/spark/streaming-watermarks-late-data/) for a full interview answer.
+
+## Key takeaway
+
+A streaming query is a sequence of checkpointed micro-batches. Triggers decide when batches run, output modes decide what is written, watermarks bound state and decide when late data is dropped, and exactly-once needs a replayable source, a checkpoint and an idempotent sink together.

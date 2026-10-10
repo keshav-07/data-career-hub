@@ -8,10 +8,10 @@ keyFacts: ["Driver plans work; executors run tasks","A shuffle ends a stage and 
 whatToLearnFirst: ["articles:spark/apache-spark-architecture", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew"]
 relatedTechnologies: ["pyspark","delta-lake","kafka"]
 monogram: "Sp"
-lessons: ["articles:spark/apache-spark-architecture", "articles:spark/rdd-fundamentals", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew", "articles:spark/caching-broadcast-accumulators", "articles:spark/catalyst-tungsten-optimizer", "articles:spark/adaptive-query-execution", "articles:spark/memory-executors-tuning", "articles:spark/deployment-monitoring"]
-updatedDate: 2026-10-05
+lessons: ["articles:spark/apache-spark-architecture", "articles:spark/rdd-fundamentals", "articles:spark/execution-model-jobs-stages-tasks", "articles:spark/partitions-shuffles-skew", "articles:spark/caching-broadcast-accumulators", "articles:spark/catalyst-tungsten-optimizer", "articles:spark/adaptive-query-execution", "articles:spark/memory-executors-tuning", "articles:spark/deployment-monitoring", "articles:spark/structured-streaming"]
+updatedDate: 2026-10-09
 ---
 
 Spark is a distributed processing engine. Your code builds a plan; Spark splits it into stages at shuffle boundaries and runs each stage as parallel tasks over partitions. Most tuning comes down to controlling how much data moves between executors and how evenly it is spread.
 
-The course runs from the architecture and RDD basics through the execution model, partitions, shuffles and skew, caching and shared variables, the Catalyst optimiser and Adaptive Query Execution, to memory tuning and running Spark on Kubernetes with the History Server. Examples were run on PySpark 4.2 and show real plans and metrics.
+The course runs from the architecture and RDD basics through the execution model, partitions, shuffles and skew, caching and shared variables, the Catalyst optimiser and Adaptive Query Execution, to memory tuning, running Spark on Kubernetes with the History Server, and Structured Streaming with watermarks and checkpoints. Examples were run on PySpark 4.2 and show real plans and metrics.
