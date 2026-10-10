@@ -1,66 +1,274 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Data Pipeline Reliability and Retry Design"
 seoTitle: "Data Pipeline Reliability and Retry Design"
-description: "Design pipelines that recover on their own: classify failures, retry with backoff and limits, isolate bad records, make steps idempotent and plan backfills."
+description: "Design pipelines that recover on their own: classify failures, retry with capped exponential backoff and jitter, set timeouts, use dead-letter queues and plan backfills."
 inventoryId: "SUPPORT-14"
 technology: ["etl-elt", "data-engineering"]
-topic: ["reliability", "retries"]
+topic: ["reliability", "retries", "dead-letter-queue"]
 difficulty: "Intermediate"
-related: ["articles:etl-elt/idempotency-in-data-pipelines", "interview-questions:python/exceptions-in-pipelines", "articles:airflow/dags-scheduling-retries"]
-sources: [{"label": "Apache Airflow documentation: Tasks (retries)", "url": "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/tasks.html"}]
-versionContext: "Tool-neutral; retry options shown in Airflow terms"
+learningObjectives:
+  - "Classify failures as transient, data, upstream-not-ready or systemic, and respond to each differently"
+  - "Implement retries with capped exponential backoff, jitter and a deadline in Python"
+  - "Explain why every retried step must be idempotent and how to keep retries safe"
+  - "Route poison records to a dead-letter queue and replay them after a fix"
+  - "Configure retries and timeouts in Airflow 3 and in the database"
+prerequisites: ["articles:etl-elt/pipeline-observability"]
+related: ["articles:etl-elt/idempotency-in-data-pipelines", "interview-questions:python/exceptions-in-pipelines", "articles:airflow/dags-scheduling-retries", "articles:etl-elt/incremental-loading-watermarks-backfills", "interview-questions:python/api-retries-backoff", "articles:python/working-with-apis"]
+previous: "articles:etl-elt/pipeline-observability"
+next: "articles:etl-elt/testing-data-pipelines-cicd"
+sources:
+  - { label: "Apache Airflow documentation: Tasks (retries and timeouts)", url: "https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/tasks.html" }
+  - { label: "AWS Architecture Blog: Exponential backoff and jitter", url: "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/" }
+  - { label: "PostgreSQL documentation: statement_timeout", url: "https://www.postgresql.org/docs/current/runtime-config-client.html" }
+versionContext: "Python runs on Python 3.11 (standard library) and SQL on PostgreSQL 16.14. The Airflow DAG was parsed with Apache Airflow 3.3.2 but not run against external systems."
 ---
 
-Reliable pipelines are not pipelines that never fail. They are pipelines where **failures are expected, contained and recoverable**, usually without a human.
+Reliable pipelines are not pipelines that never fail. Networks time out, APIs throttle, nodes are preempted and source files arrive late every week. Reliable pipelines are the ones where **failures are expected, contained and recoverable**, usually without a human, and where the failures that do need a human are reported quickly and clearly.
 
-## Classify failures
+## Classify failures first
+
+The right response depends on the kind of failure, so classify before you write any `try`.
 
 | Class | Examples | Strategy |
 |-------|----------|----------|
-| Transient | Timeouts, throttling, lock contention, preempted nodes | Retry with exponential backoff and a cap |
-| Data | A malformed record, an unexpected value | Quarantine and count; fail if the rate is high |
-| Upstream not ready | Source file late | Wait (sensor or schedule offset) with a timeout, then alert |
-| Systemic | Bad credentials, schema change, bug | Fail fast and alert; retrying will not help |
+| Transient | Timeouts, HTTP 429 and 503, lock contention, preempted nodes, dropped connections | Retry with exponential backoff, jitter and a cap |
+| Data | A malformed record, an unexpected value, a poison message | Quarantine or dead-letter the record and count it; fail if the rate is high |
+| Upstream not ready | Source file or partition not there yet | Wait (sensor, deferrable operator or schedule offset) with a timeout, then alert |
+| Systemic | Bad credentials, missing permission, schema change, a bug, HTTP 400 and 404 | Fail fast and alert; retrying will not help |
 
-Retrying a systemic failure only delays the alert.
+Retrying a systemic failure only delays the alert and wastes resources; failing on a transient one wakes someone up for a problem that would have fixed itself. In code, make the classification explicit with exception types rather than string matching.
 
-## Retry design
+```python
+class TransientError(Exception):
+    """Worth retrying: the same call may succeed later."""
 
-- **Exponential backoff with jitter**: wait longer after each failure, with randomness so many tasks do not retry at the same moment.
-- **Limits**: a small number of attempts and a maximum delay.
-- **Retry the smallest unit**: small tasks repeat less work when they fail.
-- **Idempotency first**: a retry must be safe to run (see [idempotency](/etl-elt/idempotency-in-data-pipelines/)).
+class PermanentError(Exception):
+    """Retrying will not help: fail fast and alert."""
 
-## Timeouts
+def classify_http(status: int) -> type[Exception] | None:
+    if status < 400:
+        return None
+    if status in (408, 429) or status >= 500:
+        return TransientError
+    return PermanentError          # 400, 401, 403, 404, 422 ...
 
-A task with no timeout can hang forever and block downstream work silently. Set execution timeouts on tasks and on calls to external services.
+print([(s, getattr(classify_http(s), "__name__", "ok")) for s in (200, 404, 429, 503)])
+```
 
-## Isolate failures
+```text
+[(200, 'ok'), (404, 'PermanentError'), (429, 'TransientError'), (503, 'TransientError')]
+```
 
-- Quarantine bad records rather than failing a whole batch for one row.
-- Separate independent sources into separate tasks so one failing source does not stop the others.
-- Use circuit breakers for unstable APIs: after repeated failures, stop calling for a while.
+## Retries with backoff, jitter and limits
+
+Three rules make retries safe for you and for the system you are calling:
+
+- **Exponential backoff**: wait longer after each failure (1 s, 2 s, 4 s, ...), so a struggling service gets room to recover.
+- **Jitter**: randomise each delay, so a hundred tasks that failed at the same moment do not all retry at the same moment. "Full jitter" picks a delay uniformly between zero and the exponential value.
+- **Limits**: a maximum number of attempts, a maximum single delay, and an overall deadline. Unlimited retries turn a short outage into a pile of stuck tasks.
+
+If the server sends a `Retry-After` header (common with HTTP 429 and 503), honour it instead of your own delay.
+
+```python
+import random
+import time
+
+def retry(fn, *, attempts=5, base=1.0, cap=30.0, deadline=120.0,
+          sleep=time.sleep, clock=time.monotonic, rng=random.random):
+    """Call fn until it succeeds, retrying only TransientError with capped full-jitter backoff."""
+    start = clock()
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except TransientError as exc:
+            delay = getattr(exc, "retry_after", None) or rng() * min(cap, base * 2 ** (attempt - 1))
+            if attempt == attempts or clock() - start + delay > deadline:
+                raise
+            print(f"attempt {attempt} failed ({exc}); sleeping {delay:.2f}s")
+            sleep(delay)
+
+# Simulate a service that fails twice, then succeeds. A fake sleep keeps the example instant.
+responses = iter([TransientError("503 Service Unavailable"), TransientError("timeout"), "200 OK"])
+def flaky_call():
+    r = next(responses)
+    if isinstance(r, Exception):
+        raise r
+    return r
+
+random.seed(7)
+slept = []
+print(retry(flaky_call, sleep=slept.append))
+print("total wait", round(sum(slept), 2))
+
+try:
+    retry(lambda: (_ for _ in ()).throw(PermanentError("404 Not Found")), sleep=slept.append)
+except PermanentError as exc:
+    print("failed fast:", exc)
+```
+
+```text
+attempt 1 failed (503 Service Unavailable); sleeping 0.32s
+attempt 2 failed (timeout); sleeping 0.30s
+200 OK
+total wait 0.63
+failed fast: 404 Not Found
+```
+
+The `PermanentError` is not caught by the retry loop at all, so it surfaces immediately. Injecting `sleep`, `clock` and `rng` makes the function testable without waiting; in production you would use a maintained library such as `tenacity` or your HTTP client's retry support, configured with the same rules.
+
+### Retries need idempotency
+
+A retry re-executes work that may have **partly succeeded**: the database committed but the acknowledgement was lost, or the file was written but the task was killed before it reported success. A retry is therefore only safe if the step is idempotent (see [idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/)):
+
+- loads overwrite a partition or merge on a key instead of appending;
+- API writes send an idempotency key so the server can ignore a duplicate;
+- side effects (emails, payments) are recorded and checked before repeating;
+- output files are written to a temporary name and renamed, so a half-written file never looks finished.
+
+### Retry the smallest unit
+
+A task that loads twenty tables in one loop redoes all twenty when the nineteenth fails. Split independent work into separate tasks (or record progress per chunk), so a retry repeats only what failed and one broken source does not block the others.
+
+## Timeouts everywhere
+
+A call with no timeout can hang forever, holding a worker slot and blocking every downstream task, and it never raises an error that a retry could handle. Set timeouts at each layer:
+
+- **Network calls**: a connect and a read timeout on every HTTP request (`requests` has no default timeout).
+- **Database statements**: a statement timeout for the pipeline's role or session.
+- **Tasks**: an execution timeout in the orchestrator, longer than the slowest normal run.
+- **Waiting for upstream data**: sensors with a timeout and a clear alert when it expires.
+
+{/* expect-error */}
+```sql
+SET statement_timeout = '200ms';
+SELECT pg_sleep(2);
+```
+
+```text
+ERROR:  canceling statement due to statement timeout
+```
+
+The cancelled statement raises an error the pipeline can classify (usually transient for lock waits, systemic if a query is simply too slow), instead of sitting silently for hours.
+
+## Isolate bad data: quarantine and dead-letter queues
+
+One bad record should not stop a million good ones, and it should not disappear either. For batch loads, quarantine rows with a reason ([data quality](/etl-elt/data-quality-checks-contracts/) shows the SQL). For message-driven pipelines, the equivalent is a **dead-letter queue (DLQ)**: after a record fails processing (immediately for data errors, or after a few retries for transient ones), publish it with its error details to a separate topic or table and carry on with the next record.
+
+```python
+import json
+
+def process(message: dict) -> dict:
+    return {"order_id": int(message["order_id"]), "amount_cents": round(float(message["amount"]) * 100)}
+
+def consume(messages, sink, dlq, max_dlq_ratio=0.2):
+    for offset, raw in enumerate(messages):
+        try:
+            sink.append(process(json.loads(raw)))
+        except (ValueError, KeyError, TypeError) as exc:      # data errors: no point retrying
+            dlq.append({"offset": offset, "raw": raw, "error": f"{type(exc).__name__}: {exc}"})
+    if messages and len(dlq) / len(messages) > max_dlq_ratio:
+        raise RuntimeError(f"{len(dlq)} of {len(messages)} messages dead-lettered; stopping")
+
+messages = ['{"order_id": "1", "amount": "19.99"}', '{"order_id": "2"}',
+            'not json', '{"order_id": "3", "amount": "5"}',
+            '{"order_id": "4", "amount": "7.5"}', '{"order_id": "5", "amount": "1"}',
+            '{"order_id": "6", "amount": "2"}', '{"order_id": "7", "amount": "3"}',
+            '{"order_id": "8", "amount": "4"}', '{"order_id": "9", "amount": "6"}']
+sink, dlq = [], []
+consume(messages, sink, dlq)
+print(len(sink), "processed")
+for item in dlq:
+    print(item)
+```
+
+```text
+8 processed
+{'offset': 1, 'raw': '{"order_id": "2"}', 'error': "KeyError: 'amount'"}
+{'offset': 2, 'raw': 'not json', 'error': 'JSONDecodeError: Expecting value: line 1 column 1 (char 0)'}
+```
+
+What makes a DLQ useful rather than a graveyard:
+
+- **Keep everything needed to replay**: the original payload, the source position, the error and the code version.
+- **Alert on the DLQ rate**, not only its existence. A sudden burst usually means a producer changed its format.
+- **Fail when the rate is high** (as `consume` does above): if most records are bad, the problem is systemic and dead-lettering them all just hides it.
+- **Replay through the normal path** after the fix, with an idempotent sink so replayed records that were partly processed do not duplicate.
+
+Kafka Connect has a built-in DLQ for sink connectors (`errors.tolerance=all` with `errors.deadletterqueue.topic.name`), covered in [Kafka Connect and Debezium](/kafka/kafka-connect-debezium/).
+
+## Circuit breakers for unstable dependencies
+
+When a dependency is down, retrying every call with backoff still sends it a stream of requests and makes every task slow to fail. A **circuit breaker** counts recent failures; after a threshold it "opens" and fails calls immediately for a cool-down period, then lets one trial call through. It is most useful in long-running services and streaming jobs that call an external API per record. For a daily batch task, failing the task after its retries and letting the orchestrator retry later usually achieves the same thing.
+
+## Retries and timeouts in Airflow 3
+
+Orchestrators provide task-level retries; configure them per task based on what it calls.
+
+{/* noexec */}
+```python
+from datetime import timedelta
+import pendulum
+from airflow.sdk import dag, task
+from airflow.sdk.exceptions import AirflowFailException
+
+@dag(schedule="@daily", start_date=pendulum.datetime(2026, 10, 1, tz="UTC"), catchup=False,
+     default_args={"retries": 3, "retry_delay": timedelta(minutes=2),
+                   "retry_exponential_backoff": 2.0,          # Airflow 3: a multiplier; 0 disables
+                   "max_retry_delay": timedelta(minutes=30),
+                   "execution_timeout": timedelta(hours=1)})
+def orders_daily():
+
+    @task
+    def extract(data_interval_start=None, data_interval_end=None):
+        status = 401                                           # pretend the API rejected our token
+        if status in (401, 403):
+            raise AirflowFailException("credentials rejected; not retrying")
+        return {"start": str(data_interval_start), "end": str(data_interval_end)}
+
+    @task(retries=0)                                           # a non-idempotent step: never auto-retry
+    def notify(_):
+        ...
+
+    notify(extract())
+
+orders_daily()
+```
+
+`AirflowFailException` fails the task immediately without using its retries, which is how you express "systemic, fail fast" in Airflow. Note that Airflow 2 took `True` or `False` for `retry_exponential_backoff`; in Airflow 3 it is a multiplier. See [Airflow DAGs, scheduling and retries](/airflow/dags-scheduling-retries/) for the scheduling side.
 
 ## Recovery and backfills
 
-Plan how to recover before you need to: reprocess a date range with the same code path (backfill), limit concurrency so backfills do not starve daily runs, and keep raw data so you can rebuild.
+Plan recovery before you need it:
+
+- **Keep raw data** for long enough to rebuild downstream tables after a logic bug.
+- **Use the same code path** for backfills as for daily runs, parameterised by the interval, in small idempotent chunks, with limited concurrency so daily runs are not starved.
+- **Handle late data** with a reprocessing window and a published lateness policy.
+
+[Incremental loading, late data and backfills](/etl-elt/incremental-loading-watermarks-backfills/) covers these in detail.
 
 <Callout tone="warning" title="Silent success is the worst failure">
 
-A pipeline that "succeeds" while writing zero rows looks healthy. Volume and freshness checks turn silent failures into visible ones.
+A pipeline that "succeeds" while writing zero rows looks healthy to every retry and failure alert. Volume and freshness checks turn silent failures into visible ones.
 
 </Callout>
 
 ## Common mistakes
 
-1. Unlimited retries without backoff.
-2. Retrying non-transient errors.
-3. No timeouts.
-4. Large tasks that redo hours of work on retry.
+1. Unlimited retries, or retries without backoff and jitter that hammer a struggling service.
+2. Retrying permanent errors (bad credentials, 404s, schema mismatches), which delays the alert.
+3. Retrying a non-idempotent step, which duplicates data or side effects.
+4. No timeouts, so a hung call blocks the pipeline without raising anything.
+5. One large task that redoes hours of work on retry.
+6. A DLQ that nobody monitors, or that silently absorbs a systemic failure.
+7. Catching every exception and logging it, then exiting with success.
+
+## Interview angle
+
+"How do you make a pipeline resilient?" or "What happens when the API you ingest from goes down?" are common questions. Classify failures, retry only transient ones with capped exponential backoff and jitter, make retried steps idempotent, set timeouts at every layer, dead-letter poison records with an alert on the rate, fail fast on systemic errors, and recover with backfills through the normal code path. Practise with [retries with backoff for API ingestion](/interview/python/api-retries-backoff/) and [exceptions in production pipelines](/interview/python/exceptions-in-pipelines/).
 
 ## Key takeaway
 
-Classify failures, retry only transient ones with backoff and limits, set timeouts, isolate bad data, make every step idempotent and plan backfills in advance.
+Classify failures, retry only transient ones with capped, jittered backoff and a deadline, make every retried step idempotent, set timeouts, isolate bad records in a monitored dead-letter queue, fail fast on systemic errors and plan backfills before you need them.
