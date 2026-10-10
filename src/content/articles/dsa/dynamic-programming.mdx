@@ -6,8 +6,8 @@ technology: ["dsa"]
 topic: ["dynamic-programming", "memoization", "knapsack"]
 difficulty: "Advanced"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 learningObjectives:
   - "Recognise overlapping subproblems and optimal substructure in a problem statement"
   - "Define a DP state and transition, then implement it top-down with memoisation or bottom-up with a table"
@@ -127,10 +127,10 @@ def rob_circle(houses):
     return max(rob(houses[1:]), rob(houses[:-1]))     # first and last cannot both be taken
 
 
-assert min_cost_climbing_stairs([10, 15, 20]) == 15
-assert min_cost_climbing_stairs([1, 100, 1, 1, 1, 100, 1, 1, 100, 1]) == 6
-assert rob([1, 2, 3, 1]) == 4 and rob([2, 7, 9, 3, 1]) == 12 and rob([]) == 0
-assert rob_circle([2, 3, 2]) == 3 and rob_circle([1, 2, 3, 1]) == 4 and rob_circle([5]) == 5
+assert min_cost_climbing_stairs([4, 9, 3]) == 7                 # steps 0 and 2
+assert min_cost_climbing_stairs([2, 50, 2, 2, 50, 2, 2]) == 8
+assert rob([3, 1, 4, 9]) == 12 and rob([6, 2, 1, 8, 4]) == 14 and rob([]) == 0
+assert rob_circle([4, 6, 5]) == 6 and rob_circle([3, 1, 4, 9]) == 10 and rob_circle([5]) == 5
 ```
 
 ### Counting decodings
@@ -151,8 +151,8 @@ def num_decodings(s):
     return cur
 
 
-assert num_decodings("12") == 2 and num_decodings("226") == 3
-assert num_decodings("06") == 0 and num_decodings("10") == 1 and num_decodings("2101") == 1
+assert num_decodings("17") == 2 and num_decodings("125") == 3
+assert num_decodings("30") == 0 and num_decodings("20") == 1 and num_decodings("1201") == 1
 ```
 
 ### Unbounded choices: Coin Change and Word Break
@@ -180,11 +180,11 @@ def word_break(s, words):
     return ok[len(s)]
 
 
-assert coin_change([1, 2, 5], 11) == 3 and coin_change([2], 3) == -1 and coin_change([1], 0) == 0
-assert coin_change([186, 419, 83, 408], 6249) == 20
-assert word_break("leetcode", ["leet", "code"]) is True
-assert word_break("applepenapple", ["apple", "pen"]) is True
-assert word_break("catsandog", ["cats", "dog", "sand", "and", "cat"]) is False
+assert coin_change([1, 3, 4], 6) == 2 and coin_change([5], 7) == -1 and coin_change([1], 0) == 0
+assert coin_change([9, 4, 7], 100) == 12          # greedy by largest coin would fail here
+assert word_break("sparkjob", ["spark", "job"]) is True
+assert word_break("dataflowdata", ["data", "flow"]) is True     # words can repeat
+assert word_break("etlload", ["etl", "lo", "loa"]) is False
 ```
 
 Coin Change is the standard example of greedy failing: with coins `[1, 3, 4]` and amount 6, greedy takes 4 + 1 + 1 (three coins) while DP finds 3 + 3 (two).
@@ -203,9 +203,9 @@ def max_product(nums):
     return best
 
 
-assert max_product([2, 3, -2, 4]) == 6
-assert max_product([-2, 0, -1]) == 0
-assert max_product([-2, 3, -4]) == 24
+assert max_product([3, -1, 4, 2]) == 8
+assert max_product([-3, 0, -2]) == 0
+assert max_product([-2, 5, -3]) == 30            # two negatives cancel
 ```
 
 ### State machines: Best Time to Buy and Sell with Cooldown
@@ -224,7 +224,7 @@ def max_profit_cooldown(prices):
     return max(sold, resting)
 
 
-assert max_profit_cooldown([1, 2, 3, 0, 2]) == 3
+assert max_profit_cooldown([3, 5, 1, 4, 6]) == 5
 assert max_profit_cooldown([1]) == 0
 ```
 
@@ -254,7 +254,7 @@ def length_of_lis(nums):
     return len(tails)
 
 
-for case, expected in [([10, 9, 2, 5, 3, 7, 101, 18], 4), ([0, 1, 0, 3, 2, 3], 4), ([7, 7, 7], 1), ([], 0)]:
+for case, expected in [([5, 1, 6, 2, 7, 3, 8], 4), ([2, 8, 4, 5, 9, 1], 4), ([7, 7, 7], 1), ([], 0)]:
     assert length_of_lis_quadratic(case) == expected == length_of_lis(case)
 ```
 
@@ -287,7 +287,7 @@ def unique_paths(rows, cols):
     return row[-1]
 
 
-assert unique_paths(3, 7) == 28 and unique_paths(3, 2) == 3 and unique_paths(1, 1) == 1
+assert unique_paths(3, 4) == 10 and unique_paths(4, 2) == 4 and unique_paths(1, 1) == 1
 ```
 
 ### Two strings: LCS and edit distance
@@ -337,11 +337,11 @@ def is_interleave(s1, s2, s3):
     return ok[len(s1)][len(s2)]
 
 
-assert longest_common_subsequence("abcde", "ace") == 3 and longest_common_subsequence("abc", "def") == 0
-assert edit_distance("horse", "ros") == 3 and edit_distance("intention", "execution") == 5
+assert longest_common_subsequence("kafka", "flask") == 2 and longest_common_subsequence("xyz", "abc") == 0
+assert edit_distance("flink", "link") == 1 and edit_distance("data", "delta") == 2
 assert edit_distance("", "abc") == 3
-assert is_interleave("aabcc", "dbbca", "aadbbcbcac") is True
-assert is_interleave("aabcc", "dbbca", "aadbbbaccc") is False
+assert is_interleave("ab", "cd", "acbd") is True and is_interleave("ab", "cd", "abdc") is False
+assert is_interleave("aab", "ac", "aacab") is True and is_interleave("aab", "ac", "acaba") is False
 assert is_interleave("", "", "") is True
 ```
 
@@ -364,11 +364,12 @@ def is_match(text, pattern):
     return match(0, 0)
 
 
-assert is_match("aa", "a") is False
-assert is_match("aa", "a*") is True
-assert is_match("ab", ".*") is True
-assert is_match("aab", "c*a*b") is True
-assert is_match("mississippi", "mis*is*p*.") is False
+assert is_match("ab", "a") is False             # the match must cover the whole text
+assert is_match("abbb", "ab*") is True
+assert is_match("xyz", ".*") is True
+assert is_match("ccd", "c*d") is True
+assert is_match("aac", "a*b*c") is True           # b* matches zero b's
+assert is_match("abc", "a.d") is False
 ```
 
 ### Palindromic substrings: expand around centres
@@ -403,9 +404,10 @@ def count_substrings(s):
     return total
 
 
-assert longest_palindrome("babad") in ("bab", "aba") and longest_palindrome("cbbd") == "bb"
+assert longest_palindrome("xabay") == "aba" and longest_palindrome("pqbbr") == "bb"
+assert longest_palindrome("cddc") == "cddc"
 assert longest_palindrome("a") == "a"
-assert count_substrings("abc") == 3 and count_substrings("aaa") == 6
+assert count_substrings("abc") == 3 and count_substrings("aba") == 4 and count_substrings("zzzz") == 10
 ```
 
 ## Knapsack: choose items to reach a total
@@ -446,9 +448,9 @@ def find_target_sum_ways(nums, target):
     return ways[goal]
 
 
-assert can_partition([1, 5, 11, 5]) is True and can_partition([1, 2, 3, 5]) is False
-assert coin_change_ii(5, [1, 2, 5]) == 4 and coin_change_ii(3, [2]) == 0 and coin_change_ii(0, [7]) == 1
-assert find_target_sum_ways([1, 1, 1, 1, 1], 3) == 5 and find_target_sum_ways([1], 1) == 1
+assert can_partition([3, 4, 5, 2]) is True and can_partition([2, 3, 6]) is False
+assert coin_change_ii(6, [1, 3, 4]) == 4 and coin_change_ii(7, [4]) == 0 and coin_change_ii(0, [7]) == 1
+assert find_target_sum_ways([2, 2, 2], 2) == 3 and find_target_sum_ways([1, 2, 1], 0) == 2
 assert find_target_sum_ways([0, 0, 1], 1) == 4          # zeros can take either sign
 ```
 
@@ -472,8 +474,8 @@ def max_coins(nums):
     return best[0][size - 1]
 
 
-assert max_coins([3, 1, 5, 8]) == 167
-assert max_coins([1, 5]) == 10
+assert max_coins([2, 4, 3]) == 33
+assert max_coins([3, 6]) == 24
 ```
 
 Choosing the balloon burst **last** makes its neighbours fixed (the interval boundaries), which splits the problem into two independent halves.
