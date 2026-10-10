@@ -1,0 +1,108 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Data Engineer Resume Bullets That Survive the Interview"
+seoTitle: "Data Engineer Resume Bullets Without Fake Metrics"
+description: "Data engineer resume bullets: a formula of action, system, technique and verified result, with before-and-after examples and how to measure metrics honestly."
+technology: ["career", "data-engineering"]
+topic: ["resume", "interview"]
+difficulty: "Beginner"
+section: "career"
+learningObjectives:
+  - "Write bullets as action, what you built, the technique that mattered and a result you can verify"
+  - "Turn tool lists and vague duties into specific, defensible claims"
+  - "Find honest numbers in run logs, audit tables and tickets, or describe outcomes without numbers"
+  - "Tailor bullets to a job description without exaggerating"
+related: ["articles:career/explain-a-data-engineering-project", "articles:career/behavioral-interview-data-engineers", "roadmaps:resume-and-project-selection", "projects:csv-to-warehouse-pipeline"]
+previous: "articles:career/behavioral-interview-data-engineers"
+sources:
+  - { label: "Python documentation: statistics", url: "https://docs.python.org/3/library/statistics.html" }
+versionContext: "Applies to any resume format. The measurement example runs on Python 3.11 (standard library). All example bullets are illustrative."
+---
+
+Every line on a Data Engineer's resume is a claim the interviewer may test: "you wrote *exactly-once*, how did that work?", "how did you measure *40% faster*?". A good bullet is one you can talk about for five minutes and that tells the reader what you built, how, and why it mattered. The [resume and project selection roadmap](/roadmaps/resume-and-project-selection/) covers choosing projects; this guide is about the bullets themselves.
+
+## The formula
+
+**Action verb + what you built or changed + the technique that mattered + a result you can verify.**
+
+> Built a daily incremental load from PostgreSQL to Snowflake using an `updated_at` watermark and MERGE, replacing a full refresh; median runtime fell from about 50 to about 10 minutes over the first two weeks (scheduler task history).
+
+Not every bullet needs a number. A specific technique and a concrete outcome beat a vague percentage:
+
+> Made the orders pipeline safe to rerun by overwriting date partitions instead of appending, which removed the duplicate-row incidents that had followed every retry.
+
+## Before and after
+
+| Weak | Why it is weak | Stronger |
+|------|----------------|----------|
+| Worked on big data pipelines using Spark, Kafka, Airflow, AWS | A tool list; no evidence of what you did | Built a Spark job that compacts and deduplicates hourly Kafka event files into date-partitioned Delta tables, scheduled in Airflow with retries and a freshness alert |
+| Responsible for data quality | A duty, not an achievement | Added uniqueness, null and source-reconciliation checks that block the publish step, so failed loads keep yesterday's data instead of reaching dashboards |
+| Improved performance by 73% | Unexplained number; likely to be questioned | Cut the nightly customer job from about 2 hours to 25 minutes (median of 10 runs) by broadcasting a small dimension table and fixing a skewed join key |
+| Implemented exactly-once processing | Overclaims; rarely true end to end | Made Kafka-to-Postgres ingestion effectively-once by storing consumer offsets in the same transaction as the upserted rows |
+| Used dbt | Tool name only | Moved 30 SQL scripts into dbt models with tests and documented lineage, so analysts could see which sources fed each report |
+| Helped migrate to the cloud | Unclear role | Migrated 12 daily batch jobs from cron on a VM to Airflow on a managed service, adding retries, alerting and a backfill procedure |
+
+In each stronger version, a reader learns the system, the technique and the outcome, and an interviewer has three good follow-up questions.
+
+## Finding honest numbers
+
+Numbers make bullets concrete, but only if you can say where they came from. Good sources:
+
+- **Orchestrator task history**: durations, failure counts, retries per run.
+- **Run audit tables**: rows loaded, rejected, freshness at publish time.
+- **Warehouse query history and billing**: credits or bytes scanned before and after a change.
+- **Tickets and incident logs**: number of incidents of a type before and after.
+- **Counts you can verify**: tables migrated, sources onboarded, tests added, jobs retired.
+
+Compare like with like (same job, similar input volume, enough runs) and prefer medians to single best runs:
+
+```python
+from statistics import median
+
+runs_before = [118, 131, 124, 140, 122, 119, 135, 127, 121, 129]   # minutes, last 10 runs before the change
+runs_after = [26, 24, 25, 31, 23, 27, 25, 24, 28, 26]              # first 10 runs after the change
+
+b, a = median(runs_before), median(runs_after)
+print(f"median {b:.1f} -> {a:.1f} minutes over {len(runs_before)} + {len(runs_after)} runs")
+print(f"best single run after: {min(runs_after)} minutes (do not quote this one)")
+```
+
+```text
+median 125.5 -> 25.5 minutes over 10 + 10 runs
+best single run after: 23 minutes (do not quote this one)
+```
+
+That supports "from about 2 hours to about 25 minutes (median of 10 runs)". If you have no measurement, do not estimate one for the resume. Describe the outcome ("removed a manual morning step for the analytics team") or leave the number out. Never invent percentages, cost savings, user counts or data volumes: an interviewer only needs one "how did you measure that?" to lose trust in the whole page.
+
+## Personal and course projects
+
+Projects are especially valuable early in a career, and the same rules apply:
+
+- Say they are projects; put them in a **Projects** section with a repository link.
+- Describe the engineering, not the tutorial: what you added (tests, idempotent reruns, data quality checks, a CI workflow, a README with an architecture diagram).
+- Use honest scale: "processes 2 GB of public NYC taxi data" is fine; do not imply production traffic.
+
+> Built an end-to-end pipeline that loads public trip CSVs into PostgreSQL with idempotent upserts, pytest unit and integration tests, data quality checks and a GitHub Actions workflow; documented the design and its known limits in the README.
+
+## Tailoring without exaggerating
+
+Read the job description and note the skills it repeats (for example incremental loading, Airflow, data modelling, AWS). Then:
+
+- **Reorder** bullets so the most relevant come first.
+- **Use their words** for things you really did ("orchestration" instead of "scheduling" if that is what they say), which also helps keyword-based screening.
+- **Do not add** skills you have not used. A short honest section beats a long list you cannot discuss.
+
+## Checklist for every bullet
+
+1. Starts with a strong verb you can own (built, designed, migrated, automated, reduced, added).
+2. Names the system or data and the technique that mattered.
+3. Has a verifiable result, or a concrete qualitative outcome.
+4. Uses "I" work, not team results presented as yours.
+5. Survives five minutes of "why" and "how" questions.
+6. Contains no bracketed placeholders, no vague percentages and no buzzwords you cannot explain.
+
+## Key takeaway
+
+Write each bullet as action, system, technique and verified result; take numbers only from logs, histories and tickets, quoting medians and their source; describe outcomes in words when you have no measurement; and tailor by reordering and rewording, never by inventing.
