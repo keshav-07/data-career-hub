@@ -317,31 +317,36 @@ Expect "how do you get exactly-once from Kafka to Delta" (checkpoint plus the id
 
 ## Practice questions
 
-<details><summary>Your MERGE takes 40 minutes although the batch has 10,000 rows. Where do you look?</summary>
+<details>
+<summary>Your MERGE takes 40 minutes although the batch has 10,000 rows. Where do you look?</summary>
 
 At how many target files it rewrites (`numTargetFilesRemoved` in `DESCRIBE HISTORY`). If the condition matches only on a key, Delta may have to rewrite files across the whole table. Add a partition or clustering column to the condition, cluster the table on the merge key, enable deletion vectors to avoid copying unchanged rows, and check the source for skew or duplicates.
 
 </details>
 
-<details><summary>How do you implement SCD Type 2 with MERGE when one change needs both an update and an insert?</summary>
+<details>
+<summary>How do you implement SCD Type 2 with MERGE when one change needs both an update and an insert?</summary>
 
 Stage the source twice: once keyed on the business key (matches the current row, which is closed by setting `valid_to` and `is_current = false`) and once, for changed rows only, with a NULL merge key (never matches, so it is inserted as the new current version). Compare a hash of tracked attributes with null-safe comparison and deduplicate the batch first.
 
 </details>
 
-<details><summary>What is the difference between the change data feed and time travel?</summary>
+<details>
+<summary>What is the difference between the change data feed and time travel?</summary>
 
 Time travel reads a whole earlier version of the table. The change data feed returns the row-level differences between versions, with change types, so a consumer processes only what changed. Both depend on retained files and log entries.
 
 </details>
 
-<details><summary>Two MERGE jobs on the same table fail intermittently with ConcurrentAppendException. What do you do?</summary>
+<details>
+<summary>Two MERGE jobs on the same table fail intermittently with ConcurrentAppendException. What do you do?</summary>
 
 They read overlapping files and one committed new files into data the other read. Make the jobs operate on disjoint partitions and include the partition column in both merge conditions so Delta can see they do not overlap, or run them sequentially. Retrying is fine only if the merge is idempotent.
 
 </details>
 
-<details><summary>Why is WHEN NOT MATCHED BY SOURCE THEN DELETE dangerous?</summary>
+<details>
+<summary>Why is WHEN NOT MATCHED BY SOURCE THEN DELETE dangerous?</summary>
 
 It deletes every target row absent from the source. That is right only when the source is a complete snapshot of the target's scope. With an incremental CDC batch it would delete almost the whole table. Restrict it with a condition (for example to the partitions the snapshot covers).
 

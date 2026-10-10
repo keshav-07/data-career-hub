@@ -199,25 +199,29 @@ Adding a field **without** a default would make old data unreadable with the new
 
 ## Practice questions
 
-<details><summary>What is a Parquet row group and why does its size matter?</summary>
+<details>
+<summary>What is a Parquet row group and why does its size matter?</summary>
 
 A horizontal slice of the rows, stored as one column chunk per column, with statistics in the footer. It is the unit Spark splits and skips. Too large and you lose parallelism and skipping granularity; too small and compression worsens and the footer and per-group overhead grow. Spark's writer targets 128 MB.
 
 </details>
 
-<details><summary>Why can a filter on order_id skip data but the same filter on a random column cannot?</summary>
+<details>
+<summary>Why can a filter on order_id skip data but the same filter on a random column cannot?</summary>
 
 Skipping compares the filter with each row group's min/max. Sorted or clustered data gives narrow, non-overlapping ranges, so most groups are ruled out; randomly distributed values give every group almost the full range, so none can be ruled out.
 
 </details>
 
-<details><summary>Avro and Parquet both support schema evolution. What is different?</summary>
+<details>
+<summary>Avro and Parquet both support schema evolution. What is different?</summary>
 
 Avro resolves a writer schema against a reader schema with explicit rules: defaults for missing fields, aliases for renames and defined type promotions. Parquet only records each file's own schema; a reader can add missing columns as nulls or merge file schemas, but renames and defaults have to be handled by a table format or by the reader.
 
 </details>
 
-<details><summary>Is Avro splittable? Is gzip-compressed CSV?</summary>
+<details>
+<summary>Is Avro splittable? Is gzip-compressed CSV?</summary>
 
 Avro is: blocks are separated by sync markers, so a reader can start mid-file and seek to the next block, even with compressed blocks. A gzip-compressed CSV is not, because a gzip stream can only be decompressed from the beginning.
 

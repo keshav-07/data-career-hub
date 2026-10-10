@@ -154,25 +154,29 @@ Points worth stating precisely in an interview:
 
 ## Practice questions
 
-<details><summary>A team says "our Parquet lake works fine, why move to Delta?" What concrete failures would you point to?</summary>
+<details>
+<summary>A team says "our Parquet lake works fine, why move to Delta?" What concrete failures would you point to?</summary>
 
 Readers seeing partial output from a failed or in-progress job, concurrent writers silently overwriting each other, a bad schema written and only discovered by a downstream reader, no way to correct individual rows without rewriting partitions, and no record of what changed. Each is prevented by the transaction log (atomic commits, conflict detection, schema enforcement, `MERGE`/`DELETE`, history).
 
 </details>
 
-<details><summary>After CONVERT TO DELTA, some rows written by a nightly job are missing from queries. Why?</summary>
+<details>
+<summary>After CONVERT TO DELTA, some rows written by a nightly job are missing from queries. Why?</summary>
 
 The nightly job still writes plain Parquet files into the directory, so the files are never committed to the log and Delta readers ignore them (and `VACUUM` will delete them). Change the job to write with Delta, and backfill the missed data through a Delta write.
 
 </details>
 
-<details><summary>When would you choose Iceberg over Delta?</summary>
+<details>
+<summary>When would you choose Iceberg over Delta?</summary>
 
 When many engines must write and read the same tables through a shared catalog, when you want hidden partitioning and partition evolution, or when your platform (for example a warehouse or query service) has first-class Iceberg support. Delta is the natural choice in a Spark- or Databricks-centred platform. Interoperability features such as UniForm reduce, but do not remove, the need to choose a writer format.
 
 </details>
 
-<details><summary>What does Hudi's merge-on-read table type trade off?</summary>
+<details>
+<summary>What does Hudi's merge-on-read table type trade off?</summary>
 
 Updates are appended to log files instead of rewriting base Parquet files, so writes are cheap and fast, but readers must merge base and log files until compaction runs. Copy-on-write is the reverse: expensive writes, simple fast reads.
 

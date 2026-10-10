@@ -364,37 +364,43 @@ Narrowing a type, or changing between unrelated types (string to int), is not sc
 
 ## Practice questions
 
-<details><summary>Two jobs append to the same Delta table at the same time. What happens?</summary>
+<details>
+<summary>Two jobs append to the same Delta table at the same time. What happens?</summary>
 
 Both succeed. Each writes its files and tries to create the next commit. The second to arrive finds the version taken, checks the winning commit, sees that blind appends cannot conflict, and commits as the following version. Conflicts arise when a transaction read data that another changed, such as two `MERGE` or `DELETE` operations touching the same files.
 
 </details>
 
-<details><summary>A job died halfway through writing. Do readers see partial data?</summary>
+<details>
+<summary>A job died halfway through writing. Do readers see partial data?</summary>
 
 No. The data files it wrote are not referenced by any commit, so no reader includes them. They are orphans that `VACUUM` removes once they are older than the retention period. Re-running the job is safe if the job itself is idempotent.
 
 </details>
 
-<details><summary>Why can a version listed in DESCRIBE HISTORY fail to load?</summary>
+<details>
+<summary>Why can a version listed in DESCRIBE HISTORY fail to load?</summary>
 
 History lives in the log (kept for 30 days by default), but the version's data files may have been deleted by `VACUUM` (which may delete removed files older than 7 days by default). Time travel needs both the log entries and the files.
 
 </details>
 
-<details><summary>What is the difference between schema enforcement and schema evolution?</summary>
+<details>
+<summary>What is the difference between schema enforcement and schema evolution?</summary>
 
 Enforcement is the default check that rejects writes whose columns or types do not match the table. Evolution is an explicit opt-in (`mergeSchema`, `ALTER TABLE`, column mapping, type widening) that changes the table schema. Enforcement protects curated tables from accidental drift; evolution is how you make intended changes.
 
 </details>
 
-<details><summary>Why does renaming a column require column mapping?</summary>
+<details>
+<summary>Why does renaming a column require column mapping?</summary>
 
 Without it, Parquet files are read by column name, so renaming the column in the schema would orphan the existing data in those files. Column mapping stores a stable physical name per column, so the logical name can change in the log alone. It requires a protocol upgrade that older readers cannot handle.
 
 </details>
 
-<details><summary>How would you undo a bad overwrite from this morning?</summary>
+<details>
+<summary>How would you undo a bad overwrite from this morning?</summary>
 
 Find the last good version with `DESCRIBE HISTORY`, check it with a `VERSION AS OF` query, then `RESTORE TABLE ... TO VERSION AS OF n`. It must be inside the retention window. Warn owners of streaming consumers, because the restore appears as a data change to them.
 
