@@ -10,8 +10,8 @@ anything not checked is marked as such. No ranking or traffic outcome is implied
 | SEO-01 | Production `SITE_URL` | Done (10 Oct) | Before: live canonicals, `og:url`, JSON-LD, sitemap and robots.txt all named `https://datadank.example` (checked on the deployed build at datadank.pages.dev). Now `https://datadank.com` is the default in `astro.config.mjs`; confirmed on the deployed build: canonical `https://datadank.com/sql/`, sitemap `<loc>https://datadank.com/…`. |
 | SEO-02 | robots.txt sitemap directive | Done | `robots.txt` is generated from the site URL (`src/pages/robots.txt.ts`); live: `Sitemap: https://datadank.com/sitemap-index.xml`. |
 | SEO-03 | Production validation | Done | `npm run validate` passes: 615 pages, 613 indexable, 613 in sitemap. `check:dist` now fails if any canonical, `og:url`, JSON-LD, sitemap or robots.txt names a placeholder or preview host (tested by planting a placeholder canonical). |
-| SEO-04 | Search Console | **Owner action** | Verify a Domain property for `datadank.com` (DNS TXT in Cloudflare). Cannot be done from the repository. |
-| SEO-05 | Submit sitemap | **Owner action** | Submit `https://datadank.com/sitemap-index.xml`; inspect `/`, `/sql/`, `/interview/sql/`, one lesson, one project with URL Inspection. Request indexing for the homepage and main hubs, because Google previously saw `.example` canonicals. |
+| SEO-04 | Search Console | Done (10 Oct) | `sc-domain:datadank.com` is accessible through the connected DataDank Google account. |
+| SEO-05 | Submit sitemap / inspect priority URLs | Submitted (10 Oct; pending Google fetch) | Submitted `https://datadank.com/sitemap-index.xml` via Search Console API; accepted with 0 reported warnings/errors at submission. Homepage inspection: `Crawled - currently not indexed` (crawl 2026-10-09); `/sql/`, `/interview/sql/`, `/data-engineering/roadmap/`, `/projects/` are `URL is unknown to Google`. Manual Request indexing remains an owner action in the Search Console UI. |
 | SEO-06 | Keyword-to-URL map | Started | `docs/seo/KEYWORD_URL_MAP.md` (no volumes or difficulty: unknown until GSC/Keyword Planner data). |
 | SEO-07 | Cannibalisation | Watch list | See the map; no merges without GSC evidence. |
 | SEO-08 | Homepage intent and claims | Done | H1 "Prepare for Data Engineer interviews in 90 days" (was "Become a job-ready Data Engineer in 90 days"); tagline and roadmap no longer promise a job; Day 90 of the plan no longer promises offers. |
@@ -39,6 +39,18 @@ anything not checked is marked as such. No ranking or traffic outcome is implied
 | `http://` → `https://`, `www` → apex | **Not verified**: datadank.com is not reachable from the sandbox. Owner: `curl -sI http://datadank.com/` and `curl -sI https://www.datadank.com/` should both 301 to `https://datadank.com/`. Add a Cloudflare Redirect Rule for `www` if needed. |
 | Meta descriptions over 160 chars | 0 (227 rewritten to 120–158 chars, search term first) |
 
+## Live Search Console checks (10 Oct 2026)
+
+| Check | Result |
+|---|---|
+| Last 28 days performance | 0 clicks / 0 impressions returned; data-completeness boundary unavailable, so treat as no reported data rather than proof of no search visibility ever. |
+| Sitemap | `https://datadank.com/sitemap-index.xml` submitted and accepted; pending Google fetch/processing at check time. |
+| On-page audit sample | 5/5 pages returned HTTP 200 and were indexable; 0 detected on-page issues. All had one H1, self-canonical, meta description, structured data, viewport, favicon, and complete image alt coverage. |
+| Homepage indexing | `Crawled - currently not indexed`; robots allowed, indexing allowed, page fetch successful. |
+| Four priority hubs | `/sql/`, `/interview/sql/`, `/data-engineering/roadmap/`, `/projects/`: URL unknown to Google at inspection time. |
+| Indexing tracker | Started tracking the homepage and four priority hubs; 5 URLs added. |
+| External referring URLs | Two unrelated referring URLs surfaced in homepage inspection; investigate before drawing conclusions. This alone does not establish a security compromise or penalty. |
+
 ## Change log
 
 | Date | Change | Reason |
@@ -47,3 +59,4 @@ anything not checked is marked as such. No ranking or traffic outcome is implied
 | 2026-10-10 | Contact, About, Privacy updates; homepage H1/tagline | Trust signals; remove job guarantee |
 | 2026-10-10 | Course-hub H1 fix; hub title retargeting | H1 text was "SQLSQL"; titles did not match search intent |
 | 2026-10-10 | Organization JSON-LD; Article publisher | Accurate publisher information |
+| 2026-10-10 | Submitted sitemap and began tracking five priority URLs; recorded live GSC/on-page findings | Improve URL discovery and keep the launch indexing state evidence-based |
