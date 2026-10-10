@@ -10,7 +10,7 @@ technology: ["databricks", "delta-lake"]
 topic: ["platform", "jobs", "lakehouse"]
 difficulty: "Beginner"
 prerequisites: ["articles:databricks/databricks-for-data-engineers"]
-related: ["articles:databricks/unity-catalog-governance", "articles:databricks/auto-loader-declarative-pipelines", "interview-questions:databricks/choose-databricks-compute", "articles:delta-lake/transactions-schema-evolution", "articles:spark/execution-model-jobs-stages-tasks"]
+related: ["articles:databricks/unity-catalog-governance", "articles:databricks/auto-loader-declarative-pipelines", "articles:delta-lake/transactions-schema-evolution", "articles:spark/execution-model-jobs-stages-tasks"]
 previous: "articles:databricks/databricks-for-data-engineers"
 next: "articles:databricks/unity-catalog-governance"
 sources:
@@ -190,7 +190,7 @@ Most Databricks pipeline code is ordinary PySpark or SQL. Everything in the [Spa
 
 ## Interview angle
 
-Interviewers ask how you would structure and run a pipeline on Databricks. A strong answer names the layers (bronze, silver, gold Delta tables), the compute (serverless or jobs compute for pipelines, a SQL warehouse for BI), the orchestration (a Lakeflow Job with dependent tasks, a date parameter, retries and alerts, deployed from Git with bundles), and governance (Unity Catalog, jobs running as service principals). See [Which Databricks compute should you use?](/interview/databricks/choose-databricks-compute/).
+Interviewers ask how you would structure and run a pipeline on Databricks. A strong answer names the layers (bronze, silver, gold Delta tables), the compute (serverless or jobs compute for pipelines, a SQL warehouse for BI), the orchestration (a Lakeflow Job with dependent tasks, a date parameter, retries and alerts, deployed from Git with bundles), and governance (Unity Catalog, jobs running as service principals). See Which Databricks compute should you use?.
 
 <details>
 <summary>Why is jobs compute cheaper than an all-purpose cluster for the same code?</summary>

@@ -14,7 +14,7 @@ learningObjectives:
   - "Convert an existing Parquet directory to Delta and explain why every writer must then use Delta"
   - "Compare Delta Lake, Apache Iceberg and Apache Hudi accurately on metadata, row-level changes and ecosystem"
 prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
-related: ["interview-questions:delta-lake/what-delta-lake-solves", "interview-questions:delta-lake/delta-vs-iceberg-vs-hudi", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
+related: ["interview-questions:delta-lake/what-delta-lake-solves", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
 previous: "articles:delta-lake/transactions-schema-evolution"
 next: "articles:delta-lake/merge-upserts-change-data-feed"
 sources:
@@ -127,7 +127,7 @@ Data files are still Parquet, so storage cost and compression barely change, and
 
 In return you take on:
 
-- **Maintenance**: compaction, clustering and `VACUUM` (see [OPTIMIZE, Z-ordering, VACUUM and liquid clustering](/delta-lake/optimize-zorder-vacuum-liquid-clustering/)).
+- **Maintenance**: compaction, clustering and `VACUUM` (see OPTIMIZE, Z-ordering, VACUUM and liquid clustering).
 - **Retention decisions**: time travel only reaches as far as retained files and log entries.
 - **Reader compatibility**: every engine that reads the table must support the protocol version and table features you enable (column mapping, deletion vectors, liquid clustering). Check before enabling features on a table shared with BI tools or other engines.
 
