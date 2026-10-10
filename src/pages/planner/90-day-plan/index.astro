@@ -1,6 +1,7 @@
 ---
 import ContentLayout from "../../../layouts/ContentLayout.astro";
 import PlannerRing from "../../../components/planner/PlannerRing.astro";
+import PlanDayTopics from "../../../components/planner/PlanDayTopics.astro";
 import { HOME } from "../../../utils/breadcrumbs";
 import { planDays, type PlanDay } from "../../../utils/curriculum";
 
@@ -88,57 +89,7 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
                       hours={hours}
                     />
                   </div>
-                  <ul class="pl-tasks" role="list">
-                    {d.tasks.map((t) => (
-                      <li class="pl-task">
-                        <div class="pl-task__head">
-                          <span class="pl-tasks__skill">{t.track}</span>
-                          <span class="pl-task__meta">
-                            {t.minutes} min · {t.kind}
-                          </span>
-                        </div>
-                        <ul class="pl-task__topics" role="list">
-                          {t.topics.map((item) => (
-                            <li class="day-task" title={`${t.track}: ${item.topic}`}>
-                              {item.href ? (
-                                <a class="day-task__link" href={item.href}>
-                                  <span class="day-task__skill">{t.track}</span>
-                                  <span class="day-task__topic">{item.topic}</span>
-                                </a>
-                              ) : (
-                                <span class="day-task__link">
-                                  <span class="day-task__skill">{t.track}</span>
-                                  <span class="day-task__topic">{item.topic}</span>
-                                </span>
-                              )}
-                              {item.key && (
-                                <input
-                                  type="checkbox"
-                                  class="day-task__check js-only"
-                                  data-pl-key={item.key}
-                                  data-pl-field="learn"
-                                  aria-label={`Studied: ${t.track}, ${item.topic}`}
-                                />
-                              )}
-                            </li>
-                          ))}
-                          {t.practice?.map((item) => (
-                            <li class="day-task" title={`${t.track} practice: ${item.title}`}>
-                              <a
-                                class="day-task__link"
-                                href={item.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <span class="day-task__skill">{t.track} practice</span>
-                                <span class="day-task__topic">{item.title} ↗</span>
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
+                  <PlanDayTopics tasks={d.tasks} />
                   <div class="day-card__bar">
                     <p class="day-card__foot">
                       <span

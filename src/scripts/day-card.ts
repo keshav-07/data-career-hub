@@ -1,9 +1,21 @@
 /**
- * Homepage Day card: shows the first 90-day-plan day not yet completed, lets the reader step through days and tick
- * one complete. Completion is stored by scripts/planner.ts (the checkbox is a normal `data-pl-day` input); this
- * module only chooses which day the card shows and re-renders it on `planner:change`.
+ * Homepage Day card: renders the same plan day content as /planner/90-day-plan/.
+ * Completion and topic progress are stored by scripts/planner.ts.
  */
-type Day = { d: number; th: string; h: number; m: string; t: [string, string, string, string][] };
+type Topic = { topic: string; href?: string; key?: string };
+type Task = {
+  track: string;
+  minutes: number;
+  kind: string;
+  topics: Topic[];
+  practice?: { title: string; url: string }[];
+};
+type Day = {
+  d: number;
+  th: string;
+  h: number;
+  tasks: Task[];
+};
 
 const KEY = "dch-planner-v1";
 
@@ -17,33 +29,53 @@ function stored(): Stored {
 }
 const doneDays = () => stored().days ?? {};
 
-/** One topic tile: the lesson link plus a "studied" checkbox (saved by planner.ts like the tracker pages). */
-function tile([skill, topic, href, key]: [string, string, string, string]) {
+/** A planner topic tile with the same links and progress checkbox as the 90-day plan. */
+function topicTile(track: string, topic: Topic) {
   const li = document.createElement("li");
   li.className = "day-task";
-  li.title = `${skill}: ${topic}`;
-  const link = document.createElement(href ? "a" : "span");
+  li.title = `${track}: ${topic.topic}`;
+  const link = document.createElement(topic.href ? "a" : "span");
   link.className = "day-task__link";
-  if (href) (link as HTMLAnchorElement).href = href;
-  const s = document.createElement("span");
-  s.className = "day-task__skill";
-  s.textContent = skill;
-  const t = document.createElement("span");
-  t.className = "day-task__topic";
-  t.textContent = topic;
-  link.append(s, t);
-  const box = document.createElement("input");
-  if (key) {
+  if (topic.href) (link as HTMLAnchorElement).href = topic.href;
+  const skill = document.createElement("span");
+  skill.className = "day-task__skill";
+  skill.textContent = track;
+  const title = document.createElement("span");
+  title.className = "day-task__topic";
+  title.textContent = topic.topic;
+  link.append(skill, title);
+  li.append(link);
+
+  if (topic.key) {
+    const box = document.createElement("input");
     box.type = "checkbox";
     box.className = "day-task__check";
-    box.dataset.plKey = key;
+    box.dataset.plKey = topic.key;
     box.dataset.plField = "learn";
-    box.setAttribute("aria-label", `Studied: ${skill}, ${topic}`);
-    li.append(link, box);
-  } else {
-    li.append(link);
+    box.setAttribute("aria-label", `Studied: ${track}, ${topic.topic}`);
+    li.append(box);
   }
   return li;
+}
+
+function practiceTile(track: string, practice: NonNullable<Task["practice"]>[number]) {
+  const item = document.createElement("li");
+  item.className = "day-task";
+  item.title = `${track} practice: ${practice.title}`;
+  const link = document.createElement("a");
+  link.className = "day-task__link";
+  link.href = practice.url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  const skill = document.createElement("span");
+  skill.className = "day-task__skill";
+  skill.textContent = `${track} practice`;
+  const title = document.createElement("span");
+  title.className = "day-task__topic";
+  title.textContent = `${practice.title} ↗`;
+  link.append(skill, title);
+  item.append(link);
+  return item;
 }
 
 export function initDayCard() {
@@ -83,22 +115,33 @@ export function initDayCard() {
         : shown < open
           ? "Catch up"
           : "Coming up";
-    // Rebuild the tiles only when the day changes, so a ticked checkbox keeps keyboard focus.
+
     const list = $<HTMLElement>("[data-dc-tasks]");
     if (list.dataset.day !== String(shown)) {
-      list.replaceChildren(...day.t.map(tile));
+      list.replaceChildren(
+        ...day.tasks.flatMap((task) => [
+          ...task.topics.map((topic) => topicTile(task.track, topic)),
+          ...(task.practice ?? []).map((practice) => practiceTile(task.track, practice)),
+        ]),
+      );
       list.dataset.day = String(shown);
     }
     const topics = stored().t ?? {};
     let studied = 0;
-    list.querySelectorAll<HTMLInputElement>("input[data-pl-key]").forEach((b) => {
-      b.checked = !!topics[b.dataset.plKey!]?.learn;
-      b.closest("li")!.toggleAttribute("data-done", b.checked);
-      if (b.checked) studied++;
-    });
-    $("[data-dc-count]").textContent = `${studied}/${day.t.length} topics`;
-    $("[data-dc-foot]").textContent = `${day.h} h · ${day.t.length} planned topics`;
-    $("[data-dc-outcome]").textContent = day.m;
+    list
+      .querySelectorAll<HTMLInputElement>('input[data-pl-key][data-pl-field="learn"]')
+      .forEach((box) => {
+        box.checked = !!topics[box.dataset.plKey!]?.learn;
+        box.closest("li")!.toggleAttribute("data-done", box.checked);
+        if (box.checked) studied++;
+      });
+    const trackedTopics = day.tasks.reduce(
+      (count, task) => count + task.topics.filter((topic) => topic.key).length,
+      0,
+    );
+    $("[data-dc-count]").textContent = `${studied}/${trackedTopics} topics`;
+    $("[data-dc-foot]").textContent = `${day.h} h · ${trackedTopics} planned topics`;
+
     check.dataset.plDay = String(shown);
     check.dataset.hours = String(day.h);
     check.checked = isDone;
@@ -108,7 +151,6 @@ export function initDayCard() {
     prev.disabled = shown <= 1;
     next.disabled = shown >= total;
 
-    // Main hero button: continue from the first day not yet completed.
     const cta = document.querySelector<HTMLAnchorElement>("[data-plan-cta]");
     const label = cta?.querySelector("[data-plan-cta-label]");
     if (cta && label && Object.keys(done).length) {
@@ -124,8 +166,6 @@ export function initDayCard() {
   };
   prev.addEventListener("click", () => go(shown - 1));
   next.addEventListener("click", () => go(shown + 1));
-  // planner.ts saves the tick, then fires planner:change. After ticking the day shown, move on to the next
-  // open day so the card always points at what to study next.
   let justTicked = false;
   check.addEventListener("change", () => {
     justTicked = check.checked;
@@ -136,7 +176,6 @@ export function initDayCard() {
       justTicked = false;
       const was = shown;
       const open = firstOpen();
-      // A short pause so the tick is seen before the card moves on.
       if (open <= total && open !== shown)
         setTimeout(() => {
           if (shown !== was) return;

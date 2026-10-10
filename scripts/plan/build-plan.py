@@ -595,6 +595,38 @@ def build() -> list[dict]:
             **({"weekly": milestone} if milestone else {}),
             **({"monthly": monthly} if monthly else {}),
         })
+    # Keep the opening homepage/planner cards visually balanced at exactly ten tiles.
+    # Move existing lessons between days so every topic remains scheduled once.
+    opening_moves = [
+        (1, 3, "dsa", "Product of Array Except Self"),
+        (1, 4, "sql", "NULL handling with IS NULL / COALESCE"),
+        (1, 5, "de-concepts", "Foundations lab: Data lifecycle and ownership"),
+        (2, 3, "dsa", "Contiguous Array"),
+        (2, 4, "dsa", "Shortest Subarray with Sum at Least K"),
+        (2, 5, "de-concepts", "OLTP and OLAP workloads"),
+        (6, 3, "dsa", "Find All Numbers Disappeared in an Array"),
+        (7, 4, "dsa", "Find All Duplicates in an Array"),
+        (8, 5, "de-concepts", "CSV and JSON trade-offs"),
+    ]
+    for source_day, target_day, track, topic in opening_moves:
+        source = next(
+            task for task in days[source_day - 1]["tasks"]
+            if task["track"] == track and any(item["topic"] == topic for item in task["items"])
+        )
+        item = next(item for item in source["items"] if item["topic"] == topic)
+        source["items"].remove(item)
+        target = next(task for task in days[target_day - 1]["tasks"] if task["track"] == track)
+        target["items"].append(item)
+
+    for day in days:
+        for task in [task for task in day["tasks"] if not task["items"] and not task.get("practice")]:
+            recipient = next(
+                (other for other in day["tasks"] if other is not task and other["kind"] == task["kind"]),
+                None,
+            ) or next(other for other in day["tasks"] if other is not task and other["track"] == task["track"])
+            recipient["minutes"] += task["minutes"]
+            day["tasks"].remove(task)
+
     if sql_cursor != 100 or dsa_cursor != 248 or practice_cursor != 55:
         raise ValueError(f"Coverage mismatch: SQL={sql_cursor}, DSA={dsa_cursor}, SQL practice={practice_cursor}")
     return days

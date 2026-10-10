@@ -114,6 +114,14 @@ for (const day of plan.days) {
   }
 }
 
+for (const day of plan.days.slice(0, 5)) {
+  const tiles = day.tasks.reduce(
+    (count, task) => count + task.items.length + (task.practice?.length ?? 0),
+    0,
+  );
+  if (tiles !== 10) fail(`day ${day.day} should have exactly 10 planner tiles, found ${tiles}`);
+}
+
 if (totalHours !== 348) fail(`expected 348 planned hours, found ${totalHours}`);
 if (uniqueSql.size !== 100) fail(`expected 100 unique SQL topics, found ${uniqueSql.size}`);
 if (uniqueDsa.size !== curriculum.dsa.items.length)

@@ -8,6 +8,7 @@ import { getCourse } from "../utils/navigation";
 import { SITE, TECH_GROUP_LABELS } from "../data/site";
 import HomeRoadmap from "../components/planner/HomeRoadmap.astro";
 import PlannerRing from "../components/planner/PlannerRing.astro";
+import PlanDayTopics from "../components/planner/PlanDayTopics.astro";
 import DataFlow from "../components/content/DataFlow.astro";
 import { planDays, TRACKERS, trackerRows, type PlanDay } from "../utils/curriculum";
 
@@ -31,10 +32,7 @@ const day1 = days[0];
 const planHours = days.reduce((a, d) => a + d.hours, 0);
 const topicCount = (await Promise.all(TRACKERS.map((t) => trackerRows(t.id)))).flat().length;
 const dayTopics = (day: PlanDay) =>
-  day.tasks
-    .filter((task) => task.track !== "Review")
-    .flatMap((task) => task.topics.map((item) => ({ skill: task.track, ...item })));
-const firstDayTopics = dayTopics(day1);
+  day.tasks.reduce((count, task) => count + task.topics.filter((item) => item.key).length, 0);
 ---
 
 <BaseLayout
@@ -49,11 +47,12 @@ const firstDayTopics = dayTopics(day1);
         <div class="hero-plan__copy">
           <p class="eyebrow">The DataDank 90-day plan</p>
           <h1>
-            Prepare for Data Engineer interviews <span class="hero-plan__em">in 90 days.</span>
+            Master data engineering. Ace your interviews.{" "}
+            <span class="hero-plan__em">Build your future.</span>
           </h1>
           <p class="deck">
-            A structured path from SQL, DSA, Python and data-engineering foundations to reliable
-            pipelines, system design and interview practice. Every planned topic links to a lesson.
+            A practical path to data engineering skills: clear tutorials, hands-on practice,
+            interview questions, real-world projects, and structured roadmaps.
           </p>
           <div class="hero__actions">
             <Button href="/planner/90-day-plan/#day-1" size="lg" fullWidthOnMobile data-plan-cta>
@@ -106,37 +105,14 @@ const firstDayTopics = dayTopics(day1);
                 hours={planHours}
               />
             </div>
-            <ul class="day-card__tasks" role="list" data-dc-tasks>
-              {firstDayTopics.map((t) => (
-                <li class="day-task" title={`${t.skill}: ${t.topic}`}>
-                  {t.href ? (
-                    <a class="day-task__link" href={t.href}>
-                      <span class="day-task__skill">{t.skill}</span>
-                      <span class="day-task__topic">{t.topic}</span>
-                    </a>
-                  ) : (
-                    <span class="day-task__link">
-                      <span class="day-task__skill">{t.skill}</span>
-                      <span class="day-task__topic">{t.topic}</span>
-                    </span>
-                  )}
-                  <input
-                    type="checkbox"
-                    class="day-task__check js-only"
-                    data-pl-key={t.key ?? ""}
-                    data-pl-field="learn"
-                    aria-label={`Studied: ${t.skill}, ${t.topic}`}
-                  />
-                </li>
-              ))}
-            </ul>
+            <PlanDayTopics tasks={day1.tasks} dataDayCardTasks />
             <div class="day-card__bar">
               <p class="day-card__foot">
                 <span class="day-card__count js-only" data-dc-count>
-                  0/{firstDayTopics.length} topics
+                  0/{dayTopics(day1)} topics
                 </span>
                 <span data-dc-foot>
-                  {day1.hours} h · {day1.outcome}
+                  {day1.hours} h · {dayTopics(day1)} planned topics
                 </span>
               </p>
               <div class="day-card__controls js-only">
@@ -158,9 +134,6 @@ const firstDayTopics = dayTopics(day1);
                 </button>
               </div>
             </div>
-            <p class="day-card__outcome" data-dc-outcome>
-              {day1.outcome}
-            </p>
             <p class="visually-hidden" aria-live="polite" data-dc-live></p>
             <script
               type="application/json"
@@ -170,8 +143,7 @@ const firstDayTopics = dayTopics(day1);
                   d: d.day,
                   th: d.theme,
                   h: d.hours,
-                  m: d.outcome,
-                  t: dayTopics(d).map((t) => [t.skill, t.topic, t.href ?? "", t.key ?? ""]),
+                  tasks: d.tasks,
                 })),
               ).replace(/</g, "\\u003c")}
             />

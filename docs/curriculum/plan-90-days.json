@@ -33,11 +33,6 @@
               "tracker": "sql"
             },
             {
-              "topic": "NULL handling with IS NULL / COALESCE",
-              "ref": "articles:sql/operators-nulls-case",
-              "tracker": "sql"
-            },
-            {
               "topic": "Daily Active Users case study",
               "ref": "interview-questions:sql/daily-active-users-sql-case-study"
             }
@@ -62,11 +57,6 @@
             {
               "topic": "Find Pivot Index",
               "ref": "interview-questions:dsa/find-pivot-index",
-              "tracker": "dsa"
-            },
-            {
-              "topic": "Product of Array Except Self",
-              "ref": "interview-questions:dsa/product-of-array-except-self",
               "tracker": "dsa"
             },
             {
@@ -95,23 +85,12 @@
         },
         {
           "track": "python",
-          "minutes": 90,
+          "minutes": 150,
           "kind": "project",
           "items": [
             {
               "topic": "Idempotent CSV loader setup and replay check",
               "ref": "articles:python/idempotent-csv-loader"
-            }
-          ]
-        },
-        {
-          "track": "de-concepts",
-          "minutes": 60,
-          "kind": "project",
-          "items": [
-            {
-              "topic": "Foundations lab: Data lifecycle and ownership",
-              "ref": "articles:etl-elt/modern-data-pipelines"
             }
           ]
         },
@@ -171,16 +150,6 @@
           "kind": "practice",
           "items": [
             {
-              "topic": "Contiguous Array",
-              "ref": "interview-questions:dsa/contiguous-array",
-              "tracker": "dsa"
-            },
-            {
-              "topic": "Shortest Subarray with Sum at Least K",
-              "ref": "interview-questions:dsa/shortest-subarray-with-sum-at-least-k",
-              "tracker": "dsa"
-            },
-            {
               "topic": "Maximum Subarray",
               "ref": "interview-questions:dsa/maximum-subarray",
               "tracker": "dsa"
@@ -198,18 +167,6 @@
           ]
         },
         {
-          "track": "de-concepts",
-          "minutes": 30,
-          "kind": "learn",
-          "items": [
-            {
-              "topic": "OLTP and OLAP workloads",
-              "ref": "articles:data-warehousing/data-warehousing-fundamentals",
-              "tracker": "de-concepts"
-            }
-          ]
-        },
-        {
           "track": "python",
           "minutes": 90,
           "kind": "project",
@@ -222,7 +179,7 @@
         },
         {
           "track": "de-concepts",
-          "minutes": 60,
+          "minutes": 90,
           "kind": "project",
           "items": [
             {
@@ -286,6 +243,21 @@
               "topic": "Maximum Sum Circular Subarray",
               "ref": "interview-questions:dsa/maximum-sum-circular-subarray",
               "tracker": "dsa"
+            },
+            {
+              "topic": "Product of Array Except Self",
+              "ref": "interview-questions:dsa/product-of-array-except-self",
+              "tracker": "dsa"
+            },
+            {
+              "topic": "Contiguous Array",
+              "ref": "interview-questions:dsa/contiguous-array",
+              "tracker": "dsa"
+            },
+            {
+              "topic": "Find All Numbers Disappeared in an Array",
+              "ref": "interview-questions:dsa/find-all-numbers-disappeared-in-an-array",
+              "tracker": "dsa"
             }
           ]
         },
@@ -345,6 +317,11 @@
               "topic": "DISTINCT and de-duplication",
               "ref": "articles:sql/sql-fundamentals",
               "tracker": "sql"
+            },
+            {
+              "topic": "NULL handling with IS NULL / COALESCE",
+              "ref": "articles:sql/operators-nulls-case",
+              "tracker": "sql"
             }
           ],
           "practice": [
@@ -367,6 +344,16 @@
             {
               "topic": "Spiral Matrix",
               "ref": "interview-questions:dsa/spiral-matrix",
+              "tracker": "dsa"
+            },
+            {
+              "topic": "Shortest Subarray with Sum at Least K",
+              "ref": "interview-questions:dsa/shortest-subarray-with-sum-at-least-k",
+              "tracker": "dsa"
+            },
+            {
+              "topic": "Find All Duplicates in an Array",
+              "ref": "interview-questions:dsa/find-all-duplicates-in-an-array",
               "tracker": "dsa"
             }
           ]
@@ -462,6 +449,20 @@
               "topic": "Python functions and reusable code",
               "ref": "articles:python/functions-modules-reusable-code",
               "tracker": "de-concepts"
+            },
+            {
+              "topic": "Foundations lab: Data lifecycle and ownership",
+              "ref": "articles:etl-elt/modern-data-pipelines"
+            },
+            {
+              "topic": "OLTP and OLAP workloads",
+              "ref": "articles:data-warehousing/data-warehousing-fundamentals",
+              "tracker": "de-concepts"
+            },
+            {
+              "topic": "CSV and JSON trade-offs",
+              "ref": "articles:python/file-io-csv-json",
+              "tracker": "de-concepts"
             }
           ]
         },
@@ -523,11 +524,6 @@
           "minutes": 45,
           "kind": "practice",
           "items": [
-            {
-              "topic": "Find All Numbers Disappeared in an Array",
-              "ref": "interview-questions:dsa/find-all-numbers-disappeared-in-an-array",
-              "tracker": "dsa"
-            },
             {
               "topic": "Set Mismatch",
               "ref": "interview-questions:dsa/set-mismatch",
@@ -605,11 +601,6 @@
           "minutes": 45,
           "kind": "practice",
           "items": [
-            {
-              "topic": "Find All Duplicates in an Array",
-              "ref": "interview-questions:dsa/find-all-duplicates-in-an-array",
-              "tracker": "dsa"
-            },
             {
               "topic": "First Missing Positive",
               "ref": "interview-questions:dsa/first-missing-positive",
@@ -725,18 +716,6 @@
           ]
         },
         {
-          "track": "de-concepts",
-          "minutes": 30,
-          "kind": "learn",
-          "items": [
-            {
-              "topic": "CSV and JSON trade-offs",
-              "ref": "articles:python/file-io-csv-json",
-              "tracker": "de-concepts"
-            }
-          ]
-        },
-        {
           "track": "project",
           "minutes": 90,
           "kind": "project",
@@ -749,7 +728,7 @@
         },
         {
           "track": "de-concepts",
-          "minutes": 60,
+          "minutes": 90,
           "kind": "project",
           "items": [
             {

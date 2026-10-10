@@ -1,0 +1,49 @@
+---
+import type { PlanTask } from "../../utils/curriculum";
+
+type Props = {
+  tasks: PlanTask[];
+  dataDayCardTasks?: boolean;
+};
+
+const { tasks, dataDayCardTasks = false } = Astro.props;
+---
+
+<ul class="day-card__tasks" role="list" data-dc-tasks={dataDayCardTasks ? "" : undefined}>
+  {tasks.map((task) => (
+    <>
+      {task.topics.map((topic) => (
+        <li class="day-task" title={`${task.track}: ${topic.topic}`}>
+          {topic.href ? (
+            <a class="day-task__link" href={topic.href}>
+              <span class="day-task__skill">{task.track}</span>
+              <span class="day-task__topic">{topic.topic}</span>
+            </a>
+          ) : (
+            <span class="day-task__link">
+              <span class="day-task__skill">{task.track}</span>
+              <span class="day-task__topic">{topic.topic}</span>
+            </span>
+          )}
+          {topic.key && (
+            <input
+              type="checkbox"
+              class="day-task__check js-only"
+              data-pl-key={topic.key}
+              data-pl-field="learn"
+              aria-label={`Studied: ${task.track}, ${topic.topic}`}
+            />
+          )}
+        </li>
+      ))}
+      {task.practice?.map((practice) => (
+        <li class="day-task" title={`${task.track} practice: ${practice.title}`}>
+          <a class="day-task__link" href={practice.url} target="_blank" rel="noopener noreferrer">
+            <span class="day-task__skill">{task.track} practice</span>
+            <span class="day-task__topic">{practice.title} ↗</span>
+          </a>
+        </li>
+      ))}
+    </>
+  ))}
+</ul>
