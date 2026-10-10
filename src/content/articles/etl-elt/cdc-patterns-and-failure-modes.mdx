@@ -1,73 +1,292 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "CDC Patterns and Failure Modes"
 seoTitle: "CDC Patterns and Failure Modes"
-description: "Compare change data capture approaches (log-based, query-based, triggers, outbox) and the failure modes to design for: ordering, deletes, snapshots and schema changes."
+description: "Compare log-based, query-based, trigger and outbox CDC, see how Debezium events are applied with ordered MERGE, and design for deletes, snapshots, lag and schema changes."
 inventoryId: "SUPPORT-18"
 technology: ["etl-elt", "kafka"]
 topic: ["cdc", "reliability"]
 difficulty: "Advanced"
-related: ["system-designs:change-data-capture-platform", "interview-questions:data-engineering/design-cdc-pipeline", "projects:change-data-capture-pipeline"]
-sources: [{"label": "PostgreSQL documentation: Logical decoding", "url": "https://www.postgresql.org/docs/current/logicaldecoding.html"}, {"label": "Debezium documentation", "url": "https://debezium.io/documentation/"}]
-versionContext: "Concepts apply across databases; connector behaviour varies, so check your connector's documentation"
+learningObjectives:
+  - "Compare log-based, query-based, trigger-based and outbox CDC on correctness and source impact"
+  - "Read a Debezium change event and know which fields an apply step needs"
+  - "Apply change events idempotently and in order with a position-aware MERGE, including deletes"
+  - "Design for snapshots, log retention, replica identity, schema changes and primary-key updates"
+prerequisites: ["articles:etl-elt/incremental-loading-watermarks-backfills"]
+related: ["system-designs:change-data-capture-platform", "interview-questions:data-engineering/design-cdc-pipeline", "projects:change-data-capture-pipeline", "articles:kafka/kafka-connect-debezium", "interview-questions:data-engineering/schema-evolution-in-pipelines"]
+previous: "articles:etl-elt/incremental-loading-watermarks-backfills"
+next: "articles:etl-elt/data-quality-checks-contracts"
+sources:
+  - { label: "PostgreSQL documentation: Logical decoding", url: "https://www.postgresql.org/docs/current/logicaldecoding.html" }
+  - { label: "PostgreSQL documentation: Replication slots and max_slot_wal_keep_size", url: "https://www.postgresql.org/docs/current/runtime-config-replication.html" }
+  - { label: "PostgreSQL documentation: ALTER TABLE (REPLICA IDENTITY)", url: "https://www.postgresql.org/docs/current/sql-altertable.html" }
+  - { label: "Debezium documentation: PostgreSQL connector", url: "https://debezium.io/documentation/reference/stable/connectors/postgresql.html" }
+versionContext: "SQL examples run on PostgreSQL 16.14. The logical decoding snippet needs wal_level = logical and was not executed. Debezium event fields follow the Debezium PostgreSQL connector documentation; connector behaviour varies by version and database."
 ---
 
-Change data capture (CDC) copies changes from an operational database to other systems. There are several ways to do it, each with characteristic failure modes.
+Change data capture (CDC) copies every insert, update and delete from an operational database to other systems: a warehouse, a lakehouse, a search index, a cache. It is how most companies keep analytics within minutes of production without running heavy queries against the production database. This lesson compares the ways to capture changes, shows how to apply them correctly, and lists the failure modes that cause most CDC incidents.
 
-## Approaches
+## Four ways to capture changes
 
-| Approach | How it works | Captures deletes | Load on source | Notes |
-|----------|--------------|------------------|----------------|-------|
-| **Log-based** | Read the database's transaction log | Yes | Low | Preferred; needs log access and connector operations |
-| **Query-based** | Poll `WHERE updated_at > last_seen` | No (unless soft deletes) | Medium | Misses intermediate changes and rows without updated timestamps |
-| **Triggers** | Database triggers write changes to a table | Yes | Adds write overhead | Couples CDC to the application schema |
-| **Outbox pattern** | Application writes events to an outbox table in the same transaction | As designed | Low | Emits business events rather than raw row changes |
+| Approach | How it works | Captures deletes | Intermediate changes | Load on source |
+|----------|--------------|------------------|----------------------|----------------|
+| **Log-based** | Read the database's transaction log (PostgreSQL WAL, MySQL binlog, SQL Server CDC tables, Oracle redo) | Yes | Yes, every change | Low |
+| **Query-based** | Poll `WHERE updated_at > last_watermark` | No (unless soft-deleted) | No, only the latest state at poll time | Queries on every poll |
+| **Triggers** | Database triggers write each change to a change table | Yes | Yes | Adds work to every write |
+| **Outbox** | The application writes an event to an outbox table in the same transaction as its business change | As designed | As designed | Low |
 
-## Failure modes to design for
+### Log-based
 
-### Ordering
+Every committed change is already in the database's log for crash recovery and replication. A log-based connector reads that log, converts each row change into an event, and remembers its position. In PostgreSQL this is **logical decoding**: a **replication slot** tracks how far the consumer has read, and an output plugin (`pgoutput` is built in) turns WAL records into row changes.
 
-Changes to one row must be applied in order. Key events by primary key so they share a partition, carry the source log position, and apply only if the incoming position is newer than what is stored.
+{/* noexec */}
+```sql
+-- Requires wal_level = logical (a server restart), and a role with REPLICATION.
+SELECT pg_create_logical_replication_slot('demo_slot', 'test_decoding');
+INSERT INTO customers VALUES (1, 'asha@example.com');
+SELECT lsn, xid, data FROM pg_logical_slot_get_changes('demo_slot', NULL, NULL);
+--  lsn       | xid | data
+--  0/1A2B3C8 | 750 | BEGIN 750
+--  0/1A2B3C8 | 750 | table public.customers: INSERT: customer_id[bigint]:1 email[text]:'asha@example.com'
+--  0/1A2B4F0 | 750 | COMMIT 750
+SELECT pg_drop_replication_slot('demo_slot');
+```
 
-### Duplicates and replays
+You rarely call this yourself. **Debezium**, the most widely used open-source CDC platform, runs as a Kafka Connect source connector (or as Debezium Server without Kafka), manages the slot, takes the initial snapshot, and publishes one event per row change to a topic per table. Setup is covered in [Kafka Connect and Debezium](/kafka/kafka-connect-debezium/); managed services (AWS DMS, Google Datastream, Fivetran and others) offer the same idea without running connectors.
 
-Connectors and consumers deliver at least once. Make the apply step idempotent (position-aware `MERGE`).
+### Query-based
 
-### Deletes
+Polling an `updated_at` column is the simplest option and needs no special database access. It has three structural limits: it cannot see hard deletes, it sees only the latest state of a row (three updates between polls become one), and it misses rows whose transactions commit after the watermark has moved past them. [Incremental loading](/etl-elt/incremental-loading-watermarks-backfills/) shows the lookback window and key reconciliation that reduce, but do not remove, those gaps. It is a reasonable choice for slowly changing reference data where you cannot get log access.
 
-Log-based CDC emits delete events; query-based CDC cannot see deleted rows at all. Decide whether to hard-delete or soft-delete downstream.
+### Triggers
 
-### Initial snapshot
+A trigger runs inside the writing transaction, so it captures every change including deletes:
 
-A consistent snapshot plus the log position at which it was taken, then streaming from that position. Without this, changes during the snapshot can be missed or applied twice.
+```sql
+CREATE TABLE products (product_id int PRIMARY KEY, name text NOT NULL, price numeric(10,2) NOT NULL);
 
-### Log retention and lag
+CREATE TABLE products_changes (
+    change_id  bigserial PRIMARY KEY,
+    op         char(1) NOT NULL,             -- i, u or d
+    product_id int NOT NULL,
+    row_data   jsonb,
+    txid       bigint NOT NULL DEFAULT txid_current(),
+    changed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 
-If the connector falls behind longer than the database retains its log, changes are lost and a new snapshot is required. Monitor connector lag and retention headroom.
+CREATE FUNCTION capture_products() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        INSERT INTO products_changes (op, product_id, row_data) VALUES ('d', OLD.product_id, to_jsonb(OLD));
+        RETURN OLD;
+    END IF;
+    INSERT INTO products_changes (op, product_id, row_data)
+    VALUES (lower(left(TG_OP, 1)), NEW.product_id, to_jsonb(NEW));
+    RETURN NEW;
+END;
+$$;
 
-### Schema changes
+CREATE TRIGGER products_cdc AFTER INSERT OR UPDATE OR DELETE ON products
+FOR EACH ROW EXECUTE FUNCTION capture_products();
 
-Additive changes can flow through; renames and type changes need a coordinated migration. Detect them and pause rather than corrupt the target.
+INSERT INTO products VALUES (1, 'Kettle', 30.00), (2, 'Toaster', 25.00);
+UPDATE products SET price = 27.50 WHERE product_id = 2;
+DELETE FROM products WHERE product_id = 1;
 
-### Transactions
+SELECT change_id, op, product_id, row_data->>'price' AS price FROM products_changes ORDER BY change_id;
+```
 
-A source transaction may touch several tables. Downstream, those changes may arrive at slightly different times; consumers that need cross-table consistency must account for that.
+```text
+ change_id | op | product_id | price
+-----------+----+------------+-------
+         1 | i  |          1 | 30.00
+         2 | i  |          2 | 25.00
+         3 | u  |          2 | 27.50
+         4 | d  |          1 | 30.00
+```
+
+The costs: every write to `products` now does a second write, the trigger must be maintained alongside schema changes, and the change table needs cleaning up. There is also a subtle trap for the consumer. `change_id` comes from a sequence, which is assigned when the row is written, not when the transaction commits; a consumer that reads `change_id > last_seen` can skip a change from a slow transaction that commits after a higher id is already visible. Read with a lookback, or order by commit using the transaction id and a commit timestamp, if you build on triggers.
+
+### Outbox
+
+Row-level CDC exposes the source's **internal** schema: rename a column in the application and every consumer breaks. With the outbox pattern, the application writes a deliberate business event (`OrderPlaced`, with a documented payload) to an `outbox` table in the same transaction as the business change, and log-based CDC publishes the outbox table. Consumers get a stable contract and the event is never published for a transaction that rolled back. The trade-off is application work: someone has to design and emit the events.
 
 <Callout tone="info" title="Why log-based is the default">
 
-It sees every change including deletes, preserves order, and adds little load on the source. The cost is operating the connector and managing log retention.
+It sees every committed change including deletes, preserves per-row order, adds little load on the source and needs no application changes. The cost is operating the connector and managing log retention, which is where most incidents happen.
 
 </Callout>
 
+## Anatomy of a change event
+
+A Debezium event for an update to a PostgreSQL row has this shape (simplified; real events also carry a schema section unless the converter drops it):
+
+```json
+{
+  "before": { "customer_id": 1, "email": "asha@example.com", "tier": "free" },
+  "after":  { "customer_id": 1, "email": "asha@example.com", "tier": "pro" },
+  "source": { "connector": "postgresql", "db": "shop", "schema": "public", "table": "customers",
+              "lsn": 24023128, "txId": 750, "ts_ms": 1759658100000, "snapshot": "false" },
+  "op": "u",
+  "ts_ms": 1759658100412
+}
+```
+
+- `op` is `c` (create), `u` (update), `d` (delete) or `r` (read during the snapshot).
+- `before` is null for creates; `after` is null for deletes.
+- `source.lsn` is the position in the WAL. It is the field the apply step uses to order changes for a row.
+- `source.ts_ms` is when the change happened in the database; the outer `ts_ms` is when the connector processed it. The difference is your capture lag.
+- The Kafka message **key** is the row's primary key, so all changes to a row land in the same partition and stay in order.
+- After a delete, Debezium by default also emits a **tombstone** (same key, null value) so a compacted topic can eventually drop the key.
+
+## Applying changes correctly
+
+The apply step reads a batch of events and merges them into the target. It must be:
+
+- **Idempotent**, because the connector and the consumer deliver at least once, so the same event can arrive twice.
+- **Order-aware**, because a replay or a reprocessed batch can bring an older event after a newer one.
+- **Delete-aware**, without letting an old event "resurrect" a deleted row.
+
+The approach: reduce the batch to the latest event per key, then apply it only if its position is newer than what the target already holds. Keeping deleted rows as **soft-deleted** rows with their position is what prevents resurrection: if you hard-delete, a late-replayed create finds no row to compare against and inserts it again.
+
+```sql
+CREATE TABLE cdc_customer_changes (
+    lsn         bigint NOT NULL,
+    op          char(1) NOT NULL,
+    customer_id bigint NOT NULL,
+    email       text,
+    tier        text
+);
+
+CREATE TABLE customers_replica (
+    customer_id bigint PRIMARY KEY,
+    email       text,
+    tier        text,
+    is_deleted  boolean NOT NULL DEFAULT false,
+    source_lsn  bigint NOT NULL
+);
+
+CREATE PROCEDURE apply_customer_changes() LANGUAGE sql AS $$
+    MERGE INTO customers_replica AS t
+    USING (
+        SELECT DISTINCT ON (customer_id) *
+        FROM cdc_customer_changes
+        ORDER BY customer_id, lsn DESC          -- latest change per key in this batch
+    ) AS s
+    ON t.customer_id = s.customer_id
+    WHEN MATCHED AND s.lsn <= t.source_lsn THEN
+        DO NOTHING                              -- duplicate or older event: ignore
+    WHEN MATCHED AND s.op = 'd' THEN
+        UPDATE SET is_deleted = true, source_lsn = s.lsn
+    WHEN MATCHED THEN
+        UPDATE SET email = s.email, tier = s.tier, is_deleted = false, source_lsn = s.lsn
+    WHEN NOT MATCHED AND s.op = 'd' THEN
+        INSERT (customer_id, is_deleted, source_lsn) VALUES (s.customer_id, true, s.lsn)
+    WHEN NOT MATCHED THEN
+        INSERT (customer_id, email, tier, source_lsn) VALUES (s.customer_id, s.email, s.tier, s.lsn);
+$$;
+
+-- Batch 1: customer 1 created then upgraded; customer 2 created then deleted.
+INSERT INTO cdc_customer_changes VALUES
+  (100, 'c', 1, 'asha@example.com', 'free'),
+  (105, 'u', 1, 'asha@example.com', 'pro'),
+  (110, 'c', 2, 'ben@example.com',  'free'),
+  (120, 'd', 2, NULL, NULL);
+CALL apply_customer_changes();
+
+-- Batch 2: the consumer restarts and replays old events.
+TRUNCATE cdc_customer_changes;
+INSERT INTO cdc_customer_changes VALUES
+  (100, 'c', 1, 'asha@example.com', 'free'),
+  (110, 'c', 2, 'ben@example.com',  'free');
+CALL apply_customer_changes();
+
+SELECT * FROM customers_replica ORDER BY customer_id;
+```
+
+```text
+ customer_id |      email       | tier | is_deleted | source_lsn
+-------------+------------------+------+------------+------------
+           1 | asha@example.com | pro  | f          |        105
+           2 |                  |      | t          |        120
+```
+
+The replay changed nothing: customer 1 keeps the newer tier and customer 2 stays deleted. Consumers query a view such as `WHERE NOT is_deleted`, and a periodic job can purge soft-deleted rows once they are older than the maximum replay horizon.
+
+Comparing positions per key is safe because the database's row locks serialise writes to one row, so changes to the same key appear in the log in the order they happened. Changes to **different** keys from concurrent transactions can interleave, which does not matter for a per-key merge.
+
+In a lakehouse the same logic is a Delta Lake or Iceberg `MERGE` per micro-batch; in Snowflake it is often a stream on a landing table plus a task that runs the merge.
+
+## Failure modes to design for
+
+### Initial snapshot
+
+A new pipeline needs the existing rows, not just future changes. The connector reads a consistent snapshot of each table, records the log position at which it was taken, and then streams changes from that position, so nothing is missed or applied twice. Debezium does this by default (`snapshot.mode` `initial`) and marks snapshot events with `op = 'r'`. For very large tables a full snapshot can take hours; Debezium's **incremental snapshots** (triggered through a signalling table) read the table in chunks while streaming continues, and can also re-snapshot one table later without restarting the pipeline.
+
+### Log retention and lag
+
+A replication slot makes PostgreSQL **keep WAL until the consumer confirms it**. If the connector is stopped or falls far behind, WAL accumulates on the primary's disk; an abandoned slot can fill the disk and take the production database down. Set `max_slot_wal_keep_size` so PostgreSQL invalidates the slot instead (you then need a new snapshot, which is better than an outage) and monitor how far each slot is behind:
+
+```sql
+SELECT slot_name, active,
+       pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)) AS behind
+FROM pg_replication_slots
+WHERE slot_type = 'logical';
+```
+
+On MySQL the risk is the reverse: binlogs are purged on a schedule regardless of the connector, so a connector down longer than `binlog_expire_logs_seconds` loses its position and must re-snapshot. Downstream, Kafka topic retention must also exceed the longest outage of the apply job.
+
+### Deletes and the before image
+
+Deletes need the key of the deleted row; updates often need the old values too (to maintain history or to update aggregates). In PostgreSQL the **replica identity** decides what the log contains. The default records only the primary key columns of the old row; `ALTER TABLE customers REPLICA IDENTITY FULL` records the whole old row at the cost of more WAL. A table with no primary key and default replica identity has no usable identity at all: once it is in a publication that publishes updates and deletes, PostgreSQL rejects `UPDATE` and `DELETE` statements on it until you add a key or set a replica identity.
+
+A related PostgreSQL detail: large values stored out of line (TOAST) that did not change in an update are not written to the WAL. Debezium then emits a placeholder value for that column instead of the data, and a naive apply step overwrites good data with the placeholder. Handle it by skipping columns with the placeholder in the merge or by using `REPLICA IDENTITY FULL` on the affected tables.
+
+### Primary key updates
+
+When a row's primary key changes, Debezium emits a delete for the old key and a create for the new key (with headers linking them). An apply step that only handles updates by key will leave the old key behind.
+
+### Schema changes
+
+| Source change | Effect downstream | Typical handling |
+|---------------|-------------------|------------------|
+| Add nullable column | New field appears in events | Let it flow; add the column to the target (automatically or by migration) |
+| Drop column | Field disappears | Keep the target column, populate nulls; deprecate deliberately |
+| Rename column | Looks like drop plus add | Coordinate; map old and new names for a transition period |
+| Change type (int to text) | Consumers may fail to parse | Pause and migrate; never silently cast |
+
+A **schema registry** with compatibility rules (Avro, Protobuf or JSON Schema) turns breaking changes into rejected registrations rather than broken consumers. The outbox pattern reduces the problem further because the event schema is decoupled from the table. Whatever the tooling, the apply job should **fail loudly** on an unexpected incompatible change rather than write nulls into a column for weeks.
+
+### Transactions across tables
+
+A source transaction may change an order and its order lines. CDC publishes each table to its own topic, so the consumer may see the order before its lines. Consumers that need cross-table consistency can buffer by transaction id (Debezium can emit transaction boundary events), or accept short-lived inconsistency and model around it.
+
+### Duplicates after connector restarts
+
+Connectors commit their position periodically. After a crash they resume from the last committed position and resend the events after it. With a position-aware merge, as above, this is harmless.
+
+## Monitoring CDC
+
+- **Capture lag**: event `ts_ms` minus `source.ts_ms`, and slot or binlog lag on the source.
+- **Apply lag**: time between an event being produced and being merged into the target.
+- **Throughput and errors** per table, including events sent to a dead-letter queue.
+- **Reconciliation**: periodically compare row counts or key checksums between source and target, which catches every silent failure above.
+
 ## Common mistakes
 
-1. Polling `updated_at` and assuming deletes and every intermediate change are captured.
-2. Applying changes in arrival order without positions.
-3. No snapshot strategy.
-4. Ignoring log retention until changes are lost.
+1. Polling `updated_at` and assuming every delete and intermediate change is captured.
+2. Applying events in arrival order, or with a plain upsert, without comparing positions.
+3. Hard-deleting in the target and letting a replayed create bring the row back.
+4. No snapshot strategy, or a snapshot taken without recording the log position.
+5. Leaving an unused replication slot on a production database.
+6. Ignoring replica identity and TOAST, then finding nulls or placeholders in the target.
+
+## Interview angle
+
+"Design a CDC pipeline from PostgreSQL to the warehouse" is a frequent senior question. Walk through capture (log-based, why), transport (topic per table keyed by primary key), apply (latest per key, position-aware merge, soft deletes), bootstrap (snapshot plus position), operations (slot lag, retention, reconciliation) and schema changes. Interviewers like candidates who mention the slot-filling-the-disk failure and the resurrection problem, because they come from real incidents. Practise with [design a CDC pipeline](/interview/data-engineering/design-cdc-pipeline/) and the [CDC platform case study](/data-engineering/system-design/change-data-capture-platform/).
 
 ## Key takeaway
 
-Prefer log-based CDC, key by primary key, apply with position-aware merges, plan snapshots and deletes, and monitor lag against log retention.
+Prefer log-based CDC, key events by primary key, apply them with a merge that keeps the latest position per key and soft-deletes, plan the snapshot, and monitor slot lag, retention and source-to-target reconciliation.
