@@ -1,0 +1,118 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Behavioural Interview Questions for Data Engineers"
+seoTitle: "Behavioural Interview Questions for Data Engineers"
+description: "Behavioural interview questions for data engineers: incidents, bad data, stakeholder conflicts and trade-offs, with a STAR structure and example answer outlines."
+technology: ["career", "data-engineering"]
+topic: ["interview", "behavioural"]
+difficulty: "Beginner"
+section: "career"
+learningObjectives:
+  - "Recognise the behavioural themes Data Engineer interviews return to"
+  - "Build a small bank of true stories and map each to several questions"
+  - "Answer with STAR, keeping the focus on your own actions and what you learned"
+  - "Avoid the answers that quietly fail behavioural rounds"
+related: ["articles:career/explain-a-data-engineering-project", "articles:career/data-engineering-interview-trade-offs", "articles:career/data-engineer-resume-bullets"]
+previous: "articles:career/data-engineering-interview-trade-offs"
+next: "articles:career/data-engineer-resume-bullets"
+versionContext: "Applies to any interview format; example answers are illustrative outlines, not real candidates' stories"
+---
+
+Behavioural rounds ask about what you **did** in past situations, on the assumption that it predicts what you will do next. For Data Engineers the situations are specific: a pipeline that broke at 3 am, a dashboard showing wrong numbers to an executive, a stakeholder who wants real-time data for a weekly report, a migration that slipped. Interviewers listen for ownership, judgement under uncertainty, communication and learning. The technical depth can be modest; the honesty and structure cannot.
+
+## The structure: STAR, with the weight on A and R
+
+- **Situation**: one or two sentences of context.
+- **Task**: what you were responsible for.
+- **Action**: what **you** did, step by step. This is most of the answer. Use "I" for your actions and "we" only for genuine team work.
+- **Result**: the outcome, with numbers only if you measured them, plus what you learned or changed afterwards.
+
+Keep each answer to about two minutes, then stop. Interviewers follow up on whatever interests them.
+
+## Build a story bank first
+
+You do not need a separate story for every question. Prepare six to eight true stories and practise telling each from different angles:
+
+| Story | Questions it can answer |
+|-------|------------------------|
+| A production incident you handled | Failure, pressure, ownership, communication |
+| Wrong data that reached users | Mistakes, quality, stakeholder trust |
+| A design decision you argued for | Influence, trade-offs, disagreement |
+| A request you pushed back on | Prioritisation, saying no, requirements |
+| Something you automated or simplified | Initiative, impact |
+| Learning a technology quickly | Learning, ambiguity |
+| A project that slipped or failed | Failure, planning, honesty |
+| Helping a teammate or analyst | Collaboration, mentoring |
+
+For each, write down the facts: dates, systems, what you did, what happened, and any numbers you actually have. That keeps answers consistent and stops you embellishing under pressure.
+
+## The themes Data Engineer interviews return to
+
+### Incidents and failures
+
+- "Tell me about a time a pipeline you owned failed in production."
+- "Describe the worst data incident you have been involved in."
+- "Tell me about a mistake you made and what you did about it."
+
+What a strong answer shows: you noticed (or how you were told), you contained the damage (stopped the publish, warned consumers), you found the root cause rather than the symptom, you fixed it, and you **prevented recurrence** (a test, an alert, a contract). Blameless language about others; clear ownership of your part.
+
+> **Outline.** *Situation*: a daily revenue table doubled overnight. *Task*: I owned the pipeline. *Action*: I paused the downstream refresh, told the analytics channel which dates were affected, traced it to a retried task that appended instead of overwriting, deleted the duplicate run by its run id, made the load overwrite its partition, and added a uniqueness check that blocks publishing. *Result*: corrected the same morning; the same failure mode could not recur, and the check caught an unrelated duplicate two months later.
+
+### Data quality and trust
+
+- "How did you handle a stakeholder who did not trust your numbers?"
+- "Tell me about a time you found a problem in data someone else owned."
+
+Show that you reconciled against a source of truth, explained the difference in the stakeholder's terms, and fixed the process, not just the number.
+
+### Requirements and pushback
+
+- "Tell me about a time a stakeholder asked for something you thought was wrong."
+- "Describe a time you had to say no, or not yet."
+
+The classic Data Engineer version: someone asks for "real-time" data. A strong answer asks what decision the data drives, discovers that hourly or daily is enough, and offers the simpler option with a path to faster freshness if the need changes. Show curiosity about the need, not resistance to the person.
+
+### Trade-offs and technical disagreement
+
+- "Tell me about a technical decision you disagreed with."
+- "Describe a time you chose a simpler solution over a more powerful one."
+
+Show that you argued with evidence (a prototype, a cost estimate, a benchmark you ran), accepted the decision if it went the other way, and committed to making it work.
+
+### Ambiguity and learning
+
+- "Tell me about a time you had to learn a new technology quickly."
+- "Describe a project where the requirements were unclear."
+
+Show how you reduced ambiguity: asked specific questions, built a small version first, wrote down assumptions and confirmed them.
+
+### Prioritisation and delivery
+
+- "Tell me about a project that did not go to plan."
+- "How do you handle several urgent requests at once?"
+
+Show that you made trade-offs visible to the people affected, communicated early when dates moved, and learned something you now do differently.
+
+## Answers that quietly fail
+
+1. **No real story**: "I always make sure to communicate" is an opinion, not an example.
+2. **The hero story**: everything went wrong because of others and you saved the day.
+3. **No ownership**: "we" throughout, so the interviewer cannot tell what you did.
+4. **No result or learning**: the story stops at the action.
+5. **Invented numbers**: "improved performance by 73%" with no idea how it was measured.
+6. **A "weakness" that is a boast**: "I care too much about quality."
+7. **Criticising former colleagues or employers.**
+
+## If you are early in your career
+
+Use course projects, internships, open-source contributions, personal projects and non-engineering jobs. "A time you handled a mistake" can come from a group project or a part-time job; what matters is the structure and the honesty. Say clearly when a story is from a personal project.
+
+## Practise
+
+Write each story in STAR form, then say it aloud in two minutes. Ask a friend to interrupt with "why?" and "what would you do differently?". Record one session and listen for vague words ("basically", "kind of handled it") and for "we" where you mean "I".
+
+## Key takeaway
+
+Prepare six to eight true stories, map each to several themes, tell them with STAR focused on your own actions, show how you contained, fixed and prevented problems, and report only results you can back up.
