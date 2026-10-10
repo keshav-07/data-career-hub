@@ -1,62 +1,270 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Data Pipeline Observability Fundamentals"
 seoTitle: "Data Pipeline Observability Fundamentals"
-description: "What to measure and alert on in data pipelines: run status, duration, volume, freshness, quality results, lag and lineage, so problems are found before consumers notice."
+description: "Measure freshness, volume, schema, quality and lag per run, define SLIs, SLOs and SLAs for data, detect schema drift, use lineage and design alerts people act on."
 inventoryId: "SUPPORT-13"
 technology: ["etl-elt", "data-engineering"]
-topic: ["observability", "monitoring"]
+topic: ["observability", "monitoring", "sla"]
 difficulty: "Intermediate"
-related: ["articles:etl-elt/data-quality-checks-contracts", "articles:etl-elt/pipeline-reliability-and-retries", "interview-questions:data-engineering/investigate-slow-pipeline"]
-sources: [{"label": "Apache Airflow documentation: Logging and monitoring", "url": "https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/index.html"}]
-versionContext: "Tool-neutral"
+learningObjectives:
+  - "Collect run status, duration, volume, freshness, quality and lag for every pipeline run"
+  - "Define a freshness SLI, an SLO and an SLA for a dataset and measure attainment in SQL"
+  - "Detect volume anomalies and schema drift from metadata you already have"
+  - "Write structured logs that carry run context"
+  - "Design alerts with owners, severities and runbooks, and use lineage to scope impact"
+prerequisites: ["articles:etl-elt/data-quality-checks-contracts"]
+related: ["articles:etl-elt/data-quality-checks-contracts", "articles:etl-elt/pipeline-reliability-and-retries", "interview-questions:data-engineering/investigate-slow-pipeline", "system-designs:data-sla-freshness-monitoring-system", "system-designs:data-observability-system", "interview-questions:data-engineering/monitor-pipeline-freshness-slas"]
+previous: "articles:etl-elt/data-quality-checks-contracts"
+next: "articles:etl-elt/pipeline-reliability-and-retries"
+sources:
+  - { label: "Apache Airflow documentation: Logging and monitoring", url: "https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/index.html" }
+  - { label: "OpenLineage documentation", url: "https://openlineage.io/docs/" }
+  - { label: "Google SRE book: Service Level Objectives", url: "https://sre.google/sre-book/service-level-objectives/" }
+  - { label: "PostgreSQL documentation: information_schema.columns", url: "https://www.postgresql.org/docs/current/infoschema-columns.html" }
+versionContext: "SQL runs on PostgreSQL 16.14 and Python on Python 3.11 (standard library). Tool references are descriptive and were not executed."
 ---
 
-A pipeline can succeed and still produce wrong or late data. **Observability** means you can tell, from signals you already collect, whether data is arriving on time, in the right amount and with the right content, and where to look when it is not.
+A pipeline can succeed and still produce wrong or late data. A green task in the orchestrator says the code ran without raising; it does not say the table is complete, current or correct. **Observability** means you can tell, from signals you already collect, whether data is arriving on time, in the right amount and with the right content, and where to look when it is not.
 
 ## The signals
 
 | Signal | Question | Example metric |
 |--------|----------|----------------|
-| Run status | Did it run and succeed? | Success/failure per task |
-| Duration | Is it getting slower? | Runtime per task vs recent baseline |
-| Volume | Is the amount plausible? | Rows in, rows out, rows rejected |
-| Freshness | Is the data current? | Time since last successful publish per table |
-| Quality | Is it correct? | Check results per run |
+| Run status | Did it run and succeed? | Success or failure per task and per run |
+| Duration | Is it getting slower? | Runtime per task compared with a recent baseline |
+| Volume | Is the amount plausible? | Rows read, written and rejected per run |
+| Freshness | Is the data current? | Time since the last successful publish of each table |
+| Schema | Did the structure change? | Columns added, removed or retyped since the last run |
+| Quality | Is it correct? | Check results per run (see [data quality](/etl-elt/data-quality-checks-contracts/)) |
 | Lag (streaming) | Are we keeping up? | Consumer lag, end-to-end latency |
-| Lineage | What is affected? | Upstream and downstream dependencies |
+| Lineage | What depends on what? | Upstream sources and downstream consumers of each table |
 
-## Alert on outcomes, not just failures
+Freshness, volume, schema, distribution and lineage are sometimes called the "pillars" of data observability. The labels matter less than having each signal recorded per run and per table.
 
-The most important alert is **freshness**: "table X has not been updated in N hours". It catches failures, stuck runs, skipped schedules and silent upstream outages, all with one rule. Add volume and quality alerts next. Task-failure alerts are necessary but not sufficient.
+## Make every run self-describing
 
-## Make runs self-describing
+Write one audit record per run: pipeline, data interval, start and end time, rows read, written and rejected, check results and code version. That one table answers most incident questions ("when did this table last load successfully, and how many rows did it have?") and is the source for dashboards, baselines and SLO reports.
 
-Write a small audit record for every run: pipeline, data interval, start and end time, rows read, written and rejected, check results and code version. That one table answers most incident questions and feeds dashboards and baselines.
+```sql
+CREATE TABLE pipeline_runs (
+    run_id        text PRIMARY KEY,
+    pipeline      text NOT NULL,
+    table_name    text NOT NULL,
+    interval_start date NOT NULL,
+    started_at    timestamptz NOT NULL,
+    finished_at   timestamptz,
+    status        text NOT NULL CHECK (status IN ('running', 'success', 'failed')),
+    rows_written  bigint,
+    rows_rejected bigint,
+    code_version  text
+);
 
-## Structured logs
+INSERT INTO pipeline_runs
+SELECT 'orders__' || d::date, 'orders_daily', 'fct_orders', d::date,
+       d + interval '1 day 5 hours',
+       d + interval '1 day 5 hours' + (CASE WHEN extract(day FROM d) = 20 THEN interval '3 hours' ELSE interval '35 minutes' END),
+       'success',
+       CASE WHEN extract(isodow FROM d) IN (6, 7) THEN 600 ELSE 1000 END
+         + (extract(day FROM d)::int % 5) * 10,
+       2, 'v1.4.2'
+FROM generate_series(timestamptz '2026-09-08 00:00+00', timestamptz '2026-10-06 00:00+00', interval '1 day') AS d;
 
-Log with context (run id, data interval, table, file, row counts) in a consistent, parseable format, so you can search for "everything that happened to 2026-10-01".
+-- Today's run loaded far fewer rows than usual
+UPDATE pipeline_runs SET rows_written = 410 WHERE run_id = 'orders__2026-10-06';
+```
+
+The seeded history has weekday volumes around 1,000 rows, weekends around 600, runs that finish at about 05:35 UTC, and one slow day.
+
+## Freshness: the first alert to build
+
+The most valuable single alert is **freshness**: "table X has not been successfully updated for longer than its agreed delay". It catches failed runs, stuck runs, a scheduler that stopped, a skipped schedule and a silent upstream outage, all with one rule, because every one of those ends with a stale table.
+
+```sql
+SELECT table_name,
+       max(finished_at) AS last_success,
+       timestamptz '2026-10-07 09:00+00' - max(finished_at) AS age
+FROM pipeline_runs
+WHERE status = 'success'
+GROUP BY table_name;
+```
+
+```text
+ table_name |      last_success      |   age
+------------+------------------------+----------
+ fct_orders | 2026-10-07 05:35:00+00 | 03:25:00
+```
+
+(The query uses a fixed "now" so the output is reproducible; in production it is `now()`.) Measure freshness from **your** success record, or from the newest timestamp in the data itself, not from the orchestrator's "last run" time: a run that succeeded while loading nothing should not make a table look fresh. Measuring the newest `event_time` in the table catches that case too.
+
+## SLIs, SLOs and SLAs for data
+
+The terms come from site reliability engineering and translate directly:
+
+- An **SLI** (service level indicator) is a measurement: "minutes after 00:00 UTC at which the previous day's `fct_orders` was published".
+- An **SLO** (objective) is an internal target for that measurement: "published by 06:00 UTC on 95% of days over a rolling 30 days".
+- An **SLA** (agreement) is an external commitment with consequences, usually looser than the SLO so you have room to react: "finance can rely on it by 08:00 UTC".
+
+The gap between 100% and the SLO is an **error budget**. If you have used it up this month, prioritise reliability work over new features. Attainment comes straight from the audit table:
+
+```sql
+SELECT count(*) AS days,
+       count(*) FILTER (WHERE finished_at < interval_start + interval '1 day 6 hours') AS on_time,
+       round(100.0 * count(*) FILTER (WHERE finished_at < interval_start + interval '1 day 6 hours') / count(*), 1)
+         AS pct_on_time
+FROM pipeline_runs
+WHERE table_name = 'fct_orders' AND status = 'success';
+```
+
+```text
+ days | on_time | pct_on_time
+------+---------+-------------
+   29 |      28 |        96.6
+```
+
+One late day in 29 meets a 95% SLO. Agree SLOs with the consumers who depend on the data, and only for tables where lateness has a real cost. A target nobody asked for is just another alert.
+
+## Volume anomalies
+
+Row counts are cheap to record and catch partial loads, duplicated loads and upstream outages. Compare each run with the **same weekday** over recent weeks, so weekends and Mondays do not look like incidents:
+
+```sql
+WITH runs AS (
+    SELECT run_id, interval_start, rows_written,
+           extract(isodow FROM interval_start) AS dow
+    FROM pipeline_runs WHERE table_name = 'fct_orders'
+)
+SELECT cur.interval_start, cur.rows_written,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY hist.rows_written) AS baseline,
+       round(cur.rows_written / percentile_cont(0.5) WITHIN GROUP (ORDER BY hist.rows_written)::numeric, 2) AS ratio
+FROM runs AS cur
+JOIN runs AS hist
+  ON hist.dow = cur.dow
+ AND hist.interval_start <  cur.interval_start
+ AND hist.interval_start >= cur.interval_start - 28
+WHERE cur.interval_start >= DATE '2026-10-04'
+GROUP BY cur.interval_start, cur.rows_written
+ORDER BY cur.interval_start;
+```
+
+```text
+ interval_start | rows_written | baseline | ratio
+----------------+--------------+----------+-------
+ 2026-10-04     |          640 |      620 |  1.03
+ 2026-10-05     |         1000 |     1030 |  0.97
+ 2026-10-06     |          410 |     1025 |  0.40
+```
+
+A ratio of 0.40 on a Tuesday is an alert; 640 rows on a Sunday is normal. A fixed threshold of "at least 800 rows" would have alerted every weekend and taught everyone to ignore it.
+
+## Schema drift
+
+Unexpected schema changes are a leading cause of broken pipelines. Snapshot the columns you expect and compare them with the catalog on every run:
+
+```sql
+CREATE TABLE landing_orders (order_id bigint, customer_id bigint, amount numeric, promo_code text);
+CREATE TABLE expected_columns (table_name text, column_name text, data_type text);
+INSERT INTO expected_columns VALUES
+  ('landing_orders', 'order_id', 'bigint'),
+  ('landing_orders', 'customer_id', 'bigint'),
+  ('landing_orders', 'amount', 'integer'),
+  ('landing_orders', 'currency', 'text');
+
+SELECT coalesce(e.column_name, a.column_name) AS column_name,
+       CASE WHEN a.column_name IS NULL THEN 'missing'
+            WHEN e.column_name IS NULL THEN 'unexpected'
+            ELSE 'type changed: ' || e.data_type || ' -> ' || a.data_type END AS drift
+FROM (SELECT column_name, data_type FROM expected_columns WHERE table_name = 'landing_orders') AS e
+FULL JOIN (SELECT column_name::text, data_type::text FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'landing_orders') AS a
+  USING (column_name)
+WHERE a.column_name IS NULL OR e.column_name IS NULL OR a.data_type <> e.data_type
+ORDER BY 1;
+```
+
+```text
+ column_name |              drift
+-------------+----------------------------------
+ amount      | type changed: integer -> numeric
+ currency    | missing
+ promo_code  | unexpected
+```
+
+Decide the response per kind of change: a new nullable column is usually a warning, a missing or retyped column a blocking failure (see [schema evolution in pipelines](/interview/data-engineering/schema-evolution-in-pipelines/)). For files and events, compare against the schema registry or the data contract instead of the catalog.
+
+## Structured logs with run context
+
+Logs are for the details the metrics do not hold. Log in a consistent, parseable format and attach the run context to every line, so you can search for "everything that happened to 2026-10-06" across tasks:
+
+```python
+import json
+import logging
+import sys
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        payload = {"level": record.levelname, "logger": record.name, "msg": record.getMessage()}
+        payload.update(getattr(record, "ctx", {}))
+        return json.dumps(payload)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(JsonFormatter())
+log = logging.getLogger("orders_daily")
+log.handlers[:] = [handler]
+log.setLevel(logging.INFO)
+log.propagate = False
+
+ctx = {"run_id": "orders__2026-10-06", "table": "fct_orders", "interval_start": "2026-10-06"}
+log.info("load finished", extra={"ctx": {**ctx, "rows_written": 410, "rows_rejected": 2}})
+log.warning("volume below baseline", extra={"ctx": {**ctx, "ratio": 0.40}})
+```
+
+```text
+{"level": "INFO", "logger": "orders_daily", "msg": "load finished", "run_id": "orders__2026-10-06", "table": "fct_orders", "interval_start": "2026-10-06", "rows_written": 410, "rows_rejected": 2}
+{"level": "WARNING", "logger": "orders_daily", "msg": "volume below baseline", "run_id": "orders__2026-10-06", "table": "fct_orders", "interval_start": "2026-10-06", "ratio": 0.4}
+```
+
+Log aggregation tools (CloudWatch Logs, Cloud Logging, Datadog, Elasticsearch and others) can then filter by `run_id` or `table` without regular expressions. Never log secrets or personal data; log ids and counts instead of row contents.
 
 ## Lineage
 
-When a table is wrong, lineage tells you which upstream table or job to inspect and which downstream dashboards to warn. Many catalogs and orchestrators capture lineage automatically; make sure yours does for production pipelines.
+When a table is wrong, lineage answers two questions: **upstream**, which source or job should I inspect? **Downstream**, which tables, dashboards and models are affected and whose owners must I warn? Without lineage those answers come from memory and grep.
+
+You rarely build lineage by hand. dbt derives it from `ref()` and `source()`; Airflow emits **OpenLineage** events through its OpenLineage provider; Spark has an OpenLineage integration; catalogs such as Unity Catalog, DataHub and OpenMetadata collect and display it. Check that production pipelines actually emit it, including the ones written as plain Python scripts, which are the usual gap.
+
+## Alerts people act on
+
+- **Alert on symptoms first**: freshness and volume of the tables consumers use, then task failures. A failed task that retried successfully is not worth waking someone for; a stale finance table at 06:00 is.
+- **Every alert has an owner, a severity and a runbook link.** Severity decides the channel: page for a breached SLO on a critical table, a ticket or a chat message for warnings.
+- **Include context in the alert**: table, expected versus observed, run id, link to logs and to lineage.
+- **Deduplicate.** One upstream outage should produce one alert, not one per downstream table. Lineage lets you suppress alerts for tables whose upstream is already known to be broken.
+- **Review alerts regularly** and delete or retune any that nobody acted on.
+
+## Streaming pipelines
+
+For streaming the core signals are **consumer lag** (how far behind the latest offset each consumer group is, in messages and in time), **end-to-end latency** (event time to availability in the sink), throughput, and the size of state and any dead-letter topic. Lag measured in time is easier to tie to an SLO than lag in messages.
 
 <Callout tone="info" title="Baselines beat fixed numbers">
 
-Compare duration and volume with the same weekday over recent weeks. Fixed thresholds generate false alarms on weekends, month ends and holidays.
+Compare duration and volume with the same weekday over recent weeks. Fixed thresholds generate false alarms on weekends, month ends and holidays, and false alarms are how real alerts get ignored.
 
 </Callout>
 
 ## Common mistakes
 
-1. Monitoring only task failures.
-2. No record of row counts per run.
-3. Alerts with no owner or runbook.
-4. Too many alerts, all ignored.
+1. Monitoring only task failures, so a run that "succeeds" with zero rows looks healthy.
+2. Measuring freshness from the scheduler's last run instead of the last successful publish or the data itself.
+3. No record of row counts per run, so there is no baseline when something looks off.
+4. SLOs nobody agreed with consumers, or SLAs tighter than the SLOs behind them.
+5. Alerts with no owner or runbook, and one alert per downstream table for a single upstream failure.
+6. Lineage that covers dbt models but not the Python scripts that feed them.
+
+## Interview angle
+
+"How would you monitor this pipeline?" and "How would you know the data is late or wrong before the business does?" come up in design rounds. Name the signals per run (status, duration, volume, freshness, schema, quality), the audit table that stores them, freshness as the first alert, same-weekday baselines for volume, SLOs agreed with consumers, and lineage for impact analysis. Practise with [monitoring pipeline freshness and SLAs](/interview/data-engineering/monitor-pipeline-freshness-slas/) and the [freshness monitoring system design](/data-engineering/system-design/data-sla-freshness-monitoring-system/).
 
 ## Key takeaway
 
-Measure status, duration, volume, freshness, quality and lag per run, alert first on freshness, and keep an audit record that explains every run.
+Record status, duration, volume, freshness, schema and quality for every run in an audit table, alert first on freshness of the tables people use, compare volume with same-weekday baselines, express expectations as SLOs agreed with consumers, and use lineage to find causes and scope impact.
