@@ -190,25 +190,29 @@ Gzip shrank the JSON by about eight times (smaller even than Snappy-compressed P
 
 ## Practice questions
 
-<details><summary>Why is Parquet faster than JSON even when the query selects every column?</summary>
+<details>
+<summary>Why is Parquet faster than JSON even when the query selects every column?</summary>
 
 Parquet stores typed binary values with encodings such as dictionary and run-length encoding, so there is far less data to read and nothing to tokenise; JSON must parse text, field names and digits on every row. Parquet also lets the reader skip row groups using statistics.
 
 </details>
 
-<details><summary>Your daily job reads a 30 GB events.json.gz file and uses one task. Why, and how do you fix it?</summary>
+<details>
+<summary>Your daily job reads a 30 GB events.json.gz file and uses one task. Why, and how do you fix it?</summary>
 
 Gzip is not splittable, so Spark cannot start reading in the middle of the file and assigns the whole file to one task. Ask the producer for many smaller files or a splittable format, or accept one slow ingest step and convert immediately to Parquet so every later stage is parallel.
 
 </details>
 
-<details><summary>What can go wrong with schema inference on JSON in production?</summary>
+<details>
+<summary>What can go wrong with schema inference on JSON in production?</summary>
 
 The inferred types can change between runs (a field that is always null in one batch, integers that later have decimals), timestamps and decimals come back as strings or doubles, columns are reordered alphabetically, and inference costs an extra pass. Use an explicit schema and handle drift deliberately.
 
 </details>
 
-<details><summary>How do you make sure malformed JSON records are not silently lost?</summary>
+<details>
+<summary>How do you make sure malformed JSON records are not silently lost?</summary>
 
 Read in `PERMISSIVE` mode with an explicit schema that includes a corrupt-record column, write rows where it is non-null to a quarantine table, and monitor their count. Avoid `DROPMALFORMED`, which discards them without trace.
 

@@ -4,14 +4,14 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How would you choose an orchestrator for data pipelines?"
 seoTitle: "Choosing a Data Orchestrator: Interview Answer"
-description: "Choosing a data orchestrator, interview answer: compare Airflow, Dagster, Prefect and cloud schedulers on scheduling model, backfills, observability, operations and team fit."
+description: "Choosing a data orchestrator, interview answer: compare Airflow, Dagster, Prefect and cloud schedulers on scheduling, backfills, observability and team fit."
 technology: ["data-engineering", "airflow"]
 topic: ["orchestration", "architecture"]
 difficulty: "Medium"
 questionType: ["conceptual", "architecture"]
 estimatedMinutes: 8
 interviewRelevance: "Medium"
-shortAnswer: "I choose from requirements rather than popularity: what has to be scheduled (time-based, event- or data-driven), how complex the dependencies are, how important backfills and reruns by interval are, what observability and alerting we need, who operates it, and what the team already knows. Airflow is the default in many companies, with a large provider ecosystem and, in Airflow 3, asset-based scheduling and scheduler-managed backfills. Dagster is attractive when you think in data assets and want lineage and asset checks built in; Prefect suits Python-heavy, dynamic workflows. For a handful of jobs on one platform, the platform's own scheduler (Databricks jobs, dbt Cloud, AWS Step Functions) may be enough. Whatever I pick, tasks must be idempotent and parameterised by interval so the tool can retry and backfill safely."
+shortAnswer: "I choose from requirements, not popularity: what has to be scheduled (time-based, event- or data-driven), how complex the dependencies are, how important backfills and reruns by interval are, what observability and alerting we need, who operates it, and what the team already knows. Airflow is the common default, with a large provider ecosystem and, in Airflow 3, asset-based scheduling and scheduler-managed backfills. Dagster is attractive when you think in data assets and want lineage and asset checks built in; Prefect suits Python-heavy, dynamic workflows. For a few jobs on one platform, its own scheduler (Databricks jobs, dbt Cloud, Step Functions) may be enough. Whatever I pick, tasks must be idempotent and parameterised by interval so the tool can retry and backfill safely."
 followUps: ["What is the difference between time-based and asset- or data-aware scheduling?", "What should never run inside an orchestrator's workers?", "How would you migrate from cron scripts to an orchestrator?", "Managed or self-hosted Airflow?"]
 related: ["articles:airflow/dags-scheduling-retries", "articles:airflow/dag-fundamentals-taskflow", "articles:etl-elt/modern-data-pipelines", "articles:aws/step-functions"]
 sources:
