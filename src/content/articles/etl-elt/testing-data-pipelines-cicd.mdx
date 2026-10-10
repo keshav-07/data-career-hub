@@ -15,7 +15,7 @@ learningObjectives:
   - "Compare a candidate build with production using a symmetric EXCEPT diff"
   - "Design a CI/CD pipeline for data code with isolated environments, slim builds and safe deploys"
 prerequisites: ["articles:etl-elt/pipeline-reliability-and-retries"]
-related: ["articles:airflow/best-practices-testing-cicd", "articles:etl-elt/data-quality-checks-contracts", "interview-questions:data-engineering/test-a-data-pipeline"]
+related: ["articles:airflow/best-practices-testing-cicd", "articles:etl-elt/data-quality-checks-contracts", "interview-questions:data-engineering/test-a-data-pipeline", "interview-questions:data-engineering/cicd-for-data-pipelines"]
 previous: "articles:etl-elt/pipeline-reliability-and-retries"
 sources:
   - { label: "pytest documentation", url: "https://docs.pytest.org/en/stable/" }
@@ -245,7 +245,7 @@ Practices that matter more than the tool:
 
 ## Interview angle
 
-"How do you test a data pipeline?" separates candidates quickly. Name the layers (unit tests for transforms, integration tests on a real engine, data tests on real data, regression diffs for logic changes), give concrete edge cases (duplicates, nulls, late and out-of-order data, time zones, empty inputs), mention the run-twice idempotency test, and describe a CI pipeline with an isolated schema and a diff step. Practise with [how do you test a data pipeline?](/interview/data-engineering/test-a-data-pipeline/).
+"How do you test a data pipeline?" separates candidates quickly. Name the layers (unit tests for transforms, integration tests on a real engine, data tests on real data, regression diffs for logic changes), give concrete edge cases (duplicates, nulls, late and out-of-order data, time zones, empty inputs), mention the run-twice idempotency test, and describe a CI pipeline with an isolated schema and a diff step. Practise with [how do you test a data pipeline?](/interview/data-engineering/test-a-data-pipeline/) and [CI/CD for data pipelines](/interview/data-engineering/cicd-for-data-pipelines/).
 
 ## Key takeaway
 
