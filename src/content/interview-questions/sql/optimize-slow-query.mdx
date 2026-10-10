@@ -1,9 +1,9 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "How would you optimize a slow analytical SQL query?"
-description: "Interview answer: read the query plan, reduce data scanned with pruning and column selection, make filters sargable, fix join fan-out and verify results are unchanged."
+description: "Interview answer: measure, read the query plan, reduce data scanned with pruning and column selection, make filters sargable, fix join fan-out and prove results are unchanged."
 inventoryId: "INT-05"
 technology: ["sql"]
 topic: ["performance", "query-plans"]
@@ -12,43 +12,113 @@ questionType: ["optimization", "scenario"]
 estimatedMinutes: 12
 interviewRelevance: "High"
 shortAnswer: "I start with the query plan to see where the time goes: large scans, expensive joins, sorts or aggregations. Then I reduce the data read by selecting only needed columns and filtering on partition, cluster or indexed columns without wrapping them in functions. Next I fix joins (correct keys, no accidental fan-out, broadcasting small tables) and remove repeated work, and finally I confirm the faster query returns exactly the same result."
-followUps: ["What makes a filter sargable?", "How do partitioning and clustering help in a columnar warehouse?", "The plan looks fine but the query is still slow. What next?"]
+followUps: ["What makes a filter sargable?", "How do partitioning and clustering help in a columnar warehouse?", "The plan looks fine but the query is still slow. What next?", "How do you prove the rewritten query returns the same result?"]
 prerequisites: ["articles:sql/query-optimization-fundamentals"]
-related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join"]
-versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there)"
+related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join", "interview-questions:sql/index-not-used-explain", "articles:sql/indexes"]
+versionContext: "Plan examples run on PostgreSQL 16.14 with parallel query off and EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF) so the output is stable; buffer counts can differ slightly on other machines."
+sources:
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: Indexes on expressions", url: "https://www.postgresql.org/docs/16/indexes-expressional.html" }
 ---
 
 ## Detailed explanation
 
-Structure the answer as a process; interviewers listen for measurement first.
+Structure the answer as a process; interviewers listen for measurement first and verification last.
 
-1. **Reproduce and measure.** Note runtime and data scanned. Check whether it is slow every time or only under load (queueing, concurrency).
-2. **Read the plan.** Find the operator that dominates: a full scan, a large shuffle or sort, a nested-loop join, an exploding join.
-3. **Read less.** Project only needed columns; filter on partition or clustering columns so the engine prunes files or micro-partitions.
-4. **Make filters sargable.** Compare raw columns to ranges instead of applying functions (`created_at >= ... AND created_at < ...` instead of `CAST(created_at AS DATE) = ...`).
-5. **Fix joins.** Matching key types, unique keys where expected, aggregate before joining, broadcast small dimensions in distributed engines.
-6. **Remove repeated work.** Correlated subqueries, CTEs evaluated twice, unnecessary `DISTINCT` or `ORDER BY`.
-7. **Verify.** Same row count and key aggregates as before.
+1. **Reproduce and measure.** Note runtime and data scanned. Check whether it is slow every time or only under load (queueing, concurrency, a cold cache).
+2. **Read the plan.** Find the operator that dominates: a full scan, a large shuffle or sort, a nested-loop join over many rows, a join whose output is far larger than its inputs.
+3. **Read less.** Project only needed columns (columnar engines bill and scan by column); filter on partition or clustering columns so the engine prunes files or micro-partitions.
+4. **Make filters sargable.** Compare raw columns to ranges instead of applying functions (`event_ts >= ... AND event_ts < ...` instead of `CAST(event_ts AS DATE) = ...`).
+5. **Fix joins.** Matching key types, unique keys where expected, aggregate before joining to avoid fan-out, broadcast small dimensions in distributed engines.
+6. **Remove repeated work.** Correlated subqueries run per row, CTEs evaluated twice, unnecessary `DISTINCT` or `ORDER BY`.
+7. **Verify.** Same row count and key aggregates (or an `EXCEPT` both ways) as the original.
 
-## Example
+## Worked example: a non-sargable filter
 
 ```sql
--- Before: scans every partition, transforms the column
-SELECT * FROM events WHERE CAST(event_ts AS DATE) = DATE '2026-10-01';
+CREATE TABLE events (
+  event_id   BIGINT PRIMARY KEY,
+  user_id    INT NOT NULL,
+  event_type TEXT NOT NULL,
+  event_ts   TIMESTAMP NOT NULL,
+  payload    TEXT
+);
+INSERT INTO events
+SELECT g, 1 + g % 5000,
+       (ARRAY['view', 'click', 'purchase'])[1 + g % 3],
+       TIMESTAMP '2026-09-01' + (g * 8) * INTERVAL '1 second',
+       repeat('x', 200)
+FROM generate_series(1, 300000) AS g;
+CREATE INDEX events_ts_idx ON events (event_ts);
+VACUUM ANALYZE events;
+```
 
--- After: only needed columns, prunable range filter
+300,000 events spread over 28 days, with an index on `event_ts`. The slow version wraps the column in a cast:
+
+```sql
+SET max_parallel_workers_per_gather = 0;   -- one process, for a readable plan
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS)
+SELECT * FROM events WHERE CAST(event_ts AS DATE) = DATE '2026-09-10';
+```
+
+```text
+ Seq Scan on events (actual rows=10800 loops=1)
+   Filter: ((event_ts)::date = '2026-09-10'::date)
+   Rows Removed by Filter: 289200
+   Buffers: shared hit=10000
+```
+
+The index is on `event_ts`, not on `event_ts::date`, so the planner cannot use it: every row is read and 96% are thrown away. Rewrite as a half-open range on the raw column and select only what is needed:
+
+```sql
+SET max_parallel_workers_per_gather = 0;   -- one process, for a readable plan
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS)
 SELECT user_id, event_type
 FROM events
-WHERE event_ts >= TIMESTAMP '2026-10-01 00:00:00'
-  AND event_ts <  TIMESTAMP '2026-10-02 00:00:00';
+WHERE event_ts >= TIMESTAMP '2026-09-10 00:00:00'
+  AND event_ts <  TIMESTAMP '2026-09-11 00:00:00';
 ```
+
+```text
+ Index Scan using events_ts_idx on events (actual rows=10800 loops=1)
+   Index Cond: ((event_ts >= '2026-09-10 00:00:00'::timestamp without time zone) AND (event_ts < '2026-09-11 00:00:00'::timestamp without time zone))
+   Buffers: shared hit=361 read=33
+```
+
+Same 10,800 rows, but 394 pages touched instead of 10,000 (`hit` pages were already in memory, `read` pages came from disk or the OS cache; planning lines are omitted). The half-open range (`>=` start, `<` next day) includes every timestamp on 10 September and nothing from midnight on the 11th, which `BETWEEN '2026-09-10' AND '2026-09-11'` would wrongly include.
+
+## Prove the result is unchanged
+
+```sql
+SELECT
+  (SELECT COUNT(*) FROM events WHERE CAST(event_ts AS DATE) = DATE '2026-09-10') AS before_rows,
+  (SELECT COUNT(*) FROM events
+   WHERE event_ts >= TIMESTAMP '2026-09-10' AND event_ts < TIMESTAMP '2026-09-11') AS after_rows,
+  (SELECT COUNT(*) FROM (
+     SELECT event_id FROM events WHERE CAST(event_ts AS DATE) = DATE '2026-09-10'
+     EXCEPT
+     SELECT event_id FROM events
+     WHERE event_ts >= TIMESTAMP '2026-09-10' AND event_ts < TIMESTAMP '2026-09-11'
+   ) AS d) AS rows_only_in_before;
+```
+
+| before_rows | after_rows | rows_only_in_before |
+|---|---|---|
+| 10800 | 10800 | 0 |
+
+For a full proof run the `EXCEPT` in both directions (or compare a checksum such as `SUM(hashtext(...))` over the key columns).
+
+## When you cannot change the query
+
+If a BI tool generates the cast, an **expression index** matches it exactly: `CREATE INDEX ON events ((event_ts::date))`. In a warehouse there are no B-tree indexes, but the same rule applies to pruning: a filter that wraps the partition or clustering column in a function may stop the engine skipping micro-partitions or files, so the fix is the same range rewrite.
 
 ## If the plan looks fine
 
-Look outside the query: data volume growth, skewed keys, stale statistics, small-file problems, warehouse size or concurrency limits, and whether the result could be pre-aggregated or incrementally maintained.
+Look outside the query: data volume growth, skewed keys, stale statistics (`ANALYZE` after bulk loads), small-file problems in lakehouses, warehouse size or concurrency limits, and whether the result could be pre-aggregated or incrementally maintained.
 
 ## Common mistakes
 
-1. Jumping to "add an index" without evidence.
+1. Jumping to "add an index" without evidence from the plan.
 2. Not checking that the optimised query gives the same answer.
-3. Ignoring the cost side: a bigger warehouse is a fix, but not a free one.
+3. Comparing timings from a cold and a warm cache, or from one run each.
+4. Ignoring the cost side: a bigger warehouse is a fix, but not a free one.
