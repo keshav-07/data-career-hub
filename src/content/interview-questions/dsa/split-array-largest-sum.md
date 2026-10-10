@@ -1,7 +1,7 @@
 ---
 title: "Split Array Largest Sum: Binary Search on the Largest Part"
 seoTitle: "Split Array Largest Sum: Binary Search"
-description: "Split an array into k contiguous parts so the largest part sum is as small as possible, with DP and binary search on the answer. Python solutions, proof and tests."
+description: "Split array largest sum: divide an array into k contiguous parts minimising the largest sum, using DP and binary search on the answer, with tests."
 technology: ["dsa"]
 topic: ["binary-search", "greedy", "dynamic-programming"]
 difficulty: "Hard"

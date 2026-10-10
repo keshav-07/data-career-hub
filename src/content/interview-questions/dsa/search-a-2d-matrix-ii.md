@@ -1,7 +1,7 @@
 ---
 title: "Search a 2D Matrix II: Staircase Search from the Top-Right Corner"
 seoTitle: "Search a 2D Matrix II: Staircase Search"
-description: "Search a matrix whose rows and columns are both sorted in O(m + n) by walking from the top-right corner, plus a per-row binary search. Python solutions and tests."
+description: "Search a 2D matrix II: find a target in a row- and column-sorted matrix in O(m + n) by walking from the top-right corner, plus per-row binary search."
 technology: ["dsa"]
 topic: ["binary-search", "matrix"]
 difficulty: "Medium"

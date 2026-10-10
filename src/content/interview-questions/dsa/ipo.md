@@ -1,7 +1,7 @@
 ---
 title: "IPO: Maximise Capital by Picking the Best Affordable Project Each Round"
 seoTitle: "IPO: Greedy with Two Heaps"
-description: "Choose up to k projects to maximise final capital, where each needs a minimum capital to start. Sort by cost and use a max-heap of affordable profits, O(n log n)."
+description: "IPO problem: choose up to k projects to maximise final capital, sorting by cost and using a max-heap of affordable profits in O(n log n)."
 technology: ["dsa"]
 topic: ["heaps-priority-queues", "greedy"]
 difficulty: "Hard"

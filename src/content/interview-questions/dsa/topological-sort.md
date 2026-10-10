@@ -1,7 +1,7 @@
 ---
 title: "Topological Sort: Order a DAG with Kahn's Algorithm or DFS"
 seoTitle: "Topological Sort: Kahn's Algorithm and DFS"
-description: "Order the vertices of a directed acyclic graph so every edge points forward. Peel off zero in-degree vertices with Kahn's algorithm, or reverse a DFS finish order."
+description: "Topological sort of a directed acyclic graph: peel off zero in-degree vertices with Kahn's algorithm, or reverse a DFS finish order. Python code."
 technology: ["dsa"]
 topic: ["graphs", "topological-sort"]
 difficulty: "Medium"

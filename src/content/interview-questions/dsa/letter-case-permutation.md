@@ -1,7 +1,7 @@
 ---
 title: "Letter Case Permutation: Branch Twice on Every Letter"
 seoTitle: "Letter Case Permutation: Backtracking"
-description: "Generate every string formed by switching letters between lower and upper case. Backtrack with two branches per letter and one per digit, or build the list iteratively."
+description: "Letter case permutation: generate every string from switching letters between lower and upper case, by backtracking or iterative building, in Python."
 technology: ["dsa"]
 topic: ["backtracking", "strings"]
 difficulty: "Medium"

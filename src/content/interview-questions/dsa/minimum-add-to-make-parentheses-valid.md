@@ -1,7 +1,7 @@
 ---
 title: "Minimum Add to Make Parentheses Valid: Count Unmatched Brackets in One Pass"
 seoTitle: "Minimum Add to Make Parentheses Valid"
-description: "Find the fewest brackets to insert so a parentheses string becomes balanced. Track open brackets and unmatched closers in one greedy pass, O(n) time and O(1) space."
+description: "Minimum add to make parentheses valid: track open brackets and unmatched closers in one greedy pass, O(n) time and O(1) space."
 technology: ["dsa"]
 topic: ["greedy", "stack", "strings"]
 difficulty: "Medium"
