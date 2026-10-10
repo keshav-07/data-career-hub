@@ -1,0 +1,155 @@
+---
+seoTitle: "Running Total and Moving Average in SQL"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Compute a running total and a 3-day moving average of daily revenue in SQL."
+description: "Running total and moving average in SQL with window frames: ROWS vs RANGE, ties on the order column, missing days filled from a calendar and per-store resets."
+technology: ["sql"]
+topic: ["window-functions", "window-frames", "time-series"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Running total: SUM(revenue) OVER (ORDER BY day ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW). Moving average: AVG(revenue) OVER (ORDER BY day ROWS BETWEEN 2 PRECEDING AND CURRENT ROW). Say the frame explicitly: the default with ORDER BY is RANGE, which lumps tied order values together. ROWS counts rows, not days, so if days can be missing either fill them from a calendar (LEFT JOIN, COALESCE to 0) or use RANGE BETWEEN INTERVAL '2 days' PRECEDING AND CURRENT ROW. Add PARTITION BY to restart per store, and flag the first rows whose window is incomplete."
+followUps: ["What does the default frame do when two rows share the same date?", "Should a missing day count as zero or be ignored in the average?", "How do you show the moving average only once a full window is available?", "How would you compute a 7-day rolling distinct user count?"]
+prerequisites: ["articles:sql/window-functions"]
+related: ["articles:sql/window-frames-running-totals", "articles:sql/dates-calendars-time-series", "interview-questions:sql/month-over-month-growth"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window function calls (frame clause)", url: "https://www.postgresql.org/docs/16/sql-expressions.html#SYNTAX-WINDOW-FUNCTIONS" }
+---
+
+## Sample data
+
+One store, eight days, with **no row for 4 March** (the shop was closed).
+
+```sql
+CREATE TABLE daily_revenue (day DATE PRIMARY KEY, revenue NUMERIC(10, 2) NOT NULL);
+INSERT INTO daily_revenue VALUES
+  ('2026-03-01', 100), ('2026-03-02', 200), ('2026-03-03', 300),
+  ('2026-03-05', 400), ('2026-03-06', 100), ('2026-03-07', 200),
+  ('2026-03-08', 300);
+```
+
+## The standard answer
+
+```sql
+SELECT day, revenue,
+       SUM(revenue) OVER (ORDER BY day
+                          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total,
+       ROUND(AVG(revenue) OVER (ORDER BY day
+                          ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 2)     AS avg_3_rows,
+       COUNT(*) OVER (ORDER BY day ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS rows_in_window
+FROM daily_revenue
+ORDER BY day;
+```
+
+| day | revenue | running_total | avg_3_rows | rows_in_window |
+|---|---|---|---|---|
+| 2026-03-01 | 100 | 100 | 100.00 | 1 |
+| 2026-03-02 | 200 | 300 | 150.00 | 2 |
+| 2026-03-03 | 300 | 600 | 200.00 | 3 |
+| 2026-03-05 | 400 | 1000 | 300.00 | 3 |
+| 2026-03-06 | 100 | 1100 | 266.67 | 3 |
+| 2026-03-07 | 200 | 1300 | 233.33 | 3 |
+| 2026-03-08 | 300 | 1600 | 200.00 | 3 |
+
+Two things to point out before the interviewer does:
+
+- The first two averages are over fewer than three days. Report `rows_in_window` or return `NULL` until the window is full (`CASE WHEN COUNT(*) OVER w = 3 THEN AVG(revenue) OVER w END`).
+- On 5 March, "the last three rows" are 2, 3 and 5 March: a **four-day** span, because 4 March has no row. `ROWS` counts rows, not days.
+
+## Missing days: two different answers
+
+If a closed day should count as **zero**, generate the calendar and fill it:
+
+```sql
+WITH calendar AS (
+  SELECT d::date AS day
+  FROM generate_series(DATE '2026-03-01', DATE '2026-03-08', INTERVAL '1 day') AS d
+),
+filled AS (
+  SELECT c.day, COALESCE(r.revenue, 0) AS revenue
+  FROM calendar c LEFT JOIN daily_revenue r USING (day)
+)
+SELECT day, revenue,
+       ROUND(AVG(revenue) OVER (ORDER BY day ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 2) AS avg_3_days
+FROM filled
+ORDER BY day;
+```
+
+| day | revenue | avg_3_days |
+|---|---|---|
+| 2026-03-01 | 100 | 100.00 |
+| 2026-03-02 | 200 | 150.00 |
+| 2026-03-03 | 300 | 200.00 |
+| 2026-03-04 | 0 | 166.67 |
+| 2026-03-05 | 400 | 233.33 |
+| 2026-03-06 | 100 | 166.67 |
+| 2026-03-07 | 200 | 233.33 |
+| 2026-03-08 | 300 | 200.00 |
+
+If a missing day should simply be **ignored** (average of the days that traded within the last three calendar days), use a value-based `RANGE` frame with an interval, which PostgreSQL 11+ supports:
+
+```sql
+SELECT day, revenue,
+       ROUND(AVG(revenue) OVER (ORDER BY day
+             RANGE BETWEEN INTERVAL '2 days' PRECEDING AND CURRENT ROW), 2) AS avg_trading_days
+FROM daily_revenue
+ORDER BY day;
+```
+
+| day | revenue | avg_trading_days |
+|---|---|---|
+| 2026-03-01 | 100 | 100.00 |
+| 2026-03-02 | 200 | 150.00 |
+| 2026-03-03 | 300 | 200.00 |
+| 2026-03-05 | 400 | 350.00 |
+| 2026-03-06 | 100 | 250.00 |
+| 2026-03-07 | 200 | 233.33 |
+| 2026-03-08 | 300 | 200.00 |
+
+Three queries, three different numbers for 5 March (300, 233.33, 350). None is wrong; they answer different questions, which is why you ask before writing SQL. Spark SQL and DuckDB accept the same interval frame; SQL Server does not, and BigQuery needs a numeric order key such as `UNIX_DATE(day)` with `RANGE BETWEEN 2 PRECEDING AND CURRENT ROW`.
+
+## Ties and the default frame
+
+With several stores, a company-wide running total ordered by day has two rows per date:
+
+```sql
+CREATE TABLE store_revenue (store TEXT, day DATE, revenue NUMERIC(10, 2),
+                            PRIMARY KEY (store, day));
+INSERT INTO store_revenue VALUES
+  ('north', '2026-03-01', 100), ('south', '2026-03-01', 50),
+  ('north', '2026-03-02', 200), ('south', '2026-03-02', 70);
+
+SELECT store, day, revenue,
+       SUM(revenue) OVER (ORDER BY day)                       AS default_frame,
+       SUM(revenue) OVER (ORDER BY day, store ROWS UNBOUNDED PRECEDING) AS rows_frame,
+       SUM(revenue) OVER (PARTITION BY store ORDER BY day)    AS per_store
+FROM store_revenue
+ORDER BY day, store;
+```
+
+| store | day | revenue | default_frame | rows_frame | per_store |
+|---|---|---|---|---|---|
+| north | 2026-03-01 | 100 | 150 | 100 | 100 |
+| south | 2026-03-01 | 50 | 150 | 150 | 50 |
+| north | 2026-03-02 | 200 | 420 | 350 | 300 |
+| south | 2026-03-02 | 70 | 420 | 420 | 120 |
+
+The default frame (`RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) includes all **peers**, rows with the same `day`, so both rows of a date show the same total. That is right for "total up to and including this day", but wrong if you expected a row-by-row total. `ROWS` with a unique tiebreaker (`day, store`) grows one row at a time and is deterministic. `PARTITION BY store` restarts the total for each store.
+
+## Edge cases to state
+
+- **Frame default:** always write the frame; `ROWS` is also cheaper than `RANGE` in many engines.
+- **Incomplete leading windows:** flag or null them.
+- **Missing days:** decide zero-fill versus ignore.
+- **Late data:** a running total over history must be recomputed when an old day changes; in incremental pipelines store daily aggregates and recompute the affected tail.
+
+## Common mistakes
+
+1. Relying on the default frame and getting peer-group totals on tied dates.
+2. Calling a `ROWS 6 PRECEDING` average a "7-day" average when days can be missing.
+3. Averaging daily averages instead of dividing summed revenue by summed orders for a rolling average order value.

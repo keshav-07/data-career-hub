@@ -17,7 +17,7 @@ learningObjectives:
   - "Bucket rows with NTILE and know its edge cases"
   - "Compare rows with LAG and LEAD, and avoid the LAST_VALUE frame trap"
 prerequisites: ["articles:sql/aggregations-group-by-having", "articles:sql/ctes-subqueries-temp-tables"]
-related: ["articles:pyspark/window-functions", "interview-questions:sql/window-functions-vs-group-by", "interview-questions:sql/second-highest-salary"]
+related: ["articles:pyspark/window-functions", "interview-questions:sql/window-functions-vs-group-by", "interview-questions:sql/second-highest-salary", "interview-questions:sql/top-n-per-group-department-salaries", "interview-questions:sql/month-over-month-growth"]
 previous: "articles:sql/pivot-unpivot-grouping-sets"
 next: "articles:sql/window-frames-running-totals"
 sources:

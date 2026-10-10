@@ -15,7 +15,7 @@ learningObjectives:
   - "Calculate percent of total and cumulative share with window sums"
   - "Use CUME_DIST, PERCENT_RANK and PERCENTILE_CONT, and know each engine's syntax for medians"
 prerequisites: ["articles:sql/window-functions"]
-related: ["articles:pyspark/window-functions", "interview-questions:sql/window-functions-vs-group-by"]
+related: ["articles:pyspark/window-functions", "interview-questions:sql/window-functions-vs-group-by", "interview-questions:sql/running-total-moving-average"]
 previous: "articles:sql/window-functions"
 next: "articles:sql/dates-calendars-time-series"
 sources:

@@ -1,0 +1,150 @@
+---
+seoTitle: "Month-over-Month and Year-over-Year Growth in SQL"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "Calculate month-over-month and year-over-year revenue growth in SQL."
+description: "Month-over-month growth in SQL with LAG, plus year-over-year by date join: filling missing months, avoiding integer division and dividing by zero safely."
+technology: ["sql"]
+topic: ["window-functions", "time-series", "metrics"]
+difficulty: "Medium"
+questionType: ["coding"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Aggregate to one row per month with DATE_TRUNC, then compare each month with the previous one using LAG(revenue) OVER (ORDER BY month) and compute 100.0 * (revenue - prev) / NULLIF(prev, 0). LAG takes the previous row, not the previous month, so generate a complete month calendar first and LEFT JOIN revenue to it. For year-over-year, join each month to month - INTERVAL '1 year' (or LAG 12 over a complete calendar). Multiply by 100.0 to avoid integer division, and return NULL rather than an error or infinity when the base month is zero."
+followUps: ["Why is LAG(revenue, 12) risky for year-over-year?", "What should growth be when last month's revenue was zero?", "How would you compute growth per product category?", "How do you compare a partial current month fairly?"]
+prerequisites: ["articles:sql/window-functions", "articles:sql/dates-calendars-time-series"]
+related: ["articles:sql/window-functions", "articles:sql/dates-calendars-time-series", "interview-questions:sql/monthly-revenue-sql-case-study", "interview-questions:sql/running-total-moving-average"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions (LAG)", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: Date/time functions (date_trunc, generate_series)", url: "https://www.postgresql.org/docs/16/functions-datetime.html" }
+---
+
+## Sample data
+
+There were no orders in March 2025 or March 2026.
+
+```sql
+CREATE TABLE orders (order_id INT PRIMARY KEY, order_date DATE NOT NULL, amount NUMERIC(10, 2) NOT NULL);
+INSERT INTO orders VALUES
+  (1, '2025-01-05',  60), (2, '2025-01-20',  40),
+  (3, '2025-02-11',  80),
+  (4, '2025-04-02', 120),
+  (5, '2025-05-09', 100), (6, '2025-05-30',  50),
+  (7, '2025-06-15', 150),
+  (8, '2026-01-07', 150),
+  (9, '2026-02-03', 100),
+  (10, '2026-04-21', 90);
+```
+
+## The naive version and its bug
+
+```sql
+WITH monthly AS (
+  SELECT DATE_TRUNC('month', order_date)::date AS month, SUM(amount) AS revenue
+  FROM orders
+  WHERE order_date < DATE '2025-07-01'
+  GROUP BY 1
+)
+SELECT month, revenue,
+       LAG(revenue) OVER (ORDER BY month) AS prev_revenue,
+       ROUND(100.0 * (revenue - LAG(revenue) OVER (ORDER BY month))
+             / NULLIF(LAG(revenue) OVER (ORDER BY month), 0), 1) AS mom_pct
+FROM monthly
+ORDER BY month;
+```
+
+| month | revenue | prev_revenue | mom_pct |
+|---|---|---|---|
+| 2025-01-01 | 100 | NULL | NULL |
+| 2025-02-01 | 80 | 100 | -20.0 |
+| 2025-04-01 | 120 | 80 | 50.0 |
+| 2025-05-01 | 150 | 120 | 25.0 |
+| 2025-06-01 | 150 | 150 | 0.0 |
+
+April's "previous month" is February, so the report claims +50% month over month and silently skips March. `LAG` returns the previous **row**; it knows nothing about calendars.
+
+## The fix: a complete month spine
+
+```sql
+WITH months AS (
+  SELECT m::date AS month
+  FROM generate_series(DATE '2025-01-01', DATE '2025-06-01', INTERVAL '1 month') AS m
+),
+monthly AS (
+  SELECT DATE_TRUNC('month', order_date)::date AS month, SUM(amount) AS revenue
+  FROM orders GROUP BY 1
+),
+filled AS (
+  SELECT m.month, COALESCE(r.revenue, 0) AS revenue
+  FROM months m LEFT JOIN monthly r USING (month)
+)
+SELECT month, revenue,
+       LAG(revenue) OVER (ORDER BY month) AS prev_revenue,
+       ROUND(100.0 * (revenue - LAG(revenue) OVER (ORDER BY month))
+             / NULLIF(LAG(revenue) OVER (ORDER BY month), 0), 1) AS mom_pct
+FROM filled
+ORDER BY month;
+```
+
+| month | revenue | prev_revenue | mom_pct |
+|---|---|---|---|
+| 2025-01-01 | 100 | NULL | NULL |
+| 2025-02-01 | 80 | 100 | -20.0 |
+| 2025-03-01 | 0 | 80 | -100.0 |
+| 2025-04-01 | 120 | 0 | NULL |
+| 2025-05-01 | 150 | 120 | 25.0 |
+| 2025-06-01 | 150 | 150 | 0.0 |
+
+March now appears as a 100% drop, and April's growth is `NULL`: growth from zero is undefined, and `NULLIF(prev, 0)` turns what would be a division-by-zero error into `NULL`. Some dashboards show "new" for that case; decide with the stakeholder, but never let it become a huge or infinite percentage.
+
+## Year over year
+
+Join each month to the same month a year earlier:
+
+```sql
+WITH months AS (
+  SELECT m::date AS month
+  FROM generate_series(DATE '2025-01-01', DATE '2026-04-01', INTERVAL '1 month') AS m
+),
+monthly AS (
+  SELECT DATE_TRUNC('month', order_date)::date AS month, SUM(amount) AS revenue
+  FROM orders GROUP BY 1
+),
+filled AS (
+  SELECT m.month, COALESCE(r.revenue, 0) AS revenue
+  FROM months m LEFT JOIN monthly r USING (month)
+)
+SELECT cur.month, cur.revenue, prev.revenue AS revenue_last_year,
+       ROUND(100.0 * (cur.revenue - prev.revenue) / NULLIF(prev.revenue, 0), 1) AS yoy_pct
+FROM filled cur
+JOIN filled prev ON prev.month = (cur.month - INTERVAL '1 year')::date
+ORDER BY cur.month;
+```
+
+| month | revenue | revenue_last_year | yoy_pct |
+|---|---|---|---|
+| 2026-01-01 | 150 | 100 | 50.0 |
+| 2026-02-01 | 100 | 80 | 25.0 |
+| 2026-03-01 | 0 | 0 | NULL |
+| 2026-04-01 | 90 | 120 | -25.0 |
+
+The join is on the **date**, so it is correct even if months are missing. `LAG(revenue, 12)` gives the same answer only over a complete calendar; over the sparse `monthly` result it would compare January 2026 with whatever row happened to be twelve rows back.
+
+## Why 100.0 and not 100
+
+Revenue here is `NUMERIC`, but counts are integers. In PostgreSQL and SQL Server, `100 * (12 - 10) / 10` is integer arithmetic and returns 20, while `(12 - 10) / 10 * 100` returns **0** because `2 / 10` truncates to 0. Starting with `100.0` (or casting to `NUMERIC`) makes the whole expression decimal. MySQL, Snowflake, BigQuery and DuckDB return a decimal from `/` anyway, which is why this bug often appears only after a migration to PostgreSQL.
+
+## Edge cases to state
+
+- **Partial current month.** Comparing 9 days of October with all of September shows a fake drop. Compare month-to-date with the same days of the previous month, or exclude the current month.
+- **Per group.** Add `PARTITION BY category` to `LAG` and generate the spine per category (cross join categories with months), or categories that skip a month break the same way.
+- **Time zone.** Decide in which time zone a month starts before truncating timestamps.
+
+## Common mistakes
+
+1. Using `LAG` over months that may be missing.
+2. Integer division, or dividing by a zero month.
+3. Averaging daily growth rates instead of computing growth on monthly totals.

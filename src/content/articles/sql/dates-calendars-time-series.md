@@ -14,7 +14,7 @@ learningObjectives:
   - "Compute month-over-month and year-over-year change safely, including missing periods"
   - "Calculate rolling 7 and 30 day sums, averages and active-user counts"
 prerequisites: ["articles:sql/window-frames-running-totals", "articles:sql/functions-strings-dates-types"]
-related: ["articles:sql/window-functions", "articles:data-warehousing/star-schema"]
+related: ["articles:sql/window-functions", "articles:data-warehousing/star-schema", "interview-questions:sql/month-over-month-growth"]
 previous: "articles:sql/window-frames-running-totals"
 next: "articles:sql/top-n-deduplication-scd-queries"
 sources:
