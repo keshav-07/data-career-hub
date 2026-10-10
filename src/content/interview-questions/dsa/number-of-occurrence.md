@@ -4,7 +4,7 @@ seoTitle: "Number of Occurrence with Binary Search"
 description: "Count how many times a value appears in a sorted array in O(log n) using lower and upper bound binary searches. Python solutions, pitfalls and tests."
 technology: ["dsa"]
 topic: ["binary-search"]
-difficulty: "Medium"
+difficulty: "Easy"
 questionType: ["coding"]
 estimatedMinutes: 12
 interviewRelevance: "High"
