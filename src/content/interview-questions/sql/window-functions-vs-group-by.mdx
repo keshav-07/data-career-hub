@@ -1,9 +1,10 @@
 ---
+seoTitle: "Window Functions vs GROUP BY: SQL Interview Answer"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "How do window functions differ from GROUP BY?"
-description: "Interview answer: GROUP BY collapses rows into one per group, while window functions keep every row and add a value computed over related rows."
+description: "Interview answer: GROUP BY collapses rows into one per group, while window functions keep every row and add a value computed over related rows, such as a rank or group total."
 inventoryId: "INT-02"
 technology: ["sql"]
 topic: ["window-functions", "aggregation"]
@@ -11,10 +12,13 @@ difficulty: "Easy"
 questionType: ["conceptual", "coding"]
 estimatedMinutes: 6
 interviewRelevance: "High"
-shortAnswer: "GROUP BY collapses each group into a single output row, so you lose the detail rows. A window function computes a value over a set of related rows but keeps every input row, adding the result as a new column. Use GROUP BY to summarise and window functions when you need both the row and its group-level context, such as a rank or running total."
-followUps: ["How would you return the highest-paid employee in each department?", "What is the difference between RANK and DENSE_RANK?", "Why can you not use a window function in a WHERE clause?"]
-prerequisites: ["articles:sql/joins"]
-related: ["articles:sql/window-functions", "articles:pyspark/window-functions"]
+shortAnswer: "GROUP BY collapses each group into a single output row, so you lose the detail rows. A window function computes a value over a set of related rows but keeps every input row, adding the result as a new column. Use GROUP BY to summarise and window functions when you need both the row and its group-level context, such as a rank, a share of the group total or a running total. Window functions run after WHERE, GROUP BY and HAVING, so they can even be applied to aggregated results."
+followUps: ["How would you return the highest-paid employee in each department?", "What is the difference between RANK and DENSE_RANK?", "Why can you not use a window function in a WHERE clause?", "Can you use a window function and GROUP BY in the same query?"]
+prerequisites: ["articles:sql/aggregations-group-by-having"]
+related: ["articles:sql/window-functions", "articles:pyspark/window-functions", "interview-questions:sql/top-n-per-group-department-salaries", "interview-questions:sql/sql-execution-order-where-vs-having"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions tutorial", url: "https://www.postgresql.org/docs/16/tutorial-window.html" }
 ---
 
 ## Detailed explanation
@@ -24,34 +28,81 @@ Both operate on groups of rows, but they return different shapes.
 - **`GROUP BY`** produces **one row per group**. Every selected column must be grouped or aggregated.
 - **A window function** (`... OVER (PARTITION BY ...)`) produces **one row per input row**. The partition only defines which rows feed the calculation.
 
-## Example
+## Sample data
 
 ```sql
--- One row per department
-SELECT dept, AVG(salary) AS avg_salary
-FROM employees
-GROUP BY dept;
-
--- One row per employee, with the department average alongside
-SELECT name, dept, salary,
-       AVG(salary) OVER (PARTITION BY dept) AS dept_avg,
-       salary - AVG(salary) OVER (PARTITION BY dept) AS diff_from_avg
-FROM employees;
+CREATE TABLE employees (name TEXT PRIMARY KEY, dept TEXT NOT NULL, salary INT NOT NULL);
+INSERT INTO employees VALUES
+  ('Ana', 'eng', 120), ('Bo', 'eng', 100), ('Cy', 'eng', 80),
+  ('Di', 'sales', 70), ('Ed', 'sales', 50);
 ```
 
-The second query answers "how does each person compare with their department?", which `GROUP BY` alone cannot do without joining the aggregate back to the detail table.
+## Same aggregate, two shapes
+
+```sql
+SELECT dept, AVG(salary)::numeric(6,1) AS avg_salary
+FROM employees
+GROUP BY dept
+ORDER BY dept;
+```
+
+| dept | avg_salary |
+|---|---|
+| eng | 100.0 |
+| sales | 60.0 |
+
+```sql
+SELECT name, dept, salary,
+       AVG(salary) OVER (PARTITION BY dept)::numeric(6,1)          AS dept_avg,
+       salary - AVG(salary) OVER (PARTITION BY dept)::numeric(6,1) AS diff_from_avg,
+       RANK() OVER (PARTITION BY dept ORDER BY salary DESC)        AS rank_in_dept
+FROM employees
+ORDER BY dept, salary DESC;
+```
+
+| name | dept | salary | dept_avg | diff_from_avg | rank_in_dept |
+|---|---|---|---|---|---|
+| Ana | eng | 120 | 100.0 | 20.0 | 1 |
+| Bo | eng | 100 | 100.0 | 0.0 | 2 |
+| Cy | eng | 80 | 100.0 | -20.0 | 3 |
+| Di | sales | 70 | 60.0 | 10.0 | 1 |
+| Ed | sales | 50 | 60.0 | -10.0 | 2 |
+
+The second query answers "how does each person compare with their department?", which `GROUP BY` alone cannot do without joining the aggregate back to the detail rows.
+
+## Both in one query
+
+Window functions are evaluated after `GROUP BY` and `HAVING`, so they can work on the grouped result. Each department's share of the total payroll:
+
+```sql
+SELECT dept,
+       SUM(salary) AS payroll,
+       ROUND(100.0 * SUM(salary) / SUM(SUM(salary)) OVER (), 1) AS pct_of_total
+FROM employees
+GROUP BY dept
+ORDER BY dept;
+```
+
+| dept | payroll | pct_of_total |
+|---|---|---|
+| eng | 300 | 71.4 |
+| sales | 120 | 28.6 |
+
+`SUM(SUM(salary)) OVER ()` reads as: the inner `SUM` is the group aggregate, the outer one is a window over all grouped rows.
 
 ## When to use which
 
 | Need | Use |
-|------|-----|
+|---|---|
 | Totals or averages per group | `GROUP BY` |
-| Rank within a group, top N per group | Window (`ROW_NUMBER`, `RANK`) |
-| Running total, moving average | Window with a frame |
+| Rank within a group, top N per group | Window (`ROW_NUMBER`, `RANK`, `DENSE_RANK`) |
+| Running total, moving average | Window with an `ORDER BY` and a frame |
 | Compare to the previous row | Window (`LAG`, `LEAD`) |
+| Share of total on each row | Window (`x / SUM(x) OVER (...)`) |
 
 ## Common mistakes
 
-1. Selecting a non-aggregated column with `GROUP BY` (an error in standard SQL).
-2. Filtering on a window result in `WHERE`. Window functions are evaluated after `WHERE`, so filter in an outer query or CTE, or use `QUALIFY` where supported.
-3. Saying window functions are "faster". They solve a different problem; performance depends on the engine and data.
+1. Selecting a non-aggregated column with `GROUP BY` (an error in standard SQL, unless it is functionally dependent on a grouped primary key, which PostgreSQL allows).
+2. Filtering on a window result in `WHERE`. Window functions are evaluated after `WHERE`, so filter in an outer query or CTE, or use `QUALIFY` in Snowflake, BigQuery, Databricks or DuckDB.
+3. Adding `ORDER BY` inside `OVER` for a group total: `SUM(x) OVER (PARTITION BY g ORDER BY d)` is a **running** total, because the default frame then ends at the current row.
+4. Saying window functions are "faster". They solve a different problem; each distinct window specification usually needs a sort.
