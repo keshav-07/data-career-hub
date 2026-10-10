@@ -1,0 +1,166 @@
+---
+seoTitle: "Why Is My Index Not Used? Reading EXPLAIN"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "There is an index on the column, but EXPLAIN shows a sequential scan. Why?"
+description: "Why an index is not used in PostgreSQL, shown with EXPLAIN: functions and casts on the column, leading-column rules, low selectivity, LIKE patterns and stale statistics."
+technology: ["sql"]
+topic: ["indexes", "query-plans", "performance"]
+difficulty: "Medium"
+questionType: ["optimization", "debugging"]
+estimatedMinutes: 12
+interviewRelevance: "High"
+evidenceStatus: "representative"
+shortAnswer: "Either the index cannot be used or the planner decided it is not worth using. It cannot be used when the query transforms the column (a function, or an implicit cast such as comparing an integer column to 42.0), when a composite index is missing its leading column, or when a LIKE pattern starts with a wildcard (or the index does not support pattern matching under the column's collation). It is not worth using when the filter matches a large share of the table, where a sequential scan is cheaper. Check EXPLAIN (ANALYZE, BUFFERS), compare estimated and actual rows, and run ANALYZE if statistics are stale."
+followUps: ["When is a sequential scan the right plan?", "How does a composite index on (country, created_at) serve a filter on created_at alone?", "What is an index-only scan and what does it need?", "How do you index a case-insensitive lookup?", "What is the warehouse equivalent of this problem?"]
+prerequisites: ["articles:sql/indexes"]
+related: ["articles:sql/indexes", "articles:sql/query-optimization-fundamentals", "articles:sql/query-optimizer-internals", "interview-questions:sql/optimize-slow-query"]
+versionContext: "Plans from PostgreSQL 16.14 with parallel query off and EXPLAIN (COSTS OFF); with other data sizes or settings the planner may choose differently near the thresholds."
+sources:
+  - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }
+  - { label: "PostgreSQL 16 documentation: Multicolumn indexes", url: "https://www.postgresql.org/docs/16/indexes-multicolumn.html" }
+  - { label: "PostgreSQL 16 documentation: Operator classes and operator families", url: "https://www.postgresql.org/docs/16/indexes-opclass.html" }
+  - { label: "PostgreSQL 16 documentation: Indexes on expressions", url: "https://www.postgresql.org/docs/16/indexes-expressional.html" }
+---
+
+## Detailed explanation
+
+Two different situations look the same in `EXPLAIN`:
+
+1. **The index cannot serve the predicate.** The B-tree is ordered by the raw column value, so anything that hides that value from the planner (a function, a cast, a leading wildcard, a missing leading column) rules it out.
+2. **The index could be used but is not worth it.** Reading 99% of a table through an index means a random page read per row; one sequential pass is cheaper, and the planner is right to choose it.
+
+## Sample data
+
+```sql
+CREATE TABLE orders (
+  order_id    BIGINT PRIMARY KEY,
+  customer_id INT  NOT NULL,
+  status      TEXT NOT NULL,
+  country     TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  created_at  TIMESTAMP NOT NULL
+);
+INSERT INTO orders
+SELECT g, 1 + g % 20000,
+       CASE WHEN g % 100 = 0 THEN 'refunded' ELSE 'delivered' END,
+       (ARRAY['GB', 'IN', 'US', 'DE'])[1 + g % 4],
+       'user' || (g % 20000) || '@example.com',
+       TIMESTAMP '2026-01-01' + g * INTERVAL '1 minute'
+FROM generate_series(1, 200000) AS g;
+CREATE INDEX orders_customer_idx        ON orders (customer_id);
+CREATE INDEX orders_status_idx          ON orders (status);
+CREATE INDEX orders_country_created_idx ON orders (country, created_at);
+CREATE INDEX orders_email_idx           ON orders (email);
+VACUUM ANALYZE orders;
+```
+
+200,000 orders, 1% refunded, four countries.
+
+## Cause 1: a cast or function on the column
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE customer_id = 42;
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE customer_id = 42.0;
+```
+
+```text
+ Bitmap Heap Scan on orders
+   Recheck Cond: (customer_id = 42)
+   ->  Bitmap Index Scan on orders_customer_idx
+         Index Cond: (customer_id = 42)
+
+ Seq Scan on orders
+   Filter: ((customer_id)::numeric = 42.0)
+```
+
+`42.0` is a `numeric` literal, so PostgreSQL casts the **column** to `numeric` to compare, and the integer index no longer applies. The same thing happens with `lower(email) = ...`, `CAST(created_at AS DATE) = ...` or `date_trunc(...)` on the column. In application code, this often comes from a driver binding a parameter with the wrong type. Fix the type of the value, rewrite as a range, or create an index on the exact expression (`CREATE INDEX ON orders (lower(email))`).
+
+## Cause 2: low selectivity
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE status = 'delivered';
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE status = 'refunded';
+```
+
+```text
+ Seq Scan on orders
+   Filter: (status = 'delivered'::text)
+
+ Index Scan using orders_status_idx on orders
+   Index Cond: (status = 'refunded'::text)
+```
+
+Same index, same column: 99% of rows are `delivered`, so a sequential scan wins; 1% are `refunded`, so the index wins. The planner knows the split from `pg_stats.most_common_vals`. This is the correct behaviour, not a bug. A **partial index** (`CREATE INDEX ... WHERE status = 'refunded'`) is smaller and better suited to such a rare value.
+
+## Cause 3: the leading column of a composite index is missing
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF) SELECT * FROM orders
+WHERE created_at >= '2026-03-01' AND created_at < '2026-03-02';
+EXPLAIN (COSTS OFF) SELECT * FROM orders
+WHERE country = 'GB' AND created_at >= '2026-03-01' AND created_at < '2026-03-02';
+```
+
+```text
+ Seq Scan on orders
+   Filter: ((created_at >= '2026-03-01 00:00:00'::timestamp without time zone) AND (created_at < '2026-03-02 00:00:00'::timestamp without time zone))
+
+ Bitmap Heap Scan on orders
+   Recheck Cond: ((country = 'GB'::text) AND (created_at >= ...) AND (created_at < ...))
+   ->  Bitmap Index Scan on orders_country_created_idx
+         Index Cond: ((country = 'GB'::text) AND (created_at >= ...) AND (created_at < ...))
+```
+
+(The second plan's timestamp literals are shortened to `...`.) The index is sorted by `country` first, then `created_at` within each country, like a phone book sorted by surname then first name. Without a `country` condition, the matching dates are spread across four separate runs of the index, so PostgreSQL would have to read the whole index; here it prefers the table scan. Put equality columns first and range columns last, and add a separate index if `created_at` is queried alone.
+
+## Cause 4: LIKE patterns and collations
+
+```sql
+SET max_parallel_workers_per_gather = 0;
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE email LIKE '%42@example.com';
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE email LIKE 'user42@%';
+CREATE INDEX orders_email_pattern_idx ON orders (email text_pattern_ops);
+EXPLAIN (COSTS OFF) SELECT * FROM orders WHERE email LIKE 'user42@%';
+```
+
+```text
+ Seq Scan on orders
+   Filter: (email ~~ '%42@example.com'::text)
+
+ Seq Scan on orders
+   Filter: (email ~~ 'user42@%'::text)
+
+ Index Scan using orders_email_pattern_idx on orders
+   Index Cond: ((email ~>=~ 'user42@'::text) AND (email ~<~ 'user42A'::text))
+   Filter: (email ~~ 'user42@%'::text)
+```
+
+A leading `%` can never use a B-tree: the start of the string is unknown. A **prefix** pattern can, but only with an index whose ordering is byte-wise: in a database with a non-C collation (the usual case), the default index cannot serve `LIKE`, and an index with `text_pattern_ops` (or `COLLATE "C"`) is needed. For substring search, a trigram index (`pg_trgm`) handles `%...%`.
+
+## Cause 5: stale statistics
+
+After a bulk load, the planner may still think a table is small, or that a value is rare when it now dominates. Compare **estimated** and **actual** rows in `EXPLAIN (ANALYZE)`: if they differ by orders of magnitude, run `ANALYZE orders` and look again. Autovacuum analyses tables in the background, but not immediately after a load inside a pipeline.
+
+## How to investigate in an interview
+
+1. `EXPLAIN (ANALYZE, BUFFERS)` the real query with real parameter values.
+2. Is the column wrapped in a function or cast? Is the leading index column constrained?
+3. What fraction of the table matches? If it is large, the sequential scan is probably right.
+4. Do estimated and actual row counts agree? If not, `ANALYZE`, or consider extended statistics for correlated columns.
+5. Only as a diagnostic, `SET enable_seqscan = off` shows the index plan and its cost; never ship it.
+
+## The warehouse version
+
+Snowflake, BigQuery and Delta Lake have no B-tree indexes, but the same reasoning applies to **pruning** on micro-partition or file min/max statistics: functions on the clustering column, filters that match most partitions, and poor clustering all make the engine scan everything. The query profile's "partitions scanned versus total" plays the role of `EXPLAIN`.
+
+## Common mistakes
+
+1. Assuming an index is always faster than a sequential scan.
+2. Testing with a literal while the application sends a differently typed parameter.
+3. Creating an index per column instead of one composite index in the right column order.
+4. Forgetting that every index slows down writes and must be maintained.

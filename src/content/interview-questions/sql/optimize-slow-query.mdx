@@ -14,7 +14,7 @@ interviewRelevance: "High"
 shortAnswer: "I start with the query plan to see where the time goes: large scans, expensive joins, sorts or aggregations. Then I reduce the data read by selecting only needed columns and filtering on partition, cluster or indexed columns without wrapping them in functions. Next I fix joins (correct keys, no accidental fan-out, broadcasting small tables) and remove repeated work, and finally I confirm the faster query returns exactly the same result."
 followUps: ["What makes a filter sargable?", "How do partitioning and clustering help in a columnar warehouse?", "The plan looks fine but the query is still slow. What next?", "How do you prove the rewritten query returns the same result?"]
 prerequisites: ["articles:sql/query-optimization-fundamentals"]
-related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join", "articles:sql/indexes"]
+related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join", "articles:sql/indexes", "interview-questions:sql/index-not-used-explain"]
 versionContext: "Plan examples run on PostgreSQL 16.14 with parallel query off and EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF) so the output is stable; buffer counts can differ slightly on other machines."
 sources:
   - { label: "PostgreSQL 16 documentation: Using EXPLAIN", url: "https://www.postgresql.org/docs/16/using-explain.html" }

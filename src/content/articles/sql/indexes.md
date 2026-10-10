@@ -15,7 +15,7 @@ learningObjectives:
   - "Use selectivity, cardinality and column statistics to predict whether an index will be used"
   - "Describe bitmap indexes and bitmap scans, and where each is a good fit"
 prerequisites: ["articles:sql/query-optimization-fundamentals"]
-related: ["articles:snowflake/micro-partitions-clustering-pruning", "articles:data-warehousing/partitioning-clustering-data-layout"]
+related: ["articles:snowflake/micro-partitions-clustering-pruning", "articles:data-warehousing/partitioning-clustering-data-layout", "interview-questions:sql/index-not-used-explain"]
 previous: "articles:sql/query-optimization-fundamentals"
 next: "articles:sql/partitioning-materialized-views-storage"
 versionContext: "SQL examples run on PostgreSQL 16.14 with parallel query switched off for readable plans; the bitmap simulation runs on Python 3. Costs, timings and index sizes vary by machine and data. Oracle bitmap index syntax was not executed."
