@@ -1,0 +1,284 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Working with APIs in Python: Pagination, Retries and Rate Limits"
+seoTitle: "Python API Ingestion: Pagination and Retries"
+description: "Python API ingestion for data pipelines: requests with timeouts, cursor pagination as a generator, retries with backoff and Retry-After, rate limits and incremental pulls."
+technology: ["python"]
+topic: ["apis", "ingestion", "retries"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Call an HTTP API with requests using a session, timeouts and status checks"
+  - "Hide cursor or page-number pagination behind a generator"
+  - "Retry 429 and 5xx responses with backoff, honouring Retry-After, and fail fast on other errors"
+  - "Pull incrementally with an updated-since parameter and land raw responses for replay"
+  - "Keep credentials out of code and logs"
+prerequisites: ["articles:python/error-handling-logging"]
+related: ["articles:etl-elt/pipeline-reliability-and-retries", "articles:python/iterators-generators", "articles:etl-elt/incremental-loading-watermarks-backfills", "interview-questions:python/api-retries-backoff"]
+previous: "articles:python/error-handling-logging"
+next: "articles:python/pandas-for-data-engineers"
+sources:
+  - { label: "Requests documentation: Advanced usage (sessions, timeouts, adapters)", url: "https://requests.readthedocs.io/en/latest/user/advanced/" }
+  - { label: "urllib3 documentation: Retry", url: "https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html#urllib3.util.Retry" }
+  - { label: "MDN: Retry-After header", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After" }
+  - { label: "MDN: 429 Too Many Requests", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429" }
+versionContext: "Examples run on Python 3.11 with requests 2.34 and urllib3 2.7 against a local test server started in the first block"
+---
+
+Pulling data from SaaS and partner APIs is one of the most common ingestion jobs a Data Engineer writes, and one of the most fragile. APIs paginate, throttle, time out, return 500s on a bad day and change their payloads without notice. A robust client is not much code, but every line in it exists because of a real failure.
+
+## A local API to practise against
+
+So that every example here runs without network access, the first block starts a tiny HTTP server in a background thread. It serves orders in pages of three with a cursor, throttles the second page once with `429 Too Many Requests`, and has an endpoint that fails with `503` twice before succeeding.
+
+```python
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+ORDERS = [{"id": i, "amount": i * 10, "updated_at": f"2026-10-05T{8 + i:02d}:00:00Z"} for i in range(1, 9)]
+calls = {"orders": 0, "throttled": False, "flaky": 0}
+
+class FakeApi(BaseHTTPRequestHandler):
+    def log_message(self, *args):                        # keep the example output quiet
+        pass
+
+    def send_json(self, status, body, headers=None):
+        payload = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(url.query).items()}
+        if self.headers.get("Authorization") != "Bearer test-token":
+            return self.send_json(401, {"error": "unauthorized"})
+        if url.path == "/orders":
+            calls["orders"] += 1
+            start = int(q.get("cursor", 0))
+            if start == 3 and not calls["throttled"]:
+                calls["throttled"] = True
+                return self.send_json(429, {"error": "slow down"}, {"Retry-After": "1"})
+            since = q.get("updated_since", "")
+            rows = [o for o in ORDERS if o["updated_at"] > since]
+            page = rows[start:start + 3]
+            nxt = start + 3 if start + 3 < len(rows) else None
+            return self.send_json(200, {"data": page, "next_cursor": nxt})
+        if url.path == "/flaky":
+            calls["flaky"] += 1
+            if calls["flaky"] <= 2:
+                return self.send_json(503, {"error": "unavailable"})
+            return self.send_json(200, {"ok": True})
+        self.send_json(404, {"error": "not found"})
+
+server = ThreadingHTTPServer(("127.0.0.1", 0), FakeApi)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+BASE = f"http://127.0.0.1:{server.server_address[1]}"
+print("test API ready")
+```
+
+```text
+test API ready
+```
+
+## The basics: a session, a timeout, a status check
+
+```python
+import os
+import requests
+
+os.environ.setdefault("ORDERS_API_TOKEN", "test-token")      # in production: from a secret manager
+
+session = requests.Session()
+session.headers.update({"Authorization": f"Bearer {os.environ['ORDERS_API_TOKEN']}",
+                        "Accept": "application/json"})
+
+resp = session.get(f"{BASE}/orders", params={"cursor": 0}, timeout=(3.05, 30))
+resp.raise_for_status()
+body = resp.json()
+print(resp.status_code, [o["id"] for o in body["data"]], body["next_cursor"])
+```
+
+```text
+200 [1, 2, 3] 3
+```
+
+Three habits are visible here:
+
+- A **`Session`** reuses connections (much faster for many requests) and holds shared headers.
+- An explicit **`timeout`**: `requests` waits forever by default. The tuple is (connect timeout, read timeout).
+- **`raise_for_status()`** turns 4xx and 5xx responses into exceptions instead of letting an error payload flow into your data as if it were records.
+
+The token comes from the environment, which in production is filled from a secret manager. It never appears in code, in the repository or in log lines.
+
+## Pagination as a generator
+
+APIs page results by page number, offset, cursor (an opaque token from the previous response) or a `Link` header. Whatever the scheme, wrap it in a generator so the rest of the pipeline sees a simple stream of records and memory stays flat (see [iterators and generators](/python/iterators-generators/)). Cursor pagination is the most robust because it does not skip or repeat records when data changes between pages.
+
+```python
+def iter_orders(session, updated_since=None, get=None):
+    get = get or session.get
+    cursor = 0
+    while cursor is not None:
+        params = {"cursor": cursor}
+        if updated_since:
+            params["updated_since"] = updated_since
+        resp = get(f"{BASE}/orders", params=params, timeout=(3.05, 30))
+        resp.raise_for_status()
+        body = resp.json()
+        yield from body["data"]
+        cursor = body["next_cursor"]
+
+try:
+    print([o["id"] for o in iter_orders(session)])
+except requests.HTTPError as exc:
+    print("failed:", exc.response.status_code, exc.response.reason)
+```
+
+```text
+failed: 429 Too Many Requests
+```
+
+The second page was throttled and the whole pull failed. That is the correct behaviour for a client with no retry policy, and it is why the next section exists.
+
+## Retries: which errors, how long to wait
+
+Retry only failures that can succeed later:
+
+| Response | Retry? | Why |
+|----------|--------|-----|
+| Connection error, timeout | Yes | Network or server overload |
+| 429 Too Many Requests | Yes, after `Retry-After` if given | You are being rate limited |
+| 500, 502, 503, 504 | Yes, with backoff | Server-side, often transient |
+| 400, 401, 403, 404, 422 | No | Your request, credentials or the resource is wrong; retrying repeats the error |
+
+Wait with exponential backoff and jitter, honour `Retry-After` (seconds or an HTTP date), cap the number of attempts, and only retry **idempotent** requests (GET, and PUT or DELETE where the API defines them as idempotent; POST only with an idempotency key the API supports). The [reliability lesson](/etl-elt/pipeline-reliability-and-retries/) explains the reasoning; here is the code.
+
+With `requests`, the standard approach is urllib3's `Retry` mounted on the session:
+
+```python
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+retry = Retry(
+    total=5,
+    backoff_factor=0.2,                       # 0.2s, 0.4s, 0.8s, ... between attempts
+    backoff_jitter=0.1,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET"}),
+    respect_retry_after_header=True,          # wait as long as the server asks on 429/503
+    raise_on_status=False,                    # after the last attempt, return the response; raise_for_status decides
+)
+session.mount("http://", HTTPAdapter(max_retries=retry))
+session.mount("https://", HTTPAdapter(max_retries=retry))
+
+calls["orders"], calls["throttled"] = 0, False      # the test server throttles page 2 again
+orders = list(iter_orders(session))
+print([o["id"] for o in orders], "after", calls["orders"], "requests to /orders")
+
+resp = session.get(f"{BASE}/flaky", timeout=(3.05, 30))
+print("flaky:", resp.status_code, "after", calls["flaky"], "attempts")
+```
+
+```text
+[1, 2, 3, 4, 5, 6, 7, 8] after 4 requests to /orders
+flaky: 200 after 3 attempts
+```
+
+Three pages took four requests: the throttled second page was retried after the server's `Retry-After` of one second. The flaky endpoint succeeded on its third attempt. A 404 or 401 is not in `status_forcelist`, so it is returned at once and `raise_for_status()` fails the run immediately.
+
+If you need more control (logging each retry, a total deadline, retrying on specific payloads), the `tenacity` library or a small hand-written loop like the one in [the reliability lesson](/etl-elt/pipeline-reliability-and-retries/) does the same job.
+
+## Rate limits: be a good client
+
+Retrying a 429 handles the occasional throttle. If you hit limits constantly, slow down proactively: read the API's documented limit (often in `X-RateLimit-*` or `RateLimit-*` headers), space requests to stay under it, and avoid launching many parallel workers against one API key. A simple pacing helper:
+
+```python
+import time
+
+class Pacer:
+    """Allow at most `rate` calls per second by sleeping between calls."""
+    def __init__(self, rate: float, clock=time.monotonic, sleep=time.sleep):
+        self.interval, self.clock, self.sleep, self.next_at = 1.0 / rate, clock, sleep, 0.0
+
+    def wait(self):
+        now = self.clock()
+        if now < self.next_at:
+            self.sleep(self.next_at - now)
+            now = self.next_at
+        self.next_at = now + self.interval
+
+fake_now = [0.0]
+slept = []
+pacer = Pacer(rate=5, clock=lambda: fake_now[0], sleep=lambda s: (slept.append(round(s, 2)), fake_now.__setitem__(0, fake_now[0] + s)))
+for _ in range(4):
+    pacer.wait()
+print(slept)
+```
+
+```text
+[0.2, 0.2, 0.2]
+```
+
+Call `pacer.wait()` before each request; with five requests per second allowed, the second, third and fourth calls each wait 0.2 seconds.
+
+## Incremental pulls and raw landing
+
+Re-downloading everything every day is slow and unkind to the API. Most APIs accept a filter such as `updated_since`; combine it with a stored watermark, exactly as in [incremental loading](/etl-elt/incremental-loading-watermarks-backfills/), and keep a lookback because records can be updated while you page through them.
+
+Land the **raw responses** before transforming them, one JSON Lines file per run, so you can reprocess after a bug fix without calling the API again:
+
+```python
+import tempfile
+from pathlib import Path
+
+def pull_incremental(session, watermark: str, landing_dir: Path, run_id: str) -> str:
+    records = list(iter_orders(session, updated_since=watermark))
+    out = landing_dir / f"orders__{run_id}.jsonl"
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in records), encoding="utf-8")
+    tmp.replace(out)                                  # atomic: never a half-written landing file
+    return max((r["updated_at"] for r in records), default=watermark)
+
+landing = Path(tempfile.mkdtemp())
+new_watermark = pull_incremental(session, "2026-10-05T13:00:00Z", landing, "2026-10-06")
+print(new_watermark, [p.name for p in landing.iterdir()])
+print(landing.joinpath("orders__2026-10-06.jsonl").read_text(encoding="utf-8").count("\n"), "records landed")
+server.shutdown()
+```
+
+```text
+2026-10-05T16:00:00Z ['orders__2026-10-06.jsonl']
+3 records landed
+```
+
+Only orders updated after 13:00 were fetched. The new watermark is the newest `updated_at` actually received, not the current time, and it should be saved only after the landing file is safely written.
+
+## Validate what comes back
+
+APIs change. Before loading, check that each record has the fields you need with the types you expect, and count and quarantine the ones that do not. A sudden spike in rejected records usually means the API changed, which is worth an alert. Keep unknown fields in the raw landing file so a new field is available the day someone needs it.
+
+## Common mistakes
+
+1. No timeout, so one hung connection blocks the pipeline forever.
+2. Not checking the status code, and loading an error payload as data.
+3. Retrying 400s and 401s, or retrying POSTs that create duplicates.
+4. Ignoring `Retry-After` and hammering a throttled API.
+5. Holding every page in a list for a multi-million-record pull.
+6. Setting the watermark to "now" instead of the newest record received.
+7. Tokens in code, in URLs or in log lines.
+
+## Interview angle
+
+"Write a function that pulls all records from a paginated API" is a common Python exercise for data roles, and the follow-ups are always about failure: what if it times out, returns 429, or fails on page 300 of 500? Show a generator over pages, a session with timeouts, `raise_for_status`, retries only for 429, 5xx and network errors with backoff and `Retry-After`, an incremental watermark, and raw landing for replay. Practise with [retries with backoff for API ingestion](/interview/python/api-retries-backoff/).
+
+## Key takeaway
+
+Use a session with timeouts and status checks, hide pagination in a generator, retry only transient failures with capped backoff that honours `Retry-After`, pace yourself under rate limits, pull incrementally from a stored watermark, and land raw responses before you transform them.

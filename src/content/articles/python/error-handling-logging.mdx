@@ -1,0 +1,264 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Python Error Handling and Logging for Data Pipelines"
+seoTitle: "Python Error Handling and Logging for Pipelines"
+description: "Python error handling and logging for pipelines: catch specific exceptions, add context with raise from, clean up with context managers, and log with run ids and tracebacks."
+technology: ["python"]
+topic: ["error-handling", "logging", "reliability"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Catch specific exceptions and decide between handling, retrying and failing"
+  - "Define pipeline exception types and chain causes with raise ... from"
+  - "Use try/except/else/finally and context managers so resources are always released"
+  - "Configure logging once, with module loggers, levels, run context and tracebacks"
+  - "Make a failed job exit non-zero so the scheduler notices"
+prerequisites: ["articles:python/iterators-generators"]
+related: ["interview-questions:python/exceptions-in-pipelines", "articles:etl-elt/pipeline-reliability-and-retries", "articles:etl-elt/pipeline-observability", "articles:python/working-with-apis"]
+previous: "articles:python/iterators-generators"
+next: "articles:python/working-with-apis"
+sources:
+  - { label: "Python documentation: Errors and exceptions", url: "https://docs.python.org/3/tutorial/errors.html" }
+  - { label: "Python documentation: logging HOWTO", url: "https://docs.python.org/3/howto/logging.html" }
+  - { label: "Python documentation: contextlib", url: "https://docs.python.org/3/library/contextlib.html" }
+versionContext: "Examples run on Python 3.11 (standard library only)"
+---
+
+A pipeline that crashes loudly is annoying; a pipeline that fails quietly and reports success is dangerous. Good error handling in data code is mostly about three decisions: which errors you **handle** (and how), which you **let fail the run**, and what you **record** so the person on call can fix it in minutes. Logging is how that record gets written.
+
+## Catch specific exceptions
+
+Catch only the exceptions you know how to handle, as close as possible to where they happen:
+
+```python
+def parse_amount(raw: str) -> float | None:
+    try:
+        return float(raw)
+    except ValueError:            # expected: bad input text
+        return None
+
+print(parse_amount("19.99"), parse_amount("n/a"))
+```
+
+```text
+19.99 None
+```
+
+A bare `except:` or a broad `except Exception:` deep in the code also catches bugs (`KeyError`, `TypeError`, `NameError` from a typo) and turns them into silent wrong data. Keep broad catches for **boundaries** only (the top of a job, a per-record loop with a dead-letter path), and always log and count what they catch.
+
+The common built-in exceptions in pipeline code:
+
+| Exception | Typical cause | Usual response |
+|-----------|---------------|----------------|
+| `ValueError` | Bad value: `int("x")`, invalid date | Reject the record |
+| `KeyError` | Missing field in a dict | Reject the record, or a schema change: investigate |
+| `TypeError` | Wrong type, often `None` where a value was expected | Usually a bug or a schema change |
+| `FileNotFoundError` | Input not there (yet) | Wait and retry, or fail with a clear message |
+| `TimeoutError`, `ConnectionError` | Network trouble | Retry with backoff |
+| `PermissionError` | Credentials or access | Fail fast |
+
+## Pipeline exception types and `raise ... from`
+
+Define a small hierarchy for your pipeline so callers can react by category, and chain the original exception so the traceback still shows the root cause:
+
+```python
+class PipelineError(Exception):
+    """Base class for errors this pipeline raises on purpose."""
+
+class BadRecord(PipelineError):
+    def __init__(self, line_no: int, reason: str):
+        super().__init__(f"line {line_no}: {reason}")
+        self.line_no = line_no
+
+class SourceUnavailable(PipelineError):
+    """Transient: worth retrying."""
+
+def parse_line(line_no: int, line: str) -> dict:
+    order_id, amount = line.split(",")
+    try:
+        return {"order_id": int(order_id), "amount": float(amount)}
+    except ValueError as exc:
+        raise BadRecord(line_no, f"cannot parse {line!r}") from exc
+
+try:
+    parse_line(7, "42,abc")
+except BadRecord as err:
+    print(err, "| caused by:", type(err.__cause__).__name__, "-", err.__cause__)
+```
+
+```text
+line 7: cannot parse '42,abc' | caused by: ValueError - could not convert string to float: 'abc'
+```
+
+The message says **where** and **what** in pipeline terms, and `__cause__` keeps the low-level detail. Without `from exc`, Python still shows the original exception in the traceback ("During handling of the above exception, another exception occurred"), but `from` states the relationship explicitly. Use `raise ... from None` only when the original adds nothing, for example to avoid leaking a secret in a message.
+
+## try, except, else, finally
+
+- `except` runs when the `try` block raised a matching exception.
+- `else` runs only if no exception was raised; put code there that should not be protected by the `except`.
+- `finally` always runs, success or failure: release locks, close connections, remove temporary files.
+
+```python
+def load_batch(batch, conn_log):
+    conn_log.append("open")
+    try:
+        if any(r is None for r in batch):
+            raise ValueError("null row in batch")
+    except ValueError:
+        conn_log.append("rollback")
+        raise                                   # re-raise: the caller decides what happens next
+    else:
+        conn_log.append("commit")
+    finally:
+        conn_log.append("close")
+
+ok_log, bad_log = [], []
+load_batch([1, 2], ok_log)
+try:
+    load_batch([1, None], bad_log)
+except ValueError as exc:
+    print("failed:", exc)
+print(ok_log)
+print(bad_log)
+```
+
+```text
+failed: null row in batch
+['open', 'commit', 'close']
+['open', 'rollback', 'close']
+```
+
+A bare `raise` inside `except` re-raises the current exception with its original traceback. Use it when you want to clean up or log and still let the failure propagate.
+
+## Context managers do the cleanup for you
+
+`with` guarantees cleanup without hand-written `finally` blocks. Files, locks, database connections and transactions (`with conn:` in `sqlite3` commits or rolls back) all support it. `contextlib.contextmanager` turns a generator into one, which is a tidy way to time steps or manage temporary state:
+
+```python
+import time
+from contextlib import contextmanager
+
+@contextmanager
+def step(name, timings):
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        timings[name] = time.perf_counter() - start     # recorded even if the step fails
+
+timings = {}
+with step("extract", timings):
+    rows = list(range(1000))
+try:
+    with step("transform", timings):
+        raise RuntimeError("bad mapping")
+except RuntimeError:
+    pass
+print(sorted(timings), all(seconds >= 0 for seconds in timings.values()))
+```
+
+```text
+['extract', 'transform'] True
+```
+
+The failed `transform` step still has a duration recorded, because the `finally` inside the context manager runs on the way out of the exception.
+
+## Logging: configure once, log with context
+
+Use the `logging` module rather than `print`: it has levels, timestamps, destinations and formatting that you configure **once**, at the entry point, while library code just asks for a logger.
+
+```python
+import logging
+import sys
+
+def configure_logging(level=logging.INFO):
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s run=%(run_id)s %(message)s"))
+    root = logging.getLogger()
+    root.handlers[:] = [handler]
+    root.setLevel(level)
+
+configure_logging()
+log = logging.LoggerAdapter(logging.getLogger("orders.load"), {"run_id": "orders__2026-10-05"})
+
+log.info("read %d rows from %s", 1200, "orders.csv")      # lazy %-formatting
+log.debug("first row %r", {"order_id": 1})                # below INFO: not printed
+log.warning("skipped %d bad rows", 3)
+try:
+    parse_line(9, "x,1")
+except BadRecord:
+    log.exception("record rejected")                       # ERROR level plus the traceback
+```
+
+```text
+INFO orders.load run=orders__2026-10-05 read 1200 rows from orders.csv
+WARNING orders.load run=orders__2026-10-05 skipped 3 bad rows
+ERROR orders.load run=orders__2026-10-05 record rejected
+Traceback (most recent call last):
+  File "...", line ..., in parse_line
+ValueError: invalid literal for int() with base 10: 'x'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "...", line ..., in <module>
+  File "...", line ..., in parse_line
+BadRecord: line 9: cannot parse 'x,1'
+```
+
+File names and line numbers are elided here; yours will point at your code. Practices that pay off:
+
+- **One logger per module**: `log = logging.getLogger(__name__)`. Names form a hierarchy (`orders.load` inherits from `orders`), so you can change levels per component.
+- **Levels with meaning**: `DEBUG` for detail you only want when investigating, `INFO` for normal progress (rows read and written), `WARNING` for something unusual that did not stop the run, `ERROR` for a failure, `CRITICAL` rarely.
+- **Context on every line**: run id, data interval, table, file. A `LoggerAdapter` or a filter adds it without repeating it in every call; [pipeline observability](/etl-elt/pipeline-observability/) shows JSON-formatted logs for aggregation tools.
+- **`log.exception` inside `except`** to keep the traceback; `log.error(str(exc))` loses it.
+- **Lazy formatting** (`log.info("rows %d", n)`) so arguments are only formatted when the line is actually emitted.
+- **Never log secrets or personal data.** Log ids and counts, not row contents or connection strings.
+
+## Make failures visible to the scheduler
+
+An orchestrator decides success or failure from the task's outcome: an exception in an Airflow task, or the process exit code for a script run by cron, a container or a Bash operator. A job that catches everything, logs it and returns normally reports **success**. At the top of a script, catch broadly only to log and exit non-zero:
+
+```python
+def main() -> int:
+    try:
+        rows = [parse_line(n, line) for n, line in enumerate(["1,10", "2,20"], start=1)]
+        log.info("loaded %d rows", len(rows))
+        return 0
+    except SourceUnavailable:
+        log.warning("source unavailable; exiting with 75 so the scheduler retries")
+        return 75                           # EX_TEMPFAIL: a convention for "try again later"
+    except Exception:
+        log.exception("run failed")
+        return 1
+
+print("exit code:", main())
+# In a real script: raise SystemExit(main())
+```
+
+```text
+INFO orders.load run=orders__2026-10-05 loaded 2 rows
+exit code: 0
+```
+
+## Many failures at once: ExceptionGroup
+
+Python 3.11 added `ExceptionGroup` and `except*` for code that runs several things concurrently (for example with `asyncio.TaskGroup`) and can fail in several ways at once. You will mostly meet it when using asyncio; in synchronous pipeline code, collecting per-record errors in a list and reporting a summary is usually clearer.
+
+## Common mistakes
+
+1. `except: pass` or `except Exception: pass`, which turns bugs into silent data loss.
+2. Catching an exception, logging it, and exiting with success.
+3. Losing the root cause by raising a new exception without `from`.
+4. `print` instead of logging, so there are no levels, timestamps or context.
+5. Calling `logging.basicConfig` inside library modules, which fights the application's configuration.
+6. Logging whole records, credentials or tokens.
+
+## Interview angle
+
+"How do you handle errors in a pipeline?" is answered by classification: bad records are rejected, counted and quarantined; transient errors are retried with backoff; systemic errors fail the run loudly with context. Show that you catch specific exceptions, chain causes, clean up with context managers, log with run context and tracebacks, and make failures visible to the scheduler. Practise with [exceptions in production pipelines](/interview/python/exceptions-in-pipelines/); retries are covered in [working with APIs](/python/working-with-apis/).
+
+## Key takeaway
+
+Catch narrowly, classify failures, add context with your own exception types and `raise ... from`, let context managers clean up, configure logging once with run context, use `log.exception` for tracebacks, and make every real failure end in a non-zero outcome the scheduler can see.

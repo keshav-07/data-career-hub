@@ -1,0 +1,271 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Python File I/O for Data Engineers: CSV, JSON, JSON Lines and Gzip"
+seoTitle: "Python File I/O: CSV, JSON and JSON Lines"
+description: "Python file I/O for pipelines: read and write CSV and JSON safely, stream JSON Lines and gzip files, handle encodings, quoting and Decimals, and write files atomically."
+technology: ["python"]
+topic: ["file-io", "csv", "json"]
+difficulty: "Beginner"
+learningObjectives:
+  - "Work with paths using pathlib and always set encodings explicitly"
+  - "Read and write CSV with the csv module, including quoting, BOMs and the newline rule"
+  - "Load, dump and stream JSON and JSON Lines, including dates and Decimals"
+  - "Read compressed files without unpacking them first"
+  - "Write output atomically so a crash never leaves a half-written file"
+prerequisites: ["articles:python/data-structures-for-interviews"]
+related: ["articles:python/iterators-generators", "articles:python/idempotent-csv-loader", "cheat-sheets:python-for-data-engineers", "articles:delta-lake/json-vs-parquet"]
+previous: "articles:python/data-structures-for-interviews"
+next: "articles:python/iterators-generators"
+sources:
+  - { label: "Python documentation: csv", url: "https://docs.python.org/3/library/csv.html" }
+  - { label: "Python documentation: json", url: "https://docs.python.org/3/library/json.html" }
+  - { label: "Python documentation: pathlib", url: "https://docs.python.org/3/library/pathlib.html" }
+  - { label: "Python documentation: os.replace", url: "https://docs.python.org/3/library/os.html#os.replace" }
+versionContext: "Examples run on Python 3.11 (standard library only) in a temporary directory"
+---
+
+Most pipelines start or end with a file: a partner's CSV export, a JSON API dump, a gzip of logs, an extract for another team. The standard library handles all of these well, but each format has a few traps that cause real incidents: a wrong encoding, a comma inside a quoted field, a float where money should be, or a half-written file that a downstream job picks up. This lesson covers the safe defaults.
+
+All examples write into a temporary directory:
+
+```python
+import tempfile
+from pathlib import Path
+
+workdir = Path(tempfile.mkdtemp())
+print(workdir.exists())
+```
+
+```text
+True
+```
+
+## Paths and encodings
+
+Use `pathlib.Path` rather than string concatenation: `/` joins parts portably, and methods such as `.glob()`, `.suffix` and `.stem` replace most `os.path` calls.
+
+Always pass `encoding=` when opening text files. Without it, Python uses the platform's default encoding, so the same code can read a file correctly on a laptop and garble it on a server. UTF-8 is the right default; files exported from Excel often start with a byte order mark (BOM), which `utf-8-sig` removes.
+
+```python
+csv_path = workdir / "landing" / "customers.csv"
+csv_path.parent.mkdir(parents=True, exist_ok=True)
+csv_path.write_bytes("﻿id,name,city\n1,Zoë,Köln\n".encode("utf-8"))   # an Excel-style export with a BOM
+
+print(repr(csv_path.read_text(encoding="utf-8").splitlines()[0]))
+print(repr(csv_path.read_text(encoding="utf-8-sig").splitlines()[0]))
+print(csv_path.name, csv_path.suffix, [p.name for p in workdir.glob("landing/*.csv")])
+```
+
+```text
+'﻿id,name,city'
+'id,name,city'
+customers.csv .csv ['customers.csv']
+```
+
+With plain `utf-8`, the first column is called `"﻿id"`, not `"id"`, and every lookup of `row["id"]` fails with a `KeyError` that is very confusing to debug.
+
+## CSV: always use the csv module
+
+Splitting lines on commas breaks the moment a field contains a comma, a quote or a newline, which real data does. The `csv` module implements the quoting rules. Open CSV files with `newline=""`, as the documentation requires, so the module handles line endings inside quoted fields itself.
+
+```python
+import csv
+
+orders_path = workdir / "orders.csv"
+rows = [
+    {"order_id": 1, "customer": "Asha", "note": "leave at door", "amount": "19.99"},
+    {"order_id": 2, "customer": 'Ben "BJ" Jones', "note": "ring twice, then wait", "amount": "5.00"},
+    {"order_id": 3, "customer": "Chen", "note": "line one\nline two", "amount": "120.50"},
+]
+
+with orders_path.open("w", newline="", encoding="utf-8") as f:
+    writer = csv.DictWriter(f, fieldnames=["order_id", "customer", "note", "amount"])
+    writer.writeheader()
+    writer.writerows(rows)
+
+print(orders_path.read_text(encoding="utf-8"))
+```
+
+```text
+order_id,customer,note,amount
+1,Asha,leave at door,19.99
+2,"Ben ""BJ"" Jones","ring twice, then wait",5.00
+3,Chen,"line one
+line two",120.50
+
+```
+
+The writer quoted only the fields that needed it and doubled the embedded quotes. Reading it back recovers the original values exactly, including the newline inside a field, which a line-by-line split would have turned into a broken extra row:
+
+```python
+with orders_path.open(newline="", encoding="utf-8") as f:
+    back = list(csv.DictReader(f))
+print(len(back), back[1]["customer"], repr(back[2]["note"]))
+print(len(orders_path.read_text(encoding="utf-8").splitlines()), "physical lines")
+```
+
+```text
+3 Ben "BJ" Jones 'line one\nline two'
+5 physical lines
+```
+
+Things to remember about `csv`:
+
+- **Everything is a string.** `DictReader` returns `"19.99"`, not a number. Convert and validate explicitly, and count rows that fail (see [the idempotent CSV loader](/python/idempotent-csv-loader/)).
+- **Missing and extra fields** do not raise: short rows get `None` for missing columns (`restval`), long rows put extras under the key `None` (`restkey`). Check for both if the source is unreliable.
+- **Other delimiters**: pass `delimiter=";"` or `delimiter="\t"`. `csv.Sniffer` can guess a dialect, but for a pipeline, fix the dialect in configuration rather than guessing every run.
+- **Money**: parse amounts with `decimal.Decimal`, not `float`, when exact cents matter.
+
+## JSON and JSON Lines
+
+`json.loads` and `json.dumps` convert between JSON text and Python dicts and lists. Two details matter in pipelines: JSON has no date or decimal type, and `json.dump` refuses to serialise them unless you say how.
+
+```python
+import json
+from datetime import date, datetime, timezone
+from decimal import Decimal
+
+record = {"order_id": 1, "amount": Decimal("19.99"), "order_date": date(2026, 10, 5),
+          "loaded_at": datetime(2026, 10, 5, 9, 30, tzinfo=timezone.utc)}
+
+def to_json_value(value):
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)               # keep exact digits; never float()
+    raise TypeError(f"cannot serialise {type(value).__name__}")
+
+try:
+    json.dumps(record)
+except TypeError as exc:
+    print("without default:", exc)
+
+text = json.dumps(record, default=to_json_value, sort_keys=True)
+print(text)
+
+parsed = json.loads('{"amount": 19.99}', parse_float=Decimal)
+print(parsed["amount"], type(parsed["amount"]).__name__)
+```
+
+```text
+without default: Object of type Decimal is not JSON serializable
+{"amount": "19.99", "loaded_at": "2026-10-05T09:30:00+00:00", "order_date": "2026-10-05", "order_id": 1}
+19.99 Decimal
+```
+
+`parse_float=Decimal` reads JSON numbers as exact decimals instead of floats, which matters for money.
+
+A single large JSON array must be parsed in full before you can use the first element. For big or append-only data, use **JSON Lines** (one JSON object per line, also called NDJSON): it can be streamed, appended to and split, and many tools (BigQuery, Snowflake, Spark, DuckDB) load it directly.
+
+```python
+events_path = workdir / "events.jsonl"
+with events_path.open("w", encoding="utf-8") as f:
+    for i in range(1, 6):
+        f.write(json.dumps({"event_id": i, "type": "click" if i % 2 else "view"}) + "\n")
+    f.write('{"event_id": 6, "type": \n')                     # a truncated last line
+
+def read_jsonl(path):
+    with path.open(encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            if not line.strip():
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError as exc:
+                print(f"skipping line {line_no}: {exc.msg}")
+
+clicks = sum(1 for e in read_jsonl(events_path) if e["type"] == "click")
+print("clicks:", clicks)
+```
+
+```text
+skipping line 6: Expecting value
+clicks: 3
+```
+
+One bad line costs one record, not the whole file, and memory stays flat however long the file is. In a real loader, count skipped lines and fail the run if there are too many.
+
+## Compressed files
+
+`gzip.open` in text mode (`"rt"` or `"wt"`) gives you a normal text file object, so the CSV and JSON code above works unchanged on `.gz` files without unpacking them to disk first:
+
+```python
+import gzip
+
+gz_path = workdir / "events.jsonl.gz"
+with gzip.open(gz_path, "wt", encoding="utf-8") as f:
+    for i in range(1000):
+        f.write(json.dumps({"event_id": i, "type": "view"}) + "\n")
+
+with gzip.open(gz_path, "rt", encoding="utf-8") as f:
+    count = sum(1 for _ in f)
+print(count, "lines,", gz_path.stat().st_size < 1000 * 30, "(much smaller than the raw text)")
+```
+
+```text
+1000 lines, True (much smaller than the raw text)
+```
+
+`bz2`, `lzma` and, from Python 3.14, `compression.zstd` offer the same interface. Gzip files cannot be split for parallel reading, which is one reason columnar formats such as Parquet (with internal compression) are preferred for large analytical data; see [JSON vs Parquet](/delta-lake/json-vs-parquet/).
+
+## Write files atomically
+
+If a job crashes halfway through writing `daily_extract.csv`, a downstream process can pick up a truncated file and treat it as complete. Write to a temporary file in the same directory, then rename it into place with `os.replace`, which replaces the target atomically on the same filesystem: readers see the old file or the new one, never a partial one.
+
+```python
+import os
+
+def write_csv_atomically(path: Path, fieldnames, rows):
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        with tmp.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+            f.flush()
+            os.fsync(f.fileno())          # make sure the bytes are on disk before the rename
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)       # clean up if anything failed before the rename
+
+def rows_that_fail():
+    yield {"id": 1}
+    raise RuntimeError("source connection dropped")
+
+target = workdir / "daily_extract.csv"
+write_csv_atomically(target, ["id"], [{"id": 1}, {"id": 2}])
+try:
+    write_csv_atomically(target, ["id"], rows_that_fail())
+except RuntimeError as exc:
+    print("failed:", exc)
+print(target.read_text(encoding="utf-8").split())
+print(sorted(p.name for p in workdir.iterdir() if p.name.startswith(".")))
+```
+
+```text
+failed: source connection dropped
+['id', '1', '2']
+[]
+```
+
+The failed second run left the previous good file intact and no temporary file behind. Object stores such as S3 do not have renames, but a single `PUT` of an object is atomic, so write the complete object in one upload (or a multipart upload that is completed only at the end) and publish a success marker or a manifest last.
+
+## Common mistakes
+
+1. Opening files without `encoding=`, or reading Excel exports without `utf-8-sig`.
+2. Parsing CSV with `line.split(",")`.
+3. Forgetting `newline=""` with the csv module, which produces blank lines on Windows and breaks quoted newlines.
+4. Using `float` for money in CSV or JSON.
+5. Loading a multi-gigabyte JSON array with `json.load` instead of streaming JSON Lines.
+6. Writing output in place, so a crash leaves a truncated file that looks valid.
+
+## Interview angle
+
+File handling shows up in coding rounds ("parse this log file and count errors per hour") and in design follow-ups ("what if the file is 50 GB?"). Use the csv and json modules, set encodings explicitly, stream line by line with generators, keep bad lines visible with a count, and mention atomic writes for outputs. For files larger than memory, see [processing a 50 GB CSV with limited memory](/interview/python/process-large-csv-limited-memory/).
+
+## Key takeaway
+
+Use pathlib, set encodings, let the csv module handle quoting, serialise dates and Decimals explicitly, stream JSON Lines and gzip line by line, and write outputs atomically with a temporary file and `os.replace`.

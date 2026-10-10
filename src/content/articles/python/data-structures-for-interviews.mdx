@@ -1,17 +1,19 @@
 ---
 seoTitle: "Python Data Structures for DE Interviews"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Python Data Structures for Data Engineering Interviews"
 description: "Choose between list, tuple, set, dict, deque and Counter by their operations and costs, with the patterns that come up in data engineering coding interviews."
 inventoryId: "TECH-09"
 technology: ["python"]
 topic: ["data-structures", "complexity"]
 difficulty: "Beginner"
-related: ["interview-questions:python/list-tuple-set", "interview-questions:python/shallow-vs-deep-copy"]
+related: ["interview-questions:python/list-tuple-set", "interview-questions:python/shallow-vs-deep-copy", "interview-questions:python/dict-set-complexity"]
+previous: "articles:python/functions-modules-reusable-code"
+next: "articles:python/file-io-csv-json"
 sources: [{"label": "Python documentation: Data structures", "url": "https://docs.python.org/3/tutorial/datastructures.html"}, {"label": "Python wiki: Time complexity", "url": "https://wiki.python.org/moin/TimeComplexity"}]
-versionContext: "Examples run on Python 3.12"
+versionContext: "Examples run on Python 3.11"
 ---
 
 Choosing the right built-in structure is often the whole answer to a coding question. Know what each one is **for** and what its common operations **cost**.
@@ -111,7 +113,7 @@ print(daily[("2026-10-01", "south")])
 
 ## Interview relevance
 
-Many "process these records" questions reduce to: group with a dict, deduplicate with a set or `dict.fromkeys`, count with `Counter`, and stream with a deque. State the time complexity of your choice.
+Many "process these records" questions reduce to: group with a dict, deduplicate with a set or `dict.fromkeys`, count with `Counter`, and stream with a deque. State the time complexity of your choice, including average versus worst case for dicts and sets: see [why dict and set lookups are O(1)](/interview/python/dict-set-complexity/).
 
 ## Key takeaway
 

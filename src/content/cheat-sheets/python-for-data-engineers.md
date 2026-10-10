@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Python for Data Engineers Cheat Sheet"
 description: "A quick Python reference for pipelines: files and CSV, JSON, dates, collections, generators and batching, error handling, logging and testing with pytest."
 inventoryId: "CHEAT-02"
@@ -9,7 +9,7 @@ technology: ["python"]
 topic: ["reference"]
 cheatTopic: "Python"
 related: ["articles:python/iterators-generators", "articles:python/data-structures-for-interviews", "articles:python/idempotent-csv-loader"]
-versionContext: "Examples run on Python 3.12"
+versionContext: "Examples run on Python 3.11 (standard library); itertools.batched needs Python 3.12, with a fallback shown"
 ---
 
 ## Files and CSV
@@ -58,14 +58,22 @@ print(list(dict.fromkeys(["b", "a", "b"])))          # dedupe, keep order
 ## Generators and batching
 
 ```python
-from itertools import batched, islice
+from itertools import islice
+
+try:
+    from itertools import batched                     # Python 3.12+
+except ImportError:
+    def batched(iterable, n):                         # fallback for 3.11 and older
+        it = iter(iterable)
+        while chunk := tuple(islice(it, n)):
+            yield chunk
 
 def read_ids(n):
     for i in range(n):
         yield i
 
 print(list(islice(read_ids(10), 3)))
-print(list(batched(read_ids(5), 2)))                  # Python 3.12+
+print(list(batched(read_ids(5), 2)))
 ```
 
 ## Error handling

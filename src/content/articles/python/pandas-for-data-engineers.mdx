@@ -1,0 +1,231 @@
+---
+publishedDate: "2026-10-10"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "pandas for Data Engineers: Essentials and When Not to Use It"
+seoTitle: "pandas for Data Engineers: When to Use It"
+description: "pandas for data engineers: read with explicit dtypes, clean, deduplicate, join safely with validate, aggregate and write Parquet, plus when DuckDB, Polars or Spark fit better."
+technology: ["python"]
+topic: ["pandas", "dataframes", "data-cleaning"]
+difficulty: "Intermediate"
+learningObjectives:
+  - "Read CSV data with explicit dtypes, nullable types and parsed timestamps"
+  - "Clean, deduplicate, join with validate= and aggregate DataFrames with vectorised operations"
+  - "Know the pandas 3 behaviour changes that affect existing code: Copy-on-Write and the string dtype"
+  - "Write Parquet and check memory use"
+  - "Recognise when pandas is the wrong tool and choose DuckDB, Polars, Spark or warehouse SQL instead"
+prerequisites: ["articles:python/working-with-apis"]
+related: ["articles:pyspark/pyspark-fundamentals", "articles:delta-lake/parquet-vs-avro-vs-orc", "interview-questions:python/process-large-csv-limited-memory", "articles:python/file-io-csv-json"]
+previous: "articles:python/working-with-apis"
+next: "articles:python/testing-with-pytest"
+sources:
+  - { label: "pandas documentation: What's new in 3.0", url: "https://pandas.pydata.org/docs/whatsnew/v3.0.0.html" }
+  - { label: "pandas documentation: Copy-on-Write", url: "https://pandas.pydata.org/docs/user_guide/copy_on_write.html" }
+  - { label: "pandas documentation: merge (validate parameter)", url: "https://pandas.pydata.org/docs/reference/api/pandas.merge.html" }
+  - { label: "DuckDB documentation: Python API", url: "https://duckdb.org/docs/stable/clients/python/overview" }
+versionContext: "Examples run on Python 3.11 with pandas 3.0.6 and pyarrow 26.0. Outputs of pandas 2.x differ slightly (string columns show as object)."
+---
+
+pandas is the default DataFrame library in Python and turns up everywhere in data work: notebooks, small ETL jobs, validation scripts, tests, Airflow tasks that reshape an API response. It is also frequently used where it should not be, for files bigger than memory or production jobs whose volume grows every month. This lesson covers the parts a Data Engineer uses most, the traps that cause wrong data, and the point at which to reach for something else.
+
+## Read with explicit types
+
+`read_csv` guesses types by default, and guesses go wrong: ids with leading zeros become integers, a column that is empty in the first rows becomes float, and a sentinel such as `"n/a"` turns a numeric column into strings. In a pipeline, state the types you expect.
+
+```python
+import io
+import pandas as pd
+
+raw = io.StringIO(
+    "order_id,customer_id,postcode,amount,status,ordered_at\n"
+    "1,10,01067,19.99,paid,2026-10-05T09:00:00+02:00\n"
+    "2,11,10115,,PAID,2026-10-05T10:30:00+02:00\n"
+    "2,11,10115,5.00,paid,2026-10-05T11:00:00+02:00\n"
+    "3,,80331,120.50,refunded,2026-10-06T08:15:00+02:00\n"
+)
+
+orders = pd.read_csv(
+    raw,
+    dtype={"order_id": "int64", "customer_id": "Int64", "postcode": "string", "status": "string"},
+    parse_dates=["ordered_at"],
+)
+print(orders.dtypes.to_string())
+print(orders["postcode"].tolist(), orders["customer_id"].isna().sum())
+```
+
+```text
+order_id                           int64
+customer_id                        Int64
+postcode                          string
+amount                           float64
+status                            string
+ordered_at     datetime64[us, UTC+02:00]
+['01067', '10115', '10115', '80331'] 1
+```
+
+- `postcode` kept its leading zero because it was read as a string.
+- `customer_id` uses the nullable `Int64` type (capital I), so the missing value is `<NA>` instead of turning the column into floats.
+- The timestamps kept their offset. Convert to UTC early (`.dt.tz_convert("UTC")`) and keep everything in UTC.
+
+For money, consider reading amounts as strings and converting to `decimal.Decimal`, or storing integer cents, when exact arithmetic matters; `float64` is fine for analytics but can show rounding artefacts.
+
+## Clean and deduplicate with vectorised operations
+
+Operate on whole columns rather than looping over rows. Column operations run in compiled code and are typically orders of magnitude faster than `iterrows` or `apply` with a Python function.
+
+```python
+clean = orders.assign(
+    status=orders["status"].str.lower(),
+    ordered_at=orders["ordered_at"].dt.tz_convert("UTC"),
+    amount=orders["amount"].fillna(0.0),
+)
+
+# Keep the latest version of each order: sort, then drop earlier duplicates on the key
+latest = (clean.sort_values(["order_id", "ordered_at"])
+               .drop_duplicates(subset="order_id", keep="last")
+               .reset_index(drop=True))
+print(latest[["order_id", "amount", "status"]].to_string(index=False))
+```
+
+```text
+ order_id  amount   status
+        1   19.99     paid
+        2    5.00     paid
+        3  120.50 refunded
+```
+
+`drop_duplicates` without `subset` only removes rows that are identical in every column, which is rarely what a deduplication step means. Always name the key.
+
+## Join safely
+
+`merge` silently multiplies rows when the right-hand side has duplicate keys, which inflates totals with no error. `validate=` turns that into an exception, and `indicator=True` shows which rows failed to match.
+
+```python
+customers = pd.DataFrame({"customer_id": pd.array([10, 11, 11], dtype="Int64"),
+                          "country": ["DE", "FR", "FR"]})
+
+try:
+    latest.merge(customers, on="customer_id", how="left", validate="many_to_one")
+except pd.errors.MergeError as exc:
+    print("MergeError:", str(exc).splitlines()[0])
+
+customers = customers.drop_duplicates(subset="customer_id")
+joined = latest.merge(customers, on="customer_id", how="left", validate="many_to_one", indicator=True)
+print(joined[["order_id", "country", "_merge"]].to_string(index=False))
+```
+
+```text
+MergeError: Merge keys are not unique in right dataset; not a many-to-one merge
+ order_id country    _merge
+        1      DE      both
+        2      FR      both
+        3     NaN left_only
+```
+
+Order 3 has no customer, which `_merge = left_only` makes visible: count those rows and decide whether they are acceptable.
+
+## Aggregate
+
+`groupby` with named aggregations reads like SQL's `GROUP BY` and produces clear column names:
+
+```python
+daily = (joined
+         .assign(order_date=joined["ordered_at"].dt.date)
+         .groupby(["order_date", "status"], as_index=False)
+         .agg(orders=("order_id", "count"), revenue=("amount", "sum")))
+print(daily.to_string(index=False))
+```
+
+```text
+order_date   status  orders  revenue
+2026-10-05     paid       2    24.99
+2026-10-06 refunded       1   120.50
+```
+
+## pandas 3 changes that affect old code
+
+pandas 3.0 changed two defaults that matter for pipelines:
+
+- **Copy-on-Write is always on.** Any DataFrame or Series derived from another behaves as a copy. The old chained assignment pattern `df[df.x > 0]["y"] = 1` now never modifies `df`; write `df.loc[df.x > 0, "y"] = 1` instead. The upside is that the old `SettingWithCopyWarning` confusion is gone and many operations avoid copies internally.
+- **A dedicated string dtype** is the default for text columns (backed by PyArrow when it is installed), instead of the generic `object` dtype. Code that checks `dtype == object` to find text columns needs updating.
+
+```python
+df = pd.DataFrame({"x": [1, -1, 2], "y": [0, 0, 0]})
+df[df["x"] > 0]["y"] = 1                 # chained assignment: modifies a temporary copy only
+print(df["y"].tolist())
+df.loc[df["x"] > 0, "y"] = 1             # the correct form
+print(df["y"].tolist())
+```
+
+```text
+[0, 0, 0]
+[1, 0, 1]
+```
+
+(pandas also prints a `ChainedAssignmentError` warning for the first form.)
+
+## Write Parquet, and check memory
+
+CSV loses types; Parquet keeps them, compresses well and is what lakehouse and warehouse tools read fastest. `to_parquet` needs `pyarrow` (or `fastparquet`) installed.
+
+```python
+import tempfile
+from pathlib import Path
+
+out = Path(tempfile.mkdtemp()) / "daily_sales.parquet"
+daily.to_parquet(out, index=False)
+back = pd.read_parquet(out)
+print(back.shape, back["revenue"].sum().round(2))
+print(joined.memory_usage(deep=True).sum() > 0)
+```
+
+```text
+(2, 4) 145.49
+True
+```
+
+`memory_usage(deep=True)` reports the real in-memory size including strings. As a rough rule, plan for a DataFrame to need several times the size of the source file in memory for comfortable work, because parsing expands compact text into objects and many operations create intermediate results.
+
+## When not to use pandas
+
+pandas loads data into the memory of one process and mostly uses one core. That is perfect for thousands to a few million rows, and wrong beyond that or in places where a database already does the work.
+
+| Situation | Better choice | Why |
+|-----------|---------------|-----|
+| Data larger than memory, or close to it | DuckDB, Polars (lazy/streaming), Spark | Stream, spill to disk, use all cores or many machines |
+| Transformations of data already in the warehouse | SQL in the warehouse (dbt) | No data movement; the warehouse scales |
+| Large joins and aggregations on one machine | DuckDB or Polars | Columnar, multi-threaded, often much faster |
+| Simple streaming of a huge file | Plain Python with `csv` and generators | Constant memory, no dependency |
+| Distributed processing, many TB | Spark (PySpark) | Designed for clusters |
+| Per-row business logic in production | Plain Python functions, tested | Clear, testable, no DataFrame overhead |
+
+pandas still shines for exploration, small and medium transformations, glue between systems, reshaping API responses, and **tests**: `pd.testing.assert_frame_equal` gives readable diffs when comparing expected and actual tables. DuckDB can query a pandas DataFrame directly by name, so you can mix the two:
+
+```python
+import duckdb
+
+result = duckdb.sql("SELECT status, sum(amount) AS revenue FROM joined GROUP BY status ORDER BY status").fetchall()
+print(result)
+```
+
+```text
+[('paid', 24.99), ('refunded', 120.5)]
+```
+
+## Common mistakes
+
+1. Letting `read_csv` infer types, losing leading zeros or turning integer ids into floats.
+2. `iterrows` or row-wise `apply` where a column operation exists.
+3. `merge` without `validate=`, silently duplicating rows.
+4. `drop_duplicates()` without a `subset`.
+5. Chained assignment, which in pandas 3 silently does nothing.
+6. Mixing time zones, or naive and aware timestamps, in one column.
+7. Loading a file that is a large fraction of RAM and being surprised by the out-of-memory kill.
+
+## Interview angle
+
+Expect "when would you not use pandas?" as often as pandas syntax. Show you can read with explicit types, deduplicate by key, join with `validate`, aggregate with named aggregations and write Parquet, and that you know its limits: single process, in memory. Then name the alternative for each case: DuckDB or Polars on one machine, Spark for distributed data, SQL where the data already lives. Practise with [processing a 50 GB CSV with limited memory](/interview/python/process-large-csv-limited-memory/) and [when not to use pandas](/interview/python/when-not-to-use-pandas/).
+
+## Key takeaway
+
+Use pandas for in-memory work with explicit dtypes, keyed deduplication, validated joins and vectorised operations, write Parquet rather than CSV, update code for pandas 3's Copy-on-Write and string dtype, and move to DuckDB, Polars, Spark or warehouse SQL when the data outgrows one process's memory.
