@@ -65,13 +65,17 @@ const milestone = (week: number) => days.find((d) => d.week === week && d.weekly
               {list.map((d) => (
                 <li class="pl-day" data-pl-day-card id={`day-${d.day}`}>
                   <div class="pl-day__head">
-                    <label class="pl-day__done js-only">
-                      <input type="checkbox" data-pl-day={d.day} data-hours={d.hours} />
-                      <span class="visually-hidden">Mark day {d.day} as done</span>
-                    </label>
-                    <strong>Day {d.day}</strong>
-                    <span class="pl-day__date" data-pl-date={d.day}></span>
-                    <span class="pl-day__theme">{d.theme}</span>
+                    <div class="pl-day__title">
+                      <label class="pl-day__done js-only">
+                        <input type="checkbox" data-pl-day={d.day} data-hours={d.hours} />
+                        <span class="visually-hidden">Mark day {d.day} as done</span>
+                      </label>
+                      <strong>Day {d.day}</strong>
+                    </div>
+                    <div class="pl-day__summary">
+                      <span class="pl-day__date" data-pl-date={d.day}></span>
+                      <span class="pl-day__theme">{d.theme}</span>
+                    </div>
                     <span class="pl-day__hours">{d.hours} h</span>
                   </div>
                   <ul class="pl-tasks" role="list">
