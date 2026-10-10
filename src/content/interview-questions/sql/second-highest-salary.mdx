@@ -1,10 +1,10 @@
 ---
 seoTitle: "Second-Highest Salary in SQL: Interview Answer"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Find the second-highest salary without using a simple MAX approach."
-description: "Interview answer: rank distinct salaries with DENSE_RANK and pick rank 2, handling ties, NULLs, per-department variants and the case where no second value exists."
+description: "Interview answer: rank distinct salaries with DENSE_RANK and pick rank 2, handling ties, NULLs, the Nth value, per-department variants and the no-second-value case."
 inventoryId: "INT-03"
 technology: ["sql"]
 topic: ["window-functions", "ranking"]
@@ -12,17 +12,41 @@ difficulty: "Medium"
 questionType: ["coding"]
 estimatedMinutes: 8
 interviewRelevance: "High"
-shortAnswer: "Rank salaries with DENSE_RANK() ordered by salary descending, so tied salaries share a rank, then select the salary whose rank is 2. Exclude NULL salaries first, and wrap the result so the query returns NULL rather than no row when there is no second-highest value. The same pattern with PARTITION BY dept gives the second-highest per department."
-followUps: ["Why is ROW_NUMBER wrong here when salaries tie?", "How would you return the Nth highest salary?", "How would you return every employee who earns the second-highest salary in each department?"]
+shortAnswer: "Rank salaries with DENSE_RANK() ordered by salary descending, so tied salaries share a rank, then select the salary whose rank is 2. Exclude NULL salaries first, and wrap the result in a scalar subquery so the query returns NULL rather than no row when there is no second-highest value. The same pattern with PARTITION BY dept gives the second-highest per department, and replacing 2 with N gives the Nth highest."
+followUps: ["Why is ROW_NUMBER wrong here when salaries tie?", "How would you return the Nth highest salary as a reusable function?", "How would you return every employee who earns the second-highest salary in each department?", "How does the MAX-below-MAX query generalise, and why does it not?"]
 prerequisites: ["articles:sql/window-functions"]
-related: ["interview-questions:sql/window-functions-vs-group-by"]
-versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there)"
+related: ["interview-questions:sql/window-functions-vs-group-by", "interview-questions:sql/top-n-per-group-department-salaries", "articles:sql/top-n-deduplication-scd-queries"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
 practice: {"platform": "LeetCode", "number": 176, "title": "Second Highest Salary", "url": "https://leetcode.com/problems/second-highest-salary/"}
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: LIMIT and OFFSET", url: "https://www.postgresql.org/docs/16/queries-limit.html" }
 ---
 
-## Detailed explanation
+## Sample data
 
-Salaries: Ben 150, Chen 150, Asha 120, Fay 110, Dev 90, Eli `NULL`. The highest is 150 (shared by two people), so the second-highest **distinct** salary is 120.
+Two people share the top salary, one salary is unknown, and the ops department has only one person, so the edge cases are all present.
+
+```sql
+CREATE TABLE employees (
+  emp_id INT PRIMARY KEY,
+  name   TEXT NOT NULL,
+  dept   TEXT NOT NULL,
+  salary INT            -- NULL = not yet set
+);
+INSERT INTO employees VALUES
+  (1, 'Ben',  'eng',   150),
+  (2, 'Chen', 'eng',   150),
+  (3, 'Asha', 'eng',   120),
+  (4, 'Fay',  'sales', 110),
+  (5, 'Dev',  'sales',  90),
+  (6, 'Eli',  'sales', NULL),
+  (7, 'Gia',  'ops',    95);
+```
+
+The highest salary is 150, shared by Ben and Chen, so the second-highest **distinct** salary is 120.
+
+## Detailed explanation
 
 ```sql
 WITH ranked AS (
@@ -31,14 +55,37 @@ WITH ranked AS (
   FROM employees
   WHERE salary IS NOT NULL
 )
-SELECT DISTINCT salary FROM ranked WHERE rnk = 2;   -- 120
+SELECT DISTINCT salary FROM ranked WHERE rnk = 2;
 ```
 
-`DENSE_RANK` gives 150 rank 1 for both Ben and Chen, then 120 rank 2.
+| salary |
+|---|
+| 120 |
 
-## Why not ROW_NUMBER?
+`DENSE_RANK` gives both 150s rank 1 and the next value, 120, rank 2, with no gap. The `WHERE salary IS NOT NULL` matters in PostgreSQL: `NULL` sorts **first** under `DESC`, so without the filter Eli's `NULL` would take rank 1 and 150 would become "second".
 
-`ROW_NUMBER` numbers rows 1, 2, 3 even when values tie, so row 2 is Chen's 150, which is wrong. `RANK` would also be wrong: it gives 120 rank 3 because it skips a number after the tie.
+## Why not ROW_NUMBER or RANK?
+
+```sql
+SELECT name, salary,
+       ROW_NUMBER() OVER (ORDER BY salary DESC, emp_id) AS row_num,
+       RANK()       OVER (ORDER BY salary DESC)         AS rnk,
+       DENSE_RANK() OVER (ORDER BY salary DESC)         AS dense_rnk
+FROM employees
+WHERE salary IS NOT NULL
+ORDER BY salary DESC, emp_id;
+```
+
+| name | salary | row_num | rnk | dense_rnk |
+|---|---|---|---|---|
+| Ben | 150 | 1 | 1 | 1 |
+| Chen | 150 | 2 | 1 | 1 |
+| Asha | 120 | 3 | 3 | 2 |
+| Fay | 110 | 4 | 4 | 3 |
+| Gia | 95 | 5 | 5 | 4 |
+| Dev | 90 | 6 | 6 | 5 |
+
+`ROW_NUMBER` = 2 is Chen's 150, which is the highest salary again. `RANK` = 2 does not exist at all, because `RANK` skips to 3 after a two-way tie. Only `DENSE_RANK` numbers **distinct values**.
 
 ## Alternative: DISTINCT with OFFSET
 
@@ -47,20 +94,61 @@ SELECT DISTINCT salary
 FROM employees
 WHERE salary IS NOT NULL
 ORDER BY salary DESC
-LIMIT 1 OFFSET 1;    -- 120
+LIMIT 1 OFFSET 1;
 ```
 
-This is concise. Window functions generalise better (per department, Nth value, returning the employees too).
+This returns 120 too. It is concise and generalises to the Nth value with `OFFSET n - 1`, but it does not extend to "per department" or "return the employees", which the window form does.
+
+The classic `MAX` below `MAX` query, `SELECT MAX(salary) FROM employees WHERE salary < (SELECT MAX(salary) FROM employees)`, is correct for the second value (it handles ties and ignores `NULL`s, because `MAX` skips them) but needs one more nested level for every extra N. Mention it, then move to the ranking form.
 
 ## Return NULL when there is no second value
 
-Some interview platforms expect `NULL` rather than an empty result. Wrap the query in a scalar subquery:
+Some graders and downstream jobs expect exactly one row, with `NULL` when no answer exists. A scalar subquery always produces one row. Ops has a single salary, so there is no second value:
 
 ```sql
-SELECT (SELECT DISTINCT salary FROM ranked WHERE rnk = 2) AS second_highest;
+SELECT (
+  SELECT DISTINCT salary
+  FROM (
+    SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+    FROM employees
+    WHERE salary IS NOT NULL AND dept = 'ops'
+  ) AS ranked
+  WHERE rnk = 2
+) AS second_highest;
 ```
 
-## Per department, returning employees
+| second_highest |
+|---|
+| NULL |
+
+Without the outer `SELECT (...)`, the query would return zero rows. The `DISTINCT` inside also matters: if two rows had rank 2, a scalar subquery returning two rows would fail with "more than one row returned by a subquery".
+
+## The Nth highest as a reusable function
+
+```sql
+CREATE FUNCTION nth_highest_salary(n INT) RETURNS INT
+LANGUAGE sql STABLE AS $$
+  SELECT (
+    SELECT DISTINCT salary
+    FROM employees
+    WHERE salary IS NOT NULL
+    ORDER BY salary DESC
+    LIMIT 1 OFFSET n - 1
+  )
+$$;
+
+SELECT nth_highest_salary(1) AS first,
+       nth_highest_salary(3) AS third,
+       nth_highest_salary(9) AS ninth;
+```
+
+| first | third | ninth |
+|---|---|---|
+| 150 | 110 | NULL |
+
+Validate `n` in production code: `OFFSET` with a negative value is an error in PostgreSQL.
+
+## Per department, returning the employees
 
 ```sql
 WITH ranked AS (
@@ -69,11 +157,23 @@ WITH ranked AS (
   FROM employees
   WHERE salary IS NOT NULL
 )
-SELECT dept, name, salary FROM ranked WHERE rnk = 2;
+SELECT dept, name, salary
+FROM ranked
+WHERE rnk = 2
+ORDER BY dept, name;
 ```
+
+| dept | name | salary |
+|---|---|---|
+| eng | Asha | 120 |
+| sales | Dev | 90 |
+
+Ops has no row because it has no second value. If the requirement is "every department, with `NULL` where none exists", start from the list of departments and `LEFT JOIN` the rank-2 rows to it.
 
 ## Common mistakes
 
 1. Using `ROW_NUMBER` or `RANK` and getting the wrong value on ties.
-2. Forgetting `NULL` salaries (they sort first or last depending on the engine).
+2. Forgetting `NULL` salaries. In PostgreSQL and Oracle they sort first under `DESC`; in MySQL, SQL Server and BigQuery they sort last. Filter them or write `NULLS LAST`.
 3. Returning duplicate rows when several employees share the salary; add `DISTINCT` if only the value is wanted.
+4. Returning no row instead of `NULL` when the question asks for a single value.
+5. Not asking whether "second-highest" means the second distinct value or the second person. Say which you assume.
