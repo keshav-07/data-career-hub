@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What is Kafka log compaction, and when would you use it?"
 seoTitle: "Kafka Log Compaction Use Cases: Interview Answer"
-description: "Interview answer: compaction keeps at least the latest record per key and deletes keys with tombstones, which suits changelogs, CDC tables, state backups and lookup topics."
+description: "Interview answer: compaction keeps the latest record per key and deletes keys with tombstones, which suits changelogs, CDC tables, state stores and lookups."
 technology: ["kafka"]
 topic: ["log-compaction", "retention", "tombstones"]
 difficulty: "Medium"

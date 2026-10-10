@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What does exactly-once mean in Kafka, and how is it achieved?"
 seoTitle: "Kafka Exactly-Once Semantics: Interview Answer"
-description: "Interview answer: Kafka's exactly-once combines the idempotent producer, transactions, read_committed consumers and fencing for Kafka-to-Kafka pipelines; sinks need idempotency."
+description: "Interview answer: exactly-once combines the idempotent producer, transactions, read_committed and fencing for Kafka-to-Kafka work; sinks need idempotency."
 technology: ["kafka"]
 topic: ["exactly-once", "transactions", "delivery-semantics"]
 difficulty: "Hard"

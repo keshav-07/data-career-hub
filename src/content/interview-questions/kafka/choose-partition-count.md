@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you choose the number of partitions for a Kafka topic?"
 seoTitle: "Choosing a Kafka Partition Count: Interview Answer"
-description: "Interview answer: size partitions from peak throughput per partition and per consumer, maximum consumer parallelism and growth, then weigh the cost of too many partitions."
+description: "Interview answer: size partitions from peak throughput per partition and per consumer, maximum consumer parallelism and growth, then weigh the cost of too many."
 technology: ["kafka"]
 topic: ["partitions", "capacity-planning", "throughput"]
 difficulty: "Medium"

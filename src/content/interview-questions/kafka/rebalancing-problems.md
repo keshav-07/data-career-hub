@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What causes consumer group rebalances, and how do you reduce their impact?"
 seoTitle: "Kafka Rebalancing Problems: Interview Answer"
-description: "Interview answer: rebalances follow joins, leaves, crashes and slow polls; reduce them with static membership and tuned timeouts, and soften them with cooperative or KIP-848 protocols."
+description: "Interview answer: rebalances follow joins, leaves, crashes and slow polls; cut them with static membership and soften them with cooperative or KIP-848 protocols."
 technology: ["kafka"]
 topic: ["rebalancing", "consumer-groups", "static-membership"]
 difficulty: "Medium"

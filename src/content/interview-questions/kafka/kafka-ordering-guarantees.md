@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How does Kafka guarantee message ordering, and where can ordering break?"
 seoTitle: "Kafka Message Ordering: Interview Answer"
-description: "Interview answer: Kafka orders records only within a partition, so key by the entity that needs order, keep idempotence on, fix the partition count and consume per partition."
+description: "Interview answer: Kafka orders records only within a partition, so key by the entity needing order, keep idempotence on and the partition count fixed."
 technology: ["kafka"]
 topic: ["ordering", "partitions", "producers"]
 difficulty: "Medium"

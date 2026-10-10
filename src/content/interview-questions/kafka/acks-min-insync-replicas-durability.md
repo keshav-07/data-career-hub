@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do acks, replication factor and min.insync.replicas decide Kafka durability?"
 seoTitle: "Kafka acks and min.insync.replicas: Interview Answer"
-description: "Interview answer: acks=all waits for the current in-sync replicas, and min.insync.replicas sets how small that set may be, so RF 3 with min ISR 2 survives one broker loss."
+description: "Interview answer: acks=all waits for the current in-sync replicas and min.insync.replicas sets how small that set may be; RF 3 with min ISR 2 survives a broker loss."
 technology: ["kafka"]
 topic: ["replication", "durability", "acks", "isr"]
 difficulty: "Medium"
