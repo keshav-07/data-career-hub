@@ -1,6 +1,6 @@
 ---
 title: "Design an ELT Pipeline with dbt"
-description: "A system-design case study for ELT with dbt: loading raw data, layered models, incremental and microbatch strategies, tests, contracts, CI, orchestration and cost."
+description: "ELT pipeline with dbt system design: raw loading, layered models, incremental and microbatch strategies, tests, contracts, CI, orchestration and cost."
 technology: ["data-engineering", "dbt", "snowflake"]
 topic: ["elt", "dbt", "architecture"]
 difficulty: "Intermediate"

@@ -1,6 +1,6 @@
 ---
 title: "Design a Multi-Tenant Data Platform"
-description: "A system-design case study for multi-tenant data platforms: isolation models, tenant-aware storage, row-level security, noisy neighbours, per-tenant cost and offboarding."
+description: "Multi-tenant data platform system design: isolation models, tenant-aware storage, row-level security, noisy neighbours, per-tenant cost and offboarding."
 technology: ["data-engineering", "snowflake", "cloud"]
 topic: ["multi-tenancy", "platform", "security"]
 difficulty: "Advanced"

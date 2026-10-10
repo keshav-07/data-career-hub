@@ -1,6 +1,6 @@
 ---
 title: "Design an IoT Sensor Data Pipeline"
-description: "A system-design case study for IoT telemetry: MQTT ingestion, device identity, duplicate and late readings, real-time alerts, time-series storage and downsampling."
+description: "IoT sensor data pipeline system design: MQTT ingestion, device identity, duplicate and late readings, real-time alerts, time-series storage and downsampling."
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["iot", "streaming", "time-series"]
 difficulty: "Advanced"

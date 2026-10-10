@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Real-Time Streaming Platform"
-description: "A system-design case study for a company-wide streaming platform on Kafka: topics, partitions, durability, schemas, stream processing, exactly-once, multi-tenancy and DR."
+description: "Kafka streaming platform system design: topics, partitions, durability, schemas, stream processing, exactly-once, multi-tenancy and disaster recovery."
 inventoryId: "SYS-07"
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["streaming", "ingestion", "architecture"]

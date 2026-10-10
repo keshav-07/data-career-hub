@@ -1,6 +1,6 @@
 ---
 title: "Design a Cost-Optimised Warehouse Strategy"
-description: "A system-design case study for warehouse cost control: understanding the bill, workload isolation, right-sizing, pricing models, query and storage tuning, and FinOps."
+description: "Warehouse cost optimisation system design: reading the bill, workload isolation, right-sizing, pricing models, query and storage tuning, and FinOps."
 technology: ["data-engineering", "snowflake", "data-warehousing"]
 topic: ["cost-optimisation", "finops", "warehouse"]
 difficulty: "Advanced"

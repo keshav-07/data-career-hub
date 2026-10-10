@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Design a Social Media Feed Analytics System"
-description: "A system-design case study for feed analytics: impression and engagement events, viewability rules, deduplication, creator dashboards, distinct counts and privacy."
+description: "Feed analytics system design: impression and engagement events, viewability rules, deduplication, creator dashboards, distinct counts and privacy."
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["analytics", "streaming", "architecture"]
 tags: ["feed-analytics", "impressions", "engagement", "hyperloglog", "creator-analytics", "bot-filtering"]

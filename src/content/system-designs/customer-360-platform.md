@@ -1,6 +1,6 @@
 ---
 title: "Design a Customer 360 Platform"
-description: "A system-design case study for Customer 360: identity resolution, golden records and survivorship, consent, a profile store for real-time use, and privacy by design."
+description: "Customer 360 platform system design: identity resolution, golden records and survivorship, consent, a real-time profile store and privacy by design."
 technology: ["data-engineering", "data-warehousing", "spark"]
 topic: ["customer-360", "identity-resolution", "architecture"]
 difficulty: "Advanced"

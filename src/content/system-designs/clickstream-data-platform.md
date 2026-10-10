@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-06"
 reviewedDate: "2026-10-06"
 title: "Design a Clickstream Analytics Pipeline"
-description: "A system-design case study for clickstream analytics: event collection, schema contracts, bot filtering, late mobile events, sessionisation, funnels and privacy."
+description: "Clickstream platform system design: event collection, schema contracts, bot filtering, late mobile events, sessionisation, funnels and privacy."
 inventoryId: "SYS-06"
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["clickstream", "streaming", "architecture"]

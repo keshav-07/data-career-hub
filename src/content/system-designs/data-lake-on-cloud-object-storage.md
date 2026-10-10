@@ -1,6 +1,6 @@
 ---
 title: "Design a Data Lake on Cloud Object Storage"
-description: "A system-design case study for a data lake on S3, GCS or ADLS: zones, key layout, file and table formats, catalog, security, lifecycle cost and recovery from mistakes."
+description: "Cloud data lake system design on S3, GCS or ADLS: zones, key layout, file and table formats, catalog, security, lifecycle cost and recovery from mistakes."
 technology: ["data-engineering", "data-lakes", "aws"]
 topic: ["data-lake", "storage", "architecture"]
 difficulty: "Advanced"
