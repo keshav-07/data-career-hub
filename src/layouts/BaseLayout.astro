@@ -5,7 +5,7 @@ import Footer from "../components/layout/Footer.astro";
 import MobileMenu from "../components/navigation/MobileMenu.astro";
 import SearchDialog from "../components/search/SearchDialog.astro";
 import { SITE } from "../data/site";
-import { absoluteUrl, pageTitle, websiteSchema } from "../utils/seo";
+import { absoluteUrl, organizationSchema, pageTitle, websiteSchema } from "../utils/seo";
 
 interface Props {
   title: string;
@@ -42,7 +42,10 @@ const fullTitle = pageTitle(seoTitle ?? title);
 const canonical = absoluteUrl(Astro.url.pathname, Astro.site);
 const ogImageUrl = absoluteUrl(ogImage, Astro.site);
 const isHome = Astro.url.pathname === "/";
-const jsonLd = [...(isHome ? [websiteSchema(Astro.site)] : []), ...schema];
+const jsonLd = [
+  ...(isHome ? [websiteSchema(Astro.site), organizationSchema(Astro.site)] : []),
+  ...schema,
+];
 const analyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN;
 const adsClient = import.meta.env.PUBLIC_ADSENSE_CLIENT;
 ---

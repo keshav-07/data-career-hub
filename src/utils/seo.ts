@@ -27,6 +27,8 @@ export function breadcrumbSchema(
   };
 }
 
+const orgId = (site: URL | string | undefined) => absoluteUrl("/#organization", site);
+
 export function websiteSchema(site: URL | string | undefined) {
   return {
     "@context": "https://schema.org",
@@ -35,6 +37,20 @@ export function websiteSchema(site: URL | string | undefined) {
     url: absoluteUrl("/", site),
     description: SITE.description,
     inLanguage: SITE.locale,
+    publisher: { "@id": orgId(site) },
+  };
+}
+
+/** The site's publisher. Only facts shown on the About and Contact pages: name, logo and the public email. */
+export function organizationSchema(site: URL | string | undefined) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": orgId(site),
+    name: SITE.name,
+    url: absoluteUrl("/", site),
+    logo: absoluteUrl("/icon-512.png", site),
+    ...(SITE.contactEmail ? { email: SITE.contactEmail } : {}),
   };
 }
 
@@ -56,7 +72,13 @@ export function articleSchema(opts: {
     datePublished: isoDate(opts.published),
     dateModified: isoDate(opts.modified),
     // The editorial byline is the site itself; no individual author or credentials are invented.
-    author: { "@type": "Organization", name: opts.author },
+    author: { "@type": "Organization", name: opts.author, url: absoluteUrl("/about/", opts.site) },
+    publisher: {
+      "@type": "Organization",
+      "@id": orgId(opts.site),
+      name: SITE.name,
+      logo: absoluteUrl("/icon-512.png", opts.site),
+    },
     image: absoluteUrl(opts.image ?? SITE.defaultOgImage, opts.site),
     mainEntityOfPage: absoluteUrl(opts.path, opts.site),
     inLanguage: SITE.locale,
