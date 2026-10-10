@@ -48,5 +48,4 @@ docs/               build plan & tracker, decisions, content guide, deployment, 
 ## Status
 
 The platform (design system, every template, content engine, SEO, search, QA tooling) is built and validated.
-The launch library is drafted: 136 of 138 inventory items are written or consolidated into existing pages, and 2 company guides are blocked for lack of attributable sources (165 pages in total). Every item still needs human technical, editorial and SEO review before it counts as published. Production
-launch is blocked on choosing a domain and connecting a Cloudflare account. See the tracker in `docs/BUILD_PLAN.md`.
+The site is live at https://datadank.com (Cloudflare, production origin set in `astro.config.mjs`). It has 615 built pages: lessons, interview questions, DSA problems, system designs, projects and the 90-day planner. Drafted pages still need human technical, editorial and SEO review before they count as reviewed; see `docs/content-inventory.json` and `docs/BUILD_PLAN.md`.

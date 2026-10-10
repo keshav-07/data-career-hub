@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /search/
-
-Sitemap: https://datadank.example/sitemap-index.xml

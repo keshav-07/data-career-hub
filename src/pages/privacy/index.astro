@@ -6,7 +6,7 @@ const analytics = Boolean(import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN);
 
 <ContentLayout
   title="Privacy"
-  description="What DataDank does and does not collect: no accounts, no forms, no advertising trackers, and only aggregate privacy-conscious analytics."
+  description="What DataDank does and does not collect: no accounts, no forms and no advertising trackers. Your study progress stays in your own browser."
   crumbs={[HOME, { label: "Privacy" }]}
   eyebrow="Legal"
   indexable
@@ -34,6 +34,10 @@ const analytics = Boolean(import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN);
         <li>
           <code>dch-progress-v1</code>: pages you have opened, items you marked as done, and the
           last lesson you visited, so the site can show your progress and a “continue” link.
+        </li>
+        <li>
+          <code>dch-planner-v1</code>: the 90-day plan days and study topics you ticked, and the
+          optional start date you set.
         </li>
       </ul>
       <p>
@@ -65,6 +69,12 @@ const analytics = Boolean(import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN);
       <p>
         Search runs entirely in your browser against a static index. Your search terms are not sent
         to a server.
+      </p>
+      <h2>Emailing us</h2>
+      <p>
+        If you email the address on the <a href="/contact/">contact page</a>, your message and email
+        address are used only to reply and to fix what you reported. They are not added to a
+        mailing list or shared.
       </p>
       <h2>External links</h2>
       <p>

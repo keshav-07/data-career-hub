@@ -6,7 +6,7 @@ import { SITE } from "../../data/site";
 
 <ContentLayout
   title="Contact"
-  description="How to contact DataDank to report a factual error, a broken link or a content suggestion."
+  description="Contact DataDank by email to report a factual error or broken link, suggest a topic, or send feedback on the 90-day Data Engineering plan."
   crumbs={[HOME, { label: "Contact" }]}
   eyebrow="Contact"
   deck="Corrections and suggestions are welcome."
@@ -23,7 +23,9 @@ import { SITE } from "../../data/site";
       <h2>How to reach us</h2>
       {SITE.contactEmail ? (
         <p>
-          Email <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.
+          Email <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a> for corrections,
+          broken links, content suggestions, feedback on the 90-day plan or general enquiries.
+          Messages are read by the person who maintains DataDank.
         </p>
       ) : (
         <p>
@@ -31,7 +33,13 @@ import { SITE } from "../../data/site";
           is configured.
         </p>
       )}
-      <p>This site does not use a contact form, so no message data is collected here.</p>
+      <h2>What happens to a correction</h2>
+      <p>
+        A reported error is checked against the official documentation or by running the example.
+        If it is confirmed, the page is fixed and its "last reviewed" date changes. Dates are only
+        changed when a page is substantively updated.
+      </p>
+      <p>This site does not use a contact form, so no message data is collected on this page.</p>
     </div>
   </section>
 </ContentLayout>

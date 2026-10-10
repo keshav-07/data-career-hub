@@ -2,8 +2,9 @@ import { defineConfig } from "astro/config";
 import mdx from "@astrojs/mdx";
 import sitemap from "@astrojs/sitemap";
 
-// Replace with the production domain before launch (see docs/DEPLOYMENT.md).
-const site = process.env.SITE_URL ?? "https://datadank.example";
+// Production origin. Canonical URLs, Open Graph URLs, JSON-LD, the sitemap and robots.txt are all built from it.
+// Override with SITE_URL only for a deliberate non-production build (see docs/DEPLOYMENT.md).
+const site = process.env.SITE_URL ?? "https://datadank.com";
 
 export default defineConfig({
   output: "static",

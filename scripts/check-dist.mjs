@@ -164,6 +164,26 @@ for (const u of indexable) if (!inSitemap.has(u)) errors.push(`sitemap: missing 
 for (const u of inSitemap)
   if (!indexable.includes(u)) errors.push(`sitemap: should not include ${u}`);
 
+// Every absolute URL the build emits about itself must use the production origin, never a placeholder or a
+// preview host (a wrong origin tells Google the preferred URL is somewhere else).
+const ORIGIN = new URL(process.env.SITE_URL ?? "https://datadank.com").origin;
+const BAD_HOST = /https?:\/\/(?:[\w-]+\.)*(?:datadank\.example|pages\.dev|workers\.dev|localhost)\b/;
+for (const p of pages) {
+  const selfUrls = [
+    p.html.match(/<link rel="canonical" href="([^"]*)"/)?.[1],
+    p.html.match(/<meta property="og:url" content="([^"]*)"/)?.[1],
+  ].filter(Boolean);
+  for (const u of selfUrls)
+    if (new URL(u).origin !== ORIGIN) errors.push(`${p.url}: ${u} is not on ${ORIGIN}`);
+  for (const m of p.html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g))
+    if (BAD_HOST.test(m[1])) errors.push(`${p.url}: JSON-LD names a placeholder or preview host`);
+}
+for (const f of ["robots.txt", "sitemap-index.xml", "sitemap-0.xml"]) {
+  const body = existsSync(join(DIST, f)) ? readFileSync(join(DIST, f), "utf8") : "";
+  if (!body.includes(ORIGIN)) errors.push(`${f}: does not use ${ORIGIN}`);
+  if (BAD_HOST.test(body)) errors.push(`${f}: names a placeholder or preview host`);
+}
+
 const robots = readFileSync(join(DIST, "robots.txt"), "utf8");
 if (!/Sitemap: https?:\/\/\S+\/sitemap-index\.xml/.test(robots))
   errors.push("robots.txt: missing Sitemap line");
