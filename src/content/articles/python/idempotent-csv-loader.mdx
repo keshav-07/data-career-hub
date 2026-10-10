@@ -11,7 +11,9 @@ difficulty: "Intermediate"
 featured: false
 kind: "tutorial"
 learningObjectives: ["Load CSV data into a database inside one transaction", "Make a load safe to run twice with an upsert", "Count and log bad rows instead of failing silently or crashing", "Test the loader with pytest"]
-related: ["articles:airflow/dags-scheduling-retries", "interview-questions:data-engineering/idempotent-batch-pipeline", "projects:csv-to-warehouse-pipeline"]
+related: ["articles:airflow/dags-scheduling-retries", "interview-questions:data-engineering/idempotent-batch-pipeline", "projects:csv-to-warehouse-pipeline", "articles:python/testing-with-pytest", "articles:etl-elt/idempotency-in-data-pipelines"]
+prerequisites: ["articles:python/testing-with-pytest"]
+previous: "articles:python/testing-with-pytest"
 next: "articles:airflow/dags-scheduling-retries"
 sources: [{"label": "Python documentation: sqlite3", "url": "https://docs.python.org/3/library/sqlite3.html"}, {"label": "SQLite documentation: UPSERT", "url": "https://www.sqlite.org/lang_upsert.html"}]
 versionContext: "Tested with Python 3.11 and SQLite 3.45.1 (UPSERT requires SQLite 3.24 or later). The test file was run with pytest 9.1 against the loader saved as loader.py."
