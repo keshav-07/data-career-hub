@@ -15,7 +15,7 @@ learningObjectives:
   - "Pseudonymise personal data before load when policy requires an ETL step"
   - "Choose ETL, ELT or a hybrid from compliance, compute, reprocessing and team factors"
 prerequisites: ["articles:etl-elt/modern-data-pipelines"]
-related: ["interview-questions:data-engineering/etl-vs-elt-factors", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:airflow/dags-scheduling-retries", "articles:data-warehousing/star-schema", "system-designs:elt-pipeline-with-dbt", "interview-questions:data-engineering/handle-pii-in-pipelines"]
+related: ["interview-questions:data-engineering/etl-vs-elt-factors", "interview-questions:data-engineering/idempotent-batch-pipeline", "articles:airflow/dags-scheduling-retries", "articles:data-warehousing/star-schema", "system-designs:elt-pipeline-with-dbt"]
 previous: "articles:etl-elt/modern-data-pipelines"
 next: "articles:etl-elt/batch-vs-streaming"
 sources:
@@ -185,7 +185,7 @@ Whichever order you choose, the pipeline should be **idempotent** (safe to re-ru
 
 ## Interview relevance
 
-"ETL versus ELT" is a classic question. A strong answer states the definition, gives two or three deciding factors (compliance, compute location, reprocessing needs) and admits that real systems often combine both: mandatory masking or filtering before load, modelling in SQL after it. Expect follow-ups on PII ("how would you keep emails out of the warehouse but still count unique customers?") and on reprocessing ("what happens when a business rule changes?"). Practise with [ETL vs ELT: deciding factors](/interview/data-engineering/etl-vs-elt-factors/) and [handling PII in pipelines](/interview/data-engineering/handle-pii-in-pipelines/).
+"ETL versus ELT" is a classic question. A strong answer states the definition, gives two or three deciding factors (compliance, compute location, reprocessing needs) and admits that real systems often combine both: mandatory masking or filtering before load, modelling in SQL after it. Expect follow-ups on PII ("how would you keep emails out of the warehouse but still count unique customers?") and on reprocessing ("what happens when a business rule changes?"). Practise with [ETL vs ELT: deciding factors](/interview/data-engineering/etl-vs-elt-factors/).
 
 ## Key takeaway
 

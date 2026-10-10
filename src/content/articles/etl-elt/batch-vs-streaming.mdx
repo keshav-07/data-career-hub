@@ -14,7 +14,7 @@ learningObjectives:
   - "Describe how a watermark bounds lateness and what happens to events that arrive after it"
   - "Recognise the operational costs of streaming: state, checkpoints, duplicates and always-on compute"
 prerequisites: ["articles:etl-elt/etl-vs-elt"]
-related: ["articles:kafka/topics-partitions-consumer-groups", "system-designs:scalable-batch-pipeline", "projects:kafka-spark-delta-streaming", "system-designs:unified-batch-streaming-lambda-kappa", "interview-questions:data-engineering/batch-vs-streaming-choice", "articles:kafka/delivery-semantics-exactly-once"]
+related: ["articles:kafka/topics-partitions-consumer-groups", "system-designs:scalable-batch-pipeline", "projects:kafka-spark-delta-streaming", "system-designs:unified-batch-streaming-lambda-kappa", "articles:kafka/delivery-semantics-exactly-once"]
 previous: "articles:etl-elt/etl-vs-elt"
 next: "articles:etl-elt/idempotency-in-data-pipelines"
 sources:
@@ -179,7 +179,7 @@ Ingest events continuously into a raw lakehouse table (streaming), then build cu
 
 ## Interview angle
 
-"Batch or streaming for this use case?" appears in most system-design rounds. Start from the freshness requirement and what late data costs, propose the simplest option that meets it (often micro-batch), and then show you know what streaming brings: event time, watermarks and late data, state and checkpoints, at-least-once delivery and idempotent sinks, and the cost of always-on compute. Practise with [batch vs streaming: how do you choose?](/interview/data-engineering/batch-vs-streaming-choice/).
+"Batch or streaming for this use case?" appears in most system-design rounds. Start from the freshness requirement and what late data costs, propose the simplest option that meets it (often micro-batch), and then show you know what streaming brings: event time, watermarks and late data, state and checkpoints, at-least-once delivery and idempotent sinks, and the cost of always-on compute.
 
 ## Key takeaway
 

@@ -16,7 +16,7 @@ learningObjectives:
   - "Route poison records to a dead-letter queue and replay them after a fix"
   - "Configure retries and timeouts in Airflow 3 and in the database"
 prerequisites: ["articles:etl-elt/pipeline-observability"]
-related: ["articles:etl-elt/idempotency-in-data-pipelines", "interview-questions:python/exceptions-in-pipelines", "articles:airflow/dags-scheduling-retries", "articles:etl-elt/incremental-loading-watermarks-backfills", "interview-questions:python/api-retries-backoff", "articles:python/working-with-apis"]
+related: ["articles:etl-elt/idempotency-in-data-pipelines", "interview-questions:python/exceptions-in-pipelines", "articles:airflow/dags-scheduling-retries", "articles:etl-elt/incremental-loading-watermarks-backfills"]
 previous: "articles:etl-elt/pipeline-observability"
 next: "articles:etl-elt/testing-data-pipelines-cicd"
 sources:
@@ -267,7 +267,7 @@ A pipeline that "succeeds" while writing zero rows looks healthy to every retry 
 
 ## Interview angle
 
-"How do you make a pipeline resilient?" or "What happens when the API you ingest from goes down?" are common questions. Classify failures, retry only transient ones with capped exponential backoff and jitter, make retried steps idempotent, set timeouts at every layer, dead-letter poison records with an alert on the rate, fail fast on systemic errors, and recover with backfills through the normal code path. Practise with [retries with backoff for API ingestion](/interview/python/api-retries-backoff/) and [exceptions in production pipelines](/interview/python/exceptions-in-pipelines/).
+"How do you make a pipeline resilient?" or "What happens when the API you ingest from goes down?" are common questions. Classify failures, retry only transient ones with capped exponential backoff and jitter, make retried steps idempotent, set timeouts at every layer, dead-letter poison records with an alert on the rate, fail fast on systemic errors, and recover with backfills through the normal code path. Practise with [exceptions in production pipelines](/interview/python/exceptions-in-pipelines/).
 
 ## Key takeaway
 

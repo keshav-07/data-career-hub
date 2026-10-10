@@ -6,3 +6,4 @@ src/content
 docs
 *.md
 *.mdx
+.claude

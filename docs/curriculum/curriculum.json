@@ -7499,15 +7499,6 @@
     "pattern": "Sliding Window"
    },
    {
-    "topic": "Maximum Average Subarray I",
-    "category": "Sliding Window",
-    "difficulty": "Easy",
-    "lesson": "articles:dsa/sliding-window",
-    "question": "interview-questions:dsa/maximum-average-subarray-i",
-    "heading": null,
-    "pattern": "Sliding Window"
-   },
-   {
     "topic": "Max Sum Subarray of Size K",
     "category": "Sliding Window",
     "pattern": "Sliding Window",

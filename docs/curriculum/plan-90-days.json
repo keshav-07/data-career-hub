@@ -562,7 +562,7 @@
   "Phase": "Phase 2: Advanced + Projects",
   "Focus Theme": "Big Data Engineering",
   "SQL": "Multiple chained CTEs",
-  "DSA": "Maximum Average Subarray I",
+  "DSA": "Max Sum Subarray of Size K",
   "PySpark": "Reading/writing JSON & CSV",
   "Snowflake": "Task fundamentals",
   "Kafka": "Partition reassignment",

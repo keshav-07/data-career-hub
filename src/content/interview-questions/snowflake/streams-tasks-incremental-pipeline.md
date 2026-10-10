@@ -13,7 +13,7 @@ estimatedMinutes: 12
 interviewRelevance: "High"
 shortAnswer: "Create a standard stream on the source table; it stores an offset into the table's version history and returns net inserts, updates and deletes with METADATA$ACTION and METADATA$ISUPDATE. Create a task (on a warehouse or serverless) with WHEN SYSTEM$STREAM_HAS_DATA so empty runs are skipped without resuming compute, whose body is one MERGE that drops update before-images, deletes on DELETE rows, and upserts INSERT rows, deduplicating business keys if needed. The stream's offset advances only when that DML commits, so a failed run leaves the changes for the next one: exactly-once application. Resume the task (tasks start suspended), give each consumer its own stream, and monitor task failures and stream staleness."
 followUps: ["When does a stream's offset advance?", "What happens if the task is suspended for a month?", "Why must you filter update before-images in the MERGE?", "When would a dynamic table be a better choice?"]
-related: ["articles:snowflake/streams-and-tasks", "interview-questions:snowflake/dynamic-tables-vs-streams-tasks", "articles:etl-elt/cdc-patterns-and-failure-modes", "articles:data-warehousing/slowly-changing-dimensions"]
+related: ["articles:snowflake/streams-and-tasks", "articles:etl-elt/cdc-patterns-and-failure-modes", "articles:data-warehousing/slowly-changing-dimensions"]
 versionContext: "Snowflake behaviour as documented in October 2026. Snowflake SQL is not executed here (noexec). The net-change logic was reproduced on PostgreSQL 16 in the linked lesson."
 sources:
   - { label: "Snowflake documentation: Introduction to streams", url: "https://docs.snowflake.com/en/user-guide/streams-intro" }
