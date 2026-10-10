@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Build an Idempotent CSV Loader in Python"
 description: "Build a small Python loader that reads CSV files, skips and counts bad rows, and loads into a database so running it twice gives the same result."
 inventoryId: "TECH-08"
@@ -14,7 +14,7 @@ learningObjectives: ["Load CSV data into a database inside one transaction", "Ma
 related: ["articles:airflow/dags-scheduling-retries", "interview-questions:data-engineering/idempotent-batch-pipeline", "projects:csv-to-warehouse-pipeline"]
 next: "articles:airflow/dags-scheduling-retries"
 sources: [{"label": "Python documentation: sqlite3", "url": "https://docs.python.org/3/library/sqlite3.html"}, {"label": "SQLite documentation: UPSERT", "url": "https://www.sqlite.org/lang_upsert.html"}]
-versionContext: "Tested with Python 3.12 and SQLite 3.45 (UPSERT requires SQLite 3.24 or later)"
+versionContext: "Tested with Python 3.11 and SQLite 3.45.1 (UPSERT requires SQLite 3.24 or later). The test file was run with pytest 9.1 against the loader saved as loader.py."
 ---
 
 A pipeline step is **idempotent** when running it twice for the same input leaves the system in the same state as running it once. That single property makes retries, reruns and backfills safe. In this tutorial you build a small loader that has it.
@@ -74,7 +74,7 @@ def parse_rows(path):
 
 
 def load_file(conn, path):
-    """Load one file. Safe to run twice: the file is replaced, not appended."""
+    """Load one file. Safe to run twice: rows are upserted by order_id, never appended."""
     rows, bad = parse_rows(path)
     with conn:  # one transaction: all of it commits, or none of it does
         conn.executemany(
@@ -105,7 +105,7 @@ if __name__ == "__main__":
 ## How it achieves each goal
 
 - **No duplicates on rerun.** `order_id` is the primary key and the insert uses `ON CONFLICT ... DO UPDATE` (an **upsert**). Loading the same row again updates it to identical values.
-- **Corrections win.** Because the upsert overwrites, a corrected file changes the stored values rather than being ignored.
+- **Corrections win.** Because the upsert overwrites, a corrected file changes the stored values rather than being ignored. One limit: an upsert never deletes. If a corrected file *drops* an order, the old row stays in the table. When a file is the complete truth for its slice, record the source file on each row and delete that file's rows before inserting, inside the same transaction (the partition-overwrite pattern from [idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/)).
 - **Bad rows are visible.** `parse_rows` catches only the expected parsing errors, logs each bad row with its line number, and `load_audit` records how many rows were read and how many were bad. Compare these in monitoring.
 - **All or nothing.** `with conn:` wraps the inserts and the audit write in one transaction. If anything raises, the database rolls back and the file is not half loaded.
 
@@ -135,8 +135,9 @@ Inspect the table afterwards: it holds exactly two orders after one run **and** 
 
 ## Test it
 
-Save this as `test_loader.py` and run `pytest`.
+Save this as `test_loader.py` next to `loader.py` and run `pytest`. (It imports `loader`, so it runs from your project directory rather than on this page.)
 
+{/* noexec */}
 ```python
 import sqlite3
 from pathlib import Path
