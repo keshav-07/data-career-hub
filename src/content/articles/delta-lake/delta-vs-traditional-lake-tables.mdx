@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Delta Lake vs Traditional Data Lake Tables"
 seoTitle: "Delta Lake vs Traditional Data Lake Tables"
 description: "What changes when a folder of Parquet files becomes a Delta table: atomic writes, updates and deletes, schema enforcement, time travel and faster metadata."
@@ -9,47 +9,178 @@ inventoryId: "SUPPORT-09"
 technology: ["delta-lake"]
 topic: ["comparison", "lakehouse"]
 difficulty: "Intermediate"
+learningObjectives:
+  - "Show, with code, what goes wrong in a plain Parquet directory that a Delta table prevents"
+  - "Convert an existing Parquet directory to Delta and explain why every writer must then use Delta"
+  - "Compare Delta Lake, Apache Iceberg and Apache Hudi accurately on metadata, row-level changes and ecosystem"
 prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
-related: ["interview-questions:delta-lake/what-delta-lake-solves", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
-sources: [{"label": "Delta Lake documentation", "url": "https://docs.delta.io/"}]
-versionContext: "Describes Delta Lake 3.x; comparable features exist in Apache Iceberg and Apache Hudi"
+related: ["interview-questions:delta-lake/what-delta-lake-solves", "interview-questions:delta-lake/delta-vs-iceberg-vs-hudi", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse"]
+previous: "articles:delta-lake/transactions-schema-evolution"
+next: "articles:delta-lake/merge-upserts-change-data-feed"
+sources:
+  - { label: "Delta Lake documentation", url: "https://docs.delta.io/" }
+  - { label: "Delta Lake documentation: Table utility commands (CONVERT TO DELTA)", url: "https://docs.delta.io/delta-utility/" }
+  - { label: "Apache Iceberg table specification", url: "https://iceberg.apache.org/spec/" }
+  - { label: "Apache Hudi documentation: Overview", url: "https://hudi.apache.org/docs/overview" }
+versionContext: "Examples run locally on PySpark 4.2.0 with delta-spark 4.4.0. The Iceberg and Hudi comparison describes the Iceberg v2/v3 specification and Hudi 1.x; check current documentation before relying on a specific feature."
 ---
 
-A "traditional" lake table is a directory of Parquet files, often with partition folders and an entry in a metastore. A Delta table is the same Parquet files **plus a transaction log**. Here is what that log changes in day-to-day pipeline work.
+A "traditional" lake table is a directory of Parquet files, often with partition folders and an entry in a Hive metastore. A Delta table is the same Parquet files **plus a transaction log**. This lesson shows the difference with code, covers migrating an existing directory, and compares Delta with the other two open table formats, Apache Iceberg and Apache Hudi.
+
+## What the log changes
 
 | Task | Plain Parquet directory | Delta table |
 |------|-------------------------|-------------|
 | Job fails halfway through a write | Partial files visible to readers | Nothing visible until the commit |
-| Two jobs write at once | Possible corruption or lost files | Optimistic concurrency; conflicting commit fails cleanly |
+| Two jobs write at once | Lost or mixed output, no detection | Optimistic concurrency; conflicting commit fails cleanly |
+| Overwrite while someone reads | Reader can see a mix of old and new files, or missing files | Reader keeps its snapshot |
 | Fix one wrong row | Rewrite the whole partition yourself | `UPDATE` / `DELETE` / `MERGE` |
 | Upsert from a CDC feed | Custom, error-prone code | `MERGE` |
 | Wrong schema arrives | Written anyway; readers break later | Rejected unless evolution is enabled |
 | "What did this table look like yesterday?" | Not possible without backups | Time travel |
-| Listing millions of files | Slow on object storage | Read from the log and checkpoints |
+| Find the files to read | List directories in object storage (slow at scale) | Read the log and checkpoint |
 | Compact small files safely | Risky while readers are active | `OPTIMIZE` as a transaction |
 
-## What stays the same
+## Setup
 
-- Data files are still Parquet, so storage costs and compression are similar.
-- Partitioning and file sizing still matter.
-- Your Spark and SQL code is mostly unchanged; you write `format("delta")` instead of `format("parquet")`.
+```python
+import os, re, shutil, tempfile
+from pyspark.sql import SparkSession
+from delta import configure_spark_with_delta_pip
 
-## What you take on
+builder = (
+    SparkSession.builder.master("local[2]").appName("delta-vs-parquet")
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.sql.shuffle.partitions", "2")
+)
+spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark.sparkContext.setLogLevel("ERROR")
+base = tempfile.mkdtemp()
 
-- **Maintenance**: compaction and `VACUUM` to remove unreferenced files.
-- **Retention decisions**: time travel only reaches as far back as retained files and log entries.
-- **Compatibility**: readers must understand the table format (most modern engines do, but check versions and features).
+def error_class(e):
+    found = re.search(r"\[[A-Z_.]+\]", str(e))
+    return found.group(0) if found else type(e).__name__
+```
 
-## Migrating
+## A schema mistake in a plain Parquet table
 
-Delta Lake can convert an existing Parquet directory in place (`CONVERT TO DELTA`), which creates a log over the existing files. After conversion, change all writers to write through Delta; a writer that keeps adding plain files behind the log's back will make the table inconsistent.
+A plain directory accepts any file. Here a second job appends `amount` as a string:
 
-<Callout tone="warning" title="All writers must use the format">
+```python
+plain = f"{base}/orders_parquet"
+spark.createDataFrame([(1, "Ana", 10.0)], "order_id INT, customer STRING, amount DOUBLE") \
+     .write.parquet(plain)
+spark.createDataFrame([(2, "Ben", "20")], "order_id INT, customer STRING, amount STRING") \
+     .write.mode("append").parquet(plain)                    # succeeds silently
+try:
+    spark.read.parquet(plain).collect()
+except Exception as e:
+    print(error_class(e))
+```
 
-The guarantees only hold if every writer commits through the transaction log. Audit jobs and tools that write to the path before migrating.
+```text
+[FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH]
+```
 
-</Callout>
+The write succeeded; the failure appears later, in whichever reader happens to open the bad file. With Delta, the same append is rejected at write time (shown in the [transactions lesson](/delta-lake/transactions-schema-evolution/)), and nothing is committed.
 
-## Key takeaway
+## Converting an existing directory
 
-Delta keeps the Parquet files and adds a log, which turns them into a table with atomic writes, row-level changes, schema enforcement and history. In exchange you schedule maintenance and make every writer use the format.
+`CONVERT TO DELTA` builds a log over the files already in a Parquet directory, without rewriting them. For a partitioned directory you must name the partition columns (`PARTITIONED BY (event_date DATE)`) because Delta cannot infer them.
+
+```python
+shutil.rmtree(plain)
+spark.createDataFrame([(1, "Ana", 10.0), (2, "Ben", 20.0)],
+                      "order_id INT, customer STRING, amount DOUBLE").write.parquet(plain)
+spark.sql(f"CONVERT TO DELTA parquet.`{plain}`")
+print(sorted(f for f in os.listdir(f"{plain}/_delta_log") if not f.startswith(".")))
+print(spark.read.format("delta").load(plain).count())
+```
+
+```text
+['00000000000000000000.checkpoint.parquet', '00000000000000000000.json', '_last_checkpoint', '_staged_commits']
+2
+```
+
+The conversion wrote version 0 and an immediate checkpoint listing the existing files. (Recent Delta versions also create a `_staged_commits` folder, used by catalog-managed tables; a path-based table like this one does not use it.)
+
+### All writers must go through Delta
+
+The guarantee only holds if every writer commits through the log. A job that still writes plain Parquet into the same path adds files the log does not know about:
+
+```python
+spark.createDataFrame([(99, "rogue", 1.0)], "order_id INT, customer STRING, amount DOUBLE") \
+     .write.mode("append").parquet(plain)                    # old job, not updated
+print(spark.read.format("delta").load(plain).count())
+```
+
+```text
+2
+```
+
+The rogue row is invisible to Delta readers, while an engine still reading the path as plain Parquet sees three rows: two tools now disagree about the table. `VACUUM` will eventually delete the unreferenced file. Before converting, inventory every job, tool and catalog entry that writes to or reads the path, switch all writers in the same release, and point catalog entries at the Delta table.
+
+## What stays the same, and what you take on
+
+Data files are still Parquet, so storage cost and compression barely change, and partitioning and file sizing still matter. Spark code mostly changes from `format("parquet")` to `format("delta")`.
+
+In return you take on:
+
+- **Maintenance**: compaction, clustering and `VACUUM` (see [OPTIMIZE, Z-ordering, VACUUM and liquid clustering](/delta-lake/optimize-zorder-vacuum-liquid-clustering/)).
+- **Retention decisions**: time travel only reaches as far as retained files and log entries.
+- **Reader compatibility**: every engine that reads the table must support the protocol version and table features you enable (column mapping, deletion vectors, liquid clustering). Check before enabling features on a table shared with BI tools or other engines.
+
+## Delta Lake vs Apache Iceberg vs Apache Hudi
+
+All three are open table formats that store data in Parquet (Iceberg and Hudi also support ORC and Avro data files) and add a metadata layer giving atomic commits, snapshots, schema evolution and row-level changes. They differ mainly in how metadata is organised and committed.
+
+| | Delta Lake | Apache Iceberg | Apache Hudi |
+|---|---|---|---|
+| Metadata | `_delta_log` of JSON commits plus Parquet checkpoints | Tree: table metadata file, snapshots, manifest lists, manifests | Timeline of actions in `.hoodie/`, plus a metadata table |
+| How a commit is made atomic | Atomic create of the next log file (or a catalog that coordinates commits) | Catalog swaps the pointer to the new metadata file (REST, Hive, Glue, Nessie and others) | Timeline instant transitions, with locks for multi-writer |
+| Partitioning | Partition columns or liquid clustering | Hidden partitioning with transforms (`days(ts)`, `bucket(16, id)`) and partition evolution without rewrite | Partition paths; clustering service |
+| Renames and drops | Needs column mapping (a protocol upgrade) | Native: columns are tracked by ID from the start | Supported through schema evolution |
+| Row-level updates | Copy-on-write by default; deletion vectors for merge-on-read | Copy-on-write or merge-on-read with delete files (v2); deletion vectors in v3 | Copy-on-write or merge-on-read table types, record keys and indexes |
+| Incremental reads | Change data feed | Incremental snapshot reads; changelog views in Spark | Incremental queries and CDC are core features |
+| Strongest fit | Spark and Databricks-centred lakehouses | Multi-engine platforms (Spark, Trino, Flink, Snowflake, Athena and others) | High-volume upserts and streaming ingestion with record-level indexes |
+
+Points worth stating precisely in an interview:
+
+- Iceberg's **hidden partitioning** means queries filter on the source column (`event_ts`) and the engine applies the partition transform; users never reference a partition column, and the partition scheme can change for new data without rewriting old data.
+- Hudi's **merge-on-read** table type writes updates to log files next to base files and compacts them later, trading read cost for fast writes. Delta (with deletion vectors) and Iceberg (with delete files) offer the same trade-off in their own way.
+- **Interoperability** is improving: Delta UniForm writes Iceberg metadata alongside the Delta log so Iceberg readers can read a Delta table, and Apache XTable (incubating) translates metadata between the three formats. These are read-compatibility layers; one format remains the writer of record.
+- None of the three is "faster" in general. Performance depends on file sizes, clustering, statistics and the engine. Choose by ecosystem (which engines must read and write), catalog, and the write pattern (append-heavy vs upsert-heavy).
+
+## Practice questions
+
+<details><summary>A team says "our Parquet lake works fine, why move to Delta?" What concrete failures would you point to?</summary>
+
+Readers seeing partial output from a failed or in-progress job, concurrent writers silently overwriting each other, a bad schema written and only discovered by a downstream reader, no way to correct individual rows without rewriting partitions, and no record of what changed. Each is prevented by the transaction log (atomic commits, conflict detection, schema enforcement, `MERGE`/`DELETE`, history).
+
+</details>
+
+<details><summary>After CONVERT TO DELTA, some rows written by a nightly job are missing from queries. Why?</summary>
+
+The nightly job still writes plain Parquet files into the directory, so the files are never committed to the log and Delta readers ignore them (and `VACUUM` will delete them). Change the job to write with Delta, and backfill the missed data through a Delta write.
+
+</details>
+
+<details><summary>When would you choose Iceberg over Delta?</summary>
+
+When many engines must write and read the same tables through a shared catalog, when you want hidden partitioning and partition evolution, or when your platform (for example a warehouse or query service) has first-class Iceberg support. Delta is the natural choice in a Spark- or Databricks-centred platform. Interoperability features such as UniForm reduce, but do not remove, the need to choose a writer format.
+
+</details>
+
+<details><summary>What does Hudi's merge-on-read table type trade off?</summary>
+
+Updates are appended to log files instead of rewriting base Parquet files, so writes are cheap and fast, but readers must merge base and log files until compaction runs. Copy-on-write is the reverse: expensive writes, simple fast reads.
+
+</details>
+
+## Key takeaways
+
+- Delta keeps the Parquet files and adds a log, which provides atomic writes, conflict detection, schema enforcement, row-level changes and history.
+- A plain directory accepts any file, so errors surface in readers; Delta rejects them at write time.
+- `CONVERT TO DELTA` is cheap, but every writer must switch to Delta at the same time.
+- Delta, Iceberg and Hudi offer similar guarantees; they differ in metadata design, partitioning, row-level update strategy and ecosystem.

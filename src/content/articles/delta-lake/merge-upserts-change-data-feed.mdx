@@ -1,0 +1,356 @@
+---
+title: "Delta Lake MERGE, Change Data Feed and Streaming"
+seoTitle: "Delta Lake MERGE, Change Data Feed, Streaming"
+description: "Delta Lake MERGE explained with runnable PySpark: upserts and CDC deletes, SCD Type 2 in one MERGE, change data feed reads, and streaming into and out of Delta."
+technology: ["delta-lake", "spark"]
+topic: ["merge", "change-data-feed", "streaming", "scd"]
+difficulty: "Intermediate"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+learningObjectives:
+  - "Write a MERGE that applies inserts, updates and deletes from a CDC batch, and deduplicate the source first"
+  - "Implement a Type 2 slowly changing dimension with a single MERGE"
+  - "Enable and read the change data feed in batch and streaming"
+  - "Use a Delta table as a streaming source and sink, and make foreachBatch MERGE idempotent"
+prerequisites: ["articles:delta-lake/transactions-schema-evolution"]
+related: ["articles:data-warehousing/slowly-changing-dimensions", "interview-questions:delta-lake/delta-merge-internals-conflicts", "interview-questions:data-engineering/design-cdc-pipeline", "projects:kafka-spark-delta-streaming"]
+previous: "articles:delta-lake/delta-vs-traditional-lake-tables"
+next: "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering"
+sources:
+  - { label: "Delta Lake documentation: Table deletes, updates and merges", url: "https://docs.delta.io/delta-update/" }
+  - { label: "Delta Lake documentation: Change data feed", url: "https://docs.delta.io/delta-change-data-feed/" }
+  - { label: "Delta Lake documentation: Table streaming reads and writes", url: "https://docs.delta.io/delta-streaming/" }
+  - { label: "Delta Lake documentation: Concurrency control", url: "https://docs.delta.io/concurrency-control/" }
+versionContext: "Examples run locally on PySpark 4.2.0 with delta-spark 4.4.0 (open-source Delta)."
+---
+
+Most pipelines that feed a lakehouse do not just append. They apply change data capture (CDC) from operational databases, correct late records and keep dimension history. Delta Lake's `MERGE` does this as one atomic commit, the change data feed lets downstream jobs read only what changed, and Structured Streaming can read from and write to Delta tables. Each section below runs on a laptop with the setup block.
+
+## Sample data and setup
+
+```python
+import tempfile
+from pyspark.sql import SparkSession, functions as F
+from delta import configure_spark_with_delta_pip
+from delta.tables import DeltaTable
+
+builder = (
+    SparkSession.builder.master("local[2]").appName("delta-merge")
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.sql.shuffle.partitions", "2")
+)
+spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark.sparkContext.setLogLevel("ERROR")
+base = tempfile.mkdtemp()
+
+customers = f"{base}/customers"
+spark.createDataFrame(
+    [(1, "Ana", "Leeds"), (2, "Ben", "York"), (3, "Cy", "Hull")],
+    "customer_id INT, name STRING, city STRING",
+).write.format("delta").option("delta.enableChangeDataFeed", "true").save(customers)
+```
+
+The `delta.enableChangeDataFeed` option sets that table property at creation, which the change data feed section uses.
+
+## MERGE and upserts
+
+`MERGE` joins a **source** (the incoming batch) to a **target** Delta table on a condition, then applies clauses in order:
+
+- `WHEN MATCHED [AND cond] THEN UPDATE | DELETE`: target rows with a matching source row.
+- `WHEN NOT MATCHED [BY TARGET] [AND cond] THEN INSERT`: source rows with no target row.
+- `WHEN NOT MATCHED BY SOURCE [AND cond] THEN UPDATE | DELETE`: target rows with no source row. Use it only when the source is a complete snapshot, otherwise it deletes everything not in this batch.
+
+For each row, the first clause whose condition is true wins. A CDC batch from a database usually carries an operation flag:
+
+```python
+cdc = spark.createDataFrame(
+    [(2, "Ben", "Bath", "U"), (3, "Cy", None, "D"), (4, "Di", "Kent", "I")],
+    "customer_id INT, name STRING, city STRING, op STRING",
+)
+target = DeltaTable.forPath(spark, customers)
+(target.alias("t")
+    .merge(cdc.alias("s"), "t.customer_id = s.customer_id")
+    .whenMatchedDelete(condition="s.op = 'D'")
+    .whenMatchedUpdate(condition="t.city <> s.city OR t.name <> s.name",
+                       set={"name": "s.name", "city": "s.city"})
+    .whenNotMatchedInsert(condition="s.op <> 'D'",
+                          values={"customer_id": "s.customer_id", "name": "s.name", "city": "s.city"})
+    .execute())
+target.toDF().orderBy("customer_id").show()
+m = target.history(1).select("operationMetrics").first()[0]
+print({k: m[k] for k in ("numSourceRows", "numTargetRowsInserted", "numTargetRowsUpdated",
+                         "numTargetRowsDeleted", "numTargetFilesRemoved", "numTargetFilesAdded")})
+```
+
+```text
++-----------+----+-----+
+|customer_id|name| city|
++-----------+----+-----+
+|          1| Ana|Leeds|
+|          2| Ben| Bath|
+|          4|  Di| Kent|
++-----------+----+-----+
+
+{'numSourceRows': '3', 'numTargetRowsInserted': '1', 'numTargetRowsUpdated': '1', 'numTargetRowsDeleted': '1', 'numTargetFilesRemoved': '1', 'numTargetFilesAdded': '1'}
+```
+
+The same statement in SQL, which you can run through `spark.sql` against a table name or a `` delta.`path` ``:
+
+{/* noexec */}
+```sql
+MERGE INTO customers AS t
+USING cdc_batch AS s
+ON t.customer_id = s.customer_id
+WHEN MATCHED AND s.op = 'D' THEN DELETE
+WHEN MATCHED AND (t.city <> s.city OR t.name <> s.name) THEN UPDATE SET name = s.name, city = s.city
+WHEN NOT MATCHED AND s.op <> 'D' THEN INSERT (customer_id, name, city) VALUES (s.customer_id, s.name, s.city);
+```
+
+### How MERGE executes
+
+1. Delta joins the source with the target to find which **target files** contain matching rows (an inner join on the condition, using file statistics and partition filters to skip files).
+2. It rewrites only those files: matched rows are updated or dropped and unmatched rows in the same files are copied unchanged. With deletion vectors enabled, matched rows are marked deleted instead of copying the rest of the file (see the [maintenance lesson](/delta-lake/optimize-zorder-vacuum-liquid-clustering/)).
+3. Inserted rows go to new files, and one commit removes the old files and adds the new ones.
+
+The cost is driven by how many target files the condition touches, not by the source size. A condition on the key alone forces Delta to consider every file that might contain any key; adding a partition or clustering column (`AND t.event_date = s.event_date`) or a range filter lets it prune most of the table.
+
+### Deduplicate the source first
+
+If two source rows match the same target row, Delta refuses to guess which one wins:
+
+```python
+dupes = spark.createDataFrame([(1, "Ana", "Bath"), (1, "Ana", "Derby")], "customer_id INT, name STRING, city STRING")
+try:
+    target.alias("t").merge(dupes.alias("s"), "t.customer_id = s.customer_id") \
+          .whenMatchedUpdateAll().execute()
+except Exception as e:
+    print(str(e).split("]")[0] + "]")
+```
+
+```text
+[DELTA_MULTIPLE_SOURCE_ROW_MATCHING_TARGET_ROW_IN_MERGE]
+```
+
+CDC feeds often contain several changes for one key in a batch. Keep only the latest per key before merging, using the source's ordering column (log sequence number or commit timestamp, not arrival time):
+
+```python
+from pyspark.sql import Window
+changes = spark.createDataFrame(
+    [(1, "Ana", "Bath", 101), (1, "Ana", "Derby", 105), (5, "Eve", "Ely", 103)],
+    "customer_id INT, name STRING, city STRING, lsn BIGINT",
+)
+latest = (changes
+    .withColumn("rn", F.row_number().over(Window.partitionBy("customer_id").orderBy(F.col("lsn").desc())))
+    .where("rn = 1").drop("rn", "lsn"))
+(target.alias("t").merge(latest.alias("s"), "t.customer_id = s.customer_id")
+    .whenMatchedUpdateAll().whenNotMatchedInsertAll().execute())
+print([(r.customer_id, r.city) for r in target.toDF().orderBy("customer_id").collect()])
+```
+
+```text
+[(1, 'Derby'), (2, 'Bath'), (4, 'Kent'), (5, 'Ely')]
+```
+
+### Pitfalls
+
+- **Out-of-order changes.** If a batch can contain an older change than the one already applied, guard the update: `WHEN MATCHED AND s.lsn > t.lsn`. Store the source sequence number in the target for this.
+- **Concurrent MERGEs on overlapping data** fail with `ConcurrentAppendException` or `ConcurrentDeleteReadException`. Partition or cluster the work and put that column in the condition, or serialise the jobs.
+- **Schema drift in the source**: `whenMatchedUpdateAll`/`whenNotMatchedInsertAll` fail on extra source columns unless you opt into `.withSchemaEvolution()` (SQL: `MERGE WITH SCHEMA EVOLUTION INTO`).
+- **NULL keys never match**: a source row with a NULL key is always "not matched" and gets inserted again on every run. Filter or quarantine them.
+
+### In interviews
+
+Explain the two phases (find touched files, rewrite them), why the condition should include a pruning column, why source duplicates are an error, and how you would make a CDC merge idempotent and order-safe (dedupe by sequence number, guard updates with `s.lsn > t.lsn`).
+
+## SCD Type 2 with a single MERGE
+
+A Type 2 dimension keeps a row per version with validity dates (the modelling side is in [slowly changing dimensions](/data-warehousing/slowly-changing-dimensions/)). A change needs two actions on the same key: **close** the current row and **insert** a new one. One `MERGE` cannot both update and insert for the same matched source row, so stage the source twice:
+
+- every incoming row with `merge_key = customer_id`, which matches the current row so it can be closed;
+- the changed rows again with `merge_key = NULL`, which never matches, so they are inserted as the new version.
+
+```python
+dim = f"{base}/dim_customer"
+spark.createDataFrame(
+    [(1, "Leeds", "2026-01-01", "9999-12-31", True), (2, "York", "2026-01-01", "9999-12-31", True)],
+    "customer_id INT, city STRING, valid_from STRING, valid_to STRING, is_current BOOLEAN",
+).select("customer_id", "city", F.to_date("valid_from").alias("valid_from"),
+         F.to_date("valid_to").alias("valid_to"), "is_current") \
+ .write.format("delta").save(dim)
+
+incoming = spark.createDataFrame(
+    [(1, "Leeds"), (2, "Bath"), (3, "Hull")], "customer_id INT, city STRING"
+).withColumn("effective_date", F.lit("2026-10-01").cast("date"))
+
+dim_t = DeltaTable.forPath(spark, dim)
+changed = (incoming.alias("s")
+    .join(dim_t.toDF().where("is_current").alias("t"), "customer_id")
+    .where("t.city <> s.city").select("s.*"))
+staged = (incoming.withColumn("merge_key", F.col("customer_id"))
+    .unionByName(changed.withColumn("merge_key", F.lit(None).cast("int"))))
+
+(dim_t.alias("t")
+    .merge(staged.alias("s"), "t.customer_id = s.merge_key AND t.is_current")
+    .whenMatchedUpdate(condition="t.city <> s.city",
+                       set={"is_current": "false", "valid_to": "s.effective_date"})
+    .whenNotMatchedInsert(values={"customer_id": "s.customer_id", "city": "s.city",
+                                  "valid_from": "s.effective_date",
+                                  "valid_to": "DATE'9999-12-31'", "is_current": "true"})
+    .execute())
+dim_t.toDF().orderBy("customer_id", "valid_from").show()
+```
+
+```text
++-----------+-----+----------+----------+----------+
+|customer_id| city|valid_from|  valid_to|is_current|
++-----------+-----+----------+----------+----------+
+|          1|Leeds|2026-01-01|9999-12-31|      true|
+|          2| York|2026-01-01|2026-10-01|     false|
+|          2| Bath|2026-10-01|9999-12-31|      true|
+|          3| Hull|2026-10-01|9999-12-31|      true|
++-----------+-----+----------+----------+----------+
+```
+
+Customer 1 is unchanged (matched, but the update condition is false), customer 2 has a closed and a new row, and customer 3 is new. The validity range is half-open: a row is valid where `valid_from <= d AND d < valid_to`.
+
+Things to add in production: compare a hash of all tracked attributes rather than one column (and use `<=>`, null-safe equality, so a NULL to value change is detected), deduplicate the incoming batch per key, add a surrogate key (Delta supports `GENERATED ALWAYS AS IDENTITY` columns in recent versions, or derive one with a hash of key and `valid_from`), and decide how to handle a change that arrives with an effective date earlier than the current row (a late-arriving change needs the history to be split, which a simple MERGE does not do).
+
+## Change data feed
+
+The **change data feed** (CDF) records row-level changes so consumers can read *what changed* between versions instead of re-reading the table. Enable it with `delta.enableChangeDataFeed = true` (at creation or with `ALTER TABLE ... SET TBLPROPERTIES`); only changes made after enabling are recorded. Delta then writes extra change files under `_change_data/` for commits that update or delete rows; inserts and deletes of whole files are derived from the log.
+
+```python
+(spark.read.format("delta").option("readChangeFeed", "true").option("startingVersion", 1)
+      .load(customers)
+      .select("customer_id", "city", "_change_type", "_commit_version")
+      .orderBy("_commit_version", "customer_id", "_change_type").show())
+```
+
+```text
++-----------+-----+----------------+---------------+
+|customer_id| city|    _change_type|_commit_version|
++-----------+-----+----------------+---------------+
+|          2| Bath|update_postimage|              1|
+|          2| York| update_preimage|              1|
+|          3| Hull|          delete|              1|
+|          4| Kent|          insert|              1|
+|          1|Derby|update_postimage|              2|
+|          1|Leeds| update_preimage|              2|
+|          5|  Ely|          insert|              2|
++-----------+-----+----------------+---------------+
+```
+
+Each change carries `_change_type` (`insert`, `delete`, `update_preimage`, `update_postimage`), `_commit_version` and `_commit_timestamp`. In SQL, `table_changes('name', start, end)` and `table_changes_by_path('path', start)` return the same rows.
+
+Typical uses:
+
+- **Propagating silver to gold incrementally**: read changes since the last processed version, merge them into an aggregate or a downstream copy.
+- **Feeding external systems** (a search index, a cache) with deletes as well as upserts.
+- **Auditing** what a job actually changed.
+
+### Pitfalls and limits
+
+- CDF is not a substitute for history: change files are removed by `VACUUM` like any other file, and the log behind old versions expires. Consume the feed regularly and record the last version processed.
+- Asking for a version before CDF was enabled, or past the retained history, fails.
+- A batch can hold several changes for one key across versions. Downstream merges must pick the last change per key by `_commit_version`, and drop `update_preimage` rows unless you need them.
+- With column mapping, reading the feed across a rename, drop or type change has restrictions; check the CDF documentation for your version before relying on it.
+
+## Streaming with Delta
+
+A Delta table works as a **streaming sink** and a **streaming source**. `trigger(availableNow=True)` processes everything available and stops, which makes streaming code usable as an incremental batch job and runnable in a test:
+
+```python
+events_src, events_silver, ckpt = f"{base}/events_bronze", f"{base}/events_silver", f"{base}/_ckpt"
+spark.range(0, 6).selectExpr("id AS event_id", "id % 2 AS user_id") \
+     .write.format("delta").save(events_src)
+
+q = (spark.readStream.format("delta").load(events_src)        # Delta as source
+         .withColumn("is_even_user", F.col("user_id") == 0)
+         .writeStream.format("delta")                         # Delta as sink
+         .option("checkpointLocation", f"{ckpt}/silver")
+         .trigger(availableNow=True).start(events_silver))
+q.awaitTermination()
+spark.range(6, 9).selectExpr("id AS event_id", "id % 2 AS user_id") \
+     .write.format("delta").mode("append").save(events_src)
+
+q = (spark.readStream.format("delta").load(events_src)
+         .withColumn("is_even_user", F.col("user_id") == 0)
+         .writeStream.format("delta").option("checkpointLocation", f"{ckpt}/silver")
+         .trigger(availableNow=True).start(events_silver))
+q.awaitTermination()
+print(spark.read.format("delta").load(events_silver).count())   # 9, not 15
+```
+
+```text
+9
+```
+
+The second run read only the three new rows, because the checkpoint records which source version was processed. The sink is **exactly-once**: each micro-batch's commit records the query ID and batch ID in the log (a `txn` action), so a batch replayed after a crash is recognised and skipped.
+
+### Source behaviour
+
+- The source reads appends. If an upstream commit **updates or deletes** rows, the stream fails by default, because it cannot express "this earlier row changed". Either set `skipChangeCommits` to ignore such commits, or stream the **change feed** instead with `.option("readChangeFeed", "true")`.
+- `maxFilesPerTrigger` (default 1000) and `maxBytesPerTrigger` cap the size of each micro-batch.
+- `startingVersion` / `startingTimestamp` start a new query from a point in history rather than the full table.
+
+### Upserts from a stream: foreachBatch plus MERGE
+
+A plain streaming write can only append. To upsert, run a `MERGE` per micro-batch in `foreachBatch`. That function can run again for the same batch after a failure, so either make it naturally idempotent (a guarded merge on the key gives the same result twice) or pass `txnAppId` and `txnVersion` on Delta writes inside it, which lets Delta skip a write it has already committed for that application and batch:
+
+{/* noexec */}
+```python
+def upsert_batch(batch_df, batch_id):
+    latest = batch_df.dropDuplicates(["customer_id"])        # use a real ordering column in production
+    (DeltaTable.forPath(spark, customers).alias("t")
+        .merge(latest.alias("s"), "t.customer_id = s.customer_id")
+        .whenMatchedUpdateAll().whenNotMatchedInsertAll().execute())
+
+(changes_stream.writeStream.foreachBatch(upsert_batch)
+    .option("checkpointLocation", "/chk/customers_upsert").start())
+```
+
+### In interviews
+
+Expect "how do you get exactly-once from Kafka to Delta" (checkpoint plus the idempotent Delta sink), "why did my stream fail after someone ran a DELETE on the source table" (non-append commit; use `skipChangeCommits` or the change feed), and "how do you upsert from a stream" (`foreachBatch` with an idempotent `MERGE`).
+
+## Practice questions
+
+<details><summary>Your MERGE takes 40 minutes although the batch has 10,000 rows. Where do you look?</summary>
+
+At how many target files it rewrites (`numTargetFilesRemoved` in `DESCRIBE HISTORY`). If the condition matches only on a key, Delta may have to rewrite files across the whole table. Add a partition or clustering column to the condition, cluster the table on the merge key, enable deletion vectors to avoid copying unchanged rows, and check the source for skew or duplicates.
+
+</details>
+
+<details><summary>How do you implement SCD Type 2 with MERGE when one change needs both an update and an insert?</summary>
+
+Stage the source twice: once keyed on the business key (matches the current row, which is closed by setting `valid_to` and `is_current = false`) and once, for changed rows only, with a NULL merge key (never matches, so it is inserted as the new current version). Compare a hash of tracked attributes with null-safe comparison and deduplicate the batch first.
+
+</details>
+
+<details><summary>What is the difference between the change data feed and time travel?</summary>
+
+Time travel reads a whole earlier version of the table. The change data feed returns the row-level differences between versions, with change types, so a consumer processes only what changed. Both depend on retained files and log entries.
+
+</details>
+
+<details><summary>Two MERGE jobs on the same table fail intermittently with ConcurrentAppendException. What do you do?</summary>
+
+They read overlapping files and one committed new files into data the other read. Make the jobs operate on disjoint partitions and include the partition column in both merge conditions so Delta can see they do not overlap, or run them sequentially. Retrying is fine only if the merge is idempotent.
+
+</details>
+
+<details><summary>Why is WHEN NOT MATCHED BY SOURCE THEN DELETE dangerous?</summary>
+
+It deletes every target row absent from the source. That is right only when the source is a complete snapshot of the target's scope. With an incremental CDC batch it would delete almost the whole table. Restrict it with a condition (for example to the partitions the snapshot covers).
+
+</details>
+
+## Key takeaways
+
+- `MERGE` applies inserts, updates and deletes in one commit; its cost is the number of target files it touches.
+- Deduplicate the source by a real ordering column, and guard against out-of-order changes.
+- SCD Type 2 fits in one `MERGE` by staging changed rows twice, once with a NULL merge key.
+- The change data feed gives row-level changes per version; consume it regularly, since it is subject to retention like everything else.
+- Delta is an exactly-once streaming sink; as a source it expects appends unless you skip change commits or read the change feed.

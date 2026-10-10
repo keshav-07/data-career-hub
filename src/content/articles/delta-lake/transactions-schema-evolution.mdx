@@ -1,123 +1,409 @@
 ---
 seoTitle: "Delta Lake Transactions and Schema Evolution"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Delta Lake: Transactions, Schema Evolution and Time Travel"
-description: "Delta Lake transaction log explained: ACID on data lake files, schema enforcement and evolution, and how time travel and VACUUM interact."
+description: "See how Delta Lake's transaction log gives ACID guarantees on data lake files, how schema enforcement and evolution work, and how time travel and VACUUM interact."
 inventoryId: "TECH-25"
 technology: ["delta-lake", "spark"]
 topic: ["lakehouse", "acid", "schema-evolution"]
 difficulty: "Intermediate"
 featured: false
-prerequisites: ["articles:spark/partitions-shuffles-skew"]
-related: ["interview-questions:data-engineering/idempotent-batch-pipeline"]
-previous: "articles:kafka/topics-partitions-consumer-groups"
-next: "articles:airflow/dags-scheduling-retries"
-sources: [{"label": "Delta Lake documentation", "url": "https://docs.delta.io/"}, {"label": "Delta Lake documentation: Table batch reads and writes", "url": "https://docs.delta.io/latest/delta-batch.html"}]
-versionContext: "Describes Delta Lake 3.x behaviour; some features and defaults differ between open-source Delta and managed platforms such as Databricks, so check your platform's documentation"
+learningObjectives:
+  - "Read a _delta_log commit and explain how replaying it produces the current table"
+  - "Explain which ACID guarantees Delta gives on object storage and how optimistic concurrency resolves conflicting writers"
+  - "Query and restore earlier versions, and know when time travel stops working"
+  - "Tell schema enforcement from schema evolution, and use mergeSchema, column mapping and type widening deliberately"
+prerequisites: ["articles:delta-lake/parquet-vs-avro-vs-orc"]
+related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "interview-questions:delta-lake/what-delta-lake-solves", "interview-questions:delta-lake/schema-evolution-safety", "articles:delta-lake/schema-evolution-patterns"]
+previous: "articles:delta-lake/parquet-vs-avro-vs-orc"
+next: "articles:delta-lake/delta-vs-traditional-lake-tables"
+sources:
+  - { label: "Delta Lake documentation: Table batch reads and writes", url: "https://docs.delta.io/delta-batch/" }
+  - { label: "Delta Lake documentation: Concurrency control", url: "https://docs.delta.io/concurrency-control/" }
+  - { label: "Delta Lake documentation: Table utility commands", url: "https://docs.delta.io/delta-utility/" }
+  - { label: "Delta Lake documentation: Column mapping", url: "https://docs.delta.io/delta-column-mapping/" }
+  - { label: "Delta Lake documentation: Type widening", url: "https://docs.delta.io/delta-type-widening/" }
+  - { label: "Delta Lake transaction protocol (PROTOCOL.md)", url: "https://github.com/delta-io/delta/blob/master/PROTOCOL.md" }
+versionContext: "Examples run locally on PySpark 4.2.0 with delta-spark 4.4.0 (open-source Delta). Managed platforms such as Databricks add defaults and features of their own, so check your platform's documentation."
 ---
 
-Plain Parquet files in a data lake have no transactions: a failed job can leave half-written files, and readers can see partial results. **Delta Lake** adds a transaction log on top of Parquet files so that a folder of files behaves like a reliable table.
+Plain Parquet files in a data lake have no transactions: a failed job can leave half-written files, two jobs can overwrite each other, and readers can see partial results. **Delta Lake** adds a transaction log next to the Parquet files so that a folder of files behaves like a table with commits, versions and a schema. This lesson shows the log itself, the guarantees it gives, time travel, and how schemas are enforced and evolved, with examples you can run on a laptop.
 
-## How it works
+## Setting up a local Delta session
 
-A Delta table is a directory containing Parquet data files and a `_delta_log` folder:
+Install `pyspark` and `delta-spark` with pip (matching versions: delta-spark 4.4 targets Spark 4.2). `configure_spark_with_delta_pip` adds the Delta JARs to the session; the two `config` lines register Delta's SQL extensions and catalog so `MERGE`, `RESTORE`, `DESCRIBE HISTORY` and `delta.` path tables work in SQL.
+
+```python
+import json, os, re, tempfile
+from pyspark.sql import SparkSession
+from delta import configure_spark_with_delta_pip
+from delta.tables import DeltaTable
+
+builder = (
+    SparkSession.builder.master("local[2]").appName("delta-transactions")
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.sql.shuffle.partitions", "2")
+)
+spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark.sparkContext.setLogLevel("ERROR")
+
+base = tempfile.mkdtemp()          # every table in this lesson lives under a temp dir
+orders = f"{base}/orders"
+
+def error_class(e):
+    """Return the [ERROR_CLASS] tag from a Spark or Delta exception message."""
+    found = re.search(r"\[[A-Z_]+\]", str(e))
+    return found.group(0) if found else type(e).__name__
+```
+
+## Delta Lake architecture
+
+A Delta table has three parts:
+
+1. **Data files**: ordinary Parquet files. Delta never edits a Parquet file in place; a change writes new files and marks old ones as removed.
+2. **The transaction log** (`_delta_log/`): an ordered series of commit files, `00000000000000000000.json`, `00000000000000000001.json` and so on. Each commit records *actions*: files added, files removed, schema and table properties (`metaData`), the reader and writer features required (`protocol`), and audit information (`commitInfo`).
+3. **Checkpoints**: every so often (by default every 10 commits, set by `delta.checkpointInterval`) the writer saves the whole table state as a Parquet checkpoint, so a reader loads the latest checkpoint and replays only the JSON commits after it.
+
+The table you query is the result of replaying the log: start from the checkpoint, apply each later commit's `add` and `remove` actions, and the surviving `add` entries are the files that make up the current version. Nothing else, not a directory listing and not a metastore, decides which files are in the table.
+
+Delta is a **table format and protocol**, not a server. Any engine that implements the protocol (Spark, Trino, Flink, DuckDB, Polars and others through Delta Kernel or delta-rs) can read the same table. Not every engine supports every feature, which is why the log records the protocol version and table features a reader needs.
+
+## The transaction log (_delta_log)
+
+Write two small commits and look at what lands on disk:
+
+```python
+spark.createDataFrame(
+    [(1, "Ana", 10.0), (2, "Ben", 20.0)], "order_id INT, customer STRING, amount DOUBLE"
+).write.format("delta").save(orders)                          # version 0
+
+spark.createDataFrame(
+    [(3, "Cy", 30.0)], "order_id INT, customer STRING, amount DOUBLE"
+).write.format("delta").mode("append").save(orders)           # version 1
+
+log = f"{orders}/_delta_log"
+print(sorted(f for f in os.listdir(log) if f.endswith(".json")))
+for line in open(f"{log}/00000000000000000000.json"):
+    action, body = next(iter(json.loads(line).items()))
+    print(action, body.get("operation") or body.get("path") or body.get("schemaString", "")[:40] or body)
+```
+
+Output (file names shortened):
 
 ```text
-my_table/
-  _delta_log/
-    00000000000000000000.json    <- commit 0: files added
-    00000000000000000001.json    <- commit 1: more files, some removed
-    ...
-    00000000000000000010.checkpoint.parquet
-  part-00000-....snappy.parquet
-  part-00001-....snappy.parquet
+['00000000000000000000.json', '00000000000000000001.json']
+commitInfo WRITE
+metaData {"type":"struct","fields":[{"name":"orde
+protocol {'minReaderVersion': 1, 'minWriterVersion': 2}
+add part-00000-810677d5-...-c000.snappy.parquet
+add part-00001-99e701db-...-c000.snappy.parquet
 ```
 
-Each **commit** is a JSON file that lists which data files were added or removed. The current state of the table is the result of replaying the log (with periodic Parquet **checkpoints** so readers do not replay everything). A write becomes visible only when its commit file is atomically written, so readers see either the old table version or the new one, never a half-finished write.
+Version 0 carries the schema (`metaData.schemaString`), the protocol and one `add` per data file. Each `add` also holds **file statistics**: row count and per-column minimum, maximum and null count for the first 32 columns by default. Readers use those statistics to skip files that cannot match a filter, without opening them. Version 1 holds only `commitInfo` and one `add`, because an append changes nothing else.
 
-## ACID in practice
-
-- **Atomicity**: a commit succeeds completely or not at all.
-- **Consistency**: schema enforcement blocks writes that do not match the table.
-- **Isolation**: readers use a consistent snapshot, and concurrent writers use **optimistic concurrency control**: if two writers conflict, one commit fails and can be retried.
-- **Durability**: committed data lives in durable object storage.
-
-## Schema enforcement
-
-By default, writing a DataFrame whose columns do not match the table's schema fails, instead of corrupting the table:
+`DESCRIBE HISTORY` reads the same log as a table:
 
 ```python
-df.write.format("delta").mode("append").save("/data/orders")
-# fails if df has a column the table does not, or a conflicting type
+(spark.sql(f"DESCRIBE HISTORY delta.`{orders}`")
+      .select("version", "operation", "operationParameters.mode").show())
 ```
 
-This is a feature: bad data is stopped at the boundary.
+```text
++-------+---------+-------------+
+|version|operation|         mode|
++-------+---------+-------------+
+|      1|    WRITE|       Append|
+|      0|    WRITE|ErrorIfExists|
++-------+---------+-------------+
+```
 
-## Schema evolution
+### Pitfalls
 
-When the change is intentional, you opt in explicitly:
+- **Never edit or delete files under `_delta_log` or data files by hand**, and never let a tool write plain Parquet files into the table directory. Files the log does not reference are invisible to readers and are later deleted by `VACUUM`.
+- Statistics are collected only for the first 32 columns (`delta.dataSkippingNumIndexedCols`). If you filter on a column further right, move it earlier or set `delta.dataSkippingStatsColumns`.
+
+## ACID transactions on Delta
+
+- **Atomicity.** A writer first writes its Parquet files, which are invisible because no commit mentions them, then creates the next commit file. Creating `N.json` must be atomic and must fail if the file already exists ("put-if-absent"). A job that dies before committing leaves only orphan files that no reader sees.
+- **Consistency.** Every commit is checked against the table's schema, `NOT NULL` columns and `CHECK` constraints before it is written.
+- **Isolation.** A reader picks one version and reads exactly the files of that version, so it never sees a half-applied write (snapshot isolation). Writers use **optimistic concurrency control**, described below.
+- **Durability.** Committed files live in object storage or HDFS, so they survive the cluster.
+
+Constraints are part of consistency and are worth using on curated tables:
 
 ```python
-# add new columns found in the incoming data
-(df.write.format("delta")
-   .mode("append")
-   .option("mergeSchema", "true")
-   .save("/data/orders"))
+spark.sql(f"ALTER TABLE delta.`{orders}` ADD CONSTRAINT amount_non_negative CHECK (amount >= 0)")
+try:
+    spark.createDataFrame([(4, "Di", -5.0)], "order_id INT, customer STRING, amount DOUBLE") \
+         .write.format("delta").mode("append").save(orders)
+except Exception as e:
+    print(error_class(e))
+print(spark.read.format("delta").load(orders).count())
 ```
 
-or change the table definition directly:
-
-```sql
-ALTER TABLE orders ADD COLUMNS (coupon_code STRING);
+```text
+[DELTA_VIOLATE_CONSTRAINT_WITH_VALUES]
+3
 ```
 
-**When is evolution safe?**
+The whole append is rejected and the table still has three rows.
 
-| Change | Usually safe? | Why |
-|--------|---------------|-----|
-| Add a nullable column | Yes | Old rows read as `NULL`; old readers can ignore it |
-| Widen a type (for example int → long) | Often, check support | Existing values still fit |
-| Change a type incompatibly (string → int) | No | Existing data may not convert |
-| Drop or rename a column | Needs care | Downstream queries break; requires column mapping support |
+### How optimistic concurrency works
 
-The safest habit is to evolve additively, communicate changes to downstream consumers, and avoid relying on silent `mergeSchema` in every job.
+1. The writer records the version it read, say version 7.
+2. It does its work and writes new data files.
+3. It tries to create `00000000000000000008.json`.
+4. If another writer created version 8 first, the writer reads the winning commits and checks whether they **conflict** with what it read and changed. If they do not, for example two blind appends, it retries as version 9 automatically. If they do, the commit fails with a subclass of `DeltaConcurrentModificationException`.
 
-## Time travel
+| Exception | Typical cause |
+|---|---|
+| `ConcurrentAppendException` | Another writer added files in the data this transaction read, for example two `MERGE` jobs on the same partition |
+| `ConcurrentDeleteReadException` | Another writer removed a file this transaction read |
+| `ConcurrentDeleteDeleteException` | Both transactions removed the same file, for example two `DELETE`s or a `DELETE` racing `OPTIMIZE` |
+| `MetadataChangedException` | Another writer changed the schema or table properties |
+| `ProtocolChangedException` | Another writer upgraded the protocol or created the table at the same time |
 
-Because old files remain until cleaned up, you can query earlier versions:
+Appends do not conflict with each other. `UPDATE`, `DELETE`, `MERGE` and `OPTIMIZE` can. To reduce conflicts, make concurrent jobs touch disjoint data and put the separating column in the condition (`WHERE region = 'EU'`, or `t.event_date = s.event_date` in a `MERGE`) so Delta can prove the files are disjoint. Retry a failed job only if it is idempotent.
 
-```sql
-SELECT * FROM orders VERSION AS OF 12;
-SELECT * FROM orders TIMESTAMP AS OF '2026-10-01';
-DESCRIBE HISTORY orders;
-```
+<Callout tone="warning" title="Put-if-absent on object storage">
 
-Use it to audit changes, debug a bad load, or restore a previous version.
-
-## Maintenance: OPTIMIZE and VACUUM
-
-- Many small files slow reads. **`OPTIMIZE`** compacts them into larger files.
-- **`VACUUM`** permanently deletes data files no longer referenced by the table and older than the retention threshold (7 days by default).
-
-<Callout tone="warning" title="VACUUM limits time travel">
-
-Time travel only works while the old data files still exist. After `VACUUM` removes them, versions that depended on those files can no longer be read. Do not shorten the retention period below the longest running reader or the history you need to keep.
+HDFS, Azure and Google Cloud Storage provide the atomic create Delta needs. On Amazon S3, multi-cluster writes have traditionally required the DynamoDB-backed `S3DynamoDBLogStore` (one cluster writing alone is safe without it). Check the storage configuration page for your Delta version before letting several clusters write to one S3 table.
 
 </Callout>
 
-## Common mistakes
+### In interviews
 
-1. Enabling schema merge globally so a typo in a column name becomes a new column.
-2. Running `VACUUM` with a very short retention while long jobs or time-travel queries still need old files.
-3. Leaving thousands of tiny files without compaction.
-4. Assuming Delta removes the need for idempotent pipelines. A retried job can still append duplicates unless you use `MERGE` or an overwrite pattern.
+"How does Delta give ACID on S3?" A strong answer names the log, atomic commit-file creation, snapshot reads from a version, and optimistic concurrency with conflict detection. Add that ACID covers **one table**: Delta has no multi-table transactions, so a pipeline that writes two tables must be designed to be safely re-run.
 
-## Interview relevance
+## Time travel and versioning
 
-Typical prompts: "What problems does Delta Lake solve?", "How does it provide ACID on object storage?", "What is schema evolution and when is it safe?" Mention the transaction log, optimistic concurrency and the difference between enforcement and evolution.
+Old data files stay on disk until `VACUUM` removes them, so earlier versions are still readable:
 
-## Key takeaway
+```python
+v0 = spark.read.format("delta").option("versionAsOf", 0).load(orders)
+print(v0.count(), spark.read.format("delta").load(orders).count())
 
-The transaction log turns files into a table. Enforce schemas by default, evolve them deliberately, and remember that time travel lasts only as long as the underlying files do.
+# SQL forms; timestampAsOf / TIMESTAMP AS OF take a date or timestamp
+spark.sql(f"SELECT order_id, amount FROM delta.`{orders}` VERSION AS OF 1 ORDER BY order_id").show()
+```
+
+```text
+2 3
++--------+------+
+|order_id|amount|
++--------+------+
+|       1|  10.0|
+|       2|  20.0|
+|       3|  30.0|
++--------+------+
+```
+
+**`RESTORE`** rolls the table back by writing a *new* commit whose files equal the old version's. History is kept, so a restore can itself be undone:
+
+```python
+spark.sql(f"DELETE FROM delta.`{orders}` WHERE order_id = 2")      # the "bad" change
+spark.sql(f"RESTORE TABLE delta.`{orders}` TO VERSION AS OF 2") \
+     .select("num_removed_files", "num_restored_files").show()
+print(sorted(r.order_id for r in spark.read.format("delta").load(orders).collect()))
+(spark.sql(f"DESCRIBE HISTORY delta.`{orders}`").select("version", "operation")
+      .orderBy("version").show())
+```
+
+```text
++-----------------+------------------+
+|num_removed_files|num_restored_files|
++-----------------+------------------+
+|                0|                 1|
++-----------------+------------------+
+
+[1, 2, 3]
++-------+--------------+
+|version|     operation|
++-------+--------------+
+|      0|         WRITE|
+|      1|         WRITE|
+|      2|ADD CONSTRAINT|
+|      3|        DELETE|
+|      4|       RESTORE|
++-------+--------------+
+```
+
+Order 2 sat alone in one small file, so the `DELETE` simply removed that file from the table, and the restore re-added it (one restored file, nothing to remove). Version 2 is the target because it is the last good state that still includes the constraint added above; restoring to version 1 would have dropped it.
+
+### Where time travel stops
+
+Two retention settings decide how far back you can go:
+
+| Property | Default | Controls |
+|---|---|---|
+| `delta.logRetentionDuration` | 30 days | How long commit history is kept; older entries are cleaned up when checkpoints are written |
+| `delta.deletedFileRetentionDuration` | 7 days | How old a removed file must be before `VACUUM` may delete it |
+
+A version is readable only while **both** its log entries and all of its data files exist. After `VACUUM` deletes files older than seven days, any version that needed them fails to read (`RESTORE` to it fails too), even though `DESCRIBE HISTORY` still lists it. Time travel is therefore an operational safety net for days, not an archive: for "what did this look like at month end" for years, write snapshots or keep history in the data (a Type 2 dimension, an append-only fact).
+
+### Use cases
+
+- **Debugging and audit**: compare today with yesterday (`EXCEPT` between two versions) to see what a job changed.
+- **Rollback**: `RESTORE` after a bad load, then fix and re-run the job.
+- **Reproducibility**: pin a training set or a report to a version number.
+
+`RESTORE` counts as a data change, so a downstream streaming reader of the table sees the restored files as new data and can produce duplicates. Plan downstream handling before you restore a streamed table.
+
+## Schema enforcement
+
+On write, Delta compares the incoming DataFrame with the table schema. Writes are rejected when the data has a column the table does not, or a type that cannot be safely cast. Missing nullable columns are allowed and become `NULL`.
+
+```python
+extra_col = spark.createDataFrame([(5, "Ed", 50.0, "SPRING")],
+                                  "order_id INT, customer STRING, amount DOUBLE, coupon STRING")
+try:
+    extra_col.write.format("delta").mode("append").save(orders)
+except Exception as e:
+    print(error_class(e))
+
+bad_type = spark.createDataFrame([("A6", "Flo", 60.0)], "order_id STRING, customer STRING, amount DOUBLE")
+try:
+    bad_type.write.format("delta").mode("append").save(orders)
+except Exception as e:
+    print(error_class(e))
+```
+
+```text
+[DELTA_METADATA_MISMATCH]
+[DELTA_FAILED_TO_MERGE_FIELDS]
+```
+
+Both writes fail before any commit (the second because `order_id` arrives as a string), so the table is unchanged. Compare this with a plain Parquet directory, where both files would be written and the breakage would surface in a reader days later.
+
+## Schema evolution
+
+When a change is intended, opt in for that write or change the table explicitly.
+
+### Add columns on write with mergeSchema
+
+```python
+extra_col.write.format("delta").mode("append").option("mergeSchema", "true").save(orders)
+spark.read.format("delta").load(orders).orderBy("order_id").show()
+```
+
+```text
++--------+--------+------+------+
+|order_id|customer|amount|coupon|
++--------+--------+------+------+
+|       1|     Ana|  10.0|  NULL|
+|       2|     Ben|  20.0|  NULL|
+|       3|      Cy|  30.0|  NULL|
+|       5|      Ed|  50.0|SPRING|
++--------+--------+------+------+
+```
+
+Older rows read the new column as `NULL`; no file is rewritten. The ways to evolve, and what each is for:
+
+| Mechanism | What it changes |
+|---|---|
+| `.option("mergeSchema", "true")` on a write | Adds new columns (and nested fields) from the incoming data |
+| `MERGE WITH SCHEMA EVOLUTION` or `DeltaTable.merge(...).withSchemaEvolution()` | Same, for `MERGE` |
+| `.option("overwriteSchema", "true")` with `mode("overwrite")` | Replaces the schema and data entirely |
+| `ALTER TABLE ... ADD COLUMNS` | Adds columns explicitly, reviewed in code |
+| Column mapping + `RENAME COLUMN` / `DROP COLUMN` | Renames or drops without rewriting files |
+| Type widening + `ALTER COLUMN ... TYPE` | Widens a type, for example `INT` to `BIGINT`, without rewriting files |
+
+### Renames and drops need column mapping
+
+Parquet files identify columns by name, so a plain Delta table cannot rename a column without rewriting every file:
+
+```python
+try:
+    spark.sql(f"ALTER TABLE delta.`{orders}` RENAME COLUMN coupon TO coupon_code")
+except Exception as e:
+    print(error_class(e))
+
+spark.sql(f"ALTER TABLE delta.`{orders}` SET TBLPROPERTIES ('delta.columnMapping.mode' = 'name')")
+spark.sql(f"ALTER TABLE delta.`{orders}` RENAME COLUMN coupon TO coupon_code")
+spark.sql(f"ALTER TABLE delta.`{orders}` DROP COLUMN customer")
+print(spark.read.format("delta").load(orders).columns)
+spark.sql(f"DESCRIBE DETAIL delta.`{orders}`").select("minReaderVersion", "minWriterVersion").show()
+```
+
+```text
+[DELTA_UNSUPPORTED_RENAME_COLUMN]
+['order_id', 'amount', 'coupon_code']
++----------------+----------------+
+|minReaderVersion|minWriterVersion|
++----------------+----------------+
+|               2|               7|
++----------------+----------------+
+```
+
+With column mapping, each column gets a stable physical name and ID stored in the schema, and the logical name is just metadata, so a rename or drop is a log-only change. The cost is a **protocol upgrade**: readers must support column mapping (reader version 2), and engines or connectors that do not will refuse the table. The upgrade is not reversible in place. Column mapping also limits change data feed reads across renames and drops (see the [MERGE and change data feed lesson](/delta-lake/merge-upserts-change-data-feed/)). A dropped column's data stays in the files until they are rewritten, which matters if you dropped it to remove personal data.
+
+### Type widening
+
+Delta 4.0 made type widening generally available. After enabling the `delta.enableTypeWidening` property, `ALTER COLUMN ... TYPE` can widen supported types (for example `BYTE`/`SHORT`/`INT` to `BIGINT`, `FLOAT` to `DOUBLE`, a decimal to higher precision) without rewriting files:
+
+```python
+spark.sql(f"ALTER TABLE delta.`{orders}` SET TBLPROPERTIES ('delta.enableTypeWidening' = 'true')")
+spark.sql(f"ALTER TABLE delta.`{orders}` ALTER COLUMN order_id TYPE BIGINT")
+print(spark.read.format("delta").load(orders).schema.simpleString())
+```
+
+```text
+struct<order_id:bigint,amount:double,coupon_code:string>
+```
+
+Narrowing a type, or changing between unrelated types (string to int), is not schema evolution: rewrite the table with `overwriteSchema`, or use an expand-and-contract migration, as covered in [schema evolution patterns](/delta-lake/schema-evolution-patterns/).
+
+### Pitfalls
+
+1. Setting `mergeSchema` on every job, or the session-wide `spark.databricks.delta.schema.autoMerge.enabled`, so an upstream typo (`custmer_id`) silently becomes a new column. Keep automatic merge for raw landing tables.
+2. Using `overwriteSchema` to "fix" a mismatch and wiping data you meant to keep.
+3. Enabling column mapping, type widening or deletion vectors without checking that every reader (BI connector, older Spark, another engine) supports the new protocol.
+
+## Practice questions
+
+<details><summary>Two jobs append to the same Delta table at the same time. What happens?</summary>
+
+Both succeed. Each writes its files and tries to create the next commit. The second to arrive finds the version taken, checks the winning commit, sees that blind appends cannot conflict, and commits as the following version. Conflicts arise when a transaction read data that another changed, such as two `MERGE` or `DELETE` operations touching the same files.
+
+</details>
+
+<details><summary>A job died halfway through writing. Do readers see partial data?</summary>
+
+No. The data files it wrote are not referenced by any commit, so no reader includes them. They are orphans that `VACUUM` removes once they are older than the retention period. Re-running the job is safe if the job itself is idempotent.
+
+</details>
+
+<details><summary>Why can a version listed in DESCRIBE HISTORY fail to load?</summary>
+
+History lives in the log (kept for 30 days by default), but the version's data files may have been deleted by `VACUUM` (which may delete removed files older than 7 days by default). Time travel needs both the log entries and the files.
+
+</details>
+
+<details><summary>What is the difference between schema enforcement and schema evolution?</summary>
+
+Enforcement is the default check that rejects writes whose columns or types do not match the table. Evolution is an explicit opt-in (`mergeSchema`, `ALTER TABLE`, column mapping, type widening) that changes the table schema. Enforcement protects curated tables from accidental drift; evolution is how you make intended changes.
+
+</details>
+
+<details><summary>Why does renaming a column require column mapping?</summary>
+
+Without it, Parquet files are read by column name, so renaming the column in the schema would orphan the existing data in those files. Column mapping stores a stable physical name per column, so the logical name can change in the log alone. It requires a protocol upgrade that older readers cannot handle.
+
+</details>
+
+<details><summary>How would you undo a bad overwrite from this morning?</summary>
+
+Find the last good version with `DESCRIBE HISTORY`, check it with a `VERSION AS OF` query, then `RESTORE TABLE ... TO VERSION AS OF n`. It must be inside the retention window. Warn owners of streaming consumers, because the restore appears as a data change to them.
+
+</details>
+
+## Key takeaways
+
+- The `_delta_log` is the table: replaying commits from the latest checkpoint gives the current set of files.
+- Commits are atomic file creations; readers use one version, and writers use optimistic concurrency with conflict detection.
+- ACID is per table. Pipelines spanning tables still need idempotent re-runs.
+- Time travel and `RESTORE` work only while both the log entries and the data files are retained.
+- Schema enforcement is on by default. Evolve deliberately: `mergeSchema` for additions, column mapping for renames and drops, type widening for safe type changes.
