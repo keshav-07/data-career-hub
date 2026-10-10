@@ -90,7 +90,7 @@ for f in (is_valid, is_valid_brute):
     assert f("") is True                     # empty
     assert f(")") is False                   # single closer
     assert f("(") is False                   # single opener
-    assert f("()[]{}") is True               # sequence
+    assert f("[](){}") is True               # sequence
     assert f("]") is False and f("(]") is False   # wrong type
 
 assert is_valid("(" * 50_000 + ")" * 50_000) is True     # deep nesting

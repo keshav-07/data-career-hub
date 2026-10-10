@@ -100,8 +100,8 @@ for f in (character_replacement, character_replacement_brute):
     assert f("", 3) == 0                     # empty
     assert f("Q", 0) == 1                    # single
     assert f("AAAA", 2) == 4                 # already uniform
-    assert f("ABAB", 4) == 4                 # k larger than needed
-    assert f("ABAB", 2) == 4
+    assert f("XYXY", 4) == 4                 # k larger than needed
+    assert f("XYXY", 2) == 4
 
 assert character_replacement("AB" * 50_000, 0) == 1      # large input
 
