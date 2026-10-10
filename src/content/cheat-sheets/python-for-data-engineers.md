@@ -8,7 +8,7 @@ inventoryId: "CHEAT-02"
 technology: ["python"]
 topic: ["reference"]
 cheatTopic: "Python"
-related: ["articles:python/iterators-generators", "articles:python/data-structures-for-interviews", "articles:python/idempotent-csv-loader"]
+related: ["articles:python/iterators-generators", "articles:python/data-structures-for-interviews", "articles:python/idempotent-csv-loader", "articles:python/file-io-csv-json", "articles:python/error-handling-logging", "articles:python/working-with-apis", "articles:python/pandas-for-data-engineers", "articles:python/testing-with-pytest"]
 versionContext: "Examples run on Python 3.11 (standard library); itertools.batched needs Python 3.12, with a fallback shown"
 ---
 
@@ -102,6 +102,48 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("orders")
 log.info("loaded %d rows from %s", 120, "orders.csv")   # lazy formatting
 ```
+
+## Atomic file writes
+
+```python
+import os, tempfile
+from pathlib import Path
+
+target = Path(tempfile.mkdtemp()) / "extract.csv"
+tmp = target.with_name(f".{target.name}.tmp")
+tmp.write_text("id\n1\n", encoding="utf-8")
+os.replace(tmp, target)                               # readers see the old file or the new one, never half
+print(target.read_text(encoding="utf-8").split())
+```
+
+## HTTP with timeouts and retries
+
+```python
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+session = requests.Session()
+session.mount("https://", HTTPAdapter(max_retries=Retry(
+    total=5, backoff_factor=1, status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({"GET"}), respect_retry_after_header=True)))
+# resp = session.get(url, params=params, timeout=(3.05, 30)); resp.raise_for_status()
+print(type(session.adapters["https://"].max_retries).__name__)
+```
+
+Retry only 429, 5xx and network errors; fail fast on other 4xx. Always pass `timeout=`.
+
+## pandas safety switches
+
+```text
+pd.read_csv(path, dtype={"id": "string", "qty": "Int64"}, parse_dates=["ts"])   # explicit types
+df.drop_duplicates(subset="order_id", keep="last")                              # always name the key
+left.merge(right, on="id", how="left", validate="many_to_one", indicator=True)   # catch fan-out
+df.loc[df.x > 0, "y"] = 1                                                        # not df[df.x > 0]["y"] = 1
+df.to_parquet("out.parquet", index=False)                                        # keeps types
+```
+
+Above a few million rows or near memory limits, use DuckDB, Polars or Spark instead.
 
 ## Testing with pytest
 
