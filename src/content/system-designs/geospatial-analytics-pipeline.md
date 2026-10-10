@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Geospatial Analytics Pipeline"
 description: "A system-design case study for location analytics: GPS ingestion, cleaning, spatial indexes, scalable point-in-polygon joins, GeoParquet layout, privacy and cost."
 technology: ["data-engineering", "spark", "delta-lake"]
@@ -106,7 +106,7 @@ Clarifying questions:
 
 - GPS gives longitude and latitude on the WGS84 datum (EPSG:4326 order is latitude, longitude; many formats, including GeoParquet's default OGC:CRS84, use longitude, latitude). **Axis order mix-ups** are a classic bug: points land in the ocean or the wrong hemisphere.
 - Distances and areas computed directly on degrees are wrong and vary with latitude. Use great-circle (haversine or geodesic) distance for point-to-point, and project to a local metric or equal-area projection for areas and buffers.
-- Store geometry in Parquet as **WKB**: GeoParquet defines column metadata (encoding, CRS, bounding box), and recent versions also use Parquet's native `GEOMETRY` and `GEOGRAPHY` logical types. Record the CRS explicitly.
+- Store geometry in Parquet as **WKB**: GeoParquet defines column metadata (encoding, CRS, bounding box), and the Parquet format itself now has native `GEOMETRY` and `GEOGRAPHY` logical types that newer writers and readers support (check your engines before relying on them). Record the CRS explicitly.
 - Add bounding-box columns (or a covering column) and sort files by cell id so readers can skip files whose box does not intersect the query.
 
 ## Spatial joins at scale

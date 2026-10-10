@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Lakehouse with Bronze, Silver and Gold Layers"
 seoTitle: "Design a Bronze/Silver/Gold Lakehouse"
 description: "A system-design case study for a medallion lakehouse: what each layer guarantees, idempotent merges, late data, schema evolution, governance, compaction and cost."
@@ -271,7 +271,7 @@ An alternative that scales better for large bronze tables is to encrypt personal
 Using the assumptions above:
 
 - **Daily growth**: 0.5 TB/day into bronze. Silver is usually smaller than bronze after deduplication and columnar compression; assume 50% (0.25 TB/day). Gold aggregates are small; assume 0.05 TB/day.
-- **Yearly growth**: (0.5 + 0.25 + 0.05) × 365 ≈ 290 TB/year. If bronze older than 13 months is expired or archived, net growth of hot storage is roughly 250 TB/year, which matches 50% of 500 TB.
+- **Yearly growth**: (0.5 + 0.25 + 0.05) × 365 ≈ 290 TB in the first year, close to the assumed 50% (250 TB) growth. Expiring or archiving bronze older than 13 months caps hot bronze at about 0.5 TB × 395 days ≈ 200 TB, so after the first year hot-storage growth comes mostly from silver and gold (about 110 TB/year at today's volume).
 - **Streaming**: 30% of 0.5 TB/day ≈ 150 GB/day ≈ 1.7 MB/s on average; with a 5× peak factor about 9 MB/s, comfortably within a small Kafka cluster and a few streaming executors.
 - **Files**: a silver table merged every minute by 8 tasks writes up to 11,520 files/day before compaction; daily `OPTIMIZE` brings that back to tens of files per partition.
 - **SQL serving**: 300 concurrent users at roughly 10 concurrent queries per warehouse cluster suggests 3–4 clusters at peak with auto-scaling, scaled back to one off-peak.

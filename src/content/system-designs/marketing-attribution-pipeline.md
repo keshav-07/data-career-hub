@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Marketing Attribution Pipeline"
 description: "A system-design case study for marketing attribution: touchpoint collection, identity stitching, lookback windows, rule-based models, ad spend joins and privacy."
 technology: ["data-engineering", "sql", "data-warehousing"]
@@ -250,7 +250,7 @@ Assumptions: 1.5 million marketing touchpoints a day, 40,000 conversions a day, 
 - **Touchpoints**: 1.5 million/day × about 300 bytes ≈ 450 MB/day; 400 days of history ≈ 180 GB uncompressed.
 - **Path join input per daily run**: 30 days of conversions (1.2 million) against 60 days of touchpoints (90 million rows), pruned by user id: manageable for a warehouse in minutes.
 - **Credit rows**: 40,000 × 4 touches × 6 models ≈ 1 million rows a day, 365 million a year at about 100 bytes ≈ 36 GB.
-- **Spend rows**: 20,000 campaigns × 6 platforms is an upper bound of 120,000 rows a day; tiny.
+- **Spend rows**: the 20,000 active campaigns and ad groups span all 6 platforms, so about 20,000 rows a day (one per campaign per day); tiny.
 
 ## What a strong answer includes
 

@@ -6,8 +6,8 @@ technology: ["data-engineering", "kafka", "spark"]
 topic: ["fraud-detection", "streaming", "architecture"]
 difficulty: "Advanced"
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 problem: "A payments company must decide whether to approve, review or decline each card payment while the customer waits, using the payment details, the customer's recent behaviour and machine-learning models, and must keep learning as fraud patterns change and chargeback labels arrive weeks later."
 functionalRequirements:
   - "Score every payment authorisation and return approve, review or decline"
@@ -239,7 +239,7 @@ At 50,000 payments/s: scale Kafka partitions and Flink parallelism by key; shard
 - **Peak scoring**: 5,000 decisions/s × 8 feature reads ≈ 40,000 key-value reads/s, routine for a managed key-value store or a Redis cluster.
 - **Flink state**: assume 50 million active cards, devices and IPs × about 200 bytes of window state ≈ 10 GB, easily held in RocksDB-backed state across a few task managers.
 - **Online store**: 50 million keys × 40 features × about 16 bytes ≈ 32 GB plus overhead.
-- **Training data**: one year of decisions ≈ 315 million rows; fraud is 0.1% ≈ 315,000 positives, so negatives are usually down-sampled for training.
+- **Training data**: one year of decisions ≈ 86 million × 365 ≈ 31.5 billion rows; fraud is 0.1% ≈ 31.5 million positives, so negatives are down-sampled (for example 1 to 2% of them, with weights recorded) to keep training sets manageable.
 
 ## What a strong answer includes
 

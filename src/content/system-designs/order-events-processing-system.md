@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design an Order-Events Processing System"
 description: "A system-design case study for order lifecycle events: transactional outbox, per-order ordering, state machines, stuck-order timers and current-state tables."
 technology: ["data-engineering", "kafka", "sql"]
@@ -251,7 +251,7 @@ Event volumes here are modest; costs are dominated by retention and by the numbe
 
 ## Scaling to 10×
 
-At 160 million events a day on peak days (about 20,000 events per second at peak): add Kafka partitions **before** the peak season (repartitioning changes key placement, so do it during a quiet period with consumers drained), scale consumer instances up to the partition count, and keep the stream processor's keyed state in a disk-backed store (for example RocksDB) with incremental checkpoints. Open orders, not total orders, size the state.
+At 160 million events a day (about 1,850 events per second on average, and roughly 45,000 per second at a sale-day peak): add Kafka partitions **before** the peak season (repartitioning changes key placement, so do it during a quiet period with consumers drained), scale consumer instances up to the partition count, and keep the stream processor's keyed state in a disk-backed store (for example RocksDB) with incremental checkpoints. Open orders, not total orders, size the state.
 
 ## Capacity estimate
 

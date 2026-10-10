@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Unified Batch and Streaming Platform: Lambda vs Kappa"
 seoTitle: "Unified Batch and Streaming: Lambda vs Kappa"
 description: "A system-design case study comparing Lambda and Kappa honestly, then designing a unified platform: one log, shared logic, lakehouse tables, replay and serving."
@@ -244,7 +244,7 @@ Assumptions: 30,000 events/s × 1 KB; compression about 4:1 in bronze; 2 years o
 - **Daily volume**: 30,000 × 86,400 ≈ 2.6 billion events ≈ 2.6 TB raw, about 650 GB compressed.
 - **Two years in bronze**: 650 GB × 730 ≈ 475 TB compressed.
 - **Kafka**: 7 days × 2.6 TB × 3 replicas ≈ 55 TB uncompressed (less with compression); keeping two years in Kafka at that replication would be several petabytes, which is why bronze is the long-term log.
-- **Replay time**: 2 years ≈ 1.9 trillion events / 1 million per second ≈ 22 days. That fails the "within a day" requirement, so either the backfill cluster must reach about 22 million events per second (partitioned by date and run in parallel, which works for stateless or per-day logic), or the requirement must be relaxed for full-history replays. Saying this out loud is part of a strong answer.
+- **Replay time**: the requirement is one year within a day. One year ≈ 2.6 billion × 365 ≈ 950 billion events; at 1 million per second that is about 950,000 s ≈ 11 days, and the full two years about 22 days. Meeting the target needs roughly 11 million events per second, which is realistic only if the backfill is partitioned by date and run in parallel (fine for stateless or per-day logic, hard for long-lived state), or if the requirement is relaxed. Saying this out loud is part of a strong answer.
 
 ## What a strong answer includes
 

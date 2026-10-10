@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a CDC Pipeline from an OLTP Database to the Warehouse"
 seoTitle: "Design a CDC Pipeline from OLTP to Warehouse"
 description: "A system-design case study for change data capture: log-based capture, snapshots, ordering, idempotent MERGE with deletes, schema changes and the failure modes that bite."
@@ -213,7 +213,7 @@ The result is effectively-once state in the target, which is what the business n
 
 ## Schema evolution
 
-- Debezium registers a new Avro schema version when a column is added. With the registry set to **backward** compatibility (the default), consumers can read new data with the new schema.
+- Debezium registers a new Avro schema version when a column is added. With the registry set to **backward** compatibility (the Confluent default), a consumer on the new schema can still read events written with the previous one, so upgrade consumers first; adding a column with a default is compatible in both directions.
 - **Additive nullable columns**: the sink adds the column to the raw table (schema evolution enabled), and a dbt model change adds it to current state.
 - **Renames, type narrowing, dropped columns**: treat as breaking. The registry rejects incompatible schemas, the connector stops, an alert fires, and an engineer migrates the target. Pausing is better than silently writing nulls for a column that was renamed.
 - Agree a **schema change process** with the source team: announce, deploy additive first, backfill, then remove the old column later.

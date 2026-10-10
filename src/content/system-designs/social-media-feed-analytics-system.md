@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-05"
-updatedDate: "2026-10-05"
-reviewedDate: "2026-10-05"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Design a Social Media Feed Analytics System"
 description: "A system-design case study for feed analytics: impression and engagement events, viewability rules, deduplication, creator dashboards, distinct counts and privacy."
 technology: ["data-engineering", "kafka", "spark"]
@@ -110,7 +110,7 @@ Walkthrough:
 
 ## Definitions as code
 
-Write the metric definitions down and test them. A small example in PostgreSQL: impressions only count if visible for at least one second, and both impressions and engagements count once per viewer, post and day.
+Write the metric definitions down and test them. A small example in PostgreSQL: impressions only count if visible for at least one second and count once per viewer, post and day, and engagements count once per viewer, post, action and day.
 
 ```sql
 CREATE TABLE impressions (viewer_id int, post_id int, shown_at timestamp, visible_ms int);
