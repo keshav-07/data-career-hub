@@ -1,0 +1,125 @@
+---
+seoTitle: "SQL Query Execution Order: WHERE vs HAVING"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+title: "In what order is a SQL query evaluated, and what is the difference between WHERE and HAVING?"
+description: "SQL logical execution order explained: FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT, and why WHERE filters rows while HAVING filters groups."
+technology: ["sql"]
+topic: ["sql-basics", "aggregation"]
+difficulty: "Easy"
+questionType: ["conceptual", "debugging"]
+estimatedMinutes: 6
+interviewRelevance: "Foundational"
+evidenceStatus: "representative"
+shortAnswer: "Logically a query runs FROM and JOIN, then WHERE, GROUP BY, HAVING, SELECT (including window functions), DISTINCT, ORDER BY and finally LIMIT. WHERE filters individual rows before grouping, so it cannot use aggregates; HAVING filters groups after aggregation, so it can. That order also explains why a SELECT alias is not visible in WHERE but is in ORDER BY, and why window functions cannot appear in WHERE. The optimiser may execute steps in a different physical order, but the result must match this logical order."
+followUps: ["Why can you not use a column alias in WHERE?", "Can a condition that does not use an aggregate go in HAVING?", "Where do window functions fit in the order, and how do you filter on them?", "Is the logical order the same as the physical execution order?"]
+prerequisites: ["articles:sql/sql-fundamentals"]
+related: ["articles:sql/aggregations-group-by-having", "articles:sql/sql-fundamentals", "interview-questions:sql/window-functions-vs-group-by"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs and error messages are copied from psql."
+sources:
+  - { label: "PostgreSQL 16 documentation: SELECT (description of processing order)", url: "https://www.postgresql.org/docs/16/sql-select.html" }
+---
+
+## The logical order
+
+| Step | Clause | What it produces |
+|---|---|---|
+| 1 | `FROM`, `JOIN` | The input rows |
+| 2 | `WHERE` | Rows that pass a row-level condition |
+| 3 | `GROUP BY` | One group per key |
+| 4 | `HAVING` | Groups that pass a group-level condition |
+| 5 | `SELECT` | Output expressions and aliases; window functions are computed here |
+| 6 | `DISTINCT` | Duplicate output rows removed |
+| 7 | `ORDER BY` | Sorted result (aliases are visible) |
+| 8 | `LIMIT` / `OFFSET` / `FETCH` | Part of the result |
+
+Every "why does this error?" question about aliases, aggregates or window functions is answered by finding which step the clause belongs to.
+
+## Sample data
+
+```sql
+CREATE TABLE orders (order_id INT PRIMARY KEY, customer TEXT NOT NULL,
+                     status TEXT NOT NULL, amount NUMERIC(10, 2) NOT NULL);
+INSERT INTO orders VALUES
+  (1, 'asha', 'delivered', 120.00), (2, 'asha', 'delivered', 90.00),
+  (3, 'asha', 'cancelled', 300.00), (4, 'ben',  'delivered', 150.00),
+  (5, 'ben',  'cancelled',  80.00), (6, 'chen', 'delivered',  40.00);
+```
+
+## WHERE and HAVING together
+
+"Customers whose **delivered** revenue exceeds 150":
+
+```sql
+SELECT customer, SUM(amount) AS delivered_revenue
+FROM orders
+WHERE status = 'delivered'          -- step 2: rows
+GROUP BY customer                   -- step 3
+HAVING SUM(amount) > 150            -- step 4: groups
+ORDER BY delivered_revenue DESC;    -- step 7: alias is visible
+```
+
+| customer | delivered_revenue |
+|---|---|
+| asha | 210.00 |
+
+Ben's delivered total is exactly 150, so `> 150` excludes him. Moving the status test changes the question entirely:
+
+```sql
+SELECT customer, SUM(amount) AS revenue
+FROM orders
+GROUP BY customer
+HAVING SUM(amount) > 150 AND COUNT(*) FILTER (WHERE status = 'cancelled') > 0
+ORDER BY customer;
+```
+
+| customer | revenue |
+|---|---|
+| asha | 510.00 |
+| ben | 230.00 |
+
+Now cancelled orders are included in the sum and the condition is about the group ("has at least one cancellation"). `WHERE` changes what the aggregates see; `HAVING` only decides which finished groups are shown.
+
+## Errors the order explains
+
+An aggregate in `WHERE`: counts do not exist yet at step 2.
+
+{/* expect-error */}
+```sql
+SELECT customer FROM orders WHERE SUM(amount) > 150 GROUP BY customer;
+```
+
+PostgreSQL: `ERROR: aggregate functions are not allowed in WHERE`.
+
+A `SELECT` alias in `WHERE`: the alias is created at step 5.
+
+{/* expect-error */}
+```sql
+SELECT order_id, amount * 0.2 AS tax FROM orders WHERE tax > 20;
+```
+
+PostgreSQL: `ERROR: column "tax" does not exist`. Repeat the expression or compute it in a CTE. (Snowflake and DuckDB allow aliases in `WHERE` as an extension; do not rely on that in portable code.)
+
+A window function in `WHERE`: windows are computed at step 5, after filtering.
+
+{/* expect-error */}
+```sql
+SELECT order_id FROM orders WHERE ROW_NUMBER() OVER (ORDER BY amount DESC) = 1;
+```
+
+PostgreSQL: `ERROR: window functions are not allowed in WHERE`. Wrap it in a subquery and filter outside, or use `QUALIFY` where the engine supports it.
+
+## Can a plain condition go in HAVING?
+
+Yes, if the column is grouped: `HAVING customer <> 'chen'` works. It is logically applied after grouping, so all of Chen's rows are aggregated and then discarded. Optimisers usually push such a condition down into `WHERE` themselves, but writing it in `WHERE` states the intent and is never slower.
+
+## Logical versus physical order
+
+The table above defines the **result**, not the execution plan. PostgreSQL pushes filters into scans, Spark pushes predicates into Parquet readers, and a `LIMIT` can stop a scan early. Any reordering is allowed as long as the answer is the one the logical order defines.
+
+## Common mistakes
+
+1. Filtering rows in `HAVING` when the intent is to exclude them from the aggregate.
+2. Expecting a `SELECT` alias to be visible in `WHERE` or `GROUP BY` in every engine (PostgreSQL accepts an output alias in `GROUP BY` and `ORDER BY`, but not in `WHERE` or `HAVING`).
+3. Using `HAVING` without `GROUP BY` by accident: the whole table becomes one group.

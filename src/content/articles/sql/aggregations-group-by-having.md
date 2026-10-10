@@ -16,7 +16,7 @@ learningObjectives:
   - "Filter rows with WHERE and groups with HAVING"
   - "Build several metrics in one pass with conditional aggregation"
 prerequisites: ["articles:sql/operators-nulls-case"]
-related: ["articles:sql/window-functions", "interview-questions:sql/inner-vs-left-join", "interview-questions:sql/window-functions-vs-group-by"]
+related: ["articles:sql/window-functions", "interview-questions:sql/inner-vs-left-join", "interview-questions:sql/window-functions-vs-group-by", "interview-questions:sql/sql-execution-order-where-vs-having"]
 previous: "articles:sql/functions-strings-dates-types"
 next: "articles:sql/set-operations"
 sources:
