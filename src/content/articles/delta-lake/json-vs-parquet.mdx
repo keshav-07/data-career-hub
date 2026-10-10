@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "JSON vs Parquet for Analytics Pipelines"
 seoTitle: "JSON vs Parquet for Analytics Pipelines"
 description: "Why raw JSON is convenient to land but expensive to query, how Parquet fixes size, types and scan cost, and a practical pattern for converting between them."
@@ -9,54 +9,215 @@ inventoryId: "SUPPORT-08"
 technology: ["delta-lake", "spark"]
 topic: ["file-formats", "comparison"]
 difficulty: "Beginner"
-related: ["articles:delta-lake/parquet-vs-avro-vs-orc", "articles:pyspark/dataframes-and-schemas"]
-sources: [{"label": "Spark documentation: JSON files", "url": "https://spark.apache.org/docs/latest/sql-data-sources-json.html"}, {"label": "Spark documentation: Parquet files", "url": "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html"}]
-versionContext: "Measurements and behaviour checked with PySpark 4.2"
+learningObjectives:
+  - "Measure the size and scan difference between newline-delimited JSON and Parquet for the same data"
+  - "Explain what schema inference does to JSON types and why production reads use an explicit schema"
+  - "Capture malformed JSON records instead of losing or failing on them"
+  - "Explain why gzip-compressed JSON cannot be split across tasks"
+prerequisites: ["articles:delta-lake/data-lakes-lakehouse-delta"]
+related: ["articles:delta-lake/parquet-vs-avro-vs-orc", "articles:pyspark/dataframes-and-schemas", "articles:pyspark/reading-writing-data"]
+previous: "articles:delta-lake/data-lakes-lakehouse-delta"
+next: "articles:delta-lake/parquet-vs-avro-vs-orc"
+sources:
+  - { label: "Spark documentation: JSON files", url: "https://spark.apache.org/docs/latest/sql-data-sources-json.html" }
+  - { label: "Spark documentation: Parquet files", url: "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html" }
+  - { label: "Spark documentation: Generic file source options", url: "https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html" }
+versionContext: "Examples and measurements run with PySpark 4.2.0 on synthetic data; sizes depend on your data and codec"
 ---
 
-APIs and applications produce JSON, so pipelines receive a lot of it. JSON is a fine **landing** format and a poor **analytics** format.
+APIs and applications produce JSON, so pipelines receive a lot of it. JSON is a fine **landing** format and a poor **analytics** format. This lesson measures why, shows the traps in reading JSON with Spark, and ends with the pattern most teams use: land JSON as-is, convert once to Parquet (or a Parquet-based table such as Delta) with an explicit schema.
 
 | | JSON (newline-delimited) | Parquet |
 |--|--------------------------|---------|
-| Human-readable | Yes | No |
-| Schema | Implicit; inferred on read | Explicit, stored in the file |
-| Types | Strings, numbers, booleans; dates are strings | Rich types (dates, timestamps, decimals) |
-| Size | Large: field names repeated on every row | Compact columnar compression |
-| Read a few columns | Must parse every row fully | Reads only needed columns |
-| Nested data | Natural | Supported (structs, arrays, maps) |
+| Human-readable | Yes | No (binary) |
+| Schema | None in the file; inferred on read | Stored in the file footer |
+| Types | String, number, boolean, null, object, array; dates and decimals are strings or floats | Integers, decimals, dates, timestamps, nested structs, lists and maps |
+| Size | Large: field names and text digits repeated on every row | Small: columnar encoding and compression |
+| Reading 2 of 50 fields | Every line must be parsed in full | Only the 2 column chunks are read |
+| Filter pushdown | Rows must be parsed before a filter can be checked | Min/max statistics skip whole row groups |
+| Splitting across tasks | Uncompressed: yes, at line boundaries. Gzip: no | Yes, at row-group boundaries, with any codec |
+| Appending a record | Trivial: write a line | Needs a new file; files are immutable |
 
-## The cost of querying JSON
+## Sample data and setup
 
-In a PySpark 4.2 test, the same 200,000 rows took 21,260 KB as JSON and 2,382 KB as Parquet. Size is only part of it: every JSON query parses text and repeated field names, and schema inference requires an extra pass over the data. Inference also has side effects you might not expect; Spark's inferred JSON schema lists fields in alphabetical order rather than the order they appear in the data.
+```python
+import glob, os, tempfile
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("json-vs-parquet")
+         .config("spark.sql.shuffle.partitions", "2").getOrCreate())
+spark.sparkContext.setLogLevel("ERROR")
+base = tempfile.mkdtemp()
+
+orders = spark.range(0, 200_000).select(
+    F.col("id").alias("order_id"),
+    (F.col("id") % 5000).alias("customer_id"),
+    F.element_at(F.array(*[F.lit(c) for c in ["UK", "FR", "DE", "ES", "IT"]]),
+                 (F.col("id") % 5 + 1).cast("int")).alias("country"),
+    (F.lit("2026-09-01 00:00:00").cast("timestamp") + F.make_interval(secs=F.col("id"))).alias("order_ts"),
+    F.round(F.rand(42) * 500, 2).alias("amount"),
+)
+
+def size_kb(path):
+    return sum(os.path.getsize(f) for f in glob.glob(f"{path}/part-*")) // 1024
+```
+
+## Size and scan cost
+
+```python
+orders.coalesce(1).write.json(f"{base}/json")
+orders.coalesce(1).write.parquet(f"{base}/parquet")
+print("json   ", size_kb(f"{base}/json"), "KB")
+print("parquet", size_kb(f"{base}/parquet"), "KB")
+```
+
+```text
+json    20878 KB
+parquet 3382 KB
+```
+
+About six times smaller here, with Parquet's default Snappy codec. The bigger difference is in what a query reads. Ask for one column with a filter and compare the scans:
+
+```python
+spark.read.parquet(f"{base}/parquet").where("amount > 450").select("amount").explain()
+```
+
+```text
+== Physical Plan ==
+*(1) Filter (isnotnull(amount#21) AND (amount#21 > 450.0))
++- *(1) ColumnarToRow
+   +- FileScan parquet [amount#21] Batched: true, DataFilters: [...], Format: Parquet, ...
+      PushedFilters: [IsNotNull(amount), GreaterThan(amount,450.0)], ReadSchema: struct<amount:double>
+```
+
+(Plan shortened.) `ReadSchema: struct<amount:double>` means only the `amount` column chunk is read from disk, and `PushedFilters` means the reader checks each row group's min/max statistics and skips groups that cannot match. A JSON scan can also prune the *output* columns, but the reader still has to read and tokenise every byte of every line to find them, so the I/O and CPU cost stays close to a full scan.
+
+## Schema inference and its traps
+
+Reading JSON without a schema makes Spark scan the data first to infer one:
+
+```python
+inferred = spark.read.json(f"{base}/json")
+print(inferred.schema.simpleString())
+```
+
+```text
+struct<amount:double,country:string,customer_id:bigint,order_id:bigint,order_ts:string>
+```
+
+Three things to notice:
+
+1. **Columns come back in alphabetical order**, not the order in the data, so positional code (`df.columns[0]`) breaks.
+2. **Timestamps arrive as strings.** JSON has no date type, and Spark's timestamp inference (`inferTimestamp`) is off by default.
+3. **Money arrives as `double`**, a binary floating-point type that cannot represent most decimal amounts exactly.
+
+Inference also costs an extra pass over the input, and its result depends on which records it sees: a field that is null in today's sample may be inferred as a different type tomorrow. In production, always pass a schema:
+
+```python
+schema = "order_id BIGINT, customer_id BIGINT, country STRING, order_ts TIMESTAMP, amount DECIMAL(10,2)"
+typed = spark.read.schema(schema).json(f"{base}/json")
+print(typed.schema.simpleString())
+```
+
+```text
+struct<order_id:bigint,customer_id:bigint,country:string,order_ts:timestamp,amount:decimal(10,2)>
+```
+
+## Malformed records
+
+Real feeds contain broken lines. Spark's JSON reader has three modes: `PERMISSIVE` (the default: sets fields to null and, if you declare it, keeps the raw line in a corrupt-record column), `DROPMALFORMED` (silently drops bad lines) and `FAILFAST` (fails the job). Declare the column so nothing is lost silently:
+
+```python
+bad = f"{base}/bad.json"
+with open(bad, "w") as fh:
+    fh.write('{"id": 1, "amount": "12.50"}\n{"id": 2, "amount": oops}\n{"id": "x3", "amount": "7"}\n')
+
+parsed = spark.read.schema("id INT, amount DECIMAL(10,2), _corrupt_record STRING").json(bad)
+parsed.show(truncate=False)
+```
+
+```text
++----+------+---------------------------+
+|id  |amount|_corrupt_record            |
++----+------+---------------------------+
+|1   |12.50 |NULL                       |
+|NULL|NULL  |{"id": 2, "amount": oops}  |
+|NULL|7.00  |{"id": "x3", "amount": "7"}|
++----+------+---------------------------+
+```
+
+The second line is not valid JSON. The third is valid JSON, but `"x3"` cannot be an `INT`, so the record is flagged as corrupt (and only the field that failed is null). Route rows with a non-null `_corrupt_record` to a quarantine table and alert on the count; do not let `DROPMALFORMED` hide them.
+
+## Compression and splittability
+
+Spark splits large files into chunks (up to `spark.sql.files.maxPartitionBytes`, 128 MB by default) so several tasks read one file in parallel. That needs the format to be readable from the middle of a file. Uncompressed JSON lines can be split at newlines, and Parquet at row groups, but a gzip stream can only be decompressed from the start:
+
+```python
+orders.coalesce(1).write.option("compression", "gzip").json(f"{base}/json_gz")
+spark.conf.set("spark.sql.files.maxPartitionBytes", 1024 * 1024)     # 1 MB, to make the effect visible
+for fmt, path in [("json", "json"), ("json", "json_gz"), ("parquet", "parquet")]:
+    n = spark.read.format(fmt).load(f"{base}/{path}").rdd.getNumPartitions()
+    print(f"{path:8} {size_kb(f'{base}/{path}'):6} KB  partitions={n}")
+spark.conf.unset("spark.sql.files.maxPartitionBytes")
+```
+
+```text
+json      20878 KB  partitions=21
+json_gz    2465 KB  partitions=1
+parquet    3382 KB  partitions=4
+```
+
+Gzip shrank the JSON by about eight times (smaller even than Snappy-compressed Parquet on this synthetic data), but the whole file must be read by one task. A single 20 GB `.json.gz` file is therefore read by one core while the rest of the cluster waits. Prefer many moderately sized gzip files, a splittable codec, or convert early to Parquet, whose internal compression is applied per column chunk and never blocks splitting. Parquet gave fewer partitions than JSON simply because the file is smaller.
 
 ## A practical pattern
 
-1. **Land** raw JSON unchanged (bronze), partitioned by arrival date. It preserves exactly what the source sent.
-2. **Parse** with an explicit schema, cast types (timestamps, decimals), and capture malformed records.
+1. **Land** raw JSON unchanged (bronze), partitioned by arrival date. It preserves exactly what the source sent and lets you replay.
+2. **Parse** with an explicit schema, cast types (timestamps, decimals), and capture malformed records into a quarantine table.
 3. **Write** Parquet or a Parquet-based table format (silver) for all downstream use.
 
+{/* noexec */}
 ```python
-from pyspark.sql import SparkSession
-
-spark = SparkSession.builder.getOrCreate()
-schema = "event_id STRING, user_id BIGINT, event_type STRING, event_ts TIMESTAMP, amount DECIMAL(12,2)"
-
-(spark.read.schema(schema).json("raw/events/dt=2026-10-01/")
-      .write.mode("overwrite").parquet("silver/events/dt=2026-10-01/"))
+(spark.read.schema(schema).option("columnNameOfCorruptRecord", "_corrupt_record")
+      .json("s3://lake/raw/events/dt=2026-10-01/")
+      .write.format("delta").mode("append").save("s3://lake/silver/events/"))
 ```
 
-## When to keep JSON
+### When to keep JSON
 
 - Raw landing and replay.
 - Small configuration or reference files.
-- Truly schemaless payloads you store as a single column for later parsing.
+- Truly variable payloads stored in a single string column for later parsing (Spark 4 also offers a `VARIANT` type for semi-structured data, which stores it in a binary form that is faster to query than a JSON string).
 
-## Common mistakes
+## Practice questions
 
-1. Building dashboards directly on raw JSON.
-2. Relying on schema inference in production.
-3. Storing timestamps as strings in the analytics layer.
+<details><summary>Why is Parquet faster than JSON even when the query selects every column?</summary>
 
-## Key takeaway
+Parquet stores typed binary values with encodings such as dictionary and run-length encoding, so there is far less data to read and nothing to tokenise; JSON must parse text, field names and digits on every row. Parquet also lets the reader skip row groups using statistics.
 
-Land JSON, analyse Parquet. Convert once, with an explicit schema, as early as possible.
+</details>
+
+<details><summary>Your daily job reads a 30 GB events.json.gz file and uses one task. Why, and how do you fix it?</summary>
+
+Gzip is not splittable, so Spark cannot start reading in the middle of the file and assigns the whole file to one task. Ask the producer for many smaller files or a splittable format, or accept one slow ingest step and convert immediately to Parquet so every later stage is parallel.
+
+</details>
+
+<details><summary>What can go wrong with schema inference on JSON in production?</summary>
+
+The inferred types can change between runs (a field that is always null in one batch, integers that later have decimals), timestamps and decimals come back as strings or doubles, columns are reordered alphabetically, and inference costs an extra pass. Use an explicit schema and handle drift deliberately.
+
+</details>
+
+<details><summary>How do you make sure malformed JSON records are not silently lost?</summary>
+
+Read in `PERMISSIVE` mode with an explicit schema that includes a corrupt-record column, write rows where it is non-null to a quarantine table, and monitor their count. Avoid `DROPMALFORMED`, which discards them without trace.
+
+</details>
+
+## Key takeaways
+
+- Land JSON, analyse Parquet. Convert once, with an explicit schema, as early as possible.
+- Parquet reads only the columns and row groups a query needs; JSON parses everything.
+- Schema inference reorders columns, leaves timestamps as strings and uses doubles for money.
+- Capture malformed records with a corrupt-record column and quarantine them.
+- Gzip-compressed JSON is not splittable; one large `.gz` file means one task.
