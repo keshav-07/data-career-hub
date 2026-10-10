@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "Data Lakes, Lakehouse Architecture and Delta Lake"
 seoTitle: "Data Lakes, Lakehouse Architecture and Delta Lake"
 description: "Data lakes to lakehouse with Delta Lake: file and table formats, transactions, schema evolution, medallion layers, maintenance and governance in one guide."
@@ -11,9 +11,10 @@ topic: ["fundamentals"]
 difficulty: "Intermediate"
 pillar: true
 featured: false
-related: ["articles:delta-lake/transactions-schema-evolution", "articles:delta-lake/delta-vs-traditional-lake-tables", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "system-designs:scalable-lakehouse"]
+related: ["articles:delta-lake/transactions-schema-evolution", "articles:delta-lake/delta-vs-traditional-lake-tables", "articles:delta-lake/merge-upserts-change-data-feed", "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering", "articles:data-warehousing/lake-vs-warehouse-vs-lakehouse", "system-designs:scalable-lakehouse"]
 sources: [{"label": "Delta Lake documentation", "url": "https://docs.delta.io/"}]
-versionContext: "Describes Delta Lake 3.x; comparable capabilities exist in Apache Iceberg and Apache Hudi"
+next: "articles:delta-lake/json-vs-parquet"
+versionContext: "Linked lessons run on PySpark 4.2 with delta-spark 4.4; comparable capabilities exist in Apache Iceberg and Apache Hudi"
 ---
 
 A data lake stores files cheaply in object storage. A lakehouse adds the reliability of a warehouse on top of those files through an open **table format** such as Delta Lake. This guide connects the pieces.
@@ -28,33 +29,39 @@ Read: [Lake vs warehouse vs lakehouse](/data-warehousing/lake-vs-warehouse-vs-la
 
 Use columnar Parquet for analytical data, row-based Avro for messages, and treat JSON and CSV as landing formats only.
 
-Read: [Parquet vs Avro vs ORC](/delta-lake/parquet-vs-avro-vs-orc/) · [JSON vs Parquet](/delta-lake/json-vs-parquet/)
+Read: [JSON vs Parquet](/delta-lake/json-vs-parquet/) · [Parquet vs Avro vs ORC](/delta-lake/parquet-vs-avro-vs-orc/) · Practise: [Parquet internals](/interview/delta-lake/parquet-internals/)
 
 ## 3. Table formats and the transaction log
 
-Delta Lake writes Parquet data files plus a `_delta_log` of commits. That log provides atomic writes, consistent snapshots, optimistic concurrency, time travel and row-level `MERGE`, `UPDATE` and `DELETE`.
+Delta Lake writes Parquet data files plus a `_delta_log` of commits. That log provides atomic writes, consistent snapshots, optimistic concurrency, time travel and row-level `MERGE`, `UPDATE` and `DELETE`. Apache Iceberg and Apache Hudi solve the same problem with different metadata designs.
 
-Read: [Delta Lake transactions, schema evolution and time travel](/delta-lake/transactions-schema-evolution/) · [Delta vs plain Parquet tables](/delta-lake/delta-vs-traditional-lake-tables/) · Practise: [What Delta Lake solves](/interview/delta-lake/what-delta-lake-solves/)
+Read: [Delta Lake transactions, schema evolution and time travel](/delta-lake/transactions-schema-evolution/) · [Delta vs plain Parquet tables, Iceberg and Hudi](/delta-lake/delta-vs-traditional-lake-tables/) · Practise: [What Delta Lake solves](/interview/delta-lake/what-delta-lake-solves/) · [Delta vs Iceberg vs Hudi](/interview/delta-lake/delta-vs-iceberg-vs-hudi/) · [Time travel uses and limits](/interview/delta-lake/time-travel-use-cases-limits/)
 
-## 4. Schema enforcement and evolution
+## 4. MERGE, CDC and streaming
+
+`MERGE` applies inserts, updates and deletes from a change feed in one commit and can maintain a Type 2 dimension. The change data feed exposes row-level changes to downstream jobs, and Delta tables work as exactly-once streaming sinks and as streaming sources.
+
+Read: [MERGE, change data feed and streaming](/delta-lake/merge-upserts-change-data-feed/) · Practise: [How MERGE works and why concurrent MERGEs fail](/interview/delta-lake/delta-merge-internals-conflicts/)
+
+## 5. Schema enforcement and evolution
 
 Reject mismatched writes by default; evolve schemas deliberately, preferring additive changes and expand-and-contract migrations for breaking ones.
 
 Read: [Schema evolution patterns](/delta-lake/schema-evolution-patterns/) · Practise: [When schema evolution is safe](/interview/delta-lake/schema-evolution-safety/)
 
-## 5. Medallion layers
+## 6. Maintenance and layout
+
+Compact small files with `OPTIMIZE`, cluster data on common filters (liquid clustering on new tables, Z-order on older ones), use deletion vectors for cheap row-level changes, and `VACUUM` with a retention that respects time travel and long readers.
+
+Read: [OPTIMIZE, Z-ordering, VACUUM and liquid clustering](/delta-lake/optimize-zorder-vacuum-liquid-clustering/) · [Partitioning, clustering and data layout](/data-warehousing/partitioning-clustering-data-layout/) · Practise: [Z-order vs liquid clustering](/interview/delta-lake/optimize-zorder-vs-liquid-clustering/) · [VACUUM risks](/interview/delta-lake/vacuum-retention-risks/)
+
+## 7. Medallion layers
 
 Organise tables into bronze (raw), silver (cleaned and conformed) and gold (business models). Each layer reads only the previous one and can be rebuilt.
 
-Read: [Databricks workspace, jobs and lakehouse](/databricks/workspace-jobs-lakehouse/)
+Read: [Databricks workspace, jobs and lakehouse](/databricks/workspace-jobs-lakehouse/) · [Modelling methodologies: medallion](/data-warehousing/modeling-methodologies/)
 
-## 6. Maintenance
-
-Compact small files, cluster by common filters, and `VACUUM` old files with a retention period that respects time travel and long readers.
-
-Read: [Partitioning, clustering and data layout](/data-warehousing/partitioning-clustering-data-layout/)
-
-## 7. Governance
+## 8. Governance
 
 A catalog provides names, permissions, masking and lineage across engines.
 

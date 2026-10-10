@@ -130,5 +130,57 @@
   "Custom partitioners": {
     "ref": "articles:pyspark/writing-efficient-output",
     "heading": "Custom partitioners"
+  },
+  "Delta Lake architecture": {
+    "ref": "articles:delta-lake/transactions-schema-evolution",
+    "heading": "Delta Lake architecture"
+  },
+  "ACID transactions on Delta": {
+    "ref": "articles:delta-lake/transactions-schema-evolution",
+    "heading": "ACID transactions on Delta"
+  },
+  "Transaction log (_delta_log)": {
+    "ref": "articles:delta-lake/transactions-schema-evolution",
+    "heading": "The transaction log (_delta_log)"
+  },
+  "Time travel & versioning": {
+    "ref": "articles:delta-lake/transactions-schema-evolution",
+    "heading": "Time travel and versioning"
+  },
+  "Schema enforcement": {
+    "ref": "articles:delta-lake/transactions-schema-evolution",
+    "heading": "Schema enforcement"
+  },
+  "Schema evolution": {
+    "ref": "articles:delta-lake/transactions-schema-evolution",
+    "heading": "Schema evolution"
+  },
+  "MERGE / upsert": {
+    "ref": "articles:delta-lake/merge-upserts-change-data-feed",
+    "heading": "MERGE and upserts"
+  },
+  "Change Data Feed": {
+    "ref": "articles:delta-lake/merge-upserts-change-data-feed",
+    "heading": "Change data feed"
+  },
+  "Streaming with Delta": {
+    "ref": "articles:delta-lake/merge-upserts-change-data-feed",
+    "heading": "Streaming with Delta"
+  },
+  "OPTIMIZE & compaction": {
+    "ref": "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering",
+    "heading": "OPTIMIZE and compaction"
+  },
+  "Z-Ordering": {
+    "ref": "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering",
+    "heading": "Z-Ordering"
+  },
+  "VACUUM & retention": {
+    "ref": "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering",
+    "heading": "VACUUM and retention"
+  },
+  "Liquid clustering": {
+    "ref": "articles:delta-lake/optimize-zorder-vacuum-liquid-clustering",
+    "heading": "Liquid clustering"
   }
 }

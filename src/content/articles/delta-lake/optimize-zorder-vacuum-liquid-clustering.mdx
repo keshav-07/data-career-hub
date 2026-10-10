@@ -1,0 +1,327 @@
+---
+title: "Delta Lake Performance: OPTIMIZE, Z-Ordering, VACUUM and Liquid Clustering"
+seoTitle: "Delta OPTIMIZE, Z-ORDER, VACUUM, Liquid Clustering"
+description: "Delta Lake OPTIMIZE and VACUUM in practice: compaction, Z-ordering vs liquid clustering, deletion vectors and safe retention, with runnable PySpark examples."
+technology: ["delta-lake", "spark"]
+topic: ["performance", "maintenance", "data-layout"]
+difficulty: "Advanced"
+publishedDate: "2026-10-09"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
+learningObjectives:
+  - "Compact small files with OPTIMIZE and explain why it does not disturb readers or streams"
+  - "Show how Z-ordering and liquid clustering narrow file min/max ranges so queries skip files"
+  - "Choose between partitioning, Z-ordering and liquid clustering for a table"
+  - "Run VACUUM safely and explain how retention limits time travel and long-running readers"
+  - "Explain deletion vectors and when their deleted rows are physically removed"
+prerequisites: ["articles:delta-lake/merge-upserts-change-data-feed"]
+related: ["articles:data-warehousing/partitioning-clustering-data-layout", "articles:pyspark/writing-efficient-output", "interview-questions:delta-lake/optimize-zorder-vs-liquid-clustering", "interview-questions:delta-lake/vacuum-retention-risks"]
+previous: "articles:delta-lake/merge-upserts-change-data-feed"
+next: "articles:delta-lake/schema-evolution-patterns"
+sources:
+  - { label: "Delta Lake documentation: Optimizations", url: "https://docs.delta.io/optimizations-oss/" }
+  - { label: "Delta Lake documentation: Liquid clustering", url: "https://docs.delta.io/delta-clustering/" }
+  - { label: "Delta Lake documentation: Table utility commands (VACUUM)", url: "https://docs.delta.io/delta-utility/" }
+  - { label: "Delta Lake documentation: Deletion vectors", url: "https://docs.delta.io/delta-deletion-vectors/" }
+versionContext: "Examples run locally on PySpark 4.2.0 with delta-spark 4.4.0 (open-source Delta). Databricks adds features such as predictive optimisation and automatic liquid clustering that are not covered here."
+---
+
+A Delta table that receives frequent small writes and `MERGE`s slowly degrades: thousands of small files, rows for one customer spread across every file, and old files piling up in storage. This lesson covers the maintenance that keeps it fast and cheap: compaction with `OPTIMIZE`, data layout with Z-ordering or liquid clustering, row-level deletes with deletion vectors, and cleaning up with `VACUUM`.
+
+## Setup
+
+The session lowers `optimize.maxFileSize` (the target size of files written by `OPTIMIZE`) so a small demo table produces several output files; leave the default (1 GB in open-source Delta) in real work.
+
+```python
+import os, re, tempfile
+import pyarrow.parquet as pq
+from pyspark.sql import SparkSession, functions as F
+from delta import configure_spark_with_delta_pip
+from delta.tables import DeltaTable
+
+builder = (
+    SparkSession.builder.master("local[2]").appName("delta-maintenance")
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.sql.shuffle.partitions", "2")
+    .config("spark.databricks.delta.optimize.maxFileSize", str(256 * 1024))   # demo only
+)
+spark = configure_spark_with_delta_pip(builder).getOrCreate()
+spark.sparkContext.setLogLevel("ERROR")
+base = tempfile.mkdtemp()
+
+def error_class(e):
+    """Return the [ERROR_CLASS] tag from a Spark or Delta exception message."""
+    found = re.search(r"\[[A-Z_.]+\]", str(e))
+    return found.group(0) if found else type(e).__name__
+
+def sample_events(start, end):
+    return (spark.range(start, end)
+        .select(F.col("id").alias("event_id"),
+                (F.hash("id") % 1000).cast("int").alias("customer_id"),
+                F.expr("date_add(DATE'2026-09-01', cast(id % 30 AS INT))").alias("event_date"),
+                F.round(F.rand(7) * 100, 2).alias("amount")))
+
+def customer_ranges(path):
+    """Min and max customer_id in each live data file, read from the Parquet footers."""
+    files = DeltaTable.forPath(spark, path).toDF().inputFiles()
+    out = []
+    for f in files:
+        md = pq.ParquetFile(f.replace("file:", "")).metadata
+        col = md.schema.names.index("customer_id")
+        stats = [md.row_group(g).column(col).statistics for g in range(md.num_row_groups)]
+        out.append((min(s.min for s in stats), max(s.max for s in stats)))
+    return sorted(out)
+
+events = f"{base}/events"
+for batch in range(20):                       # 20 small appends, like a micro-batch job
+    sample_events(batch * 5000, (batch + 1) * 5000).repartition(2) \
+        .write.format("delta").mode("append").save(events)
+print("files:", len(DeltaTable.forPath(spark, events).toDF().inputFiles()))
+```
+
+```text
+files: 40
+```
+
+## OPTIMIZE and compaction
+
+Every write creates at least one file per task, so streaming and frequent batch jobs produce many small files. Each file costs a storage request, a footer read and a task, so queries slow down even though the data volume is small.
+
+`OPTIMIZE` rewrites small files into larger ones (bin-packing) in a single commit:
+
+```python
+t = DeltaTable.forPath(spark, events)
+t.optimize().executeCompaction().select("metrics.numFilesRemoved", "metrics.numFilesAdded").show()
+```
+
+```text
++---------------+-------------+
+|numFilesRemoved|numFilesAdded|
++---------------+-------------+
+|             40|            6|
++---------------+-------------+
+```
+
+How it behaves:
+
+- The commit is marked `dataChange = false`, so streaming readers of the table do not reprocess the rewritten rows, and the old files remain available for time travel until `VACUUM`.
+- It is idempotent: running it again on already compacted files does nothing.
+- You can limit it to recent data with a partition predicate: `OPTIMIZE events WHERE event_date >= '2026-10-01'` (only partition columns are allowed in that `WHERE` on a partitioned table).
+- It competes with writers: a concurrent `DELETE`, `UPDATE` or `MERGE` that removes the same files makes one side fail with `ConcurrentDeleteDeleteException` or similar. Schedule compaction of hot partitions away from merge jobs.
+
+Avoid creating the problem as well as fixing it: repartition before writing so each task writes a reasonably sized file, and consider the auto compaction and optimized write table properties (`delta.autoOptimize.autoCompact`, `delta.autoOptimize.optimizeWrite`) on tables written in many small commits; check which your Delta version supports.
+
+## Z-Ordering
+
+Compaction fixes file *count*. It does not decide which rows share a file. A query such as `WHERE customer_id = 42` can skip a file only if 42 lies outside that file's min/max statistics in the log. With rows in arrival order, every file covers almost the whole range of `customer_id`:
+
+```python
+print(customer_ranges(events)[:4])
+```
+
+```text
+[(-999, 999), (-999, 999), (-999, 999), (-999, 999)]
+```
+
+(`hash() % 1000` gives values from -999 to 999.) No file can be skipped. `OPTIMIZE ... ZORDER BY` sorts rows along a **Z-order curve** across the chosen columns before writing, so each output file holds a narrow range of values:
+
+```python
+spark.conf.set("spark.databricks.delta.optimize.maxFileSize", str(64 * 1024))  # more, smaller files for the demo
+t.optimize().executeZOrderBy("customer_id")
+ranges = customer_ranges(events)
+print(len(ranges), ranges[:4])
+```
+
+```text
+14 [(-999, -858), (-859, -718), (-719, -575), (-577, -444)]
+```
+
+Each file now covers about a fourteenth of the range, so a filter on one customer touches one or two files instead of all of them. The same idea works for several columns at once (for example `ZORDER BY (customer_id, event_date)`), but each extra column weakens the clustering on the others, so keep to the one to three columns used most in selective filters.
+
+Limits that matter:
+
+- Z-ordering rewrites **all** the data in scope each time; it is not incremental. On a large table run it per partition (`OPTIMIZE ... WHERE event_date = ... ZORDER BY ...`).
+- It only helps on columns that have statistics (the first 32 columns by default) and are used in filters. It is pointless on partition columns, which are already separated.
+- New writes after the `OPTIMIZE` land unclustered until the next run.
+
+## Liquid clustering
+
+Liquid clustering (Delta 3.1 and later) replaces both partitioning and Z-ordering for most new tables. You declare clustering columns once; `OPTIMIZE` then clusters data **incrementally**, rewriting only files that are not yet well clustered, and the columns can be changed later without rewriting existing data.
+
+```python
+liquid = f"{base}/events_liquid"
+spark.sql(f"""
+  CREATE TABLE delta.`{liquid}` (event_id BIGINT, customer_id INT, event_date DATE, amount DOUBLE)
+  USING delta CLUSTER BY (customer_id)
+""")
+sample_events(0, 100000).repartition(8).write.format("delta").mode("append").save(liquid)
+spark.sql(f"OPTIMIZE delta.`{liquid}`").select("metrics.numFilesAdded").show()
+print(customer_ranges(liquid)[:3])
+spark.sql(f"DESCRIBE DETAIL delta.`{liquid}`").select("clusteringColumns", "tableFeatures").show(truncate=False)
+```
+
+```text
++-------------+
+|numFilesAdded|
++-------------+
+|           17|
++-------------+
+
+[(-999, -878), (-879, -763), (-764, -641)]
++-----------------+----------------------------------------------------+
+|clusteringColumns|tableFeatures                                       |
++-----------------+----------------------------------------------------+
+|[customer_id]    |[appendOnly, clustering, domainMetadata, invariants]|
++-----------------+----------------------------------------------------+
+```
+
+Change the keys when query patterns change; existing files keep their layout and later `OPTIMIZE` runs use the new keys (`OPTIMIZE ... FULL` reclusters everything now). Liquid clustering cannot be combined with `PARTITIONED BY` or `ZORDER BY`:
+
+```python
+spark.sql(f"ALTER TABLE delta.`{liquid}` CLUSTER BY (event_date, customer_id)")
+try:
+    spark.sql(f"OPTIMIZE delta.`{liquid}` ZORDER BY (amount)")
+except Exception as e:
+    print(error_class(e))
+```
+
+```text
+[DELTA_CLUSTERING_WITH_ZORDER_BY]
+```
+
+### Partitioning vs Z-order vs liquid clustering
+
+| | Hive-style partitioning | Z-order | Liquid clustering |
+|---|---|---|---|
+| How data is separated | One directory per value | Sorted within files by `OPTIMIZE` | Clustered within files by `OPTIMIZE` |
+| Good key | Low-cardinality, always filtered (date) | 1 to 3 selective filter columns | Up to 4 filter columns, any cardinality |
+| Change the key | Rewrite the table | Choose new columns on next run | `ALTER TABLE ... CLUSTER BY`, no rewrite |
+| Maintenance cost | None, but small files if over-partitioned | Full rewrite of the scope each run | Incremental |
+| Pitfall | Too many small partitions | Forgotten runs; too many columns | Readers and writers must support the `clustering` feature |
+
+Rules of thumb: do not partition small tables at all; if you partition, use a coarse column (a date, not a timestamp or a user ID) and keep each partition to many large files. For new tables on a recent Delta version, prefer liquid clustering on the columns used in filters and merge conditions. Clustering on a `MERGE` key also reduces how many files each merge rewrites.
+
+## Deletion vectors
+
+Without deletion vectors, deleting one row rewrites the whole Parquet file that contains it ("copy-on-write"). With them, Delta writes a small **deletion vector** file that marks row positions as deleted, and readers filter those rows out ("merge-on-read"). Enable with `delta.enableDeletionVectors`:
+
+```python
+dv = f"{base}/dv"
+spark.sql(f"CREATE TABLE delta.`{dv}` (id BIGINT, v STRING) USING delta "
+          "TBLPROPERTIES ('delta.enableDeletionVectors' = 'true')")
+spark.range(0, 1000).selectExpr("id", "CAST(id AS STRING) AS v").coalesce(1) \
+     .write.format("delta").mode("append").save(dv)
+spark.sql(f"DELETE FROM delta.`{dv}` WHERE id < 10")
+m = DeltaTable.forPath(spark, dv).history(1).select("operationMetrics").first()[0]
+print({k: m[k] for k in ("numDeletionVectorsAdded", "numRemovedFiles", "numCopiedRows")})
+print(sorted(f[:15] if f.startswith("deletion") else f[:10] for f in os.listdir(dv) if not f.startswith(".")))
+print(spark.read.format("delta").load(dv).count())
+```
+
+```text
+{'numDeletionVectorsAdded': '1', 'numRemovedFiles': '0', 'numCopiedRows': '0'}
+['_delta_log', 'deletion_vector', 'part-00000']
+990
+```
+
+No file was rewritten and no rows were copied; the table directory now holds the original Parquet file plus a `deletion_vector_....bin` file. `UPDATE` and `MERGE` use them too: the old row is marked deleted and the new version goes to a new file.
+
+Trade-offs and pitfalls:
+
+- Writes get much cheaper; reads pay a small cost to apply the vectors. `OPTIMIZE` may apply deletion vectors when it rewrites eligible files, but it does not guarantee that every deletion vector is purged. Use `REORG TABLE ... APPLY (PURGE)` when every affected file must be rewritten.
+- **Deleted rows are still in the Parquet files.** For GDPR-style erasure, run `REORG TABLE ... APPLY (PURGE)` to rewrite affected files, then `VACUUM` after the retention period so the old files are gone.
+- Enabling the feature upgrades the table protocol; readers that do not support deletion vectors cannot read the table.
+
+## VACUUM and retention
+
+`DELETE`, `MERGE`, `OPTIMIZE` and overwrites never delete data files; they mark them removed in the log. `VACUUM` physically deletes files that are **not referenced by the current version and older than the retention threshold** (`delta.deletedFileRetentionDuration`, 7 days by default). It also removes orphan files left by failed writes once they are that old. It does not touch the log.
+
+```python
+print("would delete:", spark.sql(f"VACUUM delta.`{events}` DRY RUN").count())
+try:
+    t.vacuum(0)                                   # retain 0 hours
+except Exception as e:
+    print(error_class(e))
+```
+
+```text
+would delete: 0
+[DELTA_VACUUM_RETENTION_PERIOD_TOO_SHORT]
+```
+
+Nothing is old enough to delete yet, and Delta refuses a retention shorter than the configured threshold. You can switch off that safety check (`spark.databricks.delta.retentionDurationCheck.enabled = false`). This demo does it to show the consequence:
+
+```python
+spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "false")
+spark.sql(f"VACUUM delta.`{events}` RETAIN 0 HOURS")
+spark.conf.set("spark.databricks.delta.retentionDurationCheck.enabled", "true")
+try:
+    spark.read.format("delta").option("versionAsOf", 0).load(events).collect()
+except Exception as e:
+    print(error_class(e))
+print(spark.read.format("delta").load(events).count())
+```
+
+```text
+Deleted 46 files and directories in a total of 1 directories.
+[FAILED_READ_FILE.FILE_NOT_EXIST]
+100000
+```
+
+The current version is intact, but version 0 now points at deleted files. Note that the check needs `.collect()`: a bare `.count()` on an old version can still succeed, because Delta answers it from the row counts stored in the log without opening the files.
+
+### Choosing the retention period
+
+The retention must be longer than:
+
+- the longest-running query or job that could still be reading an older version (a reader that started before a compaction still needs the pre-compaction files);
+- the furthest any streaming reader can lag behind the table;
+- the time-travel window you promise users (to restore yesterday's table you need yesterday's files).
+
+So the safe pattern is: keep the default 7 days or longer, run `VACUUM` on a schedule (it is not automatic in open-source Delta), and use `DRY RUN` before changing anything. Raise `delta.logRetentionDuration` too if you need history longer than 30 days. `VACUUM LITE` (Delta 3.3 and later) finds candidates from the log instead of listing the directory, which is much cheaper on large tables in object storage.
+
+## Practice questions
+
+<details>
+<summary>Queries filtering on customer_id scan every file even after OPTIMIZE. Why, and what fixes it?</summary>
+
+Compaction only changes file sizes; rows are still in arrival order, so every file's min/max range spans almost all customers and none can be skipped. Z-order by `customer_id` (or, better on a new table, liquid cluster by it) so files cover narrow ranges, and check that `customer_id` is within the columns that have statistics.
+
+</details>
+
+<details>
+<summary>When would you still partition a Delta table instead of using liquid clustering?</summary>
+
+When the table is large, a coarse column such as a date is in almost every filter and in retention deletes, and every engine that writes or reads the table may not support the clustering feature. Partitioning also gives a hard boundary that keeps concurrent jobs on different dates from conflicting. For new tables on recent Delta, liquid clustering is usually the better default.
+
+</details>
+
+<details>
+<summary>What can go wrong if you VACUUM with RETAIN 0 HOURS?</summary>
+
+Running queries and lagging streams that read an older snapshot fail with missing files, an in-flight writer's not-yet-committed files can be deleted, and time travel and `RESTORE` to earlier versions stop working. That is why Delta blocks short retentions unless you disable the check.
+
+</details>
+
+<details>
+<summary>A user asks for their data to be erased. The table uses deletion vectors. Is DELETE enough?</summary>
+
+No. `DELETE` marks the rows in a deletion vector, but the bytes stay in the Parquet files, and older versions still reference files that contain them. Run `REORG TABLE ... APPLY (PURGE)` to rewrite those files, then `VACUUM` once the retention period has passed (and check copies elsewhere: change data feed files, downstream tables, backups).
+
+</details>
+
+<details>
+<summary>Does OPTIMIZE break a streaming job that reads the table?</summary>
+
+No. Its commit is flagged as not changing data, so the streaming source skips it rather than re-emitting the rewritten rows.
+
+</details>
+
+## Key takeaways
+
+- `OPTIMIZE` bin-packs small files in one commit without affecting readers or streams; prevent small files at write time where you can.
+- File skipping depends on narrow per-file min/max ranges: Z-order or liquid clustering provides them, compaction alone does not.
+- Liquid clustering is incremental and its keys can change; it replaces partitioning and Z-order on new tables, but cannot be combined with them.
+- Deletion vectors make row-level changes cheap; physical removal needs compaction or `REORG ... PURGE` followed by `VACUUM`.
+- `VACUUM` is what ends time travel. Keep retention above your longest reader, stream lag and restore window, and never disable the check casually.
