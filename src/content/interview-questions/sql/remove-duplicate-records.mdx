@@ -1,10 +1,10 @@
 ---
 seoTitle: "Remove Duplicate Records Safely in SQL"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "How would you detect and remove duplicate records safely?"
-description: "Interview answer: define what makes a record a duplicate, find them with GROUP BY, keep one row per key with ROW_NUMBER, and rebuild the table without destroying data."
+description: "Interview answer: define the duplicate key, find copies with GROUP BY, keep the latest row per key with ROW_NUMBER, rebuild or delete safely, and stop duplicates coming back."
 inventoryId: "INT-04"
 technology: ["sql"]
 topic: ["deduplication", "data-quality"]
@@ -12,59 +12,142 @@ difficulty: "Medium"
 questionType: ["coding", "scenario"]
 estimatedMinutes: 10
 interviewRelevance: "High"
-shortAnswer: "First define the business key that should be unique, such as order_id, and a rule for which copy wins, such as the latest loaded_at. Find duplicates with GROUP BY key HAVING COUNT(*) > 1, then keep one row per key using ROW_NUMBER() OVER (PARTITION BY key ORDER BY loaded_at DESC) and select rn = 1. Write the result to a new table, check counts, then swap it in, rather than deleting rows in place."
-followUps: ["Why might SELECT DISTINCT not remove these duplicates?", "How do you prevent duplicates from coming back?", "How would you deduplicate a table too large to rebuild every day?"]
+shortAnswer: "First define the business key that should be unique, such as order_id, and a rule for which copy wins, such as the latest loaded_at with a unique tiebreaker. Find duplicates with GROUP BY key HAVING COUNT(*) > 1, then keep one row per key using ROW_NUMBER() OVER (PARTITION BY key ORDER BY loaded_at DESC, load_id DESC) and select rn = 1. Write the result to a new table, check counts, then swap it in; if you must delete in place, delete rows with rn > 1 inside a transaction and check the count first."
+followUps: ["Why might SELECT DISTINCT not remove these duplicates?", "How do you prevent duplicates from coming back?", "How would you deduplicate a table too large to rebuild every day?", "How do you delete duplicates in place when the table has no unique column at all?"]
 prerequisites: ["articles:sql/window-functions"]
-related: ["articles:sql/ctes-subqueries-temp-tables", "interview-questions:data-engineering/idempotent-batch-pipeline"]
-versionContext: "Standard SQL. Queries verified against sample data on SQLite 3.45 (standard DATE and TIMESTAMP literals were run as plain strings there)"
+related: ["articles:sql/ctes-subqueries-temp-tables", "articles:sql/top-n-deduplication-scd-queries", "interview-questions:data-engineering/idempotent-batch-pipeline", "interview-questions:sql/scd-type-2-merge-sql"]
+versionContext: "Queries run on PostgreSQL 16.14 with scripts/verify-examples.py; outputs are copied from psql."
 practice: {"platform": "LeetCode", "number": 196, "title": "Delete Duplicate Emails", "url": "https://leetcode.com/problems/delete-duplicate-emails/"}
+sources:
+  - { label: "PostgreSQL 16 documentation: Window functions", url: "https://www.postgresql.org/docs/16/functions-window.html" }
+  - { label: "PostgreSQL 16 documentation: DELETE", url: "https://www.postgresql.org/docs/16/sql-delete.html" }
 ---
 
 ## Detailed explanation
 
-"Duplicate" must be defined before it can be removed. Two rows can be **exact copies**, or they can share a business key but differ in other columns (a reload, a correction). Each needs a rule.
+"Duplicate" must be defined before it can be removed. Two rows can be **exact copies** (a file loaded twice), or they can share a business key but differ in other columns (a reload with a correction). Each needs a rule, and the rule is a business decision: usually "the most recently loaded version wins".
 
-## Example
+## Sample data
+
+Order 1 was loaded twice, unchanged. Order 3 was corrected the next day. Order 2 is clean. Every load row gets its own `load_id`, which later serves as a tiebreaker.
 
 ```sql
--- order 1 was loaded twice; order 3 was corrected the next day
+CREATE TABLE raw_orders (
+  load_id   INT PRIMARY KEY,
+  order_id  INT NOT NULL,
+  customer  TEXT NOT NULL,
+  amount    NUMERIC(10, 2) NOT NULL,
+  loaded_at TIMESTAMP NOT NULL
+);
+INSERT INTO raw_orders VALUES
+  (1, 1, 'asha', 40.00, '2026-10-01 02:00'),
+  (2, 2, 'ben',  25.00, '2026-10-01 02:00'),
+  (3, 3, 'chen', 90.00, '2026-10-01 02:00'),
+  (4, 1, 'asha', 40.00, '2026-10-02 02:00'),
+  (5, 3, 'chen', 95.00, '2026-10-02 02:00');
+```
+
+## Step 1: find the duplicates
+
+```sql
 SELECT order_id, COUNT(*) AS copies
 FROM raw_orders
 GROUP BY order_id
-HAVING COUNT(*) > 1;
--- (1, 2), (3, 2)
+HAVING COUNT(*) > 1
+ORDER BY order_id;
 ```
 
-`SELECT DISTINCT *` does **not** help here: the copies differ in `loaded_at` (and order 3 in `amount`), so all 5 rows are distinct.
+| order_id | copies |
+|---|---|
+| 1 | 2 |
+| 3 | 2 |
 
-Keep the latest version of each order:
+`SELECT DISTINCT *` does **not** help: the copies differ in `load_id` and `loaded_at` (and order 3 in `amount`), so all five rows are distinct. `DISTINCT` only removes rows that are identical in every selected column.
+
+## Step 2: keep the latest version of each order
 
 ```sql
 CREATE TABLE orders_clean AS
 WITH ranked AS (
   SELECT *,
-         ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY loaded_at DESC) AS rn
+         ROW_NUMBER() OVER (PARTITION BY order_id
+                            ORDER BY loaded_at DESC, load_id DESC) AS rn
   FROM raw_orders
 )
 SELECT order_id, customer, amount, loaded_at
 FROM ranked
 WHERE rn = 1;
+
+SELECT * FROM orders_clean ORDER BY order_id;
 ```
 
-Verify before swapping: `COUNT(*)` should equal `COUNT(DISTINCT order_id)` (3 and 3 here).
+| order_id | customer | amount | loaded_at |
+|---|---|---|---|
+| 1 | asha | 40.00 | 2026-10-02 02:00:00 |
+| 2 | ben | 25.00 | 2026-10-01 02:00:00 |
+| 3 | chen | 95.00 | 2026-10-02 02:00:00 |
 
-## Why rebuild instead of DELETE
+`load_id DESC` is the tiebreaker: if two copies share a `loaded_at`, the same row still wins on every run. Without it, `ROW_NUMBER` may pick a different row each time and the pipeline is not reproducible. `ROW_NUMBER` (not `RANK`) is required, because `RANK` would give both tied copies rank 1 and keep both.
 
-Deleting in place is irreversible and easy to get wrong. Building a clean table, checking it, then renaming or swapping it is safer, and the raw table remains for audit.
+## Step 3: verify before swapping
+
+```sql
+SELECT COUNT(*) AS rows_kept,
+       COUNT(DISTINCT order_id) AS distinct_keys,
+       (SELECT COUNT(DISTINCT order_id) FROM raw_orders) AS keys_in_source
+FROM orders_clean;
+```
+
+| rows_kept | distinct_keys | keys_in_source |
+|---|---|---|
+| 3 | 3 | 3 |
+
+The key is now unique and no order was lost. Then rename or swap the clean table in (in PostgreSQL, two `ALTER TABLE ... RENAME` statements in one transaction).
+
+## Deleting in place
+
+When rebuilding is not an option, delete every row that is not the winner, in a transaction so you can check the count before committing:
+
+```sql
+BEGIN;
+DELETE FROM raw_orders r
+USING (
+  SELECT load_id,
+         ROW_NUMBER() OVER (PARTITION BY order_id
+                            ORDER BY loaded_at DESC, load_id DESC) AS rn
+  FROM raw_orders
+) d
+WHERE r.load_id = d.load_id AND d.rn > 1;
+SELECT load_id, order_id, amount FROM raw_orders ORDER BY order_id;
+COMMIT;
+```
+
+| load_id | order_id | amount |
+|---|---|---|
+| 4 | 1 | 40.00 |
+| 2 | 2 | 25.00 |
+| 5 | 3 | 95.00 |
+
+The `DELETE` needs a column that identifies one physical row. If the table has none (true exact duplicates with no id), PostgreSQL's system column `ctid` can play that role inside one statement, but it changes when rows are updated or the table is rewritten, so never store it. In warehouses without row ids, rebuild the table with `CREATE OR REPLACE TABLE ... AS SELECT` (Snowflake, BigQuery, Databricks) and `QUALIFY ROW_NUMBER() OVER (...) = 1`.
+
+## Why rebuild is usually safer
+
+A `DELETE` is irreversible once committed, and an error in the rule removes real data. Building a clean table, checking it, then swapping keeps the raw table for audit and makes the step easy to rerun. On large tables a rebuild can also be cheaper than a delete, which in MVCC engines leaves dead rows that need vacuuming.
+
+## Large tables: deduplicate incrementally
+
+Rebuilding a billion-row table every day is wasteful. Deduplicate only the new batch, then `MERGE` it into the target on the business key, updating when the incoming row is newer. Each run touches only the new data, and a rerun of the same batch changes nothing. The SCD and upsert patterns are in [the SCD Type 2 merge question](/interview/sql/scd-type-2-merge-sql/).
 
 ## Preventing recurrence
 
-- Enforce uniqueness at the target (primary key, or `MERGE` on the key).
-- Make loads idempotent so retries do not append copies.
-- Add a data-quality check that fails when the key is not unique.
+- Enforce uniqueness at the target: a primary key or unique constraint where the engine enforces it. Snowflake and BigQuery accept primary key declarations but do not enforce them, so test instead.
+- Make loads idempotent (`MERGE` on the key, or delete-and-insert by partition) so retries do not append copies.
+- Add a data-quality check (the `HAVING COUNT(*) > 1` query) that fails the pipeline when the key is not unique.
 
 ## Common mistakes
 
 1. Deduplicating without agreeing which copy is correct.
 2. Using `DISTINCT` when copies differ in metadata columns.
-3. A non-deterministic `ORDER BY` in `ROW_NUMBER` (ties in `loaded_at`), so a different row wins on each run. Add a tiebreaker.
+3. A non-deterministic `ORDER BY` in `ROW_NUMBER` (ties in `loaded_at`), so a different row wins on each run.
+4. Using `RANK` or `DENSE_RANK`, which keep every tied copy.
+5. Deleting in place without a transaction and a count check.
