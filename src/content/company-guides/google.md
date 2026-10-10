@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Google Data Engineering Interview Preparation"
 seoTitle: "Google Data Engineering Interview Preparation"
 description: "Google Data Engineer interview prep from its published hiring and interview-tips pages, with labelled practice on SQL, pipelines and large-scale design."
@@ -9,7 +9,7 @@ inventoryId: "COMPANY-02"
 technology: ["data-engineering"]
 topic: ["company-preparation"]
 company: "Google"
-evidenceNote: "Sources below are pages on Google's own website, identified on 2026-10-05. They describe the company's general hiring process; they are not specific to Data Engineering roles, and processes vary by team and change over time. Summaries on this page are deliberately brief and must be checked against the live pages by a reviewer before publication. We have not added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us."
+evidenceNote: "Sources below are pages on Google's own website, identified on 2026-10-05. They describe the company's general hiring process; they are not specific to Data Engineering roles, and processes vary by team and change over time. Summaries are deliberately brief and only say what each linked page covers, without paraphrasing details that may change; treat the linked page as authoritative. We have not added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us."
 verifiedSources: [{"label": "Google Careers: Our hiring process", "url": "https://www.google.com/about/careers/applications/how-we-hire/"}, {"label": "Google Careers: Interviewing at Google, best practices and tips", "url": "https://www.google.com/about/careers/applications/interview-tips/"}]
 commonTopics: [{"topic": "Google publishes an official description of its hiring process, from application through interviews to a hiring decision.", "basis": "verified-attributed", "source": {"label": "Google Careers: Our hiring process", "url": "https://www.google.com/about/careers/applications/how-we-hire/"}}, {"topic": "Google publishes interview tips for candidates on its careers site, covering how to prepare to talk about yourself and the role.", "basis": "verified-attributed", "source": {"label": "Google Careers: Interviewing at Google, best practices and tips", "url": "https://www.google.com/about/careers/applications/interview-tips/"}}]
 reportedQuestions: []
@@ -23,7 +23,7 @@ Prepare in three areas: technical fundamentals, data system design, and behaviou
 
 ## Technology focus
 
-Expect SQL and coding fundamentals at scale: window functions, deduplication, aggregation, Python data processing and complexity analysis. Revise [SQL fundamentals](/sql/sql-fundamentals/) and the [DSA pattern roadmap](/roadmaps/dsa-for-data-engineers/).
+Data Engineering roles commonly test SQL and coding fundamentals: window functions, deduplication, aggregation, Python data processing and complexity analysis. Revise [SQL fundamentals](/sql/sql-fundamentals/) and the [DSA pattern roadmap](/roadmaps/dsa-for-data-engineers/).
 
 ## System-design focus
 

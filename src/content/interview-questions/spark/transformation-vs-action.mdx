@@ -1,8 +1,8 @@
 ---
 seoTitle: "Spark Transformations vs Actions: Interview Answer"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "What is the difference between a transformation and an action in Spark?"
 description: "Interview answer: transformations lazily describe a new dataset, actions trigger execution and return a result or write output. Includes narrow vs wide."
 inventoryId: "INT-10"
@@ -14,7 +14,8 @@ estimatedMinutes: 5
 interviewRelevance: "High"
 shortAnswer: "A transformation such as select, filter or join describes a new DataFrame from an existing one and is lazy: Spark only records it in a plan. An action such as count, collect, show or a write forces Spark to optimise that plan and actually run a job. Laziness lets Spark combine steps and skip unnecessary work before anything executes."
 followUps: ["What is the difference between a narrow and a wide transformation?", "Why can calling count() several times in a notebook be slow?", "When would you cache a DataFrame?"]
-related: ["articles:spark/partitions-shuffles-skew", "interview-questions:pyspark/broadcast-join"]
+related: ["articles:pyspark/transformations-vs-actions", "articles:spark/partitions-shuffles-skew", "interview-questions:spark/what-causes-a-shuffle"]
+versionContext: "Example runs on PySpark 4.2.0 in local mode (local[2], spark.sql.shuffle.partitions=4); ANSI mode is on by default in Spark 4."
 ---
 
 ## Detailed explanation
@@ -35,14 +36,36 @@ Spark builds a **logical plan** as you chain transformations. Nothing runs yet. 
 ## Example
 
 ```python
-orders = spark.read.parquet("/data/orders")          # nothing runs yet
+from pyspark.sql import SparkSession, functions as F
+
+spark = (SparkSession.builder.master("local[2]").appName("tva")
+         .config("spark.sql.shuffle.partitions", "4").getOrCreate())
+
+orders = (spark.range(0, 100_000)                       # nothing runs yet
+          .select(F.col("id").alias("order_id"),
+                  (F.col("id") % 50).alias("customer_id"),
+                  (F.col("id") % 500).alias("amount")))
 big = orders.filter("amount > 100").select("customer_id", "amount")
-by_customer = big.groupBy("customer_id").sum("amount")  # still lazy
-by_customer.show()                                      # action: a job runs
+by_customer = big.groupBy("customer_id").agg(F.sum("amount").alias("total"))  # still lazy
+
+print(by_customer.orderBy("customer_id").first())       # action: a job runs
 ```
+
+```text
+Row(customer_id=0, total=420000)
+```
+
+Only the last line starts work. Spark then sees the whole chain, so it can apply the filter before the aggregation and pre-aggregate (`partial_sum`) on each partition before the shuffle that `groupBy` needs.
+
+## Trade-offs and pitfalls
+
+- **Errors surface late.** A bad cast or a division error appears at the action, often many lines after the transformation that caused it. A missing column is caught earlier, when the DataFrame is defined, because analysis is eager.
+- **Recomputation.** Every action re-runs the plan from the source. `cache()` the DataFrame if several actions reuse it, and `unpersist()` afterwards.
+- **`count()` is not a full check.** The optimiser prunes columns the action does not need, so a `count()` can succeed on a DataFrame whose columns would fail when written.
 
 ## Common mistakes
 
-1. Thinking `read` or `filter` runs immediately.
+1. Thinking `read` or `filter` runs immediately. (Reading can run a small job to infer a schema or list files, but the data itself is read only by an action.)
 2. Calling several actions on the same expensive DataFrame without caching, so Spark recomputes it each time.
 3. Using `collect()` on large data, pulling everything to the driver.
+4. Treating `cache()` as an action: it is lazy, and the cache fills on the next action.

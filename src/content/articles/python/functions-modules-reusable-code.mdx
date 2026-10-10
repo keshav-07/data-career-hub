@@ -1,18 +1,19 @@
 ---
 seoTitle: "Reusable Python Pipeline Code: Functions & Modules"
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Python Functions, Modules and Reusable Data Pipeline Code"
 description: "Structure Python pipeline code as small pure functions, clear modules and a thin entry point so it is testable, reusable and safe to run from any scheduler."
 inventoryId: "TECH-06"
 technology: ["python"]
 topic: ["functions", "modules", "code-structure"]
 difficulty: "Beginner"
-related: ["articles:python/idempotent-csv-loader", "articles:python/iterators-generators"]
-next: "articles:python/iterators-generators"
-sources: [{"label": "Python documentation: Modules", "url": "https://docs.python.org/3/tutorial/modules.html"}, {"label": "Python documentation: Defining functions", "url": "https://docs.python.org/3/tutorial/controlflow.html#defining-functions"}]
-versionContext: "Examples run on Python 3.12"
+related: ["articles:python/idempotent-csv-loader", "articles:python/iterators-generators", "interview-questions:python/mutable-default-arguments", "articles:python/testing-with-pytest"]
+previous: "articles:python/python-for-data-engineering"
+next: "articles:python/data-structures-for-interviews"
+sources: [{"label": "Python documentation: Modules", "url": "https://docs.python.org/3/tutorial/modules.html"}, {"label": "Python documentation: Defining functions", "url": "https://docs.python.org/3/tutorial/controlflow.html#defining-functions"}, {"label": "Python documentation: typing", "url": "https://docs.python.org/3/library/typing.html"}]
+versionContext: "Examples run on Python 3.11"
 ---
 
 Most pipeline scripts start as one long file that reads, transforms and writes in a single block. That works once and is painful afterwards: you cannot test the transformation without a database, and you cannot reuse it in another job. The fix is structure, not cleverness.
@@ -95,9 +96,91 @@ if __name__ == "__main__":
 
 The `if __name__ == "__main__":` guard means importing the module (from a test or an orchestrator) does not start the job. Only running it as a script does.
 
-## Type hints and docstrings
+## Pass dependencies in, too
 
-Type hints (`raw: dict -> dict`) cost little and let editors and type checkers catch mistakes such as passing a string where a number is expected. A one-line docstring that says what the function guarantees is more useful than a comment that repeats the code.
+The same idea applies to things a function **talks to**: a database connection, an HTTP fetch function, a clock. Pass them in, and production passes the real one while tests pass a fake:
+
+```python
+from datetime import date
+
+def build_report(fetch_orders, run_date: date) -> dict:
+    """fetch_orders is any callable returning order dicts for a date."""
+    orders = fetch_orders(run_date)
+    return {"date": run_date.isoformat(), "orders": len(orders), "revenue": sum(o["amount"] for o in orders)}
+
+fake_fetch = lambda d: [{"amount": 10.0}, {"amount": 5.5}]          # what a test would pass
+print(build_report(fake_fetch, date(2026, 10, 5)))
+```
+
+```text
+{'date': '2026-10-05', 'orders': 2, 'revenue': 15.5}
+```
+
+Note that the run date is a parameter too. A function that calls `date.today()` inside gives a different answer on a rerun next week, which breaks retries and backfills.
+
+## Type hints
+
+Type hints cost little and let editors and type checkers (`mypy`, `pyright`) catch mistakes such as passing a string where a number is expected, or forgetting that a value can be `None`, before the code runs. Python itself does not enforce them at run time.
+
+```python
+from typing import TypedDict
+
+class RawOrder(TypedDict):
+    order_id: str
+    customer: str
+    amount: str
+
+def parse(raw: RawOrder) -> dict[str, int | str | float]:
+    return {"order_id": int(raw["order_id"]), "customer": raw["customer"].strip(), "amount": float(raw["amount"])}
+
+def find_customer(orders: list[dict], name: str) -> dict | None:
+    """Return the first order for a customer, or None. The `| None` forces callers to handle absence."""
+    return next((o for o in orders if o["customer"] == name), None)
+
+orders = [parse({"order_id": "7", "customer": " Asha ", "amount": "19.5"})]
+print(find_customer(orders, "Asha"), find_customer(orders, "Ben"))
+print(parse.__annotations__["return"])
+```
+
+```text
+{'order_id': 7, 'customer': 'Asha', 'amount': 19.5} None
+dict[str, int | str | float]
+```
+
+Useful conventions for pipeline code:
+
+- Built-in generics (`list[str]`, `dict[str, int]`) and `X | None` work without imports on Python 3.10 and later.
+- `TypedDict` describes dict-shaped records such as JSON payloads; a frozen `dataclass` suits records and configuration you create yourself.
+- Annotate public functions at module boundaries first; that is where mistakes between team members happen.
+- Run the type checker in CI next to the tests.
+
+A one-line docstring that states what the function guarantees ("returns amounts in cents; never None") is more useful than a comment that repeats the code.
+
+## Mutable default arguments
+
+Default values are evaluated **once**, when `def` runs. A list or dict default is therefore shared by every call:
+
+```python
+def add_row(row, batch=[]):          # bug: one list for every call
+    batch.append(row)
+    return batch
+
+print(add_row(1), add_row(2))
+
+def add_row_fixed(row, batch=None):
+    batch = [] if batch is None else batch
+    batch.append(row)
+    return batch
+
+print(add_row_fixed(1), add_row_fixed(2))
+```
+
+```text
+[1, 2] [1, 2]
+[1] [2]
+```
+
+In a long-lived worker process this leaks rows from one run into the next. See the [interview question on mutable defaults](/interview/python/mutable-default-arguments/) for more cases, including defaults that read the clock.
 
 ## Common mistakes
 
@@ -108,7 +191,7 @@ Type hints (`raw: dict -> dict`) cost little and let editors and type checkers c
 
 ## Interview relevance
 
-Interviewers often ask you to "clean up" a script or explain how you would test a pipeline. Talk about pure functions, I/O at the edges, configuration passed in, and tests for the transformation layer.
+Interviewers often ask you to "clean up" a script or explain how you would test a pipeline. Talk about pure functions, I/O at the edges, configuration and dependencies passed in, type hints at module boundaries, and tests for the transformation layer (see [testing with pytest](/python/testing-with-pytest/)).
 
 ## Key takeaway
 

@@ -1,14 +1,14 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Data Engineering System Design Cheat Sheet"
 description: "Data engineering system design cheat sheet: requirements, estimates, architecture, storage, processing, reliability, quality and trade-offs on one page."
 inventoryId: "CHEAT-10"
 technology: ["data-engineering", "system-design"]
 topic: ["reference", "system-design"]
 cheatTopic: "System design"
-related: ["system-designs:scalable-batch-pipeline", "system-designs:change-data-capture-platform", "articles:etl-elt/batch-vs-streaming"]
+related: ["system-designs:scalable-batch-pipeline", "system-designs:change-data-capture-platform", "articles:etl-elt/batch-vs-streaming", "roadmaps:system-design-interview-roadmap"]
 versionContext: "Technology-neutral framework"
 ---
 
@@ -30,6 +30,8 @@ versionContext: "Technology-neutral framework"
 | 1 M events/day | ~12 events/second on average; plan for peaks of several times that |
 | 1 KB × 1 B events | ~1 TB raw before compression |
 | Columnar compression | Often several times smaller than raw JSON; measure for your data |
+| Kafka disk | daily bytes × retention days × replication factor (3), before compression |
+| Peak rate | State an assumed peak factor (for example 3 to 10 times average) and size for it |
 
 ## Building blocks
 
@@ -62,7 +64,7 @@ versionContext: "Technology-neutral framework"
 | ETL vs ELT | Compliance and compute location |
 | Normalised vs star schema | Write simplicity vs query simplicity |
 | Partition key choice | Pruning vs small files |
-| Exactly-once vs at-least-once + idempotency | Complexity vs practicality |
+| Framework transactions (Kafka transactions, Flink two-phase commit) vs at-least-once + idempotent sinks | Extra latency and coupling vs simpler, sink-specific dedup; both aim at exactly-once **effect** |
 | Managed vs self-hosted | Operations vs control and cost |
 
 ## Closing

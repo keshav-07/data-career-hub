@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "What causes a shuffle in Spark?"
 description: "Interview answer: wide transformations that need rows with the same key together, such as groupBy, joins, distinct and repartition, force Spark to shuffle data."
 seoTitle: "What Causes a Shuffle in Spark? Interview Answer"
@@ -13,18 +13,22 @@ questionType: ["conceptual"]
 estimatedMinutes: 6
 interviewRelevance: "High"
 shortAnswer: "A shuffle happens when a transformation needs rows with the same key to be in the same partition, which usually means moving data between executors. Wide transformations cause it: groupBy and aggregations, most joins, distinct, repartition, window functions with partitionBy, and global orderBy. A shuffle writes data to disk, sends it over the network and starts a new stage, so it is often the most expensive part of a job."
-followUps: ["How can you avoid shuffling a large table in a join?", "Does coalesce cause a shuffle?", "Why does groupBy().count() shuffle less data than you might expect?"]
+followUps: ["What is the difference between a narrow and a wide transformation?", "How can you avoid shuffling a large table in a join?", "Does coalesce cause a shuffle?", "Why does groupBy().count() shuffle less data than you might expect?", "Can a join avoid a shuffle when both sides are large?"]
 related: ["articles:spark/partitions-shuffles-skew", "articles:pyspark/transformations-vs-actions", "interview-questions:pyspark/broadcast-join"]
-versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+versionContext: "Examples run on PySpark 4.2.0 in local mode (local[2], spark.sql.shuffle.partitions=4); plans are shown as printed, expression IDs differ between runs."
 ---
 
 ## Detailed explanation
 
-| Causes a shuffle | Usually does not |
-|------------------|------------------|
+Spark processes each partition independently. That works for **narrow** transformations, where every output partition depends on exactly one input partition: `filter`, `select`, `withColumn`, `union`, `coalesce`. Consecutive narrow steps are pipelined into the same task and no data moves.
+
+A **wide** transformation needs all rows with the same key in one place. Spark ends the current stage, has each task write its output to local disk split by target partition (shuffle write), and starts a new stage whose tasks fetch their piece from every map task over the network (shuffle read). That disk write, network transfer and serialisation is why shuffles dominate the cost of most jobs, and why the number of shuffles roughly sets the number of stages.
+
+| Causes a shuffle (wide) | Usually does not (narrow) |
+|-------------------------|---------------------------|
 | `groupBy().agg()`, `distinct`, `dropDuplicates` | `select`, `filter`, `withColumn` |
 | Sort-merge and shuffle-hash joins | Broadcast hash join (large side stays put) |
-| `repartition(n)` / `repartition(col)` | `coalesce(n)` (merges partitions without a full shuffle) |
+| `repartition(n)` / `repartition(col)` | `coalesce(n)` (merges partitions without a shuffle) |
 | Window with `partitionBy`, global `orderBy` | `union` |
 
 ## Seeing it
@@ -32,22 +36,65 @@ versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say 
 ```python
 from pyspark.sql import SparkSession, functions as F
 
-spark = SparkSession.builder.master("local[2]").appName("example").getOrCreate()
+spark = (SparkSession.builder.master("local[2]").appName("shuffle")
+         .config("spark.sql.shuffle.partitions", "4").getOrCreate())
 
 df = spark.range(0, 100_000).withColumn("k", F.col("id") % 10)
 df.groupBy("k").count().explain()
 ```
 
-The plan contains `Exchange hashpartitioning(k, ...)`, which is the shuffle, with a `partial_count` before it: Spark pre-aggregates each partition so only one row per key per partition crosses the network.
+```text
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- HashAggregate(keys=[k#1L], functions=[count(1)])
+   +- Exchange hashpartitioning(k#1L, 4), ENSURE_REQUIREMENTS, [plan_id=15]
+      +- HashAggregate(keys=[k#1L], functions=[partial_count(1)])
+         +- Project [(id#0L % 10) AS k#1L]
+            +- Range (0, 100000, step=1, splits=2)
+```
+
+`Exchange hashpartitioning(k, 4)` is the shuffle. The `partial_count` below it pre-aggregates each partition, so only one row per key per input partition crosses the network.
+
+Compare a broadcast join, `coalesce` and `repartition`:
+
+```python
+dim = spark.createDataFrame([(i, f"name{i}") for i in range(10)], ["k", "name"])
+df.join(F.broadcast(dim), "k").explain()   # BroadcastExchange of dim only; df is not shuffled
+df.coalesce(1).explain()                    # Coalesce 1, no Exchange
+df.repartition(4).explain()                 # Exchange RoundRobinPartitioning(4)
+```
+
+```text
+...
++- BroadcastHashJoin [k#1L], [k#8L], Inner, BuildRight, false, false
+   :- Project [id#0L, (id#0L % 10) AS k#1L]
+   ...
+   +- BroadcastExchange HashedRelationBroadcastMode(...)
+...
+Coalesce 1
++- *(1) Project [id#0L, (id#0L % 10) AS k#1L]
+   +- *(1) Range (0, 100000, step=1, splits=2)
+...
++- Exchange RoundRobinPartitioning(4), REPARTITION_BY_NUM, [plan_id=71]
+```
+
+A `BroadcastExchange` is not a shuffle: the small table is collected and sent whole to every executor, and the large side is joined where it already sits.
 
 ## Reducing shuffle cost
 
-1. Filter and select columns before wide operations.
-2. Broadcast small join sides.
-3. Pre-aggregate before joining.
+1. Filter rows and select only needed columns before wide operations.
+2. Broadcast small join sides (automatic below `spark.sql.autoBroadcastJoinThreshold`, 10 MB by default; AQE can also switch at run time).
+3. Pre-aggregate before joining, and combine several aggregations into one `groupBy`.
 4. Avoid unnecessary `repartition`, and avoid a global `orderBy` when only per-group order is needed.
+5. For tables joined repeatedly on the same key, bucketing (or a clustered table layout) can remove the shuffle from each join.
+6. Size `spark.sql.shuffle.partitions` for the data, and let AQE coalesce small shuffle partitions.
+
+## Trade-offs
+
+A shuffle is not always bad: `repartition` before a skewed or highly parallel step can make the rest of the job faster, and shuffle files let Spark retry a failed downstream task without recomputing the upstream stage. The goal is fewer and smaller shuffles, not zero.
 
 ## Common mistakes
 
 1. Saying "joins always shuffle" (broadcast joins do not shuffle the large side).
-2. Thinking `coalesce` and `repartition` are equivalent.
+2. Thinking `coalesce` and `repartition` are equivalent: `coalesce` avoids the shuffle but can leave uneven partitions and reduces the parallelism of the whole upstream stage.
+3. Forgetting that window functions with `partitionBy` and `distinct` shuffle too.

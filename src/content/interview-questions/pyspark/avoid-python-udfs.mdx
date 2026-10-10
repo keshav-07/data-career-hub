@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-09"
+reviewedDate: "2026-10-09"
 title: "When should you avoid Python UDFs in PySpark?"
 description: "Interview answer: avoid Python UDFs when built-in functions work, since they add serialisation cost and block optimisation; prefer pandas UDFs if needed."
 seoTitle: "When to Avoid PySpark UDFs: Interview Answer"
@@ -15,30 +15,110 @@ interviewRelevance: "High"
 shortAnswer: "Avoid a Python UDF whenever built-in Spark functions can express the logic. A UDF moves data between the JVM and Python workers and is a black box to the optimiser, so it is slower and prevents optimisations such as predicate pushdown. If Python is genuinely needed, prefer a vectorised pandas UDF that processes batches through Apache Arrow, and keep any UDF pure, null-safe and tested."
 followUps: ["What is a pandas UDF and why is it faster?", "What changed for Python UDFs in Spark 4?", "How would you test a UDF?"]
 related: ["articles:pyspark/udfs-and-safer-alternatives"]
-versionContext: "Examples run on PySpark 4.2 in local mode; behaviour notes say where Spark 3.x differs"
+versionContext: "Examples run on PySpark 4.2.0 in local mode with pandas and PyArrow installed. In Spark 4.2, spark.sql.execution.pythonUDF.arrow.enabled defaults to true, so plain Python UDFs appear as ArrowEvalPython; in Spark 3.x they appear as BatchEvalPython and use pickle."
+sources:
+  - {"label": "PySpark documentation: Python user-defined functions", "url": "https://spark.apache.org/docs/latest/api/python/user_guide/udfandudtf.html"}
+  - {"label": "PySpark documentation: Apache Arrow in PySpark", "url": "https://spark.apache.org/docs/latest/api/python/user_guide/sql/arrow_pandas.html"}
 ---
 
 ## Detailed explanation
 
-Built-in functions run in the JVM with code generation and are understood by the optimiser. A Python UDF adds a separate Python evaluation step in the physical plan. In Spark 4, regular Python UDFs can use Arrow for transfer by default when PyArrow is installed, which narrows the serialisation gap, but the function is still opaque to the optimiser and still executes Python.
+Built-in functions run inside the JVM, take part in whole-stage code generation and are understood by the Catalyst optimiser. A Python UDF is evaluated by separate Python worker processes: Spark ships batches of rows out of the JVM, runs your function, and ships results back. That costs serialisation and process hops, and the optimiser treats the function as a black box, so it cannot push a UDF filter into the file scan, reorder it, or reason about its output.
+
+In Spark 4.2, regular Python UDFs use Apache Arrow for transfer by default when PyArrow is installed, which narrows the serialisation gap with pandas UDFs. The function still executes Python and is still opaque to the optimiser.
+
+## Example: the same logic three ways
+
+```python
+import os, sys, warnings
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)   # workers use the driver's Python
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+from pyspark.sql import SparkSession, functions as F
+
+spark = SparkSession.builder.master("local[2]").appName("udfs").getOrCreate()
+df = spark.range(0, 6).select((F.col("id") * 400).alias("amount"))
+
+# 1. Built-in expression
+banded = (F.when(F.col("amount") >= 1000, "large")
+           .when(F.col("amount") >= 100, "medium")
+           .otherwise("small"))
+
+# 2. Plain Python UDF: called once per row
+@F.udf("string")
+def band_udf(amount):
+    if amount is None:
+        return None
+    return "large" if amount >= 1000 else "medium" if amount >= 100 else "small"
+
+# 3. pandas UDF: called once per Arrow batch with a pandas Series
+@F.pandas_udf("string")
+def band_pandas(amount: pd.Series) -> pd.Series:
+    out = pd.Series("small", index=amount.index)
+    out[amount >= 100] = "medium"
+    out[amount >= 1000] = "large"
+    return out.where(amount.notna(), None)
+
+df.select("amount", banded.alias("builtin"), band_udf("amount").alias("udf"),
+          band_pandas("amount").alias("pandas_udf")).show()
+```
+
+```text
++------+-------+------+----------+
+|amount|builtin|   udf|pandas_udf|
++------+-------+------+----------+
+|     0|  small| small|     small|
+|   400| medium|medium|    medium|
+|   800| medium|medium|    medium|
+|  1200|  large| large|     large|
+|  1600|  large| large|     large|
+|  2000|  large| large|     large|
++------+-------+------+----------+
+```
+
+Same answers; different plans. The built-in version is one generated-code stage. Both UDF versions add an `ArrowEvalPython` node, a hand-off to Python workers.
+
+## The optimiser cannot see inside
+
+```python
+import tempfile
+path = tempfile.mkdtemp() + "/amounts"
+df.write.mode("overwrite").parquet(path)
+t = spark.read.parquet(path)
+
+t.filter(F.col("amount") > 1000).explain()
+t.filter(band_udf("amount") == "large").explain()
+```
+
+```text
+== Physical Plan ==
+*(1) Filter (isnotnull(amount#22L) AND (amount#22L > 1000))
++- *(1) ColumnarToRow
+   +- FileScan parquet [amount#22L] ... PushedFilters: [IsNotNull(amount), GreaterThan(amount,1000)] ...
+
+== Physical Plan ==
+*(1) Filter (pythonUDF0#25 = large)
++- ArrowEvalPython [band_udf(amount#22L)#24], [pythonUDF0#25], 101
+   +- FileScan parquet [amount#22L] ... PushedFilters: [] ...
+```
+
+With the built-in filter, Parquet row-group statistics can skip data (`PushedFilters`). With the UDF filter, every row is read and sent to Python first.
 
 ## Decision order
 
-1. **Built-in function** (`when`, `regexp_extract`, `date_trunc`, array functions).
+1. **Built-in function** (`when`, `regexp_extract`, `date_trunc`, `transform` and other higher-order array functions).
 2. **SQL expression** (`F.expr("...")`) if it reads more clearly.
-3. **pandas UDF** for vectorisable Python logic.
-4. **Plain Python UDF** only when nothing else works.
+3. **pandas UDF** for vectorisable Python logic, or a library that works on whole arrays (NumPy, a model's batch `predict`).
+4. **Plain Python UDF** only when nothing else works, kept pure, null-safe and unit-tested as an ordinary Python function.
 
-## Example
+## Trade-offs
 
-```python
-# Instead of a UDF that classifies amounts:
-from pyspark.sql import functions as F
-banded = F.when(F.col("amount") >= 1000, "large").when(F.col("amount") >= 100, "medium").otherwise("small")
-```
+A UDF is sometimes the right call: complex parsing with a well-tested Python library, or ML inference, is clearer and safer in Python than a 40-line expression. Then make it vectorised, keep it deterministic (or mark it `asNondeterministic()`), and apply it after filters and projections so it sees as few rows as possible.
 
 ## Common mistakes
 
-1. Row-by-row API or database calls from a UDF.
+1. Row-by-row API or database calls from a UDF (no batching, no retries, hammering the service from every task).
 2. Forgetting `None` handling.
-3. Wrong declared return type producing `NULL`s.
+3. Declaring the wrong return type: a mismatch between declared and actual type returns `NULL` or fails, depending on the type and the Arrow setting.
+4. Forgetting that the cluster's Python workers need the same libraries as the driver.

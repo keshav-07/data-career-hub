@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "How would you design an idempotent batch pipeline?"
 description: "Interview answer: make each run deterministic for its input interval and write with overwrite-by-partition or upserts in a transaction, so reruns are safe."
 inventoryId: "INT-27"
@@ -13,7 +13,10 @@ estimatedMinutes: 10
 interviewRelevance: "High"
 shortAnswer: "An idempotent pipeline gives the same final result however many times it runs for the same input. Parameterise each run by its data interval instead of the current time, read a fixed input for that interval, and write output so that rerunning replaces rather than adds: overwrite the target partition, or upsert on a unique key, inside a transaction or atomic swap. Then retries, backfills and duplicate triggers are all safe."
 followUps: ["How would you handle late-arriving data for an already processed day?", "Append versus overwrite versus merge: when do you use each?", "How do you make an idempotent load when the target has no primary key?", "How do you test idempotency?"]
-related: ["articles:airflow/dags-scheduling-retries", "articles:python/idempotent-csv-loader", "articles:delta-lake/transactions-schema-evolution", "articles:etl-elt/etl-vs-elt", "articles:data-warehousing/star-schema"]
+related: ["articles:airflow/dags-scheduling-retries", "articles:python/idempotent-csv-loader", "articles:delta-lake/transactions-schema-evolution", "articles:etl-elt/etl-vs-elt", "articles:data-warehousing/star-schema", "articles:etl-elt/idempotency-in-data-pipelines", "interview-questions:data-engineering/design-incremental-load", "interview-questions:data-engineering/backfill-safely"]
+versionContext: "SQL verified on PostgreSQL 16.14"
+sources:
+  - { label: "PostgreSQL documentation: MERGE", url: "https://www.postgresql.org/docs/current/sql-merge.html" }
 ---
 
 ## Detailed explanation
@@ -42,18 +45,71 @@ Emails, API calls and notifications are not naturally idempotent. Record what wa
 
 ## Example
 
+Two common write patterns, each safe to rerun. First a daily fact partition, replaced in one transaction:
+
 ```sql
+CREATE TABLE staging_orders (order_id bigint, customer_id bigint, amount numeric(10,2), order_date date);
+CREATE TABLE fact_orders    (order_id bigint, customer_id bigint, amount numeric(10,2), order_date date);
+INSERT INTO staging_orders VALUES
+  (1, 10, 50.00, '2026-10-03'), (2, 11, 20.00, '2026-10-03'), (3, 12, 75.00, '2026-10-04');
+
 -- Idempotent daily load: rerunning for the same day gives the same result
 BEGIN;
 DELETE FROM fact_orders WHERE order_date = DATE '2026-10-03';
 INSERT INTO fact_orders
 SELECT * FROM staging_orders WHERE order_date = DATE '2026-10-03';
 COMMIT;
+
+-- The retry
+BEGIN;
+DELETE FROM fact_orders WHERE order_date = DATE '2026-10-03';
+INSERT INTO fact_orders
+SELECT * FROM staging_orders WHERE order_date = DATE '2026-10-03';
+COMMIT;
+
+SELECT count(*) AS rows_for_day, sum(amount) AS total FROM fact_orders;
 ```
+
+| rows_for_day | total |
+|--------------|-------|
+| 2 | 70.00 |
+
+Then a dimension maintained by key, where the source may send the same row again or a correction:
+
+```sql
+CREATE TABLE dim_customer (customer_id bigint PRIMARY KEY, tier text NOT NULL, updated_at timestamptz NOT NULL);
+CREATE TABLE staging_customer (customer_id bigint, tier text, updated_at timestamptz);
+INSERT INTO staging_customer VALUES (10, 'free', '2026-10-03 09:00+00'), (10, 'pro', '2026-10-03 12:00+00'),
+                                    (11, 'free', '2026-10-03 10:00+00');
+
+MERGE INTO dim_customer AS t
+USING (SELECT DISTINCT ON (customer_id) * FROM staging_customer ORDER BY customer_id, updated_at DESC) AS s
+ON t.customer_id = s.customer_id
+WHEN MATCHED AND s.updated_at > t.updated_at THEN UPDATE SET tier = s.tier, updated_at = s.updated_at
+WHEN NOT MATCHED THEN INSERT VALUES (s.customer_id, s.tier, s.updated_at);
+
+SELECT * FROM dim_customer ORDER BY customer_id;
+```
+
+| customer_id | tier | updated_at |
+|-------------|------|------------|
+| 10 | pro | 2026-10-03 12:00:00+00 |
+| 11 | free | 2026-10-03 10:00:00+00 |
+
+The source is reduced to one row per key before the `MERGE` (otherwise PostgreSQL raises "MERGE command cannot affect row a second time"), and the `updated_at` guard means replaying an older batch cannot overwrite newer values. Running the `MERGE` again changes nothing.
+
+## Trade-offs
+
+| Pattern | Strength | Cost |
+|---------|----------|------|
+| Partition overwrite | Simple, fast, natural for backfills | Rewrites the whole partition even if one row changed |
+| MERGE on a key | Handles corrections and late updates | Needs a reliable unique key; merge cost grows with the target |
+| Build and swap | Readers never see partial state | Rebuilds everything; only for small or medium tables |
+| Insert-if-absent | Cheap for immutable events | Cannot apply corrections |
 
 ## Testing idempotency
 
-Run the pipeline twice on the same input and assert the output (row count, key set, checksums of aggregates) is identical. Add this as an automated test.
+Run the pipeline twice on the same input and assert the output (row count, key set, checksums of aggregates) is identical. Add this as an automated test, and run it once with a failure injected between the delete and the insert to prove the transaction rolls back. The [idempotency lesson](/etl-elt/idempotency-in-data-pipelines/) has runnable versions of each pattern.
 
 ## Common mistakes
 
@@ -61,3 +117,5 @@ Run the pipeline twice on the same input and assert the output (row count, key s
 2. Appending with no unique key or deduplication.
 3. Deleting and inserting without a transaction.
 4. Forgetting that late data needs the affected partitions to be reprocessed.
+5. Merging a source that contains several rows per key.
+6. In Spark, a static overwrite that replaces the whole table when only one partition was meant (use dynamic partition overwrite or Delta's `replaceWhere`).

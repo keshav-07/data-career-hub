@@ -1,7 +1,7 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
 title: "Salesforce Data Engineering Interview Preparation"
 seoTitle: "Salesforce Data Engineering Interview Preparation"
 description: "Salesforce Data Engineer interview prep from its hiring pages and Trailhead interview module, with labelled multi-tenant data practice questions."
@@ -9,7 +9,7 @@ inventoryId: "COMPANY-10"
 technology: ["data-engineering"]
 topic: ["company-preparation"]
 company: "Salesforce"
-evidenceNote: "Sources below are pages on Salesforce's own website, identified on 2026-10-05. They describe the company's general hiring process; they are not specific to Data Engineering roles, and processes vary by team and change over time. Summaries on this page are deliberately brief and must be checked against the live pages by a reviewer before publication. We have not added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us."
+evidenceNote: "Sources below are pages on Salesforce's own website, identified on 2026-10-05. They describe the company's general hiring process; they are not specific to Data Engineering roles, and processes vary by team and change over time. Summaries are deliberately brief and only say what each linked page covers, without paraphrasing details that may change; treat the linked page as authoritative. We have not added any candidate-reported questions, because we only publish those with a named, attributable source. Every question on this page is a representative practice question written by us."
 verifiedSources: [{"label": "Salesforce Careers: How we hire", "url": "https://www.salesforce.com/company/careers/culture/how-we-hire/"}, {"label": "Salesforce Careers: Interviewing", "url": "https://www.salesforce.com/company/careers/interviewing/"}, {"label": "Salesforce Trailhead: Strategies for successful software engineer interviews", "url": "https://trailhead.salesforce.com/content/learn/modules/strategies-for-successful-software-engineer-interviews/own-your-onsite-interview"}]
 commonTopics: [{"topic": "Salesforce publishes 'How we hire' and interviewing pages on its careers site, including guidance on behavioural questions about real situations.", "basis": "verified-attributed", "source": {"label": "Salesforce Careers: Interviewing", "url": "https://www.salesforce.com/company/careers/interviewing/"}}, {"topic": "Salesforce's Trailhead learning platform includes a module on strategies for software engineer interviews.", "basis": "verified-attributed", "source": {"label": "Salesforce Trailhead: Strategies for successful software engineer interviews", "url": "https://trailhead.salesforce.com/content/learn/modules/strategies-for-successful-software-engineer-interviews/own-your-onsite-interview"}}]
 reportedQuestions: []
@@ -19,7 +19,7 @@ related: ["interview-questions:data-engineering/idempotent-batch-pipeline", "sys
 
 ## Preparation overview
 
-Prepare in three areas: technical fundamentals, data system design, and behavioural stories. CRM data is multi-tenant and change-heavy, so expect questions on isolation, change capture and history.
+Prepare in three areas: technical fundamentals, data system design, and behavioural stories. CRM data is multi-tenant and change-heavy, so isolation, change capture and history are sensible themes to prepare; they are our suggestion, not a description of Salesforce's interviews.
 
 ## Technology focus
 
@@ -31,7 +31,7 @@ Practise the [CDC platform](/data-engineering/system-design/change-data-capture-
 
 ## Behavioural preparation
 
-Salesforce's pages encourage preparing real examples for 'tell us about a time' questions; prepare several with specific details.
+Prepare several real examples for 'tell me about a time' questions, with specific details of what you did and what changed.
 
 ## What this guide does not claim
 
