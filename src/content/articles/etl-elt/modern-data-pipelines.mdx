@@ -1,80 +1,183 @@
 ---
 publishedDate: "2026-10-04"
-updatedDate: "2026-10-04"
-reviewedDate: "2026-10-04"
-title: "ETL vs ELT and Modern Data Pipelines"
+updatedDate: "2026-10-10"
+reviewedDate: "2026-10-10"
+title: "Modern Data Pipelines: Design Choices and Reliability Practices"
 seoTitle: "ETL, ELT and Modern Data Pipelines: Guide"
-description: "How modern data pipelines are built: ETL vs ELT, batch vs streaming, layered models, orchestration, idempotency, data quality, observability and recovery."
+description: "How modern data pipelines are built: ETL vs ELT, batch vs streaming, layered models, orchestration, idempotency, incremental loads, quality, observability and testing."
 inventoryId: "PILLAR-08"
 technology: ["etl-elt", "data-engineering"]
 topic: ["fundamentals"]
 difficulty: "Beginner"
 pillar: true
 featured: false
-related: ["articles:etl-elt/etl-vs-elt", "articles:etl-elt/batch-vs-streaming", "articles:etl-elt/idempotency-in-data-pipelines", "system-designs:scalable-batch-pipeline"]
-sources: []
-versionContext: "Tool-neutral overview; details and verified examples are in the linked guides"
+learningObjectives:
+  - "Name the design choices every pipeline makes and the practices that keep it reliable"
+  - "Trace one pipeline run end to end: interval, extract, validate, load, check, publish, record"
+  - "Know which lesson in this course covers each topic and in what order to study them"
+related: ["articles:etl-elt/etl-vs-elt", "articles:etl-elt/batch-vs-streaming", "articles:etl-elt/idempotency-in-data-pipelines", "system-designs:scalable-batch-pipeline", "articles:etl-elt/incremental-loading-watermarks-backfills", "articles:etl-elt/testing-data-pipelines-cicd"]
+next: "articles:etl-elt/etl-vs-elt"
+sources:
+  - { label: "Apache Airflow documentation: Best practices", url: "https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html" }
+  - { label: "Python documentation: sqlite3", url: "https://docs.python.org/3/library/sqlite3.html" }
+versionContext: "Overview of the course; the example run skeleton runs on Python 3.11 with the standard library sqlite3 module. Detailed, verified examples are in the linked lessons."
 ---
 
-A data pipeline moves data from where it is produced to where it is useful, changing it along the way. Modern pipelines share a set of design choices and a set of reliability practices; this guide covers both.
+A data pipeline moves data from where it is produced to where it is useful, changing it along the way. Modern pipelines share a small set of **design choices** (where to transform, how often to run, how to organise data) and a set of **reliability practices** (idempotency, incremental loading, quality checks, observability, retries, testing). Interviews probe both, and this course covers them in that order.
+
+## A pipeline in one picture
+
+```text
+  sources            ingestion             storage layers                  consumers
+ ─────────        ───────────────     ──────────────────────────────     ────────────
+ app database ─CDC─▶                  raw / bronze  (as received)
+ SaaS APIs  ─batch─▶  orchestrated  ─▶ staging / silver (typed, deduped) ─▶ BI dashboards
+ event stream ─────▶  jobs            marts / gold  (business models)    ─▶ ML features
+ partner files ────▶                                                     ─▶ reverse ETL
+                         │ checks, run records, lineage, alerts at every step │
+```
+
+Each layer can be rebuilt from the one before it, which is what makes fixes and backfills possible.
 
 ## Design choices
 
 ### Where transformation happens: ETL or ELT
 
-ETL transforms before loading; ELT loads raw data and transforms inside the warehouse or lakehouse. ELT dominates where compute is elastic, but compliance or format constraints can still require ETL steps.
+ETL transforms before loading; ELT loads raw data and transforms inside the warehouse or lakehouse. ELT dominates where compute is elastic, but compliance or format constraints can still require transformation before load, so most pipelines are hybrids.
 
 Read: [ETL vs ELT](/etl-elt/etl-vs-elt/) · Practise: [Deciding factors](/interview/data-engineering/etl-vs-elt-factors/)
 
 ### When it runs: batch or streaming
 
-Choose by required freshness. Batch is simpler and cheaper; streaming is justified when decisions depend on near-real-time data and brings event time, state and duplicates to handle.
+Choose by the freshness the decision needs. Batch is simpler and cheaper; streaming is justified when decisions depend on near-real-time data and brings event time, watermarks, state and duplicates to handle. Micro-batch sits in between.
 
-Read: [Batch vs streaming](/etl-elt/batch-vs-streaming/)
+Read: [Batch vs streaming](/etl-elt/batch-vs-streaming/) · Practise: [Batch or streaming?](/interview/data-engineering/batch-vs-streaming-choice/)
 
 ### How it is organised: layers
 
-Raw (as received), staging or silver (typed, cleaned, deduplicated), marts or gold (business models). Each layer is rebuildable from the previous one.
+Raw (as received), staging or silver (typed, cleaned, deduplicated), marts or gold (business models). Keep raw data long enough to rebuild everything downstream.
 
 Read: [Star schema](/data-warehousing/star-schema/) · [Data lakes and the lakehouse](/delta-lake/data-lakes-lakehouse-delta/)
 
+### What runs it: orchestration
+
+An orchestrator runs tasks in dependency order, on schedule, with retries and alerts, and passes each run its **data interval** so the run is reproducible. Airflow is the most common in job descriptions; Dagster, Prefect and cloud-native schedulers fill the same role.
+
+Read: [Airflow DAGs, scheduling and retries](/airflow/dags-scheduling-retries/) · Practise: [Choosing an orchestrator](/interview/data-engineering/choose-an-orchestrator/)
+
 ## Reliability practices
-
-### Orchestration
-
-An orchestrator runs tasks in dependency order, on schedule, with retries and alerts, driving each run from its data interval.
-
-Read: [Airflow DAGs, scheduling and retries](/airflow/dags-scheduling-retries/)
 
 ### Idempotency
 
-Every step must be safe to rerun: deterministic input slice, overwrite or merge, atomic publish and guarded side effects.
+Every step must be safe to rerun: a deterministic input slice, overwrite or merge instead of append, atomic publish and guarded side effects.
 
 Read: [Idempotency in data pipelines](/etl-elt/idempotency-in-data-pipelines/)
 
+### Incremental loading and backfills
+
+Load only what changed with a watermark that moves atomically with the data, re-read a lookback window, handle late events and deletes, and backfill through the normal job.
+
+Read: [Incremental loading, late data and backfills](/etl-elt/incremental-loading-watermarks-backfills/)
+
+### Change data capture
+
+Replicate databases from their change logs, applying ordered, idempotent merges, with a plan for snapshots, deletes and schema changes.
+
+Read: [CDC patterns and failure modes](/etl-elt/cdc-patterns-and-failure-modes/)
+
 ### Data quality
 
-Check freshness, volume, schema, keys and validity at ingestion, after transformation and before publishing; block on critical failures.
+Check freshness, volume, schema, keys and validity at ingestion, after transformation and before publishing; quarantine bad rows; block on critical failures.
 
 Read: [Checks, contracts and failure handling](/etl-elt/data-quality-checks-contracts/)
 
 ### Observability
 
-Record status, duration, volume, freshness and quality per run; alert first on freshness.
+Record status, duration, volume, freshness and quality per run; alert first on freshness; agree SLOs with consumers; use lineage to scope impact.
 
 Read: [Pipeline observability](/etl-elt/pipeline-observability/)
 
 ### Failure handling and recovery
 
-Retry transient failures with backoff, quarantine bad data, fail fast on systemic errors, and plan backfills.
+Retry transient failures with capped, jittered backoff; dead-letter bad records; fail fast on systemic errors; set timeouts everywhere.
 
 Read: [Reliability and retry design](/etl-elt/pipeline-reliability-and-retries/)
 
-### Change data capture
+### Testing and CI/CD
 
-Replicate databases from their change logs with ordered, idempotent merges.
+Unit-test transformations, run SQL against a real engine, keep data tests on every run, diff logic changes against production, and deploy through CI with isolated environments.
 
-Read: [CDC patterns and failure modes](/etl-elt/cdc-patterns-and-failure-modes/)
+Read: [Testing data pipelines and CI/CD](/etl-elt/testing-data-pipelines-cicd/)
+
+## Anatomy of one run
+
+The practices above are easiest to see in code. This skeleton is deliberately small, but every production batch job has the same steps: a run id and interval from parameters, extract a fixed slice, validate, load idempotently, check, publish atomically, and record what happened.
+
+```python
+import sqlite3
+from datetime import date
+
+def run(conn, logical_date: date, source_rows: list[dict]) -> dict:
+    run_id = f"orders__{logical_date.isoformat()}"
+    day = logical_date.isoformat()
+
+    rows = [r for r in source_rows if r["order_date"] == day]                       # 1. fixed slice
+    good = [r for r in rows if r.get("amount") is not None and r["amount"] >= 0]     # 2. validate
+    rejected = len(rows) - len(good)
+
+    with conn:                                                                      # 3-5. one transaction
+        conn.execute("DELETE FROM fct_orders WHERE order_date = ?", (day,))         # idempotent overwrite
+        conn.executemany("INSERT INTO fct_orders VALUES (?, ?, ?, ?)",
+                         [(r["order_id"], day, r["amount"], run_id) for r in good])
+        dupes = conn.execute("SELECT count(*) - count(DISTINCT order_id) FROM fct_orders "
+                             "WHERE order_date = ?", (day,)).fetchone()[0]
+        if dupes or rejected / max(len(rows), 1) > 0.1:                             # blocking checks
+            raise RuntimeError(f"{run_id}: {dupes} duplicate keys, {rejected} rejected rows")
+        conn.execute("INSERT OR REPLACE INTO pipeline_runs VALUES (?, ?, ?, 'success')", # 6. record
+                     (run_id, len(good), rejected))
+    return {"run_id": run_id, "rows": len(good), "rejected": rejected}
+
+conn = sqlite3.connect(":memory:")
+conn.execute("CREATE TABLE fct_orders (order_id INTEGER, order_date TEXT, amount REAL, run_id TEXT)")
+conn.execute("CREATE TABLE pipeline_runs (run_id TEXT PRIMARY KEY, rows INTEGER, rejected INTEGER, status TEXT)")
+source = [{"order_id": 1, "order_date": "2026-10-05", "amount": 50.0},
+          {"order_id": 2, "order_date": "2026-10-05", "amount": 20.0},
+          {"order_id": 3, "order_date": "2026-10-06", "amount": 75.0}]
+
+print(run(conn, date(2026, 10, 5), source))
+print(run(conn, date(2026, 10, 5), source))      # a retry: same result, no duplicates
+print(conn.execute("SELECT count(*) FROM fct_orders").fetchone()[0])
+
+try:
+    run(conn, date(2026, 10, 5), source + [{"order_id": 1, "order_date": "2026-10-05", "amount": 50.0}])
+except RuntimeError as exc:
+    print("blocked:", exc)
+print(conn.execute("SELECT count(*) FROM fct_orders").fetchone()[0])  # the failed run rolled back
+```
+
+```text
+{'run_id': 'orders__2026-10-05', 'rows': 2, 'rejected': 0}
+{'run_id': 'orders__2026-10-05', 'rows': 2, 'rejected': 0}
+2
+blocked: orders__2026-10-05: 1 duplicate keys, 0 rejected rows
+2
+```
+
+The retry changed nothing, and the run with a duplicate key was blocked and rolled back, so consumers still see the previous good data. Each numbered step maps to a lesson in this course.
+
+## Learning order and checkpoints
+
+| Lesson | You are ready to move on when you can... |
+|--------|-------------------------------------------|
+| [ETL vs ELT](/etl-elt/etl-vs-elt/) | Explain where transformation should run for a given dataset, including PII |
+| [Batch vs streaming](/etl-elt/batch-vs-streaming/) | Justify a latency choice and explain event time and watermarks |
+| [Idempotency](/etl-elt/idempotency-in-data-pipelines/) | Write a partition overwrite and a deduplicated MERGE, and test them by running twice |
+| [Incremental loading](/etl-elt/incremental-loading-watermarks-backfills/) | Implement a watermark load with a lookback and plan a backfill |
+| [CDC](/etl-elt/cdc-patterns-and-failure-modes/) | Apply change events in order, including deletes, and name CDC failure modes |
+| [Data quality](/etl-elt/data-quality-checks-contracts/) | Decide which checks block and which alert, and quarantine bad rows |
+| [Observability](/etl-elt/pipeline-observability/) | Define a freshness SLO and measure it from run records |
+| [Reliability](/etl-elt/pipeline-reliability-and-retries/) | Classify failures and implement capped, jittered retries |
+| [Testing and CI/CD](/etl-elt/testing-data-pipelines-cicd/) | Describe the test layers and a CI pipeline for data code |
 
 ## Put it together
 
