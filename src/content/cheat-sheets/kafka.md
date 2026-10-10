@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Kafka Cheat Sheet"
-description: "A quick Kafka 4.x reference: topics, partitions, keys, replication, producer and consumer settings, rebalancing, delivery semantics, compaction and the CLI commands."
+description: "Kafka 4.x cheat sheet: topics, partitions, keys, replication, producer and consumer settings, rebalancing, delivery semantics, compaction and CLI commands."
 inventoryId: "CHEAT-07"
 technology: ["kafka"]
 topic: ["reference"]

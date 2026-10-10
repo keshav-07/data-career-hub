@@ -1,7 +1,7 @@
 ---
 title: "Search Suggestions System: Autocomplete with a Trie or Sorted Binary Search"
 seoTitle: "Search Suggestions System: Trie Autocomplete"
-description: "Return up to three alphabetically smallest products for each prefix of a search word. Compare a trie that stores top-three lists with sorting plus binary search."
+description: "Search suggestions: return up to three alphabetically smallest products per prefix, comparing a trie of top-three lists with sorting plus binary search."
 technology: ["dsa"]
 topic: ["tries", "binary-search", "strings"]
 difficulty: "Medium"

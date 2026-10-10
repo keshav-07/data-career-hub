@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "SQL Joins: INNER, LEFT, RIGHT, FULL, Self and Cross Joins"
 seoTitle: "SQL Joins: INNER, LEFT, FULL, Self and Cross"
-description: "Predict the row count of any SQL join: INNER, LEFT, RIGHT and FULL OUTER joins, self joins, cross joins and multi-table joins, plus the filtering and fan-out traps."
+description: "SQL joins explained: INNER, LEFT, RIGHT and FULL OUTER, self and cross joins, multi-table joins, and how to predict row counts and avoid fan-out traps."
 inventoryId: "TECH-01"
 technology: ["sql"]
 topic: ["joins"]

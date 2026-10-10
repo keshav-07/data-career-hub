@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "60-Day Data Engineering Interview Preparation Plan"
 seoTitle: "60-Day Data Engineering Interview Prep Plan"
-description: "An eight-week plan for Data Engineering interviews: SQL and Python drills, Spark and modelling, system design practice, behavioural stories and mock interviews."
+description: "Data Engineering interview preparation plan over eight weeks: SQL and Python drills, Spark and modelling, system design, behavioural stories and mocks."
 inventoryId: "ROAD-03"
 technology: ["data-engineering"]
 topic: ["study-plan", "interview"]

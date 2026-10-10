@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Vector Embeddings Pipeline"
-description: "A system-design case study for embeddings at scale: batch and streaming embedding, model versioning, blue-green re-indexing, ANN index choice and recall testing."
+description: "Vector embeddings pipeline system design: batch and streaming embedding, model versioning, blue-green re-indexing, ANN index choice and recall testing."
 technology: ["data-engineering", "python", "spark"]
 topic: ["ml-data", "embeddings", "vector-search", "architecture"]
 tags: ["embeddings", "vector-database", "hnsw", "ivf", "quantisation", "re-indexing", "model-versioning"]

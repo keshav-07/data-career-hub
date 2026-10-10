@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you handle poison messages and dead-letter topics in Kafka?"
 seoTitle: "Kafka Poison Messages and DLQs: Interview Answer"
-description: "Interview answer: separate permanent from transient failures, park bad records in a dead-letter topic with context headers, retry transient ones with backoff, and alert."
+description: "Interview answer: handle Kafka poison messages by separating permanent from transient failures, parking bad records in a dead-letter topic and retrying."
 technology: ["kafka"]
 topic: ["error-handling", "dead-letter-queue", "consumers"]
 difficulty: "Medium"

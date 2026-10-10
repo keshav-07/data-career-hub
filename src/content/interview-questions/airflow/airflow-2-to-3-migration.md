@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "What changed in Airflow 3, and how would you migrate Airflow 2 DAGs?"
 seoTitle: "Airflow 2 to 3 Migration: Interview Answer"
-description: "Interview answer: the Airflow 3 changes that break DAGs (imports, schedule, execution_date, SubDAGs, SLAs, cron intervals, catchup) and a safe step-by-step migration plan."
+description: "Interview answer: Airflow 2 to 3 migration, covering changes that break DAGs (imports, execution_date, SubDAGs, SLAs, catchup) and a safe step-by-step plan."
 technology: ["airflow"]
 topic: ["airflow-3", "migration", "upgrades"]
 difficulty: "Hard"

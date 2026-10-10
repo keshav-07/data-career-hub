@@ -1,7 +1,7 @@
 ---
 title: "Window Frames: Running Totals, Moving Averages and Percentiles"
 seoTitle: "SQL Window Frames: Running Totals and Percentiles"
-description: "Master SQL window frames: running totals, moving averages with ROWS and RANGE, conditional window aggregates, percent of total, CUME_DIST and median with PERCENTILE_CONT."
+description: "SQL window frames: running totals, moving averages with ROWS and RANGE, conditional window aggregates, percent of total, CUME_DIST and PERCENTILE_CONT median."
 technology: ["sql"]
 topic: ["window-functions", "window-frames", "running-totals", "percentiles"]
 difficulty: "Intermediate"

@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Atlassian Data Engineering Interview Preparation"
 seoTitle: "Atlassian Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Atlassian using its published values and candidate resources, plus labelled practice questions on SaaS product analytics."
+description: "Atlassian Data Engineer interview prep: its published values and candidate resources, plus labelled practice questions on SaaS product analytics."
 inventoryId: "COMPANY-07"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

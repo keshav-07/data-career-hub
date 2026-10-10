@@ -1,6 +1,6 @@
 ---
 title: "Design a Slowly Changing Dimension Framework"
-description: "A system-design case study for a reusable SCD framework: type choices per column, change detection, SCD Type 2 loads, late changes, point-in-time joins and reprocessing."
+description: "Reusable SCD framework system design: type choices per column, change detection, SCD Type 2 loads, late changes, point-in-time joins and reprocessing."
 technology: ["data-engineering", "data-warehousing", "dbt"]
 topic: ["slowly-changing-dimensions", "dimensional-modelling", "batch"]
 difficulty: "Advanced"

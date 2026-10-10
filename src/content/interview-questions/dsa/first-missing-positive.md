@@ -1,7 +1,7 @@
 ---
 title: "First Missing Positive: Cyclic Sort Into Home Slots in O(n) Time, O(1) Space"
 seoTitle: "First Missing Positive: Cyclic Sort, O(1) Space"
-description: "Find the smallest positive integer missing from an unsorted array in O(n) time and O(1) extra space. Learn why the answer lies in 1..n+1 and how cyclic sort finds it."
+description: "First missing positive in an unsorted array in O(n) time and O(1) space: why the answer lies in 1..n+1 and how cyclic sort finds it."
 technology: ["dsa"]
 topic: ["arrays", "hashing"]
 difficulty: "Hard"

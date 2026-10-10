@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "How would you investigate a suddenly slower data pipeline?"
 seoTitle: "Investigating a Slow Data Pipeline: Interview Answer"
-description: "Interview answer: confirm and scope the slowdown, find which step got slower, compare inputs and plans with a good run, then check data volume, skew, resources and changes."
+description: "Interview answer: investigate a slow pipeline by scoping the slowdown, finding the slower step, comparing with a good run, then checking volume and skew."
 inventoryId: "INT-30"
 technology: ["data-engineering", "spark"]
 topic: ["debugging", "performance"]

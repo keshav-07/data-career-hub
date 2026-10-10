@@ -1,7 +1,7 @@
 ---
 title: "Reorganize String: Place the Most Frequent Character First, Never Twice in a Row"
 seoTitle: "Reorganize String: Greedy Max-Heap Solution"
-description: "Rearrange a string so no two neighbours match, or report that it is impossible. A greedy max-heap or filling even then odd slots solves it in O(n log k) or O(n)."
+description: "Reorganize string so no two neighbours match, or report it is impossible: a greedy max-heap or even-then-odd slot filling, O(n log k) or O(n)."
 technology: ["dsa"]
 topic: ["heaps-priority-queues", "greedy", "strings"]
 difficulty: "Medium"

@@ -1,7 +1,7 @@
 ---
 title: "Semi-Joins, Anti-Joins and LATERAL Joins in SQL"
 seoTitle: "SQL Semi-Joins, Anti-Joins and LATERAL Joins"
-description: "Filter with EXISTS and NOT EXISTS instead of joins that duplicate rows, avoid the NOT IN NULL trap, and use LATERAL or CROSS APPLY for per-row top-N and unnesting."
+description: "SQL semi and anti joins: use EXISTS and NOT EXISTS to avoid duplicate rows, dodge the NOT IN NULL trap, and use LATERAL or CROSS APPLY for per-row top-N."
 technology: ["sql"]
 topic: ["joins", "exists", "anti-join", "lateral"]
 difficulty: "Intermediate"

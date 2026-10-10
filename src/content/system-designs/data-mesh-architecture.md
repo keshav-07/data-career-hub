@@ -1,6 +1,6 @@
 ---
 title: "Design a Data Mesh Architecture"
-description: "A system-design case study for data mesh: domain ownership, data products with contracts, a self-serve platform, federated computational governance and when not to do it."
+description: "Data mesh system design: domain ownership, data products with contracts, a self-serve platform, federated governance, and when not to use a mesh."
 technology: ["data-engineering", "databricks", "data-warehousing"]
 topic: ["data-mesh", "data-products", "governance"]
 difficulty: "Advanced"

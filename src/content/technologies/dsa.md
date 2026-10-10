@@ -1,7 +1,7 @@
 ---
 title: "Data Structures and Algorithms for Data Engineers"
 shortName: "DSA"
-description: "DSA rounds in Data Engineering interviews are usually easy to medium problems on arrays, hashing, strings, two pointers and sliding windows, sometimes graphs or DP."
+description: "DSA for Data Engineering interviews: easy-to-medium problems on arrays, hashing, strings, two pointers and sliding windows, sometimes graphs or DP."
 group: foundations
 order: 13
 keyFacts: ["Most DE coding rounds are easy to medium: arrays, hashing, strings, two pointers, sliding window", "Graphs (topological sort) and dynamic programming appear less often but still come up", "Python built-ins (dict, set, Counter, deque, heapq, bisect) solve most problems cleanly", "Interviewers grade the process: clarify, brute force, optimise, test, state complexity"]

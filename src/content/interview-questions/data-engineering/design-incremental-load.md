@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How would you design an incremental load for a large table?"
 seoTitle: "Designing an Incremental Load: Interview Answer"
-description: "Interview answer: pick a reliable change signal, keep a watermark that moves atomically with the data, re-read a lookback through an idempotent MERGE, and handle deletes."
+description: "Interview answer: design an incremental load with a reliable change signal, a watermark that moves atomically with data, idempotent MERGE and delete handling."
 technology: ["data-engineering", "sql"]
 topic: ["incremental-loading", "watermarks", "idempotency"]
 difficulty: "Medium"

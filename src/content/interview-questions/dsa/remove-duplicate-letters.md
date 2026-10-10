@@ -1,7 +1,7 @@
 ---
 title: "Remove Duplicate Letters: Smallest Order with a Greedy Monotonic Stack"
 seoTitle: "Remove Duplicate Letters: Greedy Monotonic Stack"
-description: "Keep one copy of each letter so the result is the smallest in dictionary order. A greedy monotonic stack that knows each letter's last position solves it in O(n)."
+description: "Remove duplicate letters for the smallest dictionary-order result: a greedy monotonic stack using each letter's last position, solved in O(n)."
 technology: ["dsa"]
 topic: ["greedy", "stack", "strings"]
 difficulty: "Medium"

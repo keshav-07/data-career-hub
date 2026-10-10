@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Uber Data Engineering Interview Preparation"
 seoTitle: "Uber Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Uber using its published 'How we hire' page and engineering interview posts, plus labelled practice questions on marketplace and real-time data."
+description: "Uber Data Engineer interview prep from its 'How we hire' page and engineering interview posts, with labelled marketplace and real-time data practice."
 inventoryId: "COMPANY-04"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

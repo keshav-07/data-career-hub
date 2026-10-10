@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Data Engineering System Design: Interview Roadmap"
 seoTitle: "Data Engineering System Design Interview Roadmap"
-description: "A step-by-step roadmap for Data Engineering system design interviews: a repeatable framework, core building blocks, eight case studies and the trade-offs to rehearse."
+description: "Data Engineering system design interview roadmap: a repeatable framework, core building blocks, eight case studies and the trade-offs to rehearse."
 inventoryId: "PILLAR-12"
 technology: ["system-design", "data-engineering"]
 topic: ["system-design", "interview"]

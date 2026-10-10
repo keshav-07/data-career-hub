@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Salesforce Data Engineering Interview Preparation"
 seoTitle: "Salesforce Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Salesforce using its published hiring and interviewing pages and Trailhead interview module, plus labelled multi-tenant data practice questions."
+description: "Salesforce Data Engineer interview prep from its hiring pages and Trailhead interview module, with labelled multi-tenant data practice questions."
 inventoryId: "COMPANY-10"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

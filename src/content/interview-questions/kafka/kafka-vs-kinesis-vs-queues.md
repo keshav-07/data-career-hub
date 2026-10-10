@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Kafka vs Kinesis vs a message queue: how do you choose?"
 seoTitle: "Kafka vs Kinesis vs Message Queue: Interview"
-description: "Interview answer: choose a log (Kafka or Kinesis) for replay, fan-out and per-key order, a queue (SQS, RabbitMQ) for per-message work, then decide on operations and cost."
+description: "Interview answer: pick a log (Kafka, Kinesis) for replay, fan-out and per-key order, or a queue (SQS, RabbitMQ) for per-message work, then weigh ops and cost."
 technology: ["kafka"]
 topic: ["comparison", "messaging", "architecture"]
 difficulty: "Medium"

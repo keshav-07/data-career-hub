@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "SQL Fundamentals: SELECT, WHERE, DISTINCT, ORDER BY and LIMIT"
 seoTitle: "SQL Fundamentals: SELECT, WHERE, ORDER BY, LIMIT"
-description: "Learn the core of every SQL query: SELECT and WHERE, aliases, DISTINCT, multi-column ORDER BY and LIMIT, TOP or FETCH FIRST across PostgreSQL, MySQL and SQL Server."
+description: "SQL fundamentals: SELECT and WHERE, aliases, DISTINCT, multi-column ORDER BY and LIMIT, plus TOP and FETCH FIRST in PostgreSQL, MySQL and SQL Server."
 inventoryId: "PILLAR-02"
 technology: ["sql"]
 topic: ["fundamentals", "select", "filtering", "sorting"]

@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design an Ad-Bidding Analytics Pipeline"
-description: "A system-design case study for real-time bidding data: bid request sampling, win and impression joins, budget pacing, billing-grade spend, fraud filtering and cost."
+description: "Ad bidding analytics system design: bid request sampling, win and impression joins, budget pacing, billing-grade spend, fraud filtering and cost."
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["streaming", "advertising", "architecture"]
 tags: ["real-time-bidding", "ad-tech", "budget-pacing", "stream-joins", "deduplication", "invalid-traffic"]

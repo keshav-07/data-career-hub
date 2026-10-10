@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "What are the most important data-quality checks in production?"
 seoTitle: "Production Data Quality Checks: Interview Answer"
-description: "Interview answer: check freshness, volume, schema, uniqueness, nulls, validity and referential integrity, and decide which failures block publishing versus alert."
+description: "Interview answer: data quality checks cover freshness, volume, schema, uniqueness, nulls, validity and referential integrity, and which failures block."
 inventoryId: "INT-28"
 technology: ["data-engineering", "sql"]
 topic: ["data-quality", "reliability"]

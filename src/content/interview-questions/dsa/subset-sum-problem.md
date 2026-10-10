@@ -1,7 +1,7 @@
 ---
 title: "Subset Sum Problem: Track Every Reachable Total"
 seoTitle: "Subset Sum Problem: Reachable Totals DP"
-description: "Decide whether some subset of non-negative numbers adds up to a target. Fill a boolean take-or-skip table, then compress it to one row or a Python integer bitset."
+description: "Subset sum problem: decide whether some subset of non-negative numbers hits a target with a take-or-skip table, compressed to one row or a Python bitset."
 technology: ["dsa"]
 topic: ["dynamic-programming", "knapsack"]
 difficulty: "Medium"

@@ -1,7 +1,7 @@
 ---
 title: "Data Modeling and Warehousing"
 shortName: "Data modeling"
-description: "Data modeling and warehousing: star schemas and grain, fact and dimension design, SCDs, Data Vault and other methods, dbt, semantic layers and incremental models."
+description: "Data modeling and warehousing: star schemas and grain, fact and dimension design, SCDs, Data Vault, dbt, semantic layers and incremental models."
 group: platforms
 order: 8
 keyFacts: ["Declare the grain before choosing dimensions or facts","Know each measure's additivity: balances are not summed over time","Type 2 dimensions keep history with surrogate keys and half-open validity ranges","Kimball, Inmon, Data Vault and medallion solve different problems and are often combined","Incremental models must be idempotent: merge on the grain with a lookback window"]

@@ -1,7 +1,7 @@
 ---
 title: "Longest Palindrome: Pair Up Letter Counts and Keep One Centre"
 seoTitle: "Longest Palindrome: Pair Counts Plus One Centre"
-description: "Find the length of the longest palindrome you can build from a string's letters. Learn the counting argument: use every pair, then add one odd letter as the centre."
+description: "Longest palindrome from a string's letters: use every pair of letters, then add one odd letter as the centre. Counting argument with Python code."
 technology: ["dsa"]
 topic: ["hashing", "strings", "greedy"]
 difficulty: "Easy"

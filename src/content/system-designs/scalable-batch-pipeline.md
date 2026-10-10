@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Batch Ingestion Framework"
-description: "A system-design case study for a metadata-driven batch ingestion framework: source registry, watermarks, idempotent landing, schema drift, orchestration and backfills."
+description: "Metadata-driven batch ingestion system design: source registry, watermarks, idempotent landing, schema drift, orchestration and backfills."
 inventoryId: "SYS-01"
 technology: ["data-engineering", "spark", "airflow"]
 topic: ["batch", "ingestion", "architecture"]

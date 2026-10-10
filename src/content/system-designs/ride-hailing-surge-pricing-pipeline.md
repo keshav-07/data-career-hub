@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Ride-Hailing Surge Pricing Pipeline"
-description: "A system-design case study for dynamic pricing: driver and request streams, hexagonal geo cells, windowed supply and demand, smoothing, serving and auditability."
+description: "Surge pricing pipeline system design: driver and request streams, hexagonal geo cells, windowed supply and demand, smoothing, serving and auditability."
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["streaming", "geospatial", "architecture"]
 tags: ["surge-pricing", "h3", "stream-processing", "windowing", "feature-serving", "auditability"]

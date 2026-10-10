@@ -1,7 +1,7 @@
 ---
 title: "Kth Smallest Element in a Sorted Matrix: Binary Search on Values"
 seoTitle: "Kth Smallest Element in a Sorted Matrix"
-description: "Find the kth smallest value in a row- and column-sorted matrix with a min-heap merge or a binary search on values with staircase counting. Python solutions and tests."
+description: "Kth smallest element in a sorted matrix: a min-heap merge or binary search on values with staircase counting. Python solutions and tests."
 technology: ["dsa"]
 topic: ["binary-search", "heaps-priority-queues", "matrix"]
 difficulty: "Medium"

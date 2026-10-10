@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Data Engineering System Design Cheat Sheet"
-description: "A one-page framework for data engineering system design interviews: requirements, estimates, architecture, storage, processing, reliability, quality and trade-offs."
+description: "Data engineering system design cheat sheet: requirements, estimates, architecture, storage, processing, reliability, quality and trade-offs on one page."
 inventoryId: "CHEAT-10"
 technology: ["data-engineering", "system-design"]
 topic: ["reference", "system-design"]

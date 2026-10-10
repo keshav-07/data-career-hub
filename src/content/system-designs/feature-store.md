@@ -1,6 +1,6 @@
 ---
 title: "Design a Feature Store"
-description: "A system-design case study for a feature store: feature definitions, offline and online stores, point-in-time joins, streaming features, skew prevention and governance."
+description: "Feature store system design: feature definitions, offline and online stores, point-in-time joins, streaming features, skew prevention and governance."
 technology: ["data-engineering", "spark", "kafka"]
 topic: ["feature-store", "machine-learning", "architecture"]
 difficulty: "Advanced"

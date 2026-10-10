@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Design a Lakehouse with Bronze, Silver and Gold Layers"
 seoTitle: "Design a Bronze/Silver/Gold Lakehouse"
-description: "A system-design case study for a medallion lakehouse: what each layer guarantees, idempotent merges, late data, schema evolution, governance, compaction and cost."
+description: "Medallion lakehouse system design: what each layer guarantees, idempotent merges, late data, schema evolution, governance, compaction and cost."
 inventoryId: "SYS-04"
 technology: ["data-engineering", "delta-lake", "spark"]
 topic: ["lakehouse", "medallion-architecture", "architecture"]

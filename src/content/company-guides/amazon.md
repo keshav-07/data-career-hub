@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Amazon Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Amazon using its published Leadership Principles plus clearly labelled practice questions for SQL, modelling and design."
+description: "Amazon Data Engineer interview prep using its published Leadership Principles, plus clearly labelled practice questions for SQL, modelling and design."
 inventoryId: "COMPANY-01"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

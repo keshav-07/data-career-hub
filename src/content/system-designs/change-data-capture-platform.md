@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Design a CDC Pipeline from an OLTP Database to the Warehouse"
 seoTitle: "Design a CDC Pipeline from OLTP to Warehouse"
-description: "A system-design case study for change data capture: log-based capture, snapshots, ordering, idempotent MERGE with deletes, schema changes and the failure modes that bite."
+description: "CDC platform system design: log-based capture, snapshots, ordering, idempotent MERGE with deletes, schema changes and the failure modes that bite."
 inventoryId: "SYS-03"
 technology: ["data-engineering", "kafka", "snowflake"]
 topic: ["cdc", "streaming", "architecture"]

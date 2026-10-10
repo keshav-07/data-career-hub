@@ -4,7 +4,7 @@ updatedDate: "2026-10-10"
 reviewedDate: "2026-10-10"
 title: "How do you handle schema changes from upstream sources in a pipeline?"
 seoTitle: "Upstream Schema Changes: Interview Answer"
-description: "Interview answer: detect drift on every run, classify changes as additive or breaking, evolve automatically only for safe ones, and manage the rest with contracts and expand-contract."
+description: "Interview answer: detect schema drift every run, classify changes as additive or breaking, auto-evolve only safe ones, and use contracts and expand-contract."
 technology: ["data-engineering", "kafka"]
 topic: ["schema-evolution", "data-contracts", "reliability"]
 difficulty: "Medium"

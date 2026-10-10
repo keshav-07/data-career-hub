@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-06"
 reviewedDate: "2026-10-06"
 title: "Design a Near-Real-Time Dashboard Backend"
-description: "A system-design case study for live dashboards: event-time aggregation, watermarks, upserts into a real-time OLAP store, query serving, caching and batch correction."
+description: "Real-time analytics pipeline system design for live dashboards: event-time aggregation, watermarks, upserts into an OLAP store, caching and batch correction."
 inventoryId: "SYS-02"
 technology: ["data-engineering", "kafka", "spark"]
 topic: ["real-time-analytics", "streaming", "architecture"]

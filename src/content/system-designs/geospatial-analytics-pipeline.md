@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Design a Geospatial Analytics Pipeline"
-description: "A system-design case study for location analytics: GPS ingestion, cleaning, spatial indexes, scalable point-in-polygon joins, GeoParquet layout, privacy and cost."
+description: "Geospatial analytics pipeline system design: GPS ingestion, cleaning, spatial indexes, point-in-polygon joins at scale, GeoParquet layout, privacy and cost."
 technology: ["data-engineering", "spark", "delta-lake"]
 topic: ["analytics", "geospatial", "architecture"]
 tags: ["geospatial", "h3", "spatial-join", "geoparquet", "apache-sedona", "location-privacy"]

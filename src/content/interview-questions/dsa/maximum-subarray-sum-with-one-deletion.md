@@ -1,7 +1,7 @@
 ---
 title: "Maximum Subarray Sum with One Deletion: Kadane With Two States"
 seoTitle: "Max Subarray Sum with One Deletion: Kadane x2"
-description: "Find the largest subarray sum when you may delete at most one element. Learn to extend Kadane's algorithm with a second state that has already used its deletion."
+description: "Largest subarray sum with at most one deletion: extend Kadane's algorithm with a second state that has already used its deletion. Python and tests."
 technology: ["dsa"]
 topic: ["dynamic-programming", "arrays"]
 difficulty: "Medium"

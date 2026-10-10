@@ -3,7 +3,7 @@ publishedDate: "2026-10-05"
 updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Design a Marketing Attribution Pipeline"
-description: "A system-design case study for marketing attribution: touchpoint collection, identity stitching, lookback windows, rule-based models, ad spend joins and privacy."
+description: "Marketing attribution pipeline system design: touchpoint collection, identity stitching, lookback windows, rule-based models, ad spend joins and privacy."
 technology: ["data-engineering", "sql", "data-warehousing"]
 topic: ["analytics", "attribution", "architecture"]
 tags: ["marketing-attribution", "identity-resolution", "roas", "consent", "window-functions"]

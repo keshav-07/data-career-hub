@@ -5,7 +5,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Change Data Capture Pipeline"
-description: "An advanced project: capture inserts, updates and deletes from PostgreSQL with log-based CDC, stream them through Kafka and apply them to a Delta table with MERGE."
+description: "Advanced CDC project: capture inserts, updates and deletes from PostgreSQL with log-based CDC, stream via Kafka and apply them to a Delta table with MERGE."
 inventoryId: "PROJ-05"
 technology: ["kafka", "delta-lake", "spark"]
 topic: ["cdc", "streaming"]

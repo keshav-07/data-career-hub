@@ -4,7 +4,7 @@ updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design a Data SLA and Freshness Monitoring System"
 seoTitle: "Design Data SLA and Freshness Monitoring"
-description: "A system-design case study for data reliability: SLAs and SLOs per dataset, freshness and volume signals, lineage-aware alerting, status pages and error budgets."
+description: "Data SLA and freshness monitoring system design: SLAs and SLOs per dataset, freshness and volume signals, lineage-aware alerting and error budgets."
 technology: ["data-engineering", "airflow", "etl-elt"]
 topic: ["governance", "observability", "data-quality", "architecture"]
 tags: ["data-sla", "freshness", "data-observability", "lineage", "alerting", "error-budgets"]

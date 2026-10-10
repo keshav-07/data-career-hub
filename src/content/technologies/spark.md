@@ -1,7 +1,7 @@
 ---
 title: "Apache Spark Internals and Performance"
 shortName: "Apache Spark"
-description: "How Spark works inside: driver and executors, RDDs, jobs and stages, shuffles and skew, caching, Catalyst, AQE, memory tuning, Kubernetes and the History Server."
+description: "How Spark works inside: driver and executors, RDDs, jobs and stages, shuffles and skew, caching, Catalyst, AQE, memory tuning, Kubernetes, History Server."
 group: processing
 order: 4
 keyFacts: ["Driver plans work; executors run tasks","A shuffle ends a stage and is the usual cost centre","Adaptive Query Execution is on by default since Spark 3.2","Spark 4 supports standalone, YARN and Kubernetes; Mesos was removed"]

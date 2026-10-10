@@ -3,7 +3,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "Design an Analytics and BI Platform"
-description: "A system-design case study for an analytics and BI platform: warehouse choice, dimensional marts, a semantic layer, dashboard performance, access control and cost."
+description: "Analytics and BI platform system design: warehouse choice, dimensional marts, a semantic layer, dashboard performance, access control and cost."
 inventoryId: "SYS-08"
 technology: ["data-engineering", "data-warehousing", "dbt"]
 topic: ["analytics", "bi", "architecture"]

@@ -1,7 +1,7 @@
 ---
 title: "Design a GDPR- and PII-Compliant Data Pipeline"
 seoTitle: "Design a GDPR and PII Compliant Pipeline"
-description: "A system-design case study for privacy by design: classifying PII, minimisation, pseudonymisation, consent, erasure across every copy, crypto-shredding and audit."
+description: "GDPR and PII pipeline system design: classifying PII, minimisation, pseudonymisation, consent, erasure across every copy, crypto-shredding and audit."
 technology: ["data-engineering", "delta-lake", "kafka"]
 topic: ["gdpr", "pii", "governance"]
 difficulty: "Advanced"

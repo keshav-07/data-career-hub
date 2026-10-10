@@ -4,7 +4,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-05"
 reviewedDate: "2026-10-05"
 title: "SQL Window Functions: Ranking, LAG/LEAD and FIRST_VALUE"
-description: "Learn SQL window functions: OVER and PARTITION BY, ROW_NUMBER, RANK and DENSE_RANK with ties, NTILE buckets, LAG and LEAD comparisons, and FIRST_VALUE and LAST_VALUE."
+description: "SQL window functions: OVER and PARTITION BY, ROW_NUMBER, RANK and DENSE_RANK with ties, NTILE buckets, LAG and LEAD, and FIRST_VALUE and LAST_VALUE."
 inventoryId: "TECH-02"
 technology: ["sql"]
 topic: ["window-functions", "ranking"]

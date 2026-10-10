@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "DSA for Data Engineers: Focused 100–200 Pattern Roadmap"
 seoTitle: "DSA for Data Engineers: Focused Pattern Roadmap"
-description: "A focused data structures and algorithms roadmap for Data Engineering interviews: the patterns that recur, in order, practised across roughly 100 to 200 problems."
+description: "DSA roadmap for Data Engineering interviews: the recurring patterns in order, practised across roughly 100 to 200 problems."
 inventoryId: "ROAD-05"
 technology: ["dsa", "python"]
 topic: ["dsa", "interview"]

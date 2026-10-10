@@ -4,7 +4,7 @@ publishedDate: "2026-10-04"
 updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "CSV to Data Warehouse Pipeline"
-description: "A beginner project: load daily CSV files into a star schema with an idempotent loader, a rejects table, data-quality checks and tests you can explain in an interview."
+description: "Beginner data engineering project: load daily CSV files into a star schema with an idempotent loader, a rejects table, quality checks and tests."
 inventoryId: "PROJ-01"
 technology: ["python", "sql", "data-warehousing"]
 topic: ["batch", "modelling"]

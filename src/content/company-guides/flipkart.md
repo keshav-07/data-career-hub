@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Flipkart Data Engineering Interview Preparation"
 seoTitle: "Flipkart Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Flipkart using its published hiring-process page and role-specific interview resources, plus labelled e-commerce practice questions."
+description: "Flipkart Data Engineer interview prep from its published hiring-process page and role-specific resources, with labelled e-commerce practice questions."
 inventoryId: "COMPANY-06"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

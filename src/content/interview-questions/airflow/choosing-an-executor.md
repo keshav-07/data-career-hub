@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "How do you choose an Airflow executor: Local, Celery, Kubernetes or several?"
 seoTitle: "Choosing an Airflow Executor: Interview Answer"
-description: "Interview answer: pick LocalExecutor for one machine, Celery for warm low-latency workers, Kubernetes for per-task isolation, or combine them with multiple executors in Airflow 3."
+description: "Interview answer: choose an Airflow executor: Local for one machine, Celery for warm workers, Kubernetes for isolation, or combine them in Airflow 3."
 technology: ["airflow"]
 topic: ["executors", "scaling", "architecture"]
 difficulty: "Hard"

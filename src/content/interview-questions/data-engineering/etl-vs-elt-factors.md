@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "ETL vs ELT: what factors decide the choice?"
 seoTitle: "ETL vs ELT Decision Factors: Interview Answer"
-description: "Interview answer: choose ETL or ELT by compliance needs, where compute is cheapest, need to reprocess history, data formats and team skills; many systems mix both."
+description: "Interview answer: choose ETL or ELT by compliance needs, where compute is cheapest, reprocessing needs, data formats and team skills; many systems mix both."
 inventoryId: "INT-25"
 technology: ["data-engineering", "etl-elt"]
 topic: ["architecture", "pipelines"]

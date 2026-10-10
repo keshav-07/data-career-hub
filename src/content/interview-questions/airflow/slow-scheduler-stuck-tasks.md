@@ -4,7 +4,7 @@ updatedDate: "2026-10-09"
 reviewedDate: "2026-10-09"
 title: "Airflow is slow and tasks sit in scheduled or queued. How do you find the bottleneck?"
 seoTitle: "Airflow Scheduler Slow, Tasks Stuck: Interview"
-description: "Interview answer: read which state tasks pile up in, then check DAG parsing, concurrency limits and pools, executor capacity and the metadata database, in that order."
+description: "Interview answer: debug a slow Airflow scheduler or stuck tasks by checking task states, DAG parsing, concurrency and pools, executors, then the metadata DB."
 technology: ["airflow"]
 topic: ["scheduler", "performance", "debugging", "scaling"]
 difficulty: "Hard"

@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "DoorDash Data Engineering Interview Preparation"
 seoTitle: "DoorDash Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at DoorDash using its careers pages and its published post on AI-assisted engineering interviews, plus labelled delivery-data practice questions."
+description: "DoorDash Data Engineer interview prep from its careers pages and its post on AI-assisted engineering interviews, with labelled delivery-data practice."
 inventoryId: "COMPANY-11"
 technology: ["data-engineering"]
 topic: ["company-preparation"]

@@ -4,7 +4,7 @@ updatedDate: "2026-10-04"
 reviewedDate: "2026-10-04"
 title: "Google Data Engineering Interview Preparation"
 seoTitle: "Google Data Engineering Interview Preparation"
-description: "Prepare for Data Engineering interviews at Google using its published hiring-process and interview-tips pages, plus labelled practice questions on SQL, pipelines and large-scale design."
+description: "Google Data Engineer interview prep from its published hiring and interview-tips pages, with labelled practice on SQL, pipelines and large-scale design."
 inventoryId: "COMPANY-02"
 technology: ["data-engineering"]
 topic: ["company-preparation"]
